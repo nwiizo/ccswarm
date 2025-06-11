@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ccswarm TODO App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 ccswarm TODO App</h1>
+            <p>マルチエージェントシステムで開発されたTODOアプリ</p>
+        </header>
+        
+        <div class="todo-input">
+            <input type="text" id="todoInput" placeholder="新しいタスクを入力...">
+            <button id="addBtn">追加</button>
+        </div>
+        
+        <div class="todo-list">
+            <ul id="todoList"></ul>
+        </div>
+        
+        <div class="stats">
+            <span id="totalTasks">総タスク: 0</span>
+            <span id="completedTasks">完了: 0</span>
+            <span id="pendingTasks">未完了: 0</span>
+        </div>
+        
+        <footer>
+            <p>🎯 Powered by ccswarm multi-agent system</p>
+        </footer>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

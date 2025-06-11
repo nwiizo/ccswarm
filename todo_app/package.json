@@ -1,0 +1,19 @@
+{
+  "name": "ccswarm-todo-app",
+  "version": "1.0.0",
+  "description": "TODO application developed by ccswarm multi-agent system",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["todo", "ccswarm", "multi-agent", "nodejs", "express"],
+  "author": "ccswarm multi-agent system",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
