@@ -19,7 +19,7 @@ impl Tab {
         match self {
             Tab::Overview => "Overview",
             Tab::Agents => "Agents",
-            Tab::Tasks => "Tasks", 
+            Tab::Tasks => "Tasks",
             Tab::Logs => "Logs",
         }
     }
@@ -31,6 +31,9 @@ pub struct AgentInfo {
     pub id: String,
     pub name: String,
     pub specialization: String,
+    pub provider_type: String,
+    pub provider_icon: String,
+    pub provider_color: String,
     pub status: AgentStatus,
     pub current_task: Option<String>,
     pub tasks_completed: u32,
@@ -63,37 +66,37 @@ pub struct LogEntry {
 pub struct App {
     /// Current active tab
     pub current_tab: Tab,
-    
+
     /// Selection state for lists
     pub selected_agent: usize,
     pub selected_task: usize,
     pub selected_log: usize,
-    
+
     /// Data
     pub agents: Vec<AgentInfo>,
     pub tasks: Vec<TaskInfo>,
     pub logs: Vec<LogEntry>,
-    
+
     /// System state
     pub system_status: String,
     pub total_agents: usize,
     pub active_agents: usize,
     pub pending_tasks: usize,
     pub completed_tasks: usize,
-    
+
     /// Input state
     pub input_mode: InputMode,
     pub input_buffer: String,
-    
+
     /// Coordination components
     pub coordination_bus: CoordinationBus,
     pub status_tracker: StatusTracker,
     pub task_queue: TaskQueue,
-    
+
     /// Terminal size
     pub terminal_width: u16,
     pub terminal_height: u16,
-    
+
     /// Last update time
     pub last_update: Instant,
     pub update_interval: Duration,
@@ -239,14 +242,16 @@ impl App {
     pub async fn create_new_session(&mut self) -> Result<()> {
         self.input_mode = InputMode::CreatingAgent;
         self.input_buffer.clear();
-        self.add_log("System", "Enter agent type (frontend/backend/devops/qa):").await;
+        self.add_log("System", "Enter agent type (frontend/backend/devops/qa):")
+            .await;
         Ok(())
     }
 
     /// Delete current session
     pub async fn delete_current_session(&mut self) -> Result<()> {
         if let Some(agent) = self.agents.get(self.selected_agent) {
-            self.add_log("System", &format!("Deleting agent: {}", agent.name)).await;
+            self.add_log("System", &format!("Deleting agent: {}", agent.name))
+                .await;
             // TODO: Implement actual agent deletion
         }
         Ok(())
@@ -271,7 +276,8 @@ impl App {
     pub async fn open_command_prompt(&mut self) -> Result<()> {
         self.input_mode = InputMode::Command;
         self.input_buffer.clear();
-        self.add_log("System", "Enter command (help for available commands):").await;
+        self.add_log("System", "Enter command (help for available commands):")
+            .await;
         Ok(())
     }
 
@@ -307,7 +313,7 @@ impl App {
     /// Load agents from coordination system
     async fn load_agents(&mut self) -> Result<()> {
         let statuses = self.status_tracker.get_all_statuses().await?;
-        
+
         self.agents.clear();
         for (_i, status) in statuses.iter().enumerate() {
             if let (Some(agent_id), Some(status_val)) = (
@@ -322,6 +328,9 @@ impl App {
                         .and_then(|v| v.as_str())
                         .unwrap_or("Unknown")
                         .to_string(),
+                    provider_type: "claude_code".to_string(),
+                    provider_icon: "🤖".to_string(),
+                    provider_color: "blue".to_string(),
                     status: parse_agent_status(status_val),
                     current_task: status
                         .get("current_task")
@@ -358,7 +367,7 @@ impl App {
     /// Load tasks from task queue
     async fn load_tasks(&mut self) -> Result<()> {
         let pending_tasks = self.task_queue.get_pending_tasks().await?;
-        
+
         self.tasks.clear();
         for task in pending_tasks {
             let task_info = TaskInfo {
@@ -384,13 +393,13 @@ impl App {
     /// Update system statistics
     async fn update_system_stats(&mut self) -> Result<()> {
         self.total_agents = self.agents.len();
-        self.active_agents = self.agents.iter()
+        self.active_agents = self
+            .agents
+            .iter()
             .filter(|a| matches!(a.status, AgentStatus::Available | AgentStatus::Working))
             .count();
         self.pending_tasks = self.tasks.len();
-        self.completed_tasks = self.agents.iter()
-            .map(|a| a.tasks_completed)
-            .sum::<u32>() as usize;
+        self.completed_tasks = self.agents.iter().map(|a| a.tasks_completed).sum::<u32>() as usize;
 
         self.system_status = if self.active_agents > 0 {
             "Running".to_string()
@@ -403,13 +412,18 @@ impl App {
 
     /// Show agent details
     async fn show_agent_details(&mut self, agent_id: &str) -> Result<()> {
-        self.add_log("System", &format!("Showing details for agent: {}", agent_id)).await;
+        self.add_log(
+            "System",
+            &format!("Showing details for agent: {}", agent_id),
+        )
+        .await;
         Ok(())
     }
 
     /// Show task details
     async fn show_task_details(&mut self, task_id: &str) -> Result<()> {
-        self.add_log("System", &format!("Showing details for task: {}", task_id)).await;
+        self.add_log("System", &format!("Showing details for task: {}", task_id))
+            .await;
         Ok(())
     }
 
@@ -418,7 +432,11 @@ impl App {
         let log_entry = LogEntry {
             timestamp: Utc::now(),
             level: "INFO".to_string(),
-            agent: if source == "System" { None } else { Some(source.to_string()) },
+            agent: if source == "System" {
+                None
+            } else {
+                Some(source.to_string())
+            },
             message: message.to_string(),
         };
         self.logs.push(log_entry);
@@ -449,7 +467,7 @@ impl App {
     /// Process input and execute command/action
     pub async fn process_input(&mut self) -> Result<()> {
         let input = self.input_buffer.trim().to_string();
-        
+
         match self.input_mode {
             InputMode::AddingTask => {
                 if !input.is_empty() {
@@ -478,16 +496,13 @@ impl App {
     async fn execute_add_task(&mut self, description: &str) -> Result<()> {
         // Parse priority and type from description if included
         let (desc, priority, task_type) = self.parse_task_description(description);
-        
-        let task = crate::agent::Task::new(
-            uuid::Uuid::new_v4().to_string(),
-            desc,
-            priority,
-            task_type,
-        );
+
+        let task =
+            crate::agent::Task::new(uuid::Uuid::new_v4().to_string(), desc, priority, task_type);
 
         self.task_queue.add_task(&task).await?;
-        self.add_log("System", &format!("Task added: {}", task.description)).await;
+        self.add_log("System", &format!("Task added: {}", task.description))
+            .await;
         self.refresh_data().await?;
         Ok(())
     }
@@ -497,12 +512,21 @@ impl App {
         let agent_type = agent_type.to_lowercase();
         match agent_type.as_str() {
             "frontend" | "backend" | "devops" | "qa" => {
-                self.add_log("System", &format!("Creating {} agent...", agent_type)).await;
+                self.add_log("System", &format!("Creating {} agent...", agent_type))
+                    .await;
                 // TODO: Implement actual agent creation
-                self.add_log("System", &format!("{} agent created successfully", agent_type)).await;
+                self.add_log(
+                    "System",
+                    &format!("{} agent created successfully", agent_type),
+                )
+                .await;
             }
             _ => {
-                self.add_log("System", "Invalid agent type. Use: frontend, backend, devops, qa").await;
+                self.add_log(
+                    "System",
+                    "Invalid agent type. Use: frontend, backend, devops, qa",
+                )
+                .await;
             }
         }
         Ok(())
@@ -560,7 +584,14 @@ impl App {
                 }
             }
             _ => {
-                self.add_log("System", &format!("Unknown command: {}. Type 'help' for available commands.", cmd)).await;
+                self.add_log(
+                    "System",
+                    &format!(
+                        "Unknown command: {}. Type 'help' for available commands.",
+                        cmd
+                    ),
+                )
+                .await;
             }
         }
 
@@ -578,7 +609,7 @@ impl App {
             "  task <description>  - Add new task",
             "  agent <type>        - Create new agent (frontend/backend/devops/qa)",
             "  start               - Start orchestrator",
-            "  stop                - Stop orchestrator", 
+            "  stop                - Stop orchestrator",
             "  refresh             - Refresh all data",
             "  clear               - Clear logs",
             "  worktree [list|prune] - Manage worktrees",
@@ -590,9 +621,12 @@ impl App {
     }
 
     /// Parse task description for priority and type
-    fn parse_task_description(&self, description: &str) -> (String, crate::agent::Priority, crate::agent::TaskType) {
+    fn parse_task_description(
+        &self,
+        description: &str,
+    ) -> (String, crate::agent::Priority, crate::agent::TaskType) {
         use crate::agent::{Priority, TaskType};
-        
+
         let mut desc = description.to_string();
         let mut priority = Priority::Medium;
         let mut task_type = TaskType::Development;
@@ -632,11 +666,19 @@ impl App {
 
     /// Show detailed status
     async fn show_detailed_status(&mut self) -> Result<()> {
-        self.add_log("System", &format!("System Status: {}", self.system_status)).await;
-        self.add_log("System", &format!("Total Agents: {}", self.total_agents)).await;
-        self.add_log("System", &format!("Active Agents: {}", self.active_agents)).await;
-        self.add_log("System", &format!("Pending Tasks: {}", self.pending_tasks)).await;
-        self.add_log("System", &format!("Completed Tasks: {}", self.completed_tasks)).await;
+        self.add_log("System", &format!("System Status: {}", self.system_status))
+            .await;
+        self.add_log("System", &format!("Total Agents: {}", self.total_agents))
+            .await;
+        self.add_log("System", &format!("Active Agents: {}", self.active_agents))
+            .await;
+        self.add_log("System", &format!("Pending Tasks: {}", self.pending_tasks))
+            .await;
+        self.add_log(
+            "System",
+            &format!("Completed Tasks: {}", self.completed_tasks),
+        )
+        .await;
         Ok(())
     }
 
@@ -646,10 +688,17 @@ impl App {
             self.add_log("System", "No agents found").await;
         } else {
             self.add_log("System", "Active agents:").await;
-            let agent_info: Vec<String> = self.agents.iter()
-                .map(|agent| format!("  {} ({}) - {:?}", agent.name, agent.specialization, agent.status))
+            let agent_info: Vec<String> = self
+                .agents
+                .iter()
+                .map(|agent| {
+                    format!(
+                        "  {} ({}) - {:?}",
+                        agent.name, agent.specialization, agent.status
+                    )
+                })
                 .collect();
-            
+
             for info in agent_info {
                 self.add_log("System", &info).await;
             }
@@ -663,10 +712,17 @@ impl App {
             self.add_log("System", "No pending tasks").await;
         } else {
             self.add_log("System", "Pending tasks:").await;
-            let task_info: Vec<String> = self.tasks.iter()
-                .map(|task| format!("  {} - {} ({})", task.description, task.priority, task.task_type))
+            let task_info: Vec<String> = self
+                .tasks
+                .iter()
+                .map(|task| {
+                    format!(
+                        "  {} - {} ({})",
+                        task.description, task.priority, task.task_type
+                    )
+                })
                 .collect();
-            
+
             for info in task_info {
                 self.add_log("System", &info).await;
             }
@@ -679,7 +735,8 @@ impl App {
         self.add_log("System", "Starting orchestrator...").await;
         // TODO: Implement actual orchestrator start
         self.system_status = "Running".to_string();
-        self.add_log("System", "Orchestrator started successfully").await;
+        self.add_log("System", "Orchestrator started successfully")
+            .await;
         Ok(())
     }
 

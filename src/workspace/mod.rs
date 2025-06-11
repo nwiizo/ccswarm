@@ -29,14 +29,16 @@ impl SimpleWorkspaceManager {
     pub async fn init_if_needed(&self) -> Result<()> {
         if !self.base_path.exists() {
             info!("Creating workspace directory: {}", self.base_path.display());
-            fs::create_dir_all(&self.base_path).await
+            fs::create_dir_all(&self.base_path)
+                .await
                 .context("Failed to create workspace directory")?;
         }
 
         // agents ディレクトリを作成
         let agents_dir = self.base_path.join("agents");
         if !agents_dir.exists() {
-            fs::create_dir_all(&agents_dir).await
+            fs::create_dir_all(&agents_dir)
+                .await
                 .context("Failed to create agents directory")?;
         }
 
@@ -46,13 +48,14 @@ impl SimpleWorkspaceManager {
     /// エージェント用ワークスペースを作成
     pub async fn create_workspace(&self, agent_id: &str) -> Result<WorkspaceInfo> {
         let workspace_path = self.base_path.join("agents").join(agent_id);
-        
+
         if workspace_path.exists() {
             warn!("Workspace already exists: {}", workspace_path.display());
         } else {
-            fs::create_dir_all(&workspace_path).await
+            fs::create_dir_all(&workspace_path)
+                .await
                 .context("Failed to create agent workspace")?;
-            
+
             info!("Created workspace: {}", workspace_path.display());
         }
 
@@ -103,9 +106,10 @@ impl SimpleWorkspaceManager {
     /// ワークスペースを削除
     pub async fn remove_workspace(&self, agent_id: &str) -> Result<()> {
         let workspace_path = self.base_path.join("agents").join(agent_id);
-        
+
         if workspace_path.exists() {
-            fs::remove_dir_all(&workspace_path).await
+            fs::remove_dir_all(&workspace_path)
+                .await
                 .context("Failed to remove workspace")?;
             info!("Removed workspace: {}", workspace_path.display());
         }
@@ -117,7 +121,8 @@ impl SimpleWorkspaceManager {
     async fn save_workspace_info(&self, info: &WorkspaceInfo) -> Result<()> {
         let info_file = info.path.join(".workspace_info.json");
         let content = serde_json::to_string_pretty(info)?;
-        fs::write(&info_file, content).await
+        fs::write(&info_file, content)
+            .await
             .context("Failed to save workspace info")?;
         Ok(())
     }
@@ -126,12 +131,13 @@ impl SimpleWorkspaceManager {
     async fn load_workspace_info(&self, agent_id: &str) -> Result<WorkspaceInfo> {
         let workspace_path = self.base_path.join("agents").join(agent_id);
         let info_file = workspace_path.join(".workspace_info.json");
-        
-        let content = fs::read_to_string(&info_file).await
+
+        let content = fs::read_to_string(&info_file)
+            .await
             .context("Failed to read workspace info")?;
-        let info: WorkspaceInfo = serde_json::from_str(&content)
-            .context("Failed to parse workspace info")?;
-        
+        let info: WorkspaceInfo =
+            serde_json::from_str(&content).context("Failed to parse workspace info")?;
+
         Ok(info)
     }
 
@@ -139,10 +145,11 @@ impl SimpleWorkspaceManager {
     pub async fn setup_claude_config(&self, agent_id: &str, claude_md_content: &str) -> Result<()> {
         let workspace_path = self.base_path.join("agents").join(agent_id);
         let claude_md_path = workspace_path.join("CLAUDE.md");
-        
-        fs::write(&claude_md_path, claude_md_content).await
+
+        fs::write(&claude_md_path, claude_md_content)
+            .await
             .context("Failed to write CLAUDE.md")?;
-        
+
         info!("CLAUDE.md created for agent: {}", agent_id);
         Ok(())
     }
@@ -157,9 +164,9 @@ mod tests {
     async fn test_workspace_creation() {
         let temp_dir = TempDir::new().unwrap();
         let manager = SimpleWorkspaceManager::new(temp_dir.path().to_path_buf());
-        
+
         manager.init_if_needed().await.unwrap();
-        
+
         let workspace = manager.create_workspace("test-agent").await.unwrap();
         assert_eq!(workspace.agent_id, "test-agent");
         assert!(workspace.path.exists());
@@ -169,11 +176,11 @@ mod tests {
     async fn test_workspace_listing() {
         let temp_dir = TempDir::new().unwrap();
         let manager = SimpleWorkspaceManager::new(temp_dir.path().to_path_buf());
-        
+
         manager.init_if_needed().await.unwrap();
         manager.create_workspace("agent1").await.unwrap();
         manager.create_workspace("agent2").await.unwrap();
-        
+
         let workspaces = manager.list_workspaces().await.unwrap();
         assert_eq!(workspaces.len(), 2);
     }

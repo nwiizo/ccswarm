@@ -1,4 +1,5 @@
 pub mod claude;
+pub mod persistent;
 pub mod simple;
 pub mod task;
 

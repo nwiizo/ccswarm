@@ -1,0 +1,90 @@
+{
+  "project": {
+    "name": "TestProject",
+    "repository": {
+      "url": ".",
+      "main_branch": "main"
+    },
+    "master_claude": {
+      "role": "technical_lead",
+      "quality_threshold": 0.9,
+      "think_mode": "ultra_think",
+      "permission_level": "supervised",
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerously_skip_permissions": false,
+        "think_mode": "ultra_think",
+        "json_output": true,
+        "custom_commands": [
+          "ccswarm status",
+          "ccswarm review",
+          "ccswarm deploy",
+          "ccswarm quality-gate"
+        ],
+        "mcpServers": {}
+      }
+    }
+  },
+  "agents": {
+    "devops": {
+      "specialization": "aws_kubernetes",
+      "worktree": "agents/devops-agent",
+      "branch": "feature/infrastructure",
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerously_skip_permissions": true,
+        "think_mode": "think",
+        "json_output": true,
+        "custom_commands": [
+          "terraform plan",
+          "kubectl get pods",
+          "docker build"
+        ],
+        "mcpServers": {}
+      },
+      "claude_md_template": "devops_specialist"
+    },
+    "backend": {
+      "specialization": "backend",
+      "worktree": "agents/backend-agent",
+      "branch": "feature/backend",
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerously_skip_permissions": true,
+        "think_mode": "think_hard",
+        "json_output": true,
+        "custom_commands": [
+          "npm test",
+          "npm run migrate",
+          "npm run api-test"
+        ],
+        "mcpServers": {}
+      },
+      "claude_md_template": "backend_specialist"
+    },
+    "frontend": {
+      "specialization": "frontend",
+      "worktree": "agents/frontend-agent",
+      "branch": "feature/frontend",
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerously_skip_permissions": true,
+        "think_mode": "think_hard",
+        "json_output": true,
+        "custom_commands": [
+          "npm test",
+          "npm run lint",
+          "npm run build"
+        ],
+        "mcpServers": {}
+      },
+      "claude_md_template": "frontend_specialist"
+    }
+  },
+  "coordination": {
+    "communication_method": "json_files",
+    "sync_interval": 30,
+    "quality_gate_frequency": "on_commit",
+    "master_review_trigger": "all_tasks_complete"
+  }
+}

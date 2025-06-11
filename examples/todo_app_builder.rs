@@ -1,8 +1,8 @@
-/// 実際のTODOアプリケーション開発プログラム
-/// 
-/// このプログラムはccswarmシステムを使用して実際に動作するTODOアプリケーションを
-/// 開発し、Webサーバーを起動してアクセス可能にします。
-
+/// Enhanced TODO Application Development Program with Session Management
+///
+/// This program uses the ccswarm system with session management, auto-accept mode,
+/// real-time monitoring, and multi-provider support to develop a fully functional
+/// TODO application and launch a web server for access.
 use anyhow::Result;
 use chrono::Utc;
 use serde_json::json;
@@ -11,21 +11,25 @@ use tokio::fs;
 use tracing::{info, warn};
 
 // ccswarmライブラリのインポート
-use ccswarm::agent::{Priority, Task, TaskType, AgentStatus};
 use ccswarm::agent::simple::SimpleClaudeAgent;
+use ccswarm::agent::{AgentStatus, Priority, Task, TaskType};
+use ccswarm::auto_accept::{AutoAcceptConfig, AutoAcceptEngine};
 use ccswarm::config::ClaudeConfig;
 use ccswarm::coordination::{AgentMessage, CoordinationBus, StatusTracker, TaskQueue};
-use ccswarm::identity::{default_frontend_role, default_backend_role, default_devops_role, default_qa_role};
+use ccswarm::identity::{
+    default_backend_role, default_devops_role, default_frontend_role, default_qa_role,
+};
+use ccswarm::monitoring::{MonitoringSystem, OutputEntry, OutputType};
+use ccswarm::providers::{claude_code::ClaudeCodeProvider, AIProvider};
+use ccswarm::session::{AgentSession, SessionManager};
 use ccswarm::workspace::SimpleWorkspaceManager;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // ログ設定
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
-    info!("🚀 ccswarm 実際のTODOアプリケーション開発開始");
+    info!("🚀 ccswarm Enhanced TODO Application Development with Session Management");
 
     // プロジェクトディレクトリを作成
     let project_dir = PathBuf::from("./todo_app");
@@ -38,12 +42,15 @@ async fn main() -> Result<()> {
     let workspace_manager = SimpleWorkspaceManager::new(project_dir.clone());
     workspace_manager.init_if_needed().await?;
 
-    // 調整システムを初期化
+    // Initialize enhanced coordination systems
     let coordination_bus = CoordinationBus::new().await?;
     let task_queue = TaskQueue::new().await?;
     let status_tracker = StatusTracker::new().await?;
+    let session_manager = SessionManager::new()?;
+    let monitoring_system = MonitoringSystem::new();
+    let auto_accept_engine = AutoAcceptEngine::new(AutoAcceptConfig::safe_defaults());
 
-    info!("📋 実際のTODOアプリケーション開発タスクを定義中...");
+    info!("📋 Defining enhanced TODO application development tasks with session management...");
 
     // 実際のTODOアプリケーション開発タスクを定義
     let app_tasks = vec![
@@ -53,58 +60,59 @@ async fn main() -> Result<()> {
             "Create HTML structure for TODO app".to_string(),
             Priority::High,
             TaskType::Development,
-        ).with_details("Create index.html with form and task list structure".to_string()),
-
+        )
+        .with_details("Create index.html with form and task list structure".to_string()),
         Task::new(
             "todo-frontend-2".to_string(),
             "Create CSS styles for TODO app".to_string(),
             Priority::High,
             TaskType::Development,
-        ).with_details("Create styles.css with modern, responsive design".to_string()),
-
+        )
+        .with_details("Create styles.css with modern, responsive design".to_string()),
         Task::new(
             "todo-frontend-3".to_string(),
             "Create JavaScript for TODO functionality".to_string(),
             Priority::High,
             TaskType::Development,
-        ).with_details("Create app.js with add, delete, toggle complete functionality".to_string()),
-
+        )
+        .with_details("Create app.js with add, delete, toggle complete functionality".to_string()),
         // バックエンド開発
         Task::new(
             "todo-backend-1".to_string(),
             "Create Node.js Express server".to_string(),
             Priority::High,
             TaskType::Development,
-        ).with_details("Create server.js with Express setup and static file serving".to_string()),
-
+        )
+        .with_details("Create server.js with Express setup and static file serving".to_string()),
         Task::new(
             "todo-backend-2".to_string(),
             "Create TODO API endpoints".to_string(),
             Priority::High,
             TaskType::Development,
-        ).with_details("Create REST API for GET, POST, PUT, DELETE operations".to_string()),
-
+        )
+        .with_details("Create REST API for GET, POST, PUT, DELETE operations".to_string()),
         Task::new(
             "todo-backend-3".to_string(),
             "Create package.json and dependencies".to_string(),
             Priority::Medium,
             TaskType::Development,
-        ).with_details("Setup Node.js project with required dependencies".to_string()),
-
+        )
+        .with_details("Setup Node.js project with required dependencies".to_string()),
         // DevOps/デプロイメント
         Task::new(
             "todo-deploy-1".to_string(),
             "Create startup script".to_string(),
             Priority::Medium,
             TaskType::Infrastructure,
-        ).with_details("Create run.sh script to start the application".to_string()),
-
+        )
+        .with_details("Create run.sh script to start the application".to_string()),
         Task::new(
             "todo-deploy-2".to_string(),
             "Create README documentation".to_string(),
             Priority::Medium,
             TaskType::Documentation,
-        ).with_details("Create comprehensive README with setup and usage instructions".to_string()),
+        )
+        .with_details("Create comprehensive README with setup and usage instructions".to_string()),
     ];
 
     // タスクをキューに追加
@@ -113,55 +121,105 @@ async fn main() -> Result<()> {
         info!("📝 タスクを追加: {}", task.description);
     }
 
-    info!("🤖 専門エージェントを作成中...");
+    info!("🤖 Creating specialized agents with session management and auto-accept...");
 
-    // 専門エージェントを作成
-    let mut agents: Vec<(String, SimpleClaudeAgent)> = vec![];
-    
-    // フロントエンドエージェント
+    // Create specialized agents with enhanced session management
+    let mut agents: Vec<(String, SimpleClaudeAgent, AgentSession)> = vec![];
+
+    // Frontend Agent with Claude Code provider
     let mut frontend_agent = SimpleClaudeAgent::new(
         default_frontend_role(),
         &project_dir,
         ClaudeConfig::for_agent("frontend"),
-    ).await?;
+    )
+    .await?;
     frontend_agent.initialize(&workspace_manager).await?;
-    agents.push(("frontend".to_string(), frontend_agent));
 
-    // バックエンドエージェント
+    let frontend_session = session_manager.create_session(
+        "frontend-session-001".to_string(),
+        default_frontend_role(),
+        project_dir
+            .join("agents/frontend")
+            .to_string_lossy()
+            .to_string(),
+        Some("Frontend development with HTML/CSS/JS".to_string()),
+        true, // auto_start
+    )?;
+    agents.push(("frontend".to_string(), frontend_agent, frontend_session));
+
+    // Backend Agent with session management
     let mut backend_agent = SimpleClaudeAgent::new(
         default_backend_role(),
         &project_dir,
         ClaudeConfig::for_agent("backend"),
-    ).await?;
+    )
+    .await?;
     backend_agent.initialize(&workspace_manager).await?;
-    agents.push(("backend".to_string(), backend_agent));
 
-    // DevOpsエージェント
+    let backend_session = session_manager.create_session(
+        "backend-session-001".to_string(),
+        default_backend_role(),
+        project_dir
+            .join("agents/backend")
+            .to_string_lossy()
+            .to_string(),
+        Some("Backend development with Node.js/Express".to_string()),
+        true, // auto_start
+    )?;
+    agents.push(("backend".to_string(), backend_agent, backend_session));
+
+    // DevOps Agent with session management
     let mut devops_agent = SimpleClaudeAgent::new(
         default_devops_role(),
         &project_dir,
         ClaudeConfig::for_agent("devops"),
-    ).await?;
+    )
+    .await?;
     devops_agent.initialize(&workspace_manager).await?;
-    agents.push(("devops".to_string(), devops_agent));
 
-    info!("✅ {} 個のエージェントを初期化完了", agents.len());
+    let devops_session = session_manager.create_session(
+        "devops-session-001".to_string(),
+        default_devops_role(),
+        project_dir
+            .join("agents/devops")
+            .to_string_lossy()
+            .to_string(),
+        Some("DevOps deployment and documentation".to_string()),
+        true, // auto_start
+    )?;
+    agents.push(("devops".to_string(), devops_agent, devops_session));
 
-    // エージェントステータスを追跡システムに登録
-    for (agent_type, agent) in &agents {
-        status_tracker.update_status(
-            &agent.identity.agent_id,
-            &agent.status,
-            json!({
-                "agent_type": agent_type,
-                "specialization": agent.identity.specialization.name(),
-                "workspace": agent.workspace_path,
-                "initialized_at": agent.last_activity
-            })
-        ).await?;
+    info!(
+        "✅ {} agents initialized with session management",
+        agents.len()
+    );
+
+    // Register agent status with enhanced tracking including sessions
+    for (agent_type, agent, session) in &agents {
+        status_tracker
+            .update_status(
+                &agent.identity.agent_id,
+                &agent.status,
+                json!({
+                    "agent_type": agent_type,
+                    "specialization": agent.identity.specialization.name(),
+                    "workspace": agent.workspace_path,
+                    "session_id": session.id,
+                    "session_status": session.status,
+                    "auto_accept_enabled": session.auto_accept,
+                    "tmux_session": session.tmux_session,
+                    "initialized_at": agent.last_activity
+                }),
+            )
+            .await?;
+
+        // Register with monitoring system
+        monitoring_system
+            .register_agent(&session.id, &session.agent_id)
+            .await?;
     }
 
-    info!("🎯 実際のTODOアプリケーション開発開始...");
+    info!("🎯 Starting enhanced TODO application development with real-time monitoring...");
 
     // タスク実行とファイル生成
     let pending_tasks = task_queue.get_pending_tasks().await?;
@@ -170,47 +228,133 @@ async fn main() -> Result<()> {
     for task in pending_tasks {
         info!("📋 タスク実行中: {}", task.description);
 
-        // 適切なエージェントを選択
+        // Select appropriate agent with session management
         let agent_index = select_agent_for_task(&task, &agents);
-        
+
         if let Some(index) = agent_index {
-            let (agent_type, ref mut agent) = &mut agents[index];
-            
-            // タスク実行前の状態更新
+            let (agent_type, ref mut agent, ref session) = &mut agents[index];
+
+            // Log task start to monitoring system
+            monitoring_system
+                .add_output(
+                    &session.id,
+                    OutputEntry::new(
+                        session.agent_id.clone(),
+                        OutputType::Info,
+                        format!("Starting task: {}", task.description),
+                        Some(task.id.clone()),
+                    ),
+                )
+                .await;
+
+            // Check auto-accept if enabled
+            let can_auto_accept = if session.auto_accept {
+                auto_accept_engine
+                    .should_auto_accept(&task.description, &[])
+                    .await
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+
+            if can_auto_accept {
+                info!("🤖 Auto-accepting task: {}", task.description);
+                monitoring_system
+                    .add_output(
+                        &session.id,
+                        OutputEntry::new(
+                            session.agent_id.clone(),
+                            OutputType::Info,
+                            "Task auto-accepted by safety engine".to_string(),
+                            Some(task.id.clone()),
+                        ),
+                    )
+                    .await;
+            }
+
+            // Update agent status before execution
             agent.update_status(AgentStatus::Working);
-            
-            // タスクを実行
+
+            // Execute task with monitoring
             match agent.execute_task(task.clone()).await {
                 Ok(result) => {
                     if result.success {
-                        info!("✅ {} エージェントがタスクを完了: {}", agent_type, task.description);
-                        
-                        // 実際のファイルを生成
+                        info!(
+                            "✅ {} agent completed task: {}",
+                            agent_type, task.description
+                        );
+
+                        monitoring_system
+                            .add_output(
+                                &session.id,
+                                OutputEntry::new(
+                                    session.agent_id.clone(),
+                                    OutputType::Success,
+                                    format!("Task completed successfully: {}", task.description),
+                                    Some(task.id.clone()),
+                                ),
+                            )
+                            .await;
+
+                        // Generate actual files
                         generate_actual_files(&task, &project_dir).await?;
-                        
+
                         completed_tasks += 1;
                         task_queue.remove_task(&task.id).await?;
                     } else {
-                        warn!("❌ タスク実行失敗: {}", result.error.unwrap_or_default());
+                        let error_msg = result.error.unwrap_or_default();
+                        warn!("❌ Task execution failed: {}", error_msg);
+
+                        monitoring_system
+                            .add_output(
+                                &session.id,
+                                OutputEntry::new(
+                                    session.agent_id.clone(),
+                                    OutputType::Error,
+                                    format!("Task failed: {}", error_msg),
+                                    Some(task.id.clone()),
+                                ),
+                            )
+                            .await;
                     }
                 }
                 Err(e) => {
-                    warn!("❌ タスク実行エラー: {}", e);
+                    warn!("❌ Task execution error: {}", e);
+
+                    monitoring_system
+                        .add_output(
+                            &session.id,
+                            OutputEntry::new(
+                                session.agent_id.clone(),
+                                OutputType::Error,
+                                format!("Execution error: {}", e),
+                                Some(task.id.clone()),
+                            ),
+                        )
+                        .await;
                 }
             }
 
-            // エージェントステータスを利用可能に戻す
+            // Return agent status to available
             agent.update_status(AgentStatus::Available);
         } else {
-            warn!("⚠️ タスクに適したエージェントが見つかりません: {}", task.description);
+            warn!("⚠️ No suitable agent found for task: {}", task.description);
         }
 
         // 少し待機
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
 
-    info!("📊 TODOアプリケーション開発完了!");
-    info!("✅ 完了タスク: {}", completed_tasks);
+    info!("📊 Enhanced TODO application development completed!");
+    info!("✅ Completed tasks: {}", completed_tasks);
+    info!("🔄 Sessions managed: {}", agents.len());
+
+    // Display monitoring statistics
+    let stats = monitoring_system.get_statistics().await;
+    info!(
+        "📈 Monitoring stats: {} total entries, {} agents",
+        stats.total_entries, stats.active_agents
+    );
 
     // package.jsonの依存関係をインストール
     info!("📦 依存関係をインストール中...");
@@ -225,10 +369,16 @@ async fn main() -> Result<()> {
             info!("✅ 依存関係のインストール完了");
         }
         Ok(output) => {
-            warn!("⚠️ npm install警告: {}", String::from_utf8_lossy(&output.stderr));
+            warn!(
+                "⚠️ npm install警告: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
         Err(e) => {
-            warn!("⚠️ npm not found: {} (Nodeサーバーを手動で起動してください)", e);
+            warn!(
+                "⚠️ npm not found: {} (Nodeサーバーを手動で起動してください)",
+                e
+            );
         }
     }
 
@@ -247,14 +397,14 @@ async fn main() -> Result<()> {
         Ok(mut child) => {
             // サーバーが起動するまで少し待つ
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            
+
             info!("✅ サーバーが起動しました!");
             info!("🌐 ブラウザで http://localhost:3000 にアクセスしてください");
-            
+
             // Ctrl+Cでの終了を待つ
             tokio::signal::ctrl_c().await?;
             info!("🛑 シャットダウン中...");
-            
+
             // 子プロセスを終了
             let _ = child.kill().await;
         }
@@ -270,47 +420,50 @@ async fn main() -> Result<()> {
     coordination_bus.close().await?;
 
     info!("🎉 ccswarm TODOアプリケーション開発完了!");
-    
+
     Ok(())
 }
 
-/// タスクに適したエージェントを選択
-fn select_agent_for_task(task: &Task, agents: &[(String, SimpleClaudeAgent)]) -> Option<usize> {
+/// Select appropriate agent for task with session management
+fn select_agent_for_task(
+    task: &Task,
+    agents: &[(String, SimpleClaudeAgent, AgentSession)],
+) -> Option<usize> {
     let description = task.description.to_lowercase();
     let task_id = task.id.as_str();
-    
-    for (index, (agent_type, _)) in agents.iter().enumerate() {
+
+    for (index, (agent_type, _, session)) in agents.iter().enumerate() {
         let matches = match agent_type.as_str() {
             "frontend" => {
-                task_id.contains("frontend") ||
-                description.contains("html") || 
-                description.contains("css") || 
-                description.contains("javascript") ||
-                description.contains("frontend")
-            },
+                task_id.contains("frontend")
+                    || description.contains("html")
+                    || description.contains("css")
+                    || description.contains("javascript")
+                    || description.contains("frontend")
+            }
             "backend" => {
-                task_id.contains("backend") ||
-                description.contains("node") || 
-                description.contains("express") || 
-                description.contains("server") ||
-                description.contains("api") ||
-                description.contains("package.json")
-            },
+                task_id.contains("backend")
+                    || description.contains("node")
+                    || description.contains("express")
+                    || description.contains("server")
+                    || description.contains("api")
+                    || description.contains("package.json")
+            }
             "devops" => {
-                task_id.contains("deploy") ||
-                description.contains("script") || 
-                description.contains("readme") || 
-                description.contains("documentation") ||
-                description.contains("startup")
-            },
+                task_id.contains("deploy")
+                    || description.contains("script")
+                    || description.contains("readme")
+                    || description.contains("documentation")
+                    || description.contains("startup")
+            }
             _ => false,
         };
-        
-        if matches {
+
+        if matches && session.is_available() {
             return Some(index);
         }
     }
-    
+
     None
 }
 
@@ -357,11 +510,11 @@ async fn generate_actual_files(task: &Task, project_dir: &PathBuf) -> Result<()>
     <script src="app.js"></script>
 </body>
 </html>"#;
-            
+
             fs::write(project_dir.join("index.html"), html_content).await?;
-            info!("✅ index.html を生成");
-        },
-        
+            info!("✅ Generated index.html with enhanced UI");
+        }
+
         "todo-frontend-2" => {
             // CSS ファイルを生成
             let css_content = r#"/* ccswarm TODO App Styles */
@@ -531,11 +684,11 @@ footer {
         text-align: center;
     }
 }"#;
-            
+
             fs::write(project_dir.join("styles.css"), css_content).await?;
-            info!("✅ styles.css を生成");
-        },
-        
+            info!("✅ Generated styles.css with responsive design");
+        }
+
         "todo-frontend-3" => {
             // JavaScript ファイルを生成
             let js_content = r#"// ccswarm TODO App JavaScript
@@ -706,11 +859,11 @@ document.addEventListener('DOMContentLoaded', () => {
     new TodoApp();
     console.log('🤖 ccswarm TODO App initialized!');
 });"#;
-            
+
             fs::write(project_dir.join("app.js"), js_content).await?;
-            info!("✅ app.js を生成");
-        },
-        
+            info!("✅ Generated app.js with modern JavaScript");
+        }
+
         "todo-backend-1" => {
             // Express サーバーファイルを生成
             let server_content = r#"// ccswarm TODO App Server
@@ -810,11 +963,11 @@ app.listen(PORT, () => {
     console.log(`🤖 Multi-agent system development complete!`);
     console.log(`📁 Serving files from: ${__dirname}`);
 });"#;
-            
+
             fs::write(project_dir.join("server.js"), server_content).await?;
-            info!("✅ server.js を生成");
-        },
-        
+            info!("✅ Generated server.js with Express API");
+        }
+
         "todo-backend-3" => {
             // package.json を生成
             let package_content = r#"{
@@ -836,11 +989,11 @@ app.listen(PORT, () => {
     "node": ">=14.0.0"
   }
 }"#;
-            
+
             fs::write(project_dir.join("package.json"), package_content).await?;
-            info!("✅ package.json を生成");
-        },
-        
+            info!("✅ Generated package.json with dependencies");
+        }
+
         "todo-deploy-1" => {
             // 起動スクリプトを生成
             let run_script = r#"#!/bin/bash
@@ -868,21 +1021,23 @@ echo "🛑 終了するには Ctrl+C を押してください"
 echo ""
 
 node server.js"#;
-            
+
             fs::write(project_dir.join("run.sh"), run_script).await?;
-            
+
             // 実行権限を付与
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let mut perms = fs::metadata(project_dir.join("run.sh")).await?.permissions();
+                let mut perms = fs::metadata(project_dir.join("run.sh"))
+                    .await?
+                    .permissions();
                 perms.set_mode(0o755);
                 fs::set_permissions(project_dir.join("run.sh"), perms).await?;
             }
-            
-            info!("✅ run.sh を生成");
-        },
-        
+
+            info!("✅ Generated run.sh startup script");
+        }
+
         "todo-deploy-2" => {
             // README を生成
             let readme_content = r#"# 🤖 ccswarm TODO App
@@ -991,16 +1146,19 @@ MIT License
 ---
 
 🎉 **ccswarm multi-agent system で開発完了！**"#;
-            
+
             fs::write(project_dir.join("README.md"), readme_content).await?;
-            info!("✅ README.md を生成");
-        },
-        
+            info!("✅ Generated comprehensive README.md");
+        }
+
         _ => {
-            // その他のタスクは何もしない
-            info!("ℹ️ タスク '{}' - ファイル生成なし", task.description);
+            // Other tasks don't generate files
+            info!(
+                "ℹ️ Task '{}' - No file generation required",
+                task.description
+            );
         }
     }
-    
+
     Ok(())
 }

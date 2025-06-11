@@ -12,10 +12,8 @@ impl EventHandler {
     pub fn new(tick_rate: Duration) -> Self {
         let mut tick_interval = interval(tick_rate);
         tick_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        
-        Self {
-            tick_interval,
-        }
+
+        Self { tick_interval }
     }
 
     /// Get next event (either user input or tick)

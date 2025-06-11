@@ -56,7 +56,9 @@ mod tests {
         assert!(!GitUtils::is_git_repo(repo_path).await);
 
         // Gitリポジトリを初期化
-        shell::ShellWorktreeManager::init_if_needed(repo_path).await.unwrap();
+        shell::ShellWorktreeManager::init_if_needed(repo_path)
+            .await
+            .unwrap();
 
         // 初期化後はGitリポジトリ
         assert!(GitUtils::is_git_repo(repo_path).await);

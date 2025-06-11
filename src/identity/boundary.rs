@@ -116,7 +116,9 @@ impl TaskBoundaryChecker {
                 r"(?i)(rest|graphql|microservice|grpc)",
             ],
         ) {
-            return self.delegation_targets.get("backend")
+            return self
+                .delegation_targets
+                .get("backend")
                 .cloned()
                 .unwrap_or_else(|| "backend-agent".to_string());
         }
@@ -129,7 +131,9 @@ impl TaskBoundaryChecker {
                 r"(?i)(css|styling|tailwind|sass|layout)",
             ],
         ) {
-            return self.delegation_targets.get("frontend")
+            return self
+                .delegation_targets
+                .get("frontend")
                 .cloned()
                 .unwrap_or_else(|| "frontend-agent".to_string());
         }
@@ -143,7 +147,9 @@ impl TaskBoundaryChecker {
                 r"(?i)(ci/cd|pipeline|jenkins|github.actions)",
             ],
         ) {
-            return self.delegation_targets.get("devops")
+            return self
+                .delegation_targets
+                .get("devops")
                 .cloned()
                 .unwrap_or_else(|| "devops-agent".to_string());
         }
@@ -157,7 +163,9 @@ impl TaskBoundaryChecker {
                 r"(?i)(coverage|automation|e2e|integration)",
             ],
         ) {
-            return self.delegation_targets.get("qa")
+            return self
+                .delegation_targets
+                .get("qa")
                 .cloned()
                 .unwrap_or_else(|| "qa-agent".to_string());
         }

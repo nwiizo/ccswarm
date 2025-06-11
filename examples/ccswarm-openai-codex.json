@@ -1,0 +1,119 @@
+{
+  "project": {
+    "name": "OpenAI Codex Development Team",
+    "repository": {
+      "url": "https://github.com/company/codex-project.git",
+      "main_branch": "main"
+    },
+    "master_claude": {
+      "role": "technical_lead",
+      "quality_threshold": 0.88,
+      "think_mode": "ultrathink",
+      "permission_level": "supervised",
+      "provider": {
+        "provider_type": "claude_code",
+        "claude_code": {
+          "model": "claude-3.5-sonnet",
+          "dangerous_skip": false,
+          "think_mode": "ultrathink",
+          "json_output": true,
+          "custom_commands": [
+            "ccswarm status",
+            "ccswarm review",
+            "ccswarm coordinate"
+          ],
+          "mcp_servers": {}
+        }
+      }
+    }
+  },
+  "agents": {
+    "frontend": {
+      "specialization": "react_typescript",
+      "worktree": "agents/frontend-agent",
+      "branch": "feature/frontend-ui",
+      "provider": {
+        "provider_type": "codex",
+        "codex": {
+          "api_key": "${OPENAI_API_KEY}",
+          "model": "gpt-4",
+          "max_tokens": 2048,
+          "temperature": 0.2,
+          "organization": "${OPENAI_ORG_ID}"
+        }
+      },
+      "claude_md_template": "frontend_specialist"
+    },
+    "backend": {
+      "specialization": "node_express",
+      "worktree": "agents/backend-agent",
+      "branch": "feature/backend-api",
+      "provider": {
+        "provider_type": "codex",
+        "codex": {
+          "api_key": "${OPENAI_API_KEY}",
+          "model": "gpt-4",
+          "max_tokens": 3072,
+          "temperature": 0.1,
+          "organization": "${OPENAI_ORG_ID}"
+        }
+      },
+      "claude_md_template": "backend_specialist"
+    },
+    "mobile": {
+      "specialization": "react_native",
+      "worktree": "agents/mobile-agent",
+      "branch": "feature/mobile-app",
+      "provider": {
+        "provider_type": "codex",
+        "codex": {
+          "api_key": "${OPENAI_API_KEY}",
+          "model": "gpt-3.5-turbo",
+          "max_tokens": 2048,
+          "temperature": 0.3,
+          "organization": "${OPENAI_ORG_ID}"
+        }
+      },
+      "claude_md_template": "mobile_specialist"
+    },
+    "devops": {
+      "specialization": "aws_kubernetes",
+      "worktree": "agents/devops-agent",
+      "branch": "feature/infrastructure",
+      "provider": {
+        "provider_type": "codex",
+        "codex": {
+          "api_key": "${OPENAI_API_KEY}",
+          "model": "gpt-4",
+          "max_tokens": 4096,
+          "temperature": 0.1,
+          "api_base": "https://api.openai.com/v1",
+          "organization": "${OPENAI_ORG_ID}"
+        }
+      },
+      "claude_md_template": "devops_specialist"
+    },
+    "qa": {
+      "specialization": "testing_automation",
+      "worktree": "agents/qa-agent",
+      "branch": "feature/testing",
+      "provider": {
+        "provider_type": "codex",
+        "codex": {
+          "api_key": "${OPENAI_API_KEY}",
+          "model": "gpt-3.5-turbo-16k",
+          "max_tokens": 8192,
+          "temperature": 0.2,
+          "organization": "${OPENAI_ORG_ID}"
+        }
+      },
+      "claude_md_template": "qa_specialist"
+    }
+  },
+  "coordination": {
+    "communication_method": "json_files",
+    "sync_interval": 30,
+    "quality_gate_frequency": "on_commit",
+    "master_review_trigger": "all_tasks_complete"
+  }
+}

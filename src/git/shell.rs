@@ -46,7 +46,8 @@ impl ShellWorktreeManager {
             }
 
             // 初期コミットを作成
-            let readme_content = "# ccswarm Project\n\nThis repository is managed by ccswarm multi-agent system.\n";
+            let readme_content =
+                "# ccswarm Project\n\nThis repository is managed by ccswarm multi-agent system.\n";
             tokio::fs::write(path.join("README.md"), readme_content).await?;
 
             // git add . && git commit
@@ -74,8 +75,63 @@ impl ShellWorktreeManager {
         Ok(())
     }
 
-    /// ワークツリーを作成
+    /// ワークツリー一覧を取得
+    pub async fn list_worktrees(&self) -> Result<Vec<ShellWorktreeInfo>> {
+        let output = Command::new("git")
+            .args(["worktree", "list", "--porcelain"])
+            .current_dir(&self.repo_path)
+            .output()
+            .await
+            .context("Failed to execute git worktree list")?;
+
+        if !output.status.success() {
+            return Err(anyhow::anyhow!(
+                "Failed to list worktrees: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        self.parse_worktree_list(&output_str).await
+    }
+
+    /// 古いワークツリーをクリーンアップ
+    pub async fn prune_worktrees(&self) -> Result<()> {
+        let output = Command::new("git")
+            .args(["worktree", "prune"])
+            .current_dir(&self.repo_path)
+            .output()
+            .await
+            .context("Failed to execute git worktree prune")?;
+
+        if !output.status.success() {
+            return Err(anyhow::anyhow!(
+                "Failed to prune worktrees: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        info!("Pruned stale worktrees");
+        Ok(())
+    }
+
+    /// インスタンス版のinit_if_needed
+    pub async fn init_repo_if_needed(&self) -> Result<()> {
+        Self::init_if_needed(&self.repo_path).await
+    }
+
+    /// 簡易版のcreate_worktree (デフォルトパラメータ付き)
     pub async fn create_worktree(
+        &self,
+        worktree_path: &Path,
+        branch_name: &str,
+    ) -> Result<ShellWorktreeInfo> {
+        self.create_worktree_full(worktree_path, branch_name, true)
+            .await
+    }
+
+    /// フルパラメータ版のcreate_worktree
+    pub async fn create_worktree_full(
         &self,
         worktree_path: &Path,
         branch_name: &str,
@@ -85,13 +141,13 @@ impl ShellWorktreeManager {
         let branch_exists = self.branch_exists(branch_name).await?;
 
         let mut args = vec!["worktree", "add"];
-        
+
         if create_new_branch || !branch_exists {
             args.extend(["-b", branch_name]);
         }
-        
+
         args.push(worktree_path.to_str().unwrap());
-        
+
         if !create_new_branch && branch_exists {
             args.push(branch_name);
         }
@@ -122,38 +178,27 @@ impl ShellWorktreeManager {
             is_bare: false,
         };
 
-        info!("Created worktree: {} on branch {}", worktree_path.display(), branch_name);
+        info!(
+            "Created worktree: {} on branch {}",
+            worktree_path.display(),
+            branch_name
+        );
         Ok(info)
     }
 
-    /// ワークツリー一覧を取得
-    pub async fn list_worktrees(&self) -> Result<Vec<ShellWorktreeInfo>> {
-        let output = Command::new("git")
-            .args(["worktree", "list", "--porcelain"])
-            .current_dir(&self.repo_path)
-            .output()
-            .await
-            .context("Failed to execute git worktree list")?;
-
-        if !output.status.success() {
-            return Err(anyhow::anyhow!(
-                "Failed to list worktrees: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        self.parse_worktree_list(&output_str).await
+    /// シンプル版のremove_worktree
+    pub async fn remove_worktree(&self, worktree_path: &Path) -> Result<()> {
+        self.remove_worktree_full(worktree_path, false).await
     }
 
-    /// ワークツリーを削除
-    pub async fn remove_worktree(&self, worktree_path: &Path, force: bool) -> Result<()> {
+    /// フルパラメータ版のremove_worktree
+    pub async fn remove_worktree_full(&self, worktree_path: &Path, force: bool) -> Result<()> {
         let mut args = vec!["worktree", "remove"];
-        
+
         if force {
             args.push("--force");
         }
-        
+
         args.push(worktree_path.to_str().unwrap());
 
         let output = Command::new("git")
@@ -174,23 +219,63 @@ impl ShellWorktreeManager {
         Ok(())
     }
 
-    /// 古いワークツリーをクリーンアップ
-    pub async fn prune_worktrees(&self) -> Result<()> {
-        let output = Command::new("git")
-            .args(["worktree", "prune"])
-            .current_dir(&self.repo_path)
+    /// ワークツリー内の変更をコミット
+    pub async fn commit_worktree_changes(&self, worktree_path: &Path, message: &str) -> Result<()> {
+        // まず変更があるかチェック
+        let status_output = Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(worktree_path)
             .output()
             .await
-            .context("Failed to execute git worktree prune")?;
+            .context("Failed to check git status")?;
 
-        if !output.status.success() {
+        if !status_output.status.success() {
             return Err(anyhow::anyhow!(
-                "Failed to prune worktrees: {}",
-                String::from_utf8_lossy(&output.stderr)
+                "Failed to check git status: {}",
+                String::from_utf8_lossy(&status_output.stderr)
             ));
         }
 
-        info!("Pruned stale worktrees");
+        // 変更がない場合は何もしない
+        if status_output.stdout.is_empty() {
+            info!(
+                "No changes to commit in worktree: {}",
+                worktree_path.display()
+            );
+            return Ok(());
+        }
+
+        // 変更をステージング
+        let add_output = Command::new("git")
+            .args(["add", "."])
+            .current_dir(worktree_path)
+            .output()
+            .await
+            .context("Failed to stage changes")?;
+
+        if !add_output.status.success() {
+            return Err(anyhow::anyhow!(
+                "Failed to stage changes: {}",
+                String::from_utf8_lossy(&add_output.stderr)
+            ));
+        }
+
+        // コミット
+        let commit_output = Command::new("git")
+            .args(["commit", "-m", message])
+            .current_dir(worktree_path)
+            .output()
+            .await
+            .context("Failed to commit changes")?;
+
+        if !commit_output.status.success() {
+            return Err(anyhow::anyhow!(
+                "Failed to commit changes: {}",
+                String::from_utf8_lossy(&commit_output.stderr)
+            ));
+        }
+
+        info!("Committed changes in worktree: {}", worktree_path.display());
         Ok(())
     }
 
@@ -252,9 +337,10 @@ impl ShellWorktreeManager {
                 if line.starts_with("HEAD ") {
                     wt.head_commit = line.strip_prefix("HEAD ").unwrap().to_string();
                 } else if line.starts_with("branch ") {
-                    wt.branch = line.strip_prefix("branch refs/heads/").unwrap_or(
-                        line.strip_prefix("branch ").unwrap()
-                    ).to_string();
+                    wt.branch = line
+                        .strip_prefix("branch refs/heads/")
+                        .unwrap_or(line.strip_prefix("branch ").unwrap())
+                        .to_string();
                 } else if line == "bare" {
                     wt.is_bare = true;
                 } else if line == "locked" {
@@ -282,8 +368,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let repo_path = temp_dir.path().to_path_buf();
 
-        ShellWorktreeManager::init_if_needed(&repo_path).await.unwrap();
-        
+        ShellWorktreeManager::init_if_needed(&repo_path)
+            .await
+            .unwrap();
+
         assert!(repo_path.join(".git").exists());
         assert!(repo_path.join("README.md").exists());
     }
@@ -294,13 +382,18 @@ mod tests {
         let repo_path = temp_dir.path().to_path_buf();
 
         // リポジトリを初期化
-        ShellWorktreeManager::init_if_needed(&repo_path).await.unwrap();
-        
+        ShellWorktreeManager::init_if_needed(&repo_path)
+            .await
+            .unwrap();
+
         let manager = ShellWorktreeManager::new(repo_path).unwrap();
         let worktree_path = temp_dir.path().join("test-worktree");
 
-        let info = manager.create_worktree(&worktree_path, "test-branch", true).await.unwrap();
-        
+        let info = manager
+            .create_worktree(&worktree_path, "test-branch")
+            .await
+            .unwrap();
+
         assert_eq!(info.branch, "test-branch");
         assert!(info.path.exists());
     }

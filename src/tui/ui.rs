@@ -66,7 +66,11 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
                 .title_alignment(Alignment::Center),
         )
         .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .highlight_style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
         .select(current_tab_index);
 
     f.render_widget(tabs, area);
@@ -78,15 +82,19 @@ fn draw_overview(f: &mut Frame, area: Rect, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(7), // System stats
+            Constraint::Length(8), // Provider stats
             Constraint::Min(0),    // Agent summary
         ])
         .split(area);
 
     // System stats
     draw_system_stats(f, chunks[0], app);
-    
+
+    // Provider statistics
+    draw_provider_stats(f, chunks[1], app);
+
     // Agent summary
-    draw_agent_summary(f, chunks[1], app);
+    draw_agent_summary(f, chunks[2], app);
 }
 
 /// Draw system statistics
@@ -150,6 +158,58 @@ fn draw_system_stats(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(system_status, chunks[3]);
 }
 
+/// Draw provider statistics
+fn draw_provider_stats(f: &mut Frame, area: Rect, app: &App) {
+    // Count providers
+    let mut provider_counts = std::collections::HashMap::new();
+    for agent in &app.agents {
+        *provider_counts
+            .entry(agent.provider_type.clone())
+            .or_insert(0) += 1;
+    }
+
+    // Create provider stats items
+    let items: Vec<ListItem> = provider_counts
+        .iter()
+        .map(|(provider, count)| {
+            let (icon, color) = match provider.as_str() {
+                "Claude Code" => ("🤖", Color::Blue),
+                "Aider" => ("🔧", Color::Green),
+                "OpenAI Codex" => ("🧠", Color::Magenta),
+                "Custom" => ("⚙️", Color::Gray),
+                _ => ("❓", Color::White),
+            };
+
+            let content = vec![Line::from(vec![
+                Span::styled(
+                    format!("{} {:<15}", icon, provider),
+                    Style::default().fg(color),
+                ),
+                Span::styled(
+                    format!("{} agent{}", count, if *count == 1 { "" } else { "s" }),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled(
+                    format!(
+                        " ({:.1}%)",
+                        (*count as f32 / app.agents.len().max(1) as f32) * 100.0
+                    ),
+                    Style::default().fg(Color::Gray),
+                ),
+            ])];
+            ListItem::new(content)
+        })
+        .collect();
+
+    let provider_list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Provider Distribution "),
+    );
+
+    f.render_widget(provider_list, area);
+}
+
 /// Draw agent summary
 fn draw_agent_summary(f: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = app
@@ -163,10 +223,22 @@ fn draw_agent_summary(f: &mut Frame, area: Rect, app: &App) {
                 _ => Color::Gray,
             };
 
+            let provider_color = match agent.provider_color.as_str() {
+                "blue" => Color::Blue,
+                "green" => Color::Green,
+                "purple" => Color::Magenta,
+                "gray" => Color::Gray,
+                _ => Color::White,
+            };
+
             let content = vec![Line::from(vec![
                 Span::styled(
                     format!("{:<20}", agent.name),
                     Style::default().fg(Color::Cyan),
+                ),
+                Span::styled(
+                    format!("{} {:<12}", agent.provider_icon, agent.provider_type),
+                    Style::default().fg(provider_color),
                 ),
                 Span::styled(
                     format!("{:<15}", agent.specialization),
@@ -216,17 +288,26 @@ fn draw_agents(f: &mut Frame, area: Rect, app: &App) {
                 _ => Color::Gray,
             };
 
+            let provider_color = match agent.provider_color.as_str() {
+                "blue" => Color::Blue,
+                "green" => Color::Green,
+                "purple" => Color::Magenta,
+                "gray" => Color::Gray,
+                _ => Color::White,
+            };
+
             let content = vec![Line::from(vec![
+                Span::styled(format!("{:<3}", i + 1), Style::default().fg(Color::Gray)),
                 Span::styled(
-                    format!("{:<3}", i + 1),
-                    Style::default().fg(Color::Gray),
-                ),
-                Span::styled(
-                    format!("{:<25}", agent.name),
+                    format!("{:<20}", agent.name),
                     Style::default().fg(Color::Cyan),
                 ),
                 Span::styled(
-                    format!("{:<15}", agent.specialization),
+                    format!("{} {:<10}", agent.provider_icon, agent.provider_type),
+                    Style::default().fg(provider_color),
+                ),
+                Span::styled(
+                    format!("{:<12}", agent.specialization),
                     Style::default().fg(Color::White),
                 ),
                 Span::styled(
@@ -245,7 +326,7 @@ fn draw_agents(f: &mut Frame, area: Rect, app: &App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Agents (↑/↓ to navigate, Enter to view details) "),
+                .title(" Agents: #  Name                Provider      Type         Status          (↑/↓ to navigate, Enter to view details) "),
         )
         .highlight_style(
             Style::default()
@@ -262,6 +343,7 @@ fn draw_agents(f: &mut Frame, area: Rect, app: &App) {
             format!("ID: {}", agent.id),
             format!("Name: {}", agent.name),
             format!("Type: {}", agent.specialization),
+            format!("Provider: {} {}", agent.provider_icon, agent.provider_type),
             format!("Status: {:?}", agent.status),
             format!("Tasks Completed: {}", agent.tasks_completed),
             format!("Last Activity: {}", agent.last_activity.format("%H:%M:%S")),
@@ -313,7 +395,10 @@ fn draw_tasks(f: &mut Frame, area: Rect, app: &App) {
             Row::new(vec![
                 Cell::from(format!("{}", i + 1)),
                 Cell::from(task.description.clone()),
-                Cell::from(Span::styled(task.priority.clone(), Style::default().fg(priority_color))),
+                Cell::from(Span::styled(
+                    task.priority.clone(),
+                    Style::default().fg(priority_color),
+                )),
                 Cell::from(task.task_type.clone()),
                 Cell::from(task.status.clone()),
             ])
@@ -333,15 +418,15 @@ fn draw_tasks(f: &mut Frame, area: Rect, app: &App) {
             Constraint::Length(10),
             Constraint::Length(15),
             Constraint::Length(10),
-        ]
+        ],
     )
-        .header(header)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Tasks (t to add new task) "),
-        )
-        .highlight_style(selected_style);
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Tasks (t to add new task) "),
+    )
+    .highlight_style(selected_style);
 
     let mut table_state = ratatui::widgets::TableState::default();
     table_state.select(Some(app.selected_task));
@@ -400,10 +485,7 @@ fn draw_logs(f: &mut Frame, area: Rect, app: &App) {
                     Style::default().fg(level_color),
                 ),
                 Span::styled(
-                    format!(
-                        "{:<12} ",
-                        log.agent.as_deref().unwrap_or("System")
-                    ),
+                    format!("{:<12} ", log.agent.as_deref().unwrap_or("System")),
                     Style::default().fg(Color::Cyan),
                 ),
                 Span::styled(log.message.clone(), Style::default().fg(Color::White)),
@@ -436,11 +518,7 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     };
 
     let footer = Paragraph::new(key_bindings)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Controls "),
-        )
+        .block(Block::default().borders(Borders::ALL).title(" Controls "))
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center);
 
@@ -459,7 +537,9 @@ fn draw_input_popup(f: &mut Frame, app: &App) {
     };
 
     let prompt = match app.input_mode {
-        InputMode::AddingTask => "Enter task description (use [high]/[low] for priority, [test]/[docs]/etc for type):",
+        InputMode::AddingTask => {
+            "Enter task description (use [high]/[low] for priority, [test]/[docs]/etc for type):"
+        }
         InputMode::CreatingAgent => "Enter agent type (frontend/backend/devops/qa):",
         InputMode::Command => "Enter command (help for available commands):",
         _ => "Enter input:",

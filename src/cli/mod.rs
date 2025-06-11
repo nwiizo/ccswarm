@@ -595,7 +595,11 @@ impl CliRunner {
                 branch,
                 new_branch,
             } => {
-                let info = manager.create_worktree(path, branch, *new_branch).await?;
+                let info = if *new_branch {
+                    manager.create_worktree_full(path, branch, true).await?
+                } else {
+                    manager.create_worktree(path, branch).await?
+                };
 
                 if self.json_output {
                     println!("{}", serde_json::to_string_pretty(&info)?);
@@ -606,7 +610,11 @@ impl CliRunner {
                 }
             }
             WorktreeAction::Remove { path, force } => {
-                manager.remove_worktree(path, *force).await?;
+                if *force {
+                    manager.remove_worktree_full(path, true).await?
+                } else {
+                    manager.remove_worktree(path).await?
+                };
 
                 if self.json_output {
                     println!(
