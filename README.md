@@ -2,16 +2,17 @@
 
 > ⚠️ **BETA SOFTWARE**: This is pre-release software under active development. Features may change, and bugs may exist. Please report issues on GitHub.
 
-
+[![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Downloads](https://img.shields.io/crates/d/ccswarm.svg)](https://crates.io/crates/ccswarm)
 
-**ccswarm** is an advanced multi-agent orchestration system featuring the **Session-Persistent Agent Architecture** for **93% token reduction** and **AI-Powered Auto-Create System** for instant application generation. Master Claude Code orchestrates specialized AI agents with persistent sessions, auto-accept mode, real-time monitoring, and multi-provider support, enabling scalable distributed development using Git worktrees, intelligent session pooling, and CLAUDE.md configuration files. Generate complete applications from natural language descriptions in seconds!
+**ccswarm** is an advanced multi-agent orchestration system that orchestrates specialized AI agents with session management, auto-accept mode, real-time monitoring, and multi-provider support, enabling scalable distributed development using Git worktrees and CLAUDE.md configuration files. Now available on [crates.io](https://crates.io/crates/ccswarm)!
 
 ## 🌟 Core Design Philosophy
 
-- **🎯 AI-Powered Auto-Create**: Generate complete applications from natural language in seconds
-- **🚀 Session-Persistent Architecture**: Revolutionary 93% token reduction through intelligent session reuse
+- **🎯 Auto-Create Templates**: Generate application templates from predefined structures
+- **🚀 Session Management**: Persistent sessions with conversation history
 - **🔄 Conversation Continuity**: Preserve context across tasks for enhanced performance
 - **📊 Batch Processing**: Execute multiple tasks efficiently in single sessions
 - **Multi-Provider Support**: Works with Claude Code, Aider, OpenAI Codex, and custom tools
@@ -27,17 +28,28 @@
 
 ### 1. Installation
 
-```bash
-# Ensure Rust is installed
-rustc --version
+#### Install from crates.io (Recommended)
 
-# Build ccswarm
+```bash
+# Install the latest version
+cargo install ccswarm
+
+# Or install a specific version
+cargo install ccswarm --version 0.1.0
+```
+
+#### Build from Source
+
+```bash
+# Clone repository
 git clone https://github.com/nwiizo/ccswarm.git
 cd ccswarm
+
+# Build release version
 cargo build --release
 
-# Add binary to PATH (optional)
-sudo cp target/release/ccswarm /usr/local/bin/
+# Install locally
+cargo install --path .
 ```
 
 ### 2. Project Initialization
@@ -97,16 +109,17 @@ ccswarm status --detailed
 
 ## 🚀 Session-Persistent Agent Architecture
 
-### Revolutionary Token Efficiency
+### Session Management Features
 
-The **Session-Persistent Agent Architecture** represents a breakthrough in AI agent efficiency, delivering **93% token reduction** through intelligent session management:
+The Session-Persistent Agent Architecture provides session management capabilities:
 
-#### Traditional vs. Session-Persistent Approach
+#### Session Management Approach
 
-| Approach | 50 Tasks Token Usage | Efficiency | Session Reuse |
-|----------|----------------------|------------|---------------|
-| **Traditional** | 180,000 tokens | 100% overhead per task | None |
-| **Session-Persistent** | 13,400 tokens | 93% reduction | Intelligent reuse |
+| Feature | Description |
+|---------|-------------|
+| **Session Persistence** | Maintains conversation history across tasks |
+| **Session Pooling** | Reuses existing sessions when possible |
+| **Batch Processing** | Executes multiple tasks in single sessions |
 
 #### Key Technical Innovations
 
@@ -130,21 +143,6 @@ The **Session-Persistent Agent Architecture** represents a breakthrough in AI ag
    - Real-time drift detection and correction
    - Preserve agent specialization boundaries
 
-#### Performance Metrics
-
-```
-Traditional Approach (50 tasks):
-├── CLAUDE.md reading: 50 × 2,000 = 100,000 tokens
-├── Identity establishment: 50 × 500 = 25,000 tokens  
-├── Task prompts: 50 × 800 = 40,000 tokens
-├── Boundary verification: 50 × 300 = 15,000 tokens
-└── Total: 180,000 tokens
-
-Session-Persistent Approach (50 tasks):
-├── Initial identity: 1 × 3,600 = 3,600 tokens
-├── Additional tasks: 49 × 200 = 9,800 tokens
-└── Total: 13,400 tokens (93% reduction)
-```
 
 ## 🏗️ System Architecture
 
@@ -154,7 +152,7 @@ Session-Persistent Approach (50 tasks):
 │         Master Claude Code              │ ← Orchestration & Quality Management
 │         (claude --json automation)      │
 ├─────────────────────────────────────────┤
-│    🚀 Session-Persistent Manager       │ ← 93% Token Reduction Engine
+│    🚀 Session-Persistent Manager       │ ← Session Management Engine
 │    ├─ Session Pool & Load Balancing ─┤ │ ← Intelligent session reuse
 │    ├─ Conversation History (50 msgs) ─┤ │ ← Context preservation
 │    ├─ Batch Task Processing ─────────┤ │ ← Amortized overhead
@@ -343,9 +341,9 @@ ccswarm delegate show
    Estimated Duration: 2400 seconds
 ```
 
-### 🚀 AI-Powered Auto-Create System
+### 🚀 Auto-Create System
 
-Generate complete, working applications from natural language descriptions in seconds!
+Generate application templates using predefined structures:
 
 ```bash
 # Generate TODO application
@@ -379,12 +377,10 @@ my_app/
 
 #### Auto-Create Features
 
-- **Intelligent Analysis**: Detects app type from natural language
-- **Task Decomposition**: Breaks requirements into agent tasks
-- **Multi-Agent Execution**: Frontend, Backend, DevOps, QA collaborate
-- **Complete Applications**: Fully functional, ready to run
-- **Best Practices**: Modern standards, clean architecture
-- **Customization**: Adapts to auth, real-time, mobile requirements
+- **Template Selection**: Matches request to predefined templates
+- **Task Creation**: Creates tasks for each agent role
+- **File Generation**: Creates standard boilerplate files
+- **Basic Structure**: Provides starting point for development
 
 ### Agent Management
 

@@ -38,23 +38,23 @@ cargo run -- auto-create "Create blog with auth" --output ./blog
 cargo run -- delegate analyze "Create login form" --verbose
 cargo run -- delegate task "Add auth" --agent backend --priority high
 
-# Session management (93% token efficiency)
+# Session management
 cargo run -- session list
 cargo run -- worktree list
 ```
 
 ## 🏗️ Architecture Overview
 
-ccswarm is an AI-powered multi-agent orchestration system with three revolutionary features:
+ccswarm is an AI-powered multi-agent orchestration system with three key features:
 
-1. **Session-Persistent Architecture** - 93% token reduction through intelligent session reuse
-2. **Master Delegation System** - AI-powered task analysis and optimal agent assignment  
-3. **Auto-Create System** - Generate complete applications from natural language
+1. **Session-Persistent Architecture** - Session management and reuse capabilities
+2. **Master Delegation System** - Task analysis and agent assignment  
+3. **Auto-Create System** - Generate application templates from predefined structures
 
 ### Core Modules (`src/`)
 - `agent/` - Agent implementations with persistent sessions
 - `identity/` - Agent roles and boundary checking
-- `session/` - Session persistence and pooling (93% token reduction)
+- `session/` - Session persistence and pooling
 - `orchestrator/` - Master Claude, delegation, and auto-create
 - `providers/` - Multi-provider support (Claude Code, Aider, Codex)
 - `auto_accept/` - Safe automation with risk assessment
@@ -76,11 +76,10 @@ pub enum AgentRole {
 
 ## 💡 Session-Persistent Architecture
 
-### 93% Token Reduction
-```
-Traditional: 180,000 tokens (50 tasks)
-Session-Persistent: 13,400 tokens (93% reduction)
-```
+### Session Management Features
+- Conversation history preservation
+- Session pooling and reuse
+- Batch task execution
 
 ### Key Components
 - `src/session/persistent.rs` - Conversation history preservation
@@ -184,7 +183,7 @@ cargo run --example monitoring_demo
 ## ⚠️ Critical Notes
 
 ### Performance
-- Session reuse dramatically reduces token usage
+- Session reuse can improve efficiency
 - Git worktree isolation requires disk space
 - JSON coordination may have latency
 - Real-time monitoring adds minimal overhead
