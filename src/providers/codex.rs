@@ -29,19 +29,25 @@ struct OpenAIMessage {
 /// OpenAI API response structure
 #[derive(Debug, Deserialize)]
 struct OpenAIResponse {
+    #[allow(dead_code)] // Part of API response structure
     id: String,
+    #[allow(dead_code)] // Part of API response structure
     object: String,
+    #[allow(dead_code)] // Part of API response structure
     created: u64,
     model: String,
     choices: Vec<OpenAIChoice>,
+    #[allow(dead_code)] // Part of API response structure
     usage: Option<OpenAIUsage>,
 }
 
 /// OpenAI choice structure
 #[derive(Debug, Deserialize)]
 struct OpenAIChoice {
+    #[allow(dead_code)] // Part of API response structure
     index: u32,
     message: OpenAIMessage,
+    #[allow(dead_code)] // Part of API response structure
     finish_reason: Option<String>,
 }
 
@@ -65,6 +71,7 @@ struct OpenAIErrorDetails {
     message: String,
     #[serde(rename = "type")]
     error_type: String,
+    #[allow(dead_code)] // Part of API response structure
     code: Option<String>,
 }
 
@@ -226,7 +233,7 @@ impl CodexExecutor {
     }
 
     /// Generate task-specific prompt for Codex
-    fn generate_task_prompt(&self, identity: &AgentIdentity, task: &Task) -> String {
+    fn generate_task_prompt(&self, _identity: &AgentIdentity, task: &Task) -> String {
         let task_header = format!(
             "TASK REQUEST\n\
              Task ID: {}\n\
@@ -333,6 +340,35 @@ impl CodexExecutor {
             .unwrap_or_else(|| "https://api.openai.com/v1".to_string())
     }
 
+    /// Parse OpenAI response into TaskResult for testing
+    #[cfg(test)]
+    fn parse_response(&self, response: OpenAIResponse, task: &Task, duration: std::time::Duration) -> TaskResult {
+        if let Some(choice) = response.choices.first() {
+            TaskResult {
+                success: true,
+                output: serde_json::json!({
+                    "response": choice.message.content,
+                    "response_id": response.id,
+                    "provider": "codex",
+                    "model": response.model,
+                    "task_id": task.id,
+                }),
+                error: None,
+                duration,
+            }
+        } else {
+            TaskResult {
+                success: false,
+                output: serde_json::json!({
+                    "provider": "codex",
+                    "model": response.model,
+                }),
+                error: Some("No response choices returned".to_string()),
+                duration,
+            }
+        }
+    }
+
     /// Make API request to OpenAI
     async fn make_api_request(&self, request: OpenAIRequest) -> Result<OpenAIResponse> {
         let url = format!("{}/chat/completions", self.get_api_base());
@@ -371,45 +407,6 @@ impl CodexExecutor {
         }
     }
 
-    /// Parse OpenAI response into task result
-    fn parse_response(
-        &self,
-        response: OpenAIResponse,
-        task: &Task,
-        duration: std::time::Duration,
-    ) -> TaskResult {
-        let success = !response.choices.is_empty()
-            && response
-                .choices
-                .iter()
-                .all(|choice| choice.finish_reason.as_ref() != Some(&"error".to_string()));
-
-        let content = if let Some(choice) = response.choices.first() {
-            choice.message.content.clone()
-        } else {
-            "No response generated".to_string()
-        };
-
-        TaskResult {
-            success,
-            output: serde_json::json!({
-                "response": content,
-                "task_id": task.id,
-                "provider": "codex",
-                "model": response.model,
-                "response_id": response.id,
-                "finish_reason": response.choices.first().and_then(|c| c.finish_reason.clone()),
-                "usage": response.usage,
-                "total_choices": response.choices.len(),
-            }),
-            error: if success {
-                None
-            } else {
-                Some("Failed to generate valid response".to_string())
-            },
-            duration,
-        }
-    }
 }
 
 #[async_trait]

@@ -1,3 +1,6 @@
+pub mod master_delegation;
+pub mod auto_create;
+
 use anyhow::{Context, Result};
 use async_channel::{Receiver, Sender};
 use chrono::{DateTime, Utc};

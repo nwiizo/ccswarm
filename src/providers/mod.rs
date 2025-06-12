@@ -3,7 +3,7 @@ pub mod claude_code;
 pub mod codex;
 pub mod custom;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

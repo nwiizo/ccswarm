@@ -12,6 +12,7 @@ pub enum Tab {
     Agents,
     Tasks,
     Logs,
+    Delegation,
 }
 
 impl Tab {
@@ -21,6 +22,7 @@ impl Tab {
             Tab::Agents => "Agents",
             Tab::Tasks => "Tasks",
             Tab::Logs => "Logs",
+            Tab::Delegation => "Delegation",
         }
     }
 }
@@ -62,6 +64,24 @@ pub struct LogEntry {
     pub message: String,
 }
 
+/// Delegation decision for display
+#[derive(Debug, Clone)]
+pub struct DelegationInfo {
+    pub task_description: String,
+    pub recommended_agent: String,
+    pub confidence: f64,
+    pub reasoning: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Delegation state for TUI
+#[derive(Debug, Clone, PartialEq)]
+pub enum DelegationMode {
+    Analyze,
+    Delegate,
+    ViewStats,
+}
+
 /// Application state for TUI
 pub struct App {
     /// Current active tab
@@ -71,11 +91,13 @@ pub struct App {
     pub selected_agent: usize,
     pub selected_task: usize,
     pub selected_log: usize,
+    pub selected_delegation: usize,
 
     /// Data
     pub agents: Vec<AgentInfo>,
     pub tasks: Vec<TaskInfo>,
     pub logs: Vec<LogEntry>,
+    pub delegation_decisions: Vec<DelegationInfo>,
 
     /// System state
     pub system_status: String,
@@ -87,6 +109,10 @@ pub struct App {
     /// Input state
     pub input_mode: InputMode,
     pub input_buffer: String,
+    
+    /// Delegation state
+    pub delegation_mode: DelegationMode,
+    pub delegation_input: String,
 
     /// Coordination components
     pub coordination_bus: CoordinationBus,
@@ -108,6 +134,7 @@ pub enum InputMode {
     AddingTask,
     CreatingAgent,
     Command,
+    DelegationInput,
 }
 
 impl App {
@@ -122,9 +149,11 @@ impl App {
             selected_agent: 0,
             selected_task: 0,
             selected_log: 0,
+            selected_delegation: 0,
             agents: Vec::new(),
             tasks: Vec::new(),
             logs: Vec::new(),
+            delegation_decisions: Vec::new(),
             system_status: "Starting...".to_string(),
             total_agents: 0,
             active_agents: 0,
@@ -132,6 +161,8 @@ impl App {
             completed_tasks: 0,
             input_mode: InputMode::Normal,
             input_buffer: String::new(),
+            delegation_mode: DelegationMode::Analyze,
+            delegation_input: String::new(),
             coordination_bus,
             status_tracker,
             task_queue,
@@ -148,7 +179,8 @@ impl App {
             Tab::Overview => Tab::Agents,
             Tab::Agents => Tab::Tasks,
             Tab::Tasks => Tab::Logs,
-            Tab::Logs => Tab::Overview,
+            Tab::Logs => Tab::Delegation,
+            Tab::Delegation => Tab::Overview,
         };
         self.reset_selection();
     }
@@ -156,10 +188,11 @@ impl App {
     /// Navigate to previous tab
     pub fn previous_tab(&mut self) {
         self.current_tab = match self.current_tab {
-            Tab::Overview => Tab::Logs,
+            Tab::Overview => Tab::Delegation,
             Tab::Agents => Tab::Overview,
             Tab::Tasks => Tab::Agents,
             Tab::Logs => Tab::Tasks,
+            Tab::Delegation => Tab::Logs,
         };
         self.reset_selection();
     }
@@ -180,6 +213,11 @@ impl App {
             Tab::Logs => {
                 if self.selected_log > 0 {
                     self.selected_log -= 1;
+                }
+            }
+            Tab::Delegation => {
+                if self.selected_delegation > 0 {
+                    self.selected_delegation -= 1;
                 }
             }
             _ => {}
@@ -204,6 +242,11 @@ impl App {
                     self.selected_log += 1;
                 }
             }
+            Tab::Delegation => {
+                if self.selected_delegation < self.delegation_decisions.len().saturating_sub(1) {
+                    self.selected_delegation += 1;
+                }
+            }
             _ => {}
         }
     }
@@ -214,17 +257,30 @@ impl App {
             Tab::Agents => self.selected_agent = 0,
             Tab::Tasks => self.selected_task = 0,
             Tab::Logs => self.selected_log = 0,
+            Tab::Delegation => self.selected_delegation = 0,
             _ => {}
         }
     }
 
-    /// Activate selected item
+    /// Activate selected item (start agent if available)
     pub async fn activate_selected(&mut self) -> Result<()> {
         match self.current_tab {
             Tab::Agents => {
-                if let Some(agent) = self.agents.get(self.selected_agent) {
-                    let agent_id = agent.id.clone();
-                    self.show_agent_details(&agent_id).await?;
+                if let Some(agent) = self.agents.get(self.selected_agent).cloned() {
+                    match agent.status {
+                        AgentStatus::Available => {
+                            // Start the agent
+                            self.start_agent(&agent.id).await?;
+                        }
+                        AgentStatus::Working => {
+                            // Show agent details
+                            self.show_agent_details(&agent.id).await?;
+                        }
+                        _ => {
+                            // Show agent details for other statuses
+                            self.show_agent_details(&agent.id).await?;
+                        }
+                    }
                 }
             }
             Tab::Tasks => {
@@ -234,6 +290,53 @@ impl App {
                 }
             }
             _ => {}
+        }
+        Ok(())
+    }
+
+    /// Start an available agent
+    pub async fn start_agent(&mut self, agent_id: &str) -> Result<()> {
+        let mut agent_info = None;
+        
+        // Find the agent and collect info
+        if let Some(agent) = self.agents.iter_mut().find(|a| a.id == agent_id) {
+            // Change status to Working
+            agent.status = AgentStatus::Working;
+            agent.last_activity = Utc::now();
+            
+            // Collect info for logging
+            agent_info = Some((agent.name.clone(), agent.specialization.clone()));
+            
+            // Update system stats
+            self.active_agents += 1;
+        }
+        
+        // Log after borrowing ends
+        if let Some((name, specialization)) = agent_info {
+            self.add_log("System", &format!("🚀 Starting agent: {} ({})", name, specialization)).await;
+            
+            // If this is a Master agent, provide special logging
+            if specialization.contains("Master") {
+                self.add_log("Master", "🎯 Master Claude Code orchestrator activated").await;
+                self.add_log("Master", "📋 Ready to coordinate multi-agent tasks").await;
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Start agent by ID or name
+    pub async fn start_agent_by_id(&mut self, identifier: &str) -> Result<()> {
+        // Find agent by ID or name
+        let agent_to_start = self.agents
+            .iter()
+            .find(|a| a.id == identifier || a.name == identifier)
+            .map(|a| a.id.clone());
+
+        if let Some(agent_id) = agent_to_start {
+            self.start_agent(&agent_id).await?;
+        } else {
+            self.add_log("System", &format!("Agent not found: {}", identifier)).await;
         }
         Ok(())
     }
@@ -315,11 +418,61 @@ impl App {
         let statuses = self.status_tracker.get_all_statuses().await?;
 
         self.agents.clear();
+        
+        // Always add Master Claude Code agent
+        let master_agent = AgentInfo {
+            id: "master-claude-code".to_string(),
+            name: "master".to_string(),
+            specialization: "Master Claude Code".to_string(),
+            provider_type: "claude_code".to_string(),
+            provider_icon: "👑".to_string(),
+            provider_color: "gold".to_string(),
+            status: AgentStatus::Available,
+            current_task: None,
+            tasks_completed: 0,
+            last_activity: Utc::now(),
+            workspace: "/workspace".to_string(),
+        };
+        self.agents.push(master_agent);
+
+        // Add other default agents
+        let default_agents = vec![
+            ("qa-agent", "qa", "QA Specialist"),
+            ("devops-agent", "devops", "DevOps Specialist"), 
+            ("test-agent", "test", "Test Specialist"),
+            ("error-agent", "error", "Error Handler"),
+            ("backend-agent", "backend", "Backend Specialist"),
+            ("frontend-agent", "frontend", "Frontend Specialist"),
+        ];
+
+        for (id, name, spec) in default_agents {
+            let agent = AgentInfo {
+                id: id.to_string(),
+                name: name.to_string(),
+                specialization: spec.to_string(),
+                provider_type: "claude_code".to_string(),
+                provider_icon: "🤖".to_string(),
+                provider_color: "blue".to_string(),
+                status: AgentStatus::Available,
+                current_task: None,
+                tasks_completed: 0,
+                last_activity: Utc::now(),
+                workspace: "Unknown".to_string(),
+            };
+            self.agents.push(agent);
+        }
+
+        // Load dynamic agents from coordination system
         for (_i, status) in statuses.iter().enumerate() {
             if let (Some(agent_id), Some(status_val)) = (
                 status.get("agent_id").and_then(|v| v.as_str()),
                 status.get("status").and_then(|v| v.as_str()),
             ) {
+                // Skip if already exists in default agents
+                if self.agents.iter().any(|a| a.id == agent_id) {
+                    continue;
+                }
+
                 let agent_info = AgentInfo {
                     id: agent_id.to_string(),
                     name: agent_id.split('-').next().unwrap_or("Unknown").to_string(),
@@ -484,6 +637,11 @@ impl App {
                     self.execute_command(&input).await?;
                 }
             }
+            InputMode::DelegationInput => {
+                if !input.is_empty() {
+                    self.execute_delegation_action(&input).await?;
+                }
+            }
             _ => {}
         }
 
@@ -562,6 +720,13 @@ impl App {
                     self.add_log("System", "Usage: agent <type>").await;
                 }
             }
+            "start_agent" | "activate" => {
+                if let Some(agent_id) = args.get(0) {
+                    self.start_agent_by_id(agent_id).await?;
+                } else {
+                    self.add_log("System", "Usage: start_agent <agent_id|agent_name>").await;
+                }
+            }
             "start" => self.start_orchestrator().await?,
             "stop" => self.stop_orchestrator().await?,
             "refresh" => {
@@ -602,16 +767,18 @@ impl App {
     async fn show_help(&mut self) {
         let help_text = vec![
             "Available commands:",
-            "  help                 - Show this help",
-            "  status              - Show system status",
-            "  agents              - List all agents",
-            "  tasks               - List all tasks",
-            "  task <description>  - Add new task",
-            "  agent <type>        - Create new agent (frontend/backend/devops/qa)",
-            "  start               - Start orchestrator",
-            "  stop                - Stop orchestrator",
-            "  refresh             - Refresh all data",
-            "  clear               - Clear logs",
+            "  help                    - Show this help",
+            "  status                  - Show system status",
+            "  agents                  - List all agents",
+            "  tasks                   - List all tasks",
+            "  task <description>      - Add new task",
+            "  agent <type>            - Create new agent (frontend/backend/devops/qa)",
+            "  start_agent <id|name>   - Start/activate an agent (e.g., 'start_agent master')",
+            "  activate <id|name>      - Alias for start_agent",
+            "  start                   - Start orchestrator",
+            "  stop                    - Stop orchestrator",
+            "  refresh                 - Refresh all data",
+            "  clear                   - Clear logs",
             "  worktree [list|prune] - Manage worktrees",
         ];
 
@@ -666,6 +833,7 @@ impl App {
 
     /// Show detailed status
     async fn show_detailed_status(&mut self) -> Result<()> {
+        self.add_log("System", "=== Detailed System Status ===").await;
         self.add_log("System", &format!("System Status: {}", self.system_status))
             .await;
         self.add_log("System", &format!("Total Agents: {}", self.total_agents))
@@ -679,6 +847,11 @@ impl App {
             &format!("Completed Tasks: {}", self.completed_tasks),
         )
         .await;
+        
+        // Show Master Claude Code status specifically
+        if let Some(master) = self.agents.iter().find(|a| a.specialization.contains("Master")) {
+            self.add_log("System", &format!("👑 Master Claude Code: {:?}", master.status)).await;
+        }
         Ok(())
     }
 
@@ -764,7 +937,212 @@ impl App {
         self.add_log("System", "Worktree pruning completed").await;
         Ok(())
     }
+
+    /// Switch delegation mode
+    pub fn switch_delegation_mode(&mut self) {
+        self.delegation_mode = match self.delegation_mode {
+            DelegationMode::Analyze => DelegationMode::Delegate,
+            DelegationMode::Delegate => DelegationMode::ViewStats,
+            DelegationMode::ViewStats => DelegationMode::Analyze,
+        };
+    }
+
+    /// Start delegation input mode
+    pub async fn start_delegation_input(&mut self) -> Result<()> {
+        self.input_mode = InputMode::DelegationInput;
+        self.delegation_input.clear();
+        
+        match self.delegation_mode {
+            DelegationMode::Analyze => {
+                self.add_log("Master", "Enter task description to analyze:").await;
+            }
+            DelegationMode::Delegate => {
+                self.add_log("Master", "Enter task description to delegate:").await;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Execute delegation action
+    async fn execute_delegation_action(&mut self, input: &str) -> Result<()> {
+        match self.delegation_mode {
+            DelegationMode::Analyze => {
+                self.analyze_task_for_delegation(input).await?;
+            }
+            DelegationMode::Delegate => {
+                self.delegate_task_to_agent(input).await?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Analyze task for delegation
+    async fn analyze_task_for_delegation(&mut self, task_description: &str) -> Result<()> {
+        self.add_log("Master", &format!("🔍 Analyzing task: '{}'", task_description)).await;
+
+        // Use basic rule-based analysis for demo
+        let (recommended_agent, confidence, reasoning) = self.analyze_task_content(task_description);
+
+        let delegation_info = DelegationInfo {
+            task_description: task_description.to_string(),
+            recommended_agent: recommended_agent.clone(),
+            confidence,
+            reasoning: reasoning.clone(),
+            created_at: chrono::Utc::now(),
+        };
+
+        self.delegation_decisions.push(delegation_info);
+
+        self.add_log("Master", &format!(
+            "✅ Analysis complete: {} agent recommended ({:.1}% confidence)",
+            recommended_agent, confidence * 100.0
+        )).await;
+        self.add_log("Master", &format!("📝 Reasoning: {}", reasoning)).await;
+
+        Ok(())
+    }
+
+    /// Delegate task to specific agent
+    async fn delegate_task_to_agent(&mut self, input: &str) -> Result<()> {
+        // Parse input as "agent_type task_description"
+        let parts: Vec<&str> = input.splitn(2, ' ').collect();
+        if parts.len() < 2 {
+            self.add_log("Master", "Usage: <agent_type> <task_description>").await;
+            return Ok(());
+        }
+
+        let agent_type = parts[0];
+        let task_description = parts[1];
+
+        // Validate agent type
+        let valid_agents = ["frontend", "backend", "devops", "qa"];
+        if !valid_agents.contains(&agent_type) {
+            self.add_log("Master", &format!(
+                "Invalid agent type: {}. Valid agents: {}", 
+                agent_type, 
+                valid_agents.join(", ")
+            )).await;
+            return Ok(());
+        }
+
+        self.add_log("Master", &format!(
+            "🎯 Delegating task to {} agent: '{}'", 
+            agent_type, 
+            task_description
+        )).await;
+
+        // Create and add task to queue
+        let task = crate::agent::Task::new(
+            uuid::Uuid::new_v4().to_string(),
+            task_description.to_string(),
+            crate::agent::Priority::Medium,
+            crate::agent::TaskType::Development,
+        );
+
+        self.task_queue.add_task(&task).await?;
+
+        // Add delegation decision for tracking
+        let delegation_info = DelegationInfo {
+            task_description: task_description.to_string(),
+            recommended_agent: agent_type.to_string(),
+            confidence: 1.0, // Manual delegation is 100% confident
+            reasoning: "Manual delegation by Master".to_string(),
+            created_at: chrono::Utc::now(),
+        };
+
+        self.delegation_decisions.push(delegation_info);
+
+        self.add_log("Master", &format!("✅ Task delegated to {} agent successfully", agent_type)).await;
+        self.refresh_data().await?;
+
+        Ok(())
+    }
+
+    /// Analyze task content and recommend agent
+    fn analyze_task_content(&self, task_description: &str) -> (String, f64, String) {
+        let desc_lower = task_description.to_lowercase();
+
+        // Frontend keywords
+        if desc_lower.contains("ui") || desc_lower.contains("html") || desc_lower.contains("css") ||
+           desc_lower.contains("javascript") || desc_lower.contains("component") || 
+           desc_lower.contains("react") || desc_lower.contains("vue") || desc_lower.contains("frontend") {
+            return ("Frontend".to_string(), 0.9, "Contains UI/frontend keywords".to_string());
+        }
+
+        // Backend keywords
+        if desc_lower.contains("api") || desc_lower.contains("server") || desc_lower.contains("database") ||
+           desc_lower.contains("backend") || desc_lower.contains("endpoint") || desc_lower.contains("node") ||
+           desc_lower.contains("express") || desc_lower.contains("rest") {
+            return ("Backend".to_string(), 0.9, "Contains API/backend keywords".to_string());
+        }
+
+        // Testing keywords
+        if desc_lower.contains("test") || desc_lower.contains("testing") || desc_lower.contains("qa") ||
+           desc_lower.contains("quality") || desc_lower.contains("validation") || desc_lower.contains("unit") {
+            return ("QA".to_string(), 0.9, "Contains testing/QA keywords".to_string());
+        }
+
+        // Infrastructure keywords
+        if desc_lower.contains("deploy") || desc_lower.contains("ci/cd") || desc_lower.contains("docker") ||
+           desc_lower.contains("infrastructure") || desc_lower.contains("pipeline") || 
+           desc_lower.contains("build") || desc_lower.contains("devops") {
+            return ("DevOps".to_string(), 0.9, "Contains infrastructure/DevOps keywords".to_string());
+        }
+
+        // Default to backend for general development
+        ("Backend".to_string(), 0.6, "General development task, defaulting to backend".to_string())
+    }
+
+    /// Get delegation statistics
+    pub fn get_delegation_stats(&self) -> String {
+        if self.delegation_decisions.is_empty() {
+            return "No delegation decisions yet".to_string();
+        }
+
+        let total = self.delegation_decisions.len();
+        let mut agent_counts = std::collections::HashMap::new();
+        let mut total_confidence = 0.0;
+
+        for decision in &self.delegation_decisions {
+            *agent_counts.entry(decision.recommended_agent.clone()).or_insert(0) += 1;
+            total_confidence += decision.confidence;
+        }
+
+        let avg_confidence = total_confidence / total as f64;
+
+        let mut stats = format!("📊 Delegation Statistics:\n");
+        stats.push_str(&format!("Total delegations: {}\n", total));
+        stats.push_str(&format!("Average confidence: {:.1}%\n", avg_confidence * 100.0));
+        stats.push_str("Agent distribution:\n");
+
+        for (agent, count) in agent_counts {
+            let percentage = (count as f64 / total as f64) * 100.0;
+            stats.push_str(&format!("  {}: {} ({:.1}%)\n", agent, count, percentage));
+        }
+
+        stats
+    }
+
+    /// Handle delegation tab interactions
+    pub async fn handle_delegation_enter(&mut self) -> Result<()> {
+        match self.delegation_mode {
+            DelegationMode::Analyze | DelegationMode::Delegate => {
+                self.start_delegation_input().await?;
+            }
+            DelegationMode::ViewStats => {
+                // Show delegation statistics
+                let stats = self.get_delegation_stats();
+                for line in stats.lines() {
+                    self.add_log("Master", line).await;
+                }
+            }
+        }
+        Ok(())
+    }
 }
+
 
 /// Parse agent status from string
 fn parse_agent_status(status: &str) -> AgentStatus {

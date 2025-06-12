@@ -2,7 +2,7 @@
 ///
 /// This module provides sophisticated session pooling, load balancing, and
 /// resource management for optimal token efficiency and performance.
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -13,11 +13,11 @@ use tokio::time::interval;
 use uuid::Uuid;
 
 use crate::agent::persistent::PersistentClaudeAgent;
-use crate::agent::{AgentStatus, Task, TaskResult};
+use crate::agent::{Task, TaskResult};
 use crate::config::ClaudeConfig;
 use crate::identity::AgentRole;
 use crate::session::worktree_session::{
-    CombinedEfficiencyStats, WorktreeSessionConfig, WorktreeSessionManager,
+    WorktreeSessionConfig, WorktreeSessionManager,
 };
 
 /// Session pool entry with metadata
@@ -182,7 +182,9 @@ pub struct SessionPool {
 #[derive(Debug, Clone)]
 struct LoadBalancerState {
     last_selected: usize,
+    #[allow(dead_code)] // Will be used for advanced load balancing
     selection_weights: Vec<f64>,
+    #[allow(dead_code)] // Will be used for performance-based routing
     performance_history: VecDeque<f64>,
 }
 
@@ -190,15 +192,21 @@ struct LoadBalancerState {
 struct PerformanceMetrics {
     total_tasks_processed: usize,
     total_execution_time: Duration,
+    #[allow(dead_code)] // Will be used for utilization tracking
     session_utilization: HashMap<String, f64>,
+    #[allow(dead_code)] // Will be used for error rate monitoring
     error_rates: HashMap<String, f64>,
+    #[allow(dead_code)] // Will be used for throughput analysis
     throughput_history: VecDeque<(DateTime<Utc>, usize)>,
 }
 
 #[derive(Debug, Clone)]
 struct ScalingState {
+    #[allow(dead_code)] // Will be used for auto-scaling logic
     last_scale_up: Option<DateTime<Utc>>,
+    #[allow(dead_code)] // Will be used for auto-scaling logic
     last_scale_down: Option<DateTime<Utc>>,
+    #[allow(dead_code)] // Will be used for scaling operation tracking
     pending_scale_operations: usize,
 }
 
@@ -598,7 +606,7 @@ impl SessionPool {
     /// Start auto-scaling background task
     async fn start_auto_scaling_task(&self) -> tokio::task::JoinHandle<()> {
         let pools = Arc::clone(&self.pools);
-        let scaling_state = Arc::clone(&self.scaling_state);
+        let _scaling_state = Arc::clone(&self.scaling_state);
         let config = self.config.clone();
 
         tokio::spawn(async move {

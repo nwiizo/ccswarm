@@ -70,7 +70,18 @@ async fn run_app<B: Backend>(
                             KeyCode::Char('r') => app.refresh_data().await?,
                             KeyCode::Up | KeyCode::Char('k') => app.previous_item(),
                             KeyCode::Down | KeyCode::Char('j') => app.next_item(),
-                            KeyCode::Enter => app.activate_selected().await?,
+                            KeyCode::Enter => {
+                                if app.current_tab == app::Tab::Delegation {
+                                    app.handle_delegation_enter().await?;
+                                } else {
+                                    app.activate_selected().await?;
+                                }
+                            }
+                            KeyCode::Char(' ') => {
+                                if app.current_tab == app::Tab::Delegation {
+                                    app.switch_delegation_mode();
+                                }
+                            }
                             KeyCode::Tab => app.next_tab(),
                             KeyCode::BackTab => app.previous_tab(),
                             KeyCode::Esc => app.cancel_current_action(),

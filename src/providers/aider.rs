@@ -206,7 +206,7 @@ impl AiderExecutor {
     }
 
     /// Build Aider command arguments
-    fn build_command_args(&self, prompt: &str, working_dir: &PathBuf) -> Vec<String> {
+    fn build_command_args(&self, prompt: &str, _working_dir: &PathBuf) -> Vec<String> {
         let mut args = Vec::new();
 
         // Add model specification

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Output, Stdio};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::collections::HashMap;
 
 /// Error types for tmux operations
 #[derive(Debug, thiserror::Error)]
@@ -53,16 +54,50 @@ pub struct TmuxPane {
     pub current_command: String,
 }
 
-/// Client for interacting with tmux
-pub struct TmuxClient {
+/// Configuration for tmux client
+#[derive(Debug, Clone)]
+pub struct TmuxClientConfig {
     /// Timeout for tmux commands
-    command_timeout: Duration,
+    pub command_timeout: Duration,
     /// Whether to check if tmux server is running before commands
-    check_server: bool,
+    pub check_server: bool,
+    /// Whether to automatically start tmux server if not running
+    pub auto_start_server: bool,
+    /// Maximum number of retry attempts for failed commands
+    pub max_retries: u32,
+    /// Default shell to use in new sessions
+    pub default_shell: Option<String>,
+    /// Global environment variables to set in all sessions
+    pub global_env: HashMap<String, String>,
+}
+
+impl Default for TmuxClientConfig {
+    fn default() -> Self {
+        Self {
+            command_timeout: Duration::from_secs(30),
+            check_server: true,
+            auto_start_server: true,
+            max_retries: 3,
+            default_shell: None,
+            global_env: HashMap::new(),
+        }
+    }
+}
+
+/// Enhanced client for interacting with tmux
+pub struct TmuxClient {
+    /// Configuration for the tmux client
+    config: TmuxClientConfig,
+    /// Cache of session information to reduce tmux calls
+    #[allow(dead_code)] // Will be used in future caching implementation
+    session_cache: std::sync::Mutex<HashMap<String, (TmuxSession, Instant)>>,
+    /// Cache timeout duration
+    #[allow(dead_code)] // Will be used in future caching implementation
+    cache_timeout: Duration,
 }
 
 impl TmuxClient {
-    /// Creates a new tmux client
+    /// Creates a new tmux client with default configuration
     ///
     /// # Returns
     /// A new TmuxClient instance
@@ -70,6 +105,20 @@ impl TmuxClient {
     /// # Errors
     /// Returns TmuxError::TmuxNotFound if tmux is not installed
     pub fn new() -> Result<Self, TmuxError> {
+        Self::with_config(TmuxClientConfig::default())
+    }
+
+    /// Creates a new tmux client with custom configuration
+    ///
+    /// # Arguments
+    /// * `config` - Configuration for the tmux client
+    ///
+    /// # Returns
+    /// A new TmuxClient instance
+    ///
+    /// # Errors
+    /// Returns TmuxError::TmuxNotFound if tmux is not installed
+    pub fn with_config(config: TmuxClientConfig) -> Result<Self, TmuxError> {
         // Check if tmux is available
         let output = Command::new("tmux")
             .arg("-V")
@@ -81,16 +130,23 @@ impl TmuxClient {
         }
 
         Ok(Self {
-            command_timeout: Duration::from_secs(30),
-            check_server: true,
+            config,
+            session_cache: std::sync::Mutex::new(HashMap::new()),
+            cache_timeout: Duration::from_secs(5), // Cache for 5 seconds
         })
     }
 
-    /// Creates a new tmux client with custom settings
+    /// Creates a new tmux client with custom timeout (legacy method)
     pub fn with_timeout(timeout: Duration) -> Result<Self, TmuxError> {
-        let mut client = Self::new()?;
-        client.command_timeout = timeout;
-        Ok(client)
+        let mut config = TmuxClientConfig::default();
+        config.command_timeout = timeout;
+        Self::with_config(config)
+    }
+
+    /// Gets the tmux version
+    pub fn get_version(&self) -> Result<String, TmuxError> {
+        let output = self.run_command_with_output(&["-V"])?;
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
     /// Checks if the tmux server is running
@@ -130,7 +186,7 @@ impl TmuxClient {
     ) -> Result<(), TmuxError> {
         self.validate_session_name(session_name)?;
 
-        if self.check_server {
+        if self.config.check_server {
             self.ensure_server_running()?;
         }
 
@@ -164,7 +220,7 @@ impl TmuxClient {
     ) -> Result<(), TmuxError> {
         self.validate_session_name(session_name)?;
 
-        if self.check_server {
+        if self.config.check_server {
             self.ensure_server_running()?;
         }
 

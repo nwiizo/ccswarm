@@ -107,6 +107,7 @@ pub struct OutputFilter {
 pub struct AgentOutputStream {
     buffer: Arc<Mutex<VecDeque<OutputEntry>>>,
     last_cleanup: Arc<Mutex<Instant>>,
+    #[allow(dead_code)] // Used in matches_filter method via OutputEntry
     agent_id: String,
     broadcast_tx: broadcast::Sender<OutputEntry>,
 }

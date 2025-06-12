@@ -12,13 +12,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
 use uuid::Uuid;
 
 use crate::agent::persistent::{PersistentClaudeAgent, SessionStats};
-use crate::agent::{AgentStatus, Task, TaskResult};
+use crate::agent::{Task, TaskResult};
 use crate::config::ClaudeConfig;
 use crate::identity::{AgentIdentity, AgentRole};
 

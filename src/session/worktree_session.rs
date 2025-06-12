@@ -176,7 +176,7 @@ impl WorktreeSessionManager {
     ) -> Option<Arc<Mutex<PersistentClaudeAgent>>> {
         let sessions = self.worktree_sessions.read().await;
 
-        for (agent_id, info) in sessions.iter() {
+        for (_agent_id, info) in sessions.iter() {
             if info.agent_role.name() == role.name()
                 && info.status == WorktreeSessionStatus::Idle
                 && info.git_status == GitWorktreeStatus::Ready
@@ -239,7 +239,7 @@ impl WorktreeSessionManager {
         self.update_session_info(&agent_id, session_info.clone())
             .await;
 
-        let worktree_info = self
+        let _worktree_info = self
             .git_manager
             .create_worktree(&session_info.worktree_path, &branch_name)
             .await

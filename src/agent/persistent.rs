@@ -56,9 +56,6 @@ pub struct ClaudeCodeSession {
     /// Claude configuration
     claude_config: ClaudeConfig,
 
-    /// Session start time
-    started_at: Instant,
-
     /// Last activity timestamp
     last_activity: Instant,
 
@@ -73,14 +70,12 @@ impl ClaudeCodeSession {
         env_vars: HashMap<String, String>,
         claude_config: ClaudeConfig,
     ) -> Self {
-        let now = Instant::now();
         Self {
             session_id,
             working_dir,
             env_vars,
             claude_config,
-            started_at: now,
-            last_activity: now,
+            last_activity: Instant::now(),
             is_active: true,
         }
     }

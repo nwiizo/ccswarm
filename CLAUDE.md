@@ -40,8 +40,19 @@ cargo run -- init --name "MixedProject" --template mixed-providers
 # Start orchestrator
 cargo run -- start
 
-# Start TUI (Terminal User Interface) - ENHANCED!
+# Start TUI (Terminal User Interface) - ENHANCED with Delegation!
 cargo run -- tui
+
+# Master task delegation commands - NEW FEATURE!
+cargo run -- delegate analyze "Create login form with validation" --verbose
+cargo run -- delegate task "Add auth middleware" --agent backend --priority high
+cargo run -- delegate stats --detailed
+cargo run -- delegate interactive
+
+# Auto-create applications - AI-POWERED APP GENERATION!
+cargo run -- auto-create "TODOアプリケーションを作成してください" --output ./my_todo_app
+cargo run -- auto-create "Create a blog with authentication" --output ./my_blog
+cargo run -- auto-create "Create real-time chat application" --output ./chat_app
 
 # Session management
 cargo run -- session create --agent frontend --workspace ./agents/frontend
@@ -194,7 +205,172 @@ let result = pool.execute_task(role, task, claude_config).await?;
 ## 🏗️ Architecture Overview
 
 ### Core System Design
-ccswarm is an **advanced multi-agent orchestration system** featuring the **Session-Persistent Agent Architecture** for **93% token reduction**. Master Claude Code orchestrates specialized AI agents with persistent sessions, auto-accept mode, real-time monitoring, and multi-provider support, enabling scalable distributed development using Git worktrees, intelligent session pooling, and CLAUDE.md configuration files.
+ccswarm is an **advanced multi-agent orchestration system** featuring the **Session-Persistent Agent Architecture** for **93% token reduction**, **Master Task Delegation System**, and **AI-Powered Auto-Create System**. Master Claude Code orchestrates specialized AI agents with persistent sessions, intelligent task delegation, auto-accept mode, real-time monitoring, and multi-provider support, enabling scalable distributed development using Git worktrees, intelligent session pooling, and CLAUDE.md configuration files. The Auto-Create system enables complete application generation from natural language descriptions in a single command.
+
+## 🎯 Master Task Delegation System - NEW FEATURE!
+
+### Intelligent Task Analysis and Assignment
+
+The Master Delegation System (`src/orchestrator/master_delegation.rs`) provides intelligent task analysis and optimal agent assignment through multiple strategies:
+
+#### Delegation Strategies
+
+**1. ContentBased Strategy**
+- Keyword analysis for task categorization
+- Technology stack matching
+- Automatic agent selection based on task content
+
+**2. LoadBalanced Strategy**  
+- Real-time workload monitoring
+- Availability-based agent selection
+- Performance-optimized task distribution
+
+**3. ExpertiseBased Strategy**
+- Agent expertise scoring
+- Historical success rate analysis
+- Complex task specialization matching
+
+**4. WorkflowBased Strategy**
+- Task dependency awareness
+- Multi-step project coordination
+- Workflow-optimized sequencing
+
+**5. Hybrid Strategy (Default)**
+- Combines all strategies for optimal results
+- Adaptive decision making
+- Confidence-weighted recommendations
+
+#### CLI Commands for Delegation
+
+```bash
+# Analyze task and get Master's recommendation
+cargo run -- delegate analyze "Create responsive navbar component" --verbose --strategy hybrid
+
+# Manually delegate specific task
+cargo run -- delegate task "Implement JWT authentication" --agent backend --priority high
+
+# View delegation statistics and patterns
+cargo run -- delegate stats --detailed --period 24
+
+# Interactive delegation mode with real-time feedback
+cargo run -- delegate interactive
+
+# Show current delegation configuration
+cargo run -- delegate show --file ccswarm.json
+```
+
+#### TUI Delegation Interface
+
+The TUI now includes a dedicated **Delegation Tab** with three modes:
+
+1. **🔍 Analyze Mode**: Get task recommendations from Master
+2. **🎯 Delegate Mode**: Manually assign tasks to specific agents  
+3. **📊 Stats Mode**: View delegation patterns and analytics
+
+**TUI Key Bindings for Delegation:**
+- `Space`: Switch between delegation modes
+- `Enter`: Analyze task or delegate to agent
+- `↑/↓`: Navigate through delegation history
+
+#### Example Delegation Flow
+
+```
+Master Analysis:
+┌─ Task: "Add user authentication with password reset"
+├─ Content Analysis: backend keywords detected (api, authentication, server)
+├─ Recommended Agent: Backend
+├─ Confidence: 92%
+├─ Reasoning: "Contains API/backend keywords with authentication focus"
+├─ Estimated Duration: 3600 seconds
+└─ Dependencies: []
+```
+
+## 🚀 AI-Powered Auto-Create System - REVOLUTIONARY!
+
+### Complete Application Generation from Natural Language
+
+The Auto-Create System (`src/orchestrator/auto_create.rs`) enables developers to generate complete, functional applications from simple natural language descriptions in a single command.
+
+#### Key Features
+
+**1. Intelligent Task Decomposition**
+- Analyzes natural language requests
+- Detects application type (TODO, Blog, E-commerce, API, Dashboard)
+- Automatically decomposes into agent-specific tasks
+- Customizes tasks based on requirements (auth, real-time, mobile)
+
+**2. Multi-Agent Coordination**
+- Master Claude analyzes and plans the application
+- Tasks delegated to specialized agents:
+  - Frontend → React components, UI, styling
+  - Backend → REST APIs, business logic
+  - DevOps → Docker, deployment configuration
+  - QA → Test structure and quality assurance
+
+**3. Actual Code Generation**
+- Generates complete, runnable applications
+- Includes all necessary files and configurations
+- Follows best practices and modern standards
+- Ready to run with `npm install && npm start`
+
+#### Usage Examples
+
+```bash
+# Basic TODO application
+cargo run -- auto-create "TODOアプリケーションを作成してください" --output ./my_todo_app
+
+# Blog with authentication
+cargo run -- auto-create "Create a blog platform with user authentication" --output ./blog
+
+# Real-time chat application
+cargo run -- auto-create "Build a real-time chat app with WebSockets" --output ./chat
+
+# E-commerce site
+cargo run -- auto-create "Create an online shop with shopping cart" --output ./shop
+```
+
+#### Generated Application Structure
+
+```
+my_app/
+├── index.html        # React app entry point
+├── app.js           # React components
+├── styles.css       # Professional styling
+├── server.js        # Express.js REST API
+├── package.json     # Dependencies
+├── Dockerfile       # Container configuration
+├── docker-compose.yml
+├── app.test.js      # Test structure
+├── README.md        # Documentation
+└── .gitignore       # Git configuration
+```
+
+#### Application Types Supported
+
+1. **TODO Applications**
+   - Task management with CRUD operations
+   - Real-time updates
+   - Mobile-responsive design
+
+2. **Blog Platforms**
+   - Article management
+   - Comment system
+   - Authentication support
+
+3. **E-commerce Sites**
+   - Product catalog
+   - Shopping cart
+   - Payment integration ready
+
+4. **Real-time Applications**
+   - WebSocket integration
+   - Live updates
+   - Multi-user support
+
+5. **Custom Applications**
+   - Flexible template system
+   - Extensible architecture
+   - AI-driven customization
 
 ### Key Architectural Components
 
@@ -273,7 +449,15 @@ pub enum AgentRole {
 - **Session-aware execution** with tmux integration
 - **JSON output handling** for programmatic control
 
-#### 10. Terminal User Interface (`src/tui/`)
+#### 10. Auto-Create Engine (`src/orchestrator/auto_create.rs`)
+- **Natural language understanding** for application requirements
+- **Intelligent task decomposition** into agent-specific subtasks
+- **Application type detection** (TODO, Blog, E-commerce, API, Dashboard)
+- **Template-based generation** with customization capabilities
+- **Actual file generation** creating complete, runnable applications
+- **Multi-agent orchestration** for coordinated development
+
+#### 11. Terminal User Interface (`src/tui/`)
 - **Real-time dashboard** built with ratatui for monitoring multi-agent activities
 - **Interactive tabs** for Overview, Agents, Tasks, and Logs with live streaming
 - **Command mode** with intelligent task creation and agent management
@@ -286,20 +470,29 @@ pub enum AgentRole {
 ### Enhanced Data Flow Architecture
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Master Claude │───▶│ Task Distribution│───▶│ Multi-Provider  │
-│   Orchestrator  │    │  & Auto-Accept   │    │ Agent Pool      │
+│   User Request  │───▶│  Auto-Create     │───▶│ Task Decomposer │
+│  (Natural Lang) │    │     Engine       │    │ & Master Claude │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         │              ┌────────▼────────┐             │
-         │              │ Session Manager │             │
-┌────────▼────────┐     │ + tmux Sessions │     ┌───────▼───────┐
-│ Real-time       │     │ + Auto-Accept   │     │ Git Worktrees │
-│ Monitoring      │     │ + Safety Checks │     │ + CLAUDE.md   │
-│ & Streaming     │     └─────────────────┘     │ Configuration │
-└─────────────────┘              │              └───────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                    JSON Coordination Bus + Output Streams
+                                │                       │
+                       ┌────────▼────────┐     ┌────────▼────────┐
+                       │ Task Delegation │     │ Multi-Provider  │
+                       │  & Auto-Accept  │     │ Agent Pool      │
+                       └─────────────────┘     └─────────────────┘
+                                │                       │
+                       ┌────────▼────────┐     ┌───────▼───────┐
+                       │ Session Manager │     │ Git Worktrees │
+┌─────────────────┐    │ + tmux Sessions │     │ + CLAUDE.md   │
+│ Real-time       │    │ + Safety Checks │     │ Configuration │
+│ Monitoring      │    └─────────────────┘     └───────────────┘
+│ & Streaming     │             │                       │
+└─────────────────┘    ┌────────▼───────────────────────▼────────┐
+         │             │  JSON Coordination Bus + Output Streams  │
+         └─────────────┴──────────────────────────────────────────┘
+                                        │
+                               ┌────────▼────────┐
+                               │ Generated Files │
+                               │ (Complete App)  │
+                               └─────────────────┘
 ```
 
 ## 🔧 Key Implementation Patterns
@@ -346,7 +539,7 @@ pub enum AgentRole {
 - `src/tmux/` - **NEW** tmux client integration and session operations
 - `src/coordination/` - Inter-agent communication and task routing
 - `src/git/` - Git worktree management and shell operations
-- `src/orchestrator/` - Master Claude and system coordination
+- `src/orchestrator/` - Master Claude, system coordination, and auto-create engine
 - `src/config/` - Configuration management and templates
 - `src/cli/` - Command-line interface and user interactions
 - `src/tui/` - Terminal User Interface with real-time monitoring

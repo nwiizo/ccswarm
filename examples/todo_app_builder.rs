@@ -4,7 +4,6 @@
 /// real-time monitoring, and multi-provider support to develop a fully functional
 /// TODO application and launch a web server for access.
 use anyhow::Result;
-use chrono::Utc;
 use serde_json::json;
 use std::path::PathBuf;
 use tokio::fs;
@@ -13,14 +12,13 @@ use tracing::{info, warn};
 // ccswarmライブラリのインポート
 use ccswarm::agent::simple::SimpleClaudeAgent;
 use ccswarm::agent::{AgentStatus, Priority, Task, TaskType};
-use ccswarm::auto_accept::{AutoAcceptConfig, AutoAcceptEngine};
+use ccswarm::auto_accept::{AutoAcceptConfig, AutoAcceptEngine, AutoAcceptDecision, Operation, OperationType};
 use ccswarm::config::ClaudeConfig;
-use ccswarm::coordination::{AgentMessage, CoordinationBus, StatusTracker, TaskQueue};
+use ccswarm::coordination::{CoordinationBus, StatusTracker, TaskQueue};
 use ccswarm::identity::{
     default_backend_role, default_devops_role, default_frontend_role, default_qa_role,
 };
-use ccswarm::monitoring::{MonitoringSystem, OutputEntry, OutputType};
-use ccswarm::providers::{claude_code::ClaudeCodeProvider, AIProvider};
+use ccswarm::monitoring::{MonitoringSystem, OutputType};
 use ccswarm::session::{AgentSession, SessionManager};
 use ccswarm::workspace::SimpleWorkspaceManager;
 
@@ -48,7 +46,7 @@ async fn main() -> Result<()> {
     let status_tracker = StatusTracker::new().await?;
     let session_manager = SessionManager::new()?;
     let monitoring_system = MonitoringSystem::new();
-    let auto_accept_engine = AutoAcceptEngine::new(AutoAcceptConfig::safe_defaults());
+    let auto_accept_engine = AutoAcceptEngine::new(AutoAcceptConfig::default());
 
     info!("📋 Defining enhanced TODO application development tasks with session management...");
 
@@ -113,6 +111,43 @@ async fn main() -> Result<()> {
             TaskType::Documentation,
         )
         .with_details("Create comprehensive README with setup and usage instructions".to_string()),
+        // QA/Testing tasks
+        Task::new(
+            "todo-test-1".to_string(),
+            "Write unit tests for API endpoints".to_string(),
+            Priority::High,
+            TaskType::Testing,
+        )
+        .with_details("Create unit tests for all REST API endpoints".to_string()),
+        Task::new(
+            "todo-test-2".to_string(),
+            "Write integration tests for user flow".to_string(),
+            Priority::Medium,
+            TaskType::Testing,
+        )
+        .with_details("Test complete user flow from adding to deleting tasks".to_string()),
+        Task::new(
+            "todo-test-3".to_string(),
+            "Create frontend unit tests".to_string(),
+            Priority::Medium,
+            TaskType::Testing,
+        )
+        .with_details("Test JavaScript functions and UI components".to_string()),
+        // Infrastructure tasks
+        Task::new(
+            "todo-infra-1".to_string(),
+            "Set up CI/CD pipeline for deployment".to_string(),
+            Priority::Low,
+            TaskType::Infrastructure,
+        )
+        .with_details("Create GitHub Actions workflow for automated testing and deployment".to_string()),
+        Task::new(
+            "todo-infra-2".to_string(),
+            "Create Docker configuration".to_string(),
+            Priority::Low,
+            TaskType::Infrastructure,
+        )
+        .with_details("Add Dockerfile and docker-compose.yml for containerization".to_string()),
     ];
 
     // タスクをキューに追加
@@ -189,6 +224,27 @@ async fn main() -> Result<()> {
     )?;
     agents.push(("devops".to_string(), devops_agent, devops_session));
 
+    // QA Agent with session management
+    let mut qa_agent = SimpleClaudeAgent::new(
+        default_qa_role(),
+        &project_dir,
+        ClaudeConfig::for_agent("qa"),
+    )
+    .await?;
+    qa_agent.initialize(&workspace_manager).await?;
+
+    let qa_session = session_manager.create_session(
+        "qa-session-001".to_string(),
+        default_qa_role(),
+        project_dir
+            .join("agents/qa")
+            .to_string_lossy()
+            .to_string(),
+        Some("QA testing and validation".to_string()),
+        true, // auto_start
+    )?;
+    agents.push(("qa".to_string(), qa_agent, qa_session));
+
     info!(
         "✅ {} agents initialized with session management",
         agents.len()
@@ -214,9 +270,9 @@ async fn main() -> Result<()> {
             .await?;
 
         // Register with monitoring system
-        monitoring_system
-            .register_agent(&session.id, &session.agent_id)
-            .await?;
+        if let Err(e) = monitoring_system.register_agent(session.agent_id.clone()) {
+            warn!("Failed to register agent with monitoring system: {}", e);
+        }
     }
 
     info!("🎯 Starting enhanced TODO application development with real-time monitoring...");
@@ -235,41 +291,57 @@ async fn main() -> Result<()> {
             let (agent_type, ref mut agent, ref session) = &mut agents[index];
 
             // Log task start to monitoring system
-            monitoring_system
-                .add_output(
-                    &session.id,
-                    OutputEntry::new(
-                        session.agent_id.clone(),
-                        OutputType::Info,
-                        format!("Starting task: {}", task.description),
-                        Some(task.id.clone()),
-                    ),
-                )
-                .await;
+            if let Err(e) = monitoring_system.add_output(
+                session.agent_id.clone(),
+                agent_type.clone(),
+                OutputType::Info,
+                format!("Starting task: {}", task.description),
+                Some(task.id.clone()),
+                session.id.clone(),
+            ) {
+                warn!("Failed to log task start: {}", e);
+            }
 
             // Check auto-accept if enabled
             let can_auto_accept = if session.auto_accept {
-                auto_accept_engine
-                    .should_auto_accept(&task.description, &[])
-                    .await
-                    .unwrap_or(false)
+                let operation = Operation {
+                    operation_type: match task.task_type {
+                        TaskType::Development | TaskType::Feature => OperationType::WriteFile,
+                        TaskType::Testing => OperationType::RunTests,
+                        TaskType::Documentation => OperationType::WriteFile,
+                        TaskType::Bugfix => OperationType::EditFile,
+                        TaskType::Infrastructure => OperationType::SystemCommand,
+                        _ => OperationType::Other,
+                    },
+                    description: task.description.clone(),
+                    affected_files: vec![],
+                    commands: vec![],
+                    risk_level: 3, // Medium risk for demo
+                    reversible: true,
+                    task: Some(task.clone()),
+                };
+                
+                match auto_accept_engine.should_auto_accept(&operation) {
+                    Ok(AutoAcceptDecision::Accept(_)) => true,
+                    Ok(AutoAcceptDecision::Reject(_)) => false,
+                    Err(_) => false,
+                }
             } else {
                 false
             };
 
             if can_auto_accept {
                 info!("🤖 Auto-accepting task: {}", task.description);
-                monitoring_system
-                    .add_output(
-                        &session.id,
-                        OutputEntry::new(
-                            session.agent_id.clone(),
-                            OutputType::Info,
-                            "Task auto-accepted by safety engine".to_string(),
-                            Some(task.id.clone()),
-                        ),
-                    )
-                    .await;
+                if let Err(e) = monitoring_system.add_output(
+                    session.agent_id.clone(),
+                    agent_type.clone(),
+                    OutputType::Info,
+                    "Task auto-accepted by safety engine".to_string(),
+                    Some(task.id.clone()),
+                    session.id.clone(),
+                ) {
+                    warn!("Failed to log auto-accept: {}", e);
+                }
             }
 
             // Update agent status before execution
@@ -284,17 +356,16 @@ async fn main() -> Result<()> {
                             agent_type, task.description
                         );
 
-                        monitoring_system
-                            .add_output(
-                                &session.id,
-                                OutputEntry::new(
-                                    session.agent_id.clone(),
-                                    OutputType::Success,
-                                    format!("Task completed successfully: {}", task.description),
-                                    Some(task.id.clone()),
-                                ),
-                            )
-                            .await;
+                        if let Err(e) = monitoring_system.add_output(
+                            session.agent_id.clone(),
+                            agent_type.clone(),
+                            OutputType::Info,
+                            format!("Task completed successfully: {}", task.description),
+                            Some(task.id.clone()),
+                            session.id.clone(),
+                        ) {
+                            warn!("Failed to log task completion: {}", e);
+                        }
 
                         // Generate actual files
                         generate_actual_files(&task, &project_dir).await?;
@@ -305,33 +376,31 @@ async fn main() -> Result<()> {
                         let error_msg = result.error.unwrap_or_default();
                         warn!("❌ Task execution failed: {}", error_msg);
 
-                        monitoring_system
-                            .add_output(
-                                &session.id,
-                                OutputEntry::new(
-                                    session.agent_id.clone(),
-                                    OutputType::Error,
-                                    format!("Task failed: {}", error_msg),
-                                    Some(task.id.clone()),
-                                ),
-                            )
-                            .await;
+                        if let Err(e) = monitoring_system.add_output(
+                            session.agent_id.clone(),
+                            agent_type.clone(),
+                            OutputType::Error,
+                            format!("Task failed: {}", error_msg),
+                            Some(task.id.clone()),
+                            session.id.clone(),
+                        ) {
+                            warn!("Failed to log task failure: {}", e);
+                        }
                     }
                 }
                 Err(e) => {
                     warn!("❌ Task execution error: {}", e);
 
-                    monitoring_system
-                        .add_output(
-                            &session.id,
-                            OutputEntry::new(
-                                session.agent_id.clone(),
-                                OutputType::Error,
-                                format!("Execution error: {}", e),
-                                Some(task.id.clone()),
-                            ),
-                        )
-                        .await;
+                    if let Err(e) = monitoring_system.add_output(
+                        session.agent_id.clone(),
+                        agent_type.clone(),
+                        OutputType::Error,
+                        format!("Execution error: {}", e),
+                        Some(task.id.clone()),
+                        session.id.clone(),
+                    ) {
+                        warn!("Failed to log execution error: {}", e);
+                    }
                 }
             }
 
@@ -350,10 +419,10 @@ async fn main() -> Result<()> {
     info!("🔄 Sessions managed: {}", agents.len());
 
     // Display monitoring statistics
-    let stats = monitoring_system.get_statistics().await;
+    let stats = monitoring_system.get_stats();
     info!(
         "📈 Monitoring stats: {} total entries, {} agents",
-        stats.total_entries, stats.active_agents
+        stats.total_entries, stats.active_streams
     );
 
     // package.jsonの依存関係をインストール
@@ -432,6 +501,7 @@ fn select_agent_for_task(
     let description = task.description.to_lowercase();
     let task_id = task.id.as_str();
 
+    // First try to find exact matches based on task type and content
     for (index, (agent_type, _, session)) in agents.iter().enumerate() {
         let matches = match agent_type.as_str() {
             "frontend" => {
@@ -440,6 +510,12 @@ fn select_agent_for_task(
                     || description.contains("css")
                     || description.contains("javascript")
                     || description.contains("frontend")
+                    || description.contains("ui")
+                    || description.contains("component")
+                    || description.contains("style")
+                    || description.contains("react")
+                    || description.contains("vue")
+                    || description.contains("angular")
             }
             "backend" => {
                 task_id.contains("backend")
@@ -448,6 +524,10 @@ fn select_agent_for_task(
                     || description.contains("server")
                     || description.contains("api")
                     || description.contains("package.json")
+                    || description.contains("database")
+                    || description.contains("endpoint")
+                    || description.contains("rest")
+                    || description.contains("graphql")
             }
             "devops" => {
                 task_id.contains("deploy")
@@ -455,11 +535,91 @@ fn select_agent_for_task(
                     || description.contains("readme")
                     || description.contains("documentation")
                     || description.contains("startup")
+                    || description.contains("ci/cd")
+                    || description.contains("pipeline")
+                    || description.contains("docker")
+                    || description.contains("infrastructure")
+                    || description.contains("deployment")
+                    || description.contains("build")
+            }
+            "qa" => {
+                task_id.contains("test")
+                    || description.contains("test")
+                    || description.contains("testing")
+                    || description.contains("qa")
+                    || description.contains("quality")
+                    || description.contains("validation")
+                    || description.contains("integration")
+                    || description.contains("unit")
+                    || description.contains("e2e")
+                    || description.contains("spec")
+                    || description.contains("assertion")
             }
             _ => false,
         };
 
-        if matches && session.is_available() {
+        if matches && session.is_runnable() {
+            return Some(index);
+        }
+    }
+
+    // If no exact match found, try to assign based on task type
+    for (index, (agent_type, _, session)) in agents.iter().enumerate() {
+        if !session.is_runnable() {
+            continue;
+        }
+
+        let type_matches = match (&task.task_type, agent_type.as_str()) {
+            // Testing tasks prefer QA, then devops
+            (TaskType::Testing, "qa") => true,
+            (TaskType::Testing, "devops") => true,
+            (TaskType::Testing, _) => false, // Will fall back to any available agent
+            
+            // Infrastructure tasks to devops
+            (TaskType::Infrastructure, "devops") => true,
+            
+            // Development tasks prefer backend then frontend
+            (TaskType::Development, "backend") => true,
+            (TaskType::Development, "frontend") => true,
+            
+            // Feature tasks prefer frontend then backend
+            (TaskType::Feature, "frontend") => true,
+            (TaskType::Feature, "backend") => true,
+            
+            // Documentation to devops
+            (TaskType::Documentation, "devops") => true,
+            
+            // Review tasks to QA
+            (TaskType::Review, "qa") => true,
+            (TaskType::Review, "devops") => true,
+            
+            // Bugfix can go to any technical agent
+            (TaskType::Bugfix, "backend") => true,
+            (TaskType::Bugfix, "frontend") => true,
+            (TaskType::Bugfix, "devops") => true,
+            (TaskType::Bugfix, "qa") => true,
+            
+            _ => false,
+        };
+
+        if type_matches {
+            return Some(index);
+        }
+    }
+
+    // Last resort: assign to any available agent (prefer backend as most general)
+    for (index, (agent_type, _, session)) in agents.iter().enumerate() {
+        if session.is_runnable() {
+            match agent_type.as_str() {
+                "backend" => return Some(index), // Backend is most versatile
+                _ => continue,
+            }
+        }
+    }
+
+    // Really last resort: any available agent
+    for (index, (_, _, session)) in agents.iter().enumerate() {
+        if session.is_runnable() {
             return Some(index);
         }
     }
@@ -1149,6 +1309,386 @@ MIT License
 
             fs::write(project_dir.join("README.md"), readme_content).await?;
             info!("✅ Generated comprehensive README.md");
+        }
+
+        "todo-test-1" => {
+            // Unit tests for API endpoints
+            let test_content = r#"// Unit tests for TODO API endpoints
+const request = require('supertest');
+const app = require('./server');
+
+describe('TODO API Endpoints', () => {
+    describe('GET /api/todos', () => {
+        test('should return all todos', async () => {
+            const response = await request(app)
+                .get('/api/todos')
+                .expect(200);
+            
+            expect(Array.isArray(response.body)).toBe(true);
+        });
+    });
+
+    describe('POST /api/todos', () => {
+        test('should create a new todo', async () => {
+            const newTodo = {
+                text: 'Test todo item',
+                completed: false
+            };
+
+            const response = await request(app)
+                .post('/api/todos')
+                .send(newTodo)
+                .expect(201);
+
+            expect(response.body.text).toBe(newTodo.text);
+            expect(response.body.completed).toBe(false);
+            expect(response.body.id).toBeDefined();
+        });
+    });
+
+    describe('PUT /api/todos/:id', () => {
+        test('should update an existing todo', async () => {
+            // First create a todo
+            const createResponse = await request(app)
+                .post('/api/todos')
+                .send({ text: 'Todo to update', completed: false });
+
+            const todoId = createResponse.body.id;
+            const updatedTodo = {
+                text: 'Updated todo',
+                completed: true
+            };
+
+            const response = await request(app)
+                .put(`/api/todos/${todoId}`)
+                .send(updatedTodo)
+                .expect(200);
+
+            expect(response.body.text).toBe(updatedTodo.text);
+            expect(response.body.completed).toBe(true);
+        });
+    });
+
+    describe('DELETE /api/todos/:id', () => {
+        test('should delete a todo', async () => {
+            // First create a todo
+            const createResponse = await request(app)
+                .post('/api/todos')
+                .send({ text: 'Todo to delete', completed: false });
+
+            const todoId = createResponse.body.id;
+
+            await request(app)
+                .delete(`/api/todos/${todoId}`)
+                .expect(204);
+        });
+    });
+});"#;
+
+            fs::write(project_dir.join("test/api.test.js"), test_content).await?;
+            
+            // Create test directory and add package.json test script
+            fs::create_dir_all(project_dir.join("test")).await?;
+            info!("✅ Generated API unit tests");
+        }
+
+        "todo-test-2" => {
+            // Integration tests
+            let integration_test = r#"// Integration tests for user flow
+const puppeteer = require('puppeteer');
+
+describe('TODO App Integration Tests', () => {
+    let browser;
+    let page;
+
+    beforeAll(async () => {
+        browser = await puppeteer.launch();
+        page = await browser.newPage();
+        await page.goto('http://localhost:3000');
+    });
+
+    afterAll(async () => {
+        await browser.close();
+    });
+
+    test('complete user flow: add, toggle, delete todo', async () => {
+        // Add a new todo
+        await page.type('#todoInput', 'Integration test todo');
+        await page.click('#addBtn');
+
+        // Check if todo appears
+        await page.waitForSelector('.todo-item');
+        const todoText = await page.$eval('.todo-text', el => el.textContent);
+        expect(todoText).toBe('Integration test todo');
+
+        // Toggle completion
+        await page.click('.todo-checkbox');
+        const isCompleted = await page.$eval('.todo-item', el => el.classList.contains('completed'));
+        expect(isCompleted).toBe(true);
+
+        // Delete todo
+        await page.click('.todo-delete');
+        const todoItems = await page.$$('.todo-item');
+        expect(todoItems.length).toBe(0);
+    });
+
+    test('statistics update correctly', async () => {
+        // Add multiple todos
+        await page.type('#todoInput', 'Todo 1');
+        await page.click('#addBtn');
+        
+        await page.type('#todoInput', 'Todo 2');
+        await page.click('#addBtn');
+
+        // Check total count
+        const totalTasks = await page.$eval('#totalTasks', el => el.textContent);
+        expect(totalTasks).toContain('2');
+
+        // Complete one todo
+        await page.click('.todo-checkbox');
+
+        // Check completed count
+        const completedTasks = await page.$eval('#completedTasks', el => el.textContent);
+        expect(completedTasks).toContain('1');
+
+        const pendingTasks = await page.$eval('#pendingTasks', el => el.textContent);
+        expect(pendingTasks).toContain('1');
+    });
+});"#;
+
+            fs::write(project_dir.join("test/integration.test.js"), integration_test).await?;
+            info!("✅ Generated integration tests");
+        }
+
+        "todo-test-3" => {
+            // Frontend unit tests
+            let frontend_test = r#"// Frontend unit tests
+/**
+ * @jest-environment jsdom
+ */
+
+// Mock TodoApp class for testing
+class MockTodoApp {
+    constructor() {
+        this.todos = [];
+        this.todoIdCounter = 1;
+    }
+
+    addTodo(text) {
+        const newTodo = {
+            id: this.todoIdCounter++,
+            text: text,
+            completed: false,
+            createdAt: new Date().toISOString()
+        };
+        this.todos.push(newTodo);
+        return newTodo;
+    }
+
+    toggleTodo(id) {
+        const todo = this.todos.find(t => t.id === id);
+        if (todo) {
+            todo.completed = !todo.completed;
+        }
+        return todo;
+    }
+
+    deleteTodo(id) {
+        this.todos = this.todos.filter(t => t.id !== id);
+    }
+
+    updateStats() {
+        const total = this.todos.length;
+        const completed = this.todos.filter(t => t.completed).length;
+        const pending = total - completed;
+
+        return { total, completed, pending };
+    }
+}
+
+describe('TodoApp Frontend Logic', () => {
+    let app;
+
+    beforeEach(() => {
+        app = new MockTodoApp();
+    });
+
+    test('should add new todo', () => {
+        const todo = app.addTodo('Test todo');
+        
+        expect(todo.text).toBe('Test todo');
+        expect(todo.completed).toBe(false);
+        expect(todo.id).toBe(1);
+        expect(app.todos.length).toBe(1);
+    });
+
+    test('should toggle todo completion', () => {
+        const todo = app.addTodo('Test todo');
+        const toggledTodo = app.toggleTodo(todo.id);
+        
+        expect(toggledTodo.completed).toBe(true);
+        
+        app.toggleTodo(todo.id);
+        expect(toggledTodo.completed).toBe(false);
+    });
+
+    test('should delete todo', () => {
+        const todo = app.addTodo('Test todo');
+        app.deleteTodo(todo.id);
+        
+        expect(app.todos.length).toBe(0);
+    });
+
+    test('should update statistics correctly', () => {
+        app.addTodo('Todo 1');
+        app.addTodo('Todo 2');
+        app.addTodo('Todo 3');
+        
+        // Complete one todo
+        app.toggleTodo(1);
+        
+        const stats = app.updateStats();
+        expect(stats.total).toBe(3);
+        expect(stats.completed).toBe(1);
+        expect(stats.pending).toBe(2);
+    });
+});"#;
+
+            fs::write(project_dir.join("test/frontend.test.js"), frontend_test).await?;
+            info!("✅ Generated frontend unit tests");
+        }
+
+        "todo-infra-1" => {
+            // GitHub Actions CI/CD pipeline
+            let github_actions = r#"name: TODO App CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [14.x, 16.x, 18.x]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm install
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Run linting
+      run: npm run lint
+    
+    - name: Build application
+      run: npm run build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm install
+    
+    - name: Build for production
+      run: npm run build
+    
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production..."
+        # Add your deployment commands here"#;
+
+            fs::create_dir_all(project_dir.join(".github/workflows")).await?;
+            fs::write(project_dir.join(".github/workflows/ci-cd.yml"), github_actions).await?;
+            info!("✅ Generated GitHub Actions CI/CD pipeline");
+        }
+
+        "todo-infra-2" => {
+            // Dockerfile
+            let dockerfile = r#"FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install --only=production
+
+# Copy application files
+COPY . .
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+# Start application
+CMD ["npm", "start"]"#;
+
+            fs::write(project_dir.join("Dockerfile"), dockerfile).await?;
+
+            // Docker Compose
+            let docker_compose = r#"version: '3.8'
+
+services:
+  todo-app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ./todos.json:/app/todos.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - todo-app
+    restart: unless-stopped
+
+volumes:
+  todo_data:"#;
+
+            fs::write(project_dir.join("docker-compose.yml"), docker_compose).await?;
+            info!("✅ Generated Docker configuration");
         }
 
         _ => {

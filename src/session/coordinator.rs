@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
-use crate::agent::{Priority, Task, TaskResult, TaskType};
+use crate::agent::{Task, TaskResult};
 use crate::config::ClaudeConfig;
 // Temporary coordination types until full coordination system is implemented
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +120,7 @@ pub struct SessionCoordinator {
     session_pool: Arc<Mutex<SessionPool>>,
 
     /// Coordination bus integration
+    #[allow(dead_code)] // Will be used for inter-agent coordination
     coordination_bus: Arc<RwLock<CoordinationBus>>,
 
     /// Active task tracking
@@ -135,22 +136,29 @@ pub struct SessionCoordinator {
 #[derive(Debug)]
 struct CoordinationBus {
     /// Outbound message queue
+    #[allow(dead_code)] // Will be used for message queuing
     outbound_queue: Vec<AgentMessage>,
 
     /// Coordination directory for file-based communication
+    #[allow(dead_code)] // Will be used for file-based coordination
     coordination_dir: PathBuf,
 }
 
 // Simplified message handler for now - avoiding async trait in dyn context
+#[allow(dead_code)] // Will be implemented for message handling
 trait MessageHandler: Send + Sync {
     fn handle_message_sync(&self, message: &AgentMessage) -> Result<Option<AgentMessage>>;
 }
 
 #[derive(Debug, Clone)]
 struct TaskExecution {
+    #[allow(dead_code)] // Will be used for task tracking
     pub task: Task,
+    #[allow(dead_code)] // Will be used for session assignment tracking
     pub assigned_session: String,
+    #[allow(dead_code)] // Will be used for timing metrics
     pub started_at: DateTime<Utc>,
+    #[allow(dead_code)] // Will be used for completion estimation
     pub estimated_completion: Option<DateTime<Utc>>,
     pub status: TaskExecutionStatus,
 }
@@ -166,6 +174,7 @@ enum TaskExecutionStatus {
 
 #[derive(Debug)]
 struct PerformanceTracker {
+    #[allow(dead_code)] // Will be used for performance metrics
     start_time: DateTime<Utc>,
     total_tasks: usize,
     total_sessions_created: usize,
@@ -413,8 +422,8 @@ impl SessionCoordinator {
     /// Try to optimize task execution through batching
     async fn try_batch_optimization(
         &self,
-        role: &AgentRole,
-        task: &Task,
+        _role: &AgentRole,
+        _task: &Task,
     ) -> Result<Option<TaskResult>> {
         // In a real implementation, this would check for pending compatible tasks
         // and potentially delay execution to form efficient batches
@@ -439,7 +448,7 @@ impl SessionCoordinator {
     }
 
     /// Send coordination update
-    async fn send_coordination_update(&self, role: &AgentRole, result: &TaskResult) -> Result<()> {
+    async fn send_coordination_update(&self, _role: &AgentRole, result: &TaskResult) -> Result<()> {
         let message = SessionCoordinationMessage::SessionStatusUpdate {
             session_id: "session_id".to_string(), // Would extract from result
             agent_id: "agent_id".to_string(),     // Would extract from result
@@ -461,8 +470,8 @@ impl SessionCoordinator {
     /// Send efficiency report
     async fn send_efficiency_report(
         &self,
-        tokens_saved: usize,
-        tasks_processed: usize,
+        _tokens_saved: usize,
+        _tasks_processed: usize,
     ) -> Result<()> {
         let tracker = self.performance_tracker.lock().await;
 

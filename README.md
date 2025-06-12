@@ -6,10 +6,11 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**ccswarm** is an advanced multi-agent orchestration system featuring the **Session-Persistent Agent Architecture** for **93% token reduction**. Master Claude Code orchestrates specialized AI agents with persistent sessions, auto-accept mode, real-time monitoring, and multi-provider support, enabling scalable distributed development using Git worktrees, intelligent session pooling, and CLAUDE.md configuration files.
+**ccswarm** is an advanced multi-agent orchestration system featuring the **Session-Persistent Agent Architecture** for **93% token reduction** and **AI-Powered Auto-Create System** for instant application generation. Master Claude Code orchestrates specialized AI agents with persistent sessions, auto-accept mode, real-time monitoring, and multi-provider support, enabling scalable distributed development using Git worktrees, intelligent session pooling, and CLAUDE.md configuration files. Generate complete applications from natural language descriptions in seconds!
 
 ## 🌟 Core Design Philosophy
 
+- **🎯 AI-Powered Auto-Create**: Generate complete applications from natural language in seconds
 - **🚀 Session-Persistent Architecture**: Revolutionary 93% token reduction through intelligent session reuse
 - **🔄 Conversation Continuity**: Preserve context across tasks for enhanced performance
 - **📊 Batch Processing**: Execute multiple tasks efficiently in single sessions
@@ -66,7 +67,22 @@ ccswarm tui
 ccswarm status
 ```
 
-### 4. Execute Tasks
+### 4. Auto-Create Applications (NEW!)
+
+```bash
+# Generate complete TODO app from natural language
+ccswarm auto-create "Create a TODO application" --output ./my_todo_app
+
+# Generate blog with authentication
+ccswarm auto-create "Create a blog platform with user auth" --output ./blog
+
+# Run the generated app
+cd my_todo_app
+npm install
+npm start
+```
+
+### 5. Execute Tasks
 
 ```bash
 # Add frontend task
@@ -283,6 +299,93 @@ ccswarm task "Create user registration form" \
 # Type: development, testing, documentation, infrastructure, bugfix, feature
 ```
 
+### 🎯 Master Task Delegation
+
+ccswarm features an advanced Master delegation system that intelligently analyzes tasks and assigns them to optimal agents based on content, workload, and expertise.
+
+```bash
+# Analyze task and get agent recommendation
+ccswarm delegate analyze "Create responsive navigation component" \
+  --verbose --strategy hybrid
+
+# Manually delegate task to specific agent
+ccswarm delegate task "Add authentication middleware" \
+  --agent backend --priority high --type development
+
+# View delegation statistics and patterns
+ccswarm delegate stats --detailed --period 24
+
+# Interactive delegation mode
+ccswarm delegate interactive
+
+# Show delegation configuration
+ccswarm delegate show
+```
+
+#### Delegation Strategies
+
+| Strategy | Description | Use Cases |
+|----------|-------------|-----------|
+| `content` | Keyword-based analysis | Clear task descriptions |
+| `load` | Workload balancing | High-volume periods |
+| `expertise` | Agent expertise scores | Complex technical tasks |
+| `workflow` | Dependency awareness | Multi-step projects |
+| `hybrid` | Combined approach | General use (default) |
+
+#### Example Analysis Output
+
+```
+🔍 Task Analysis Results
+   Task: Create login form with validation
+   Recommended Agent: Frontend
+   Confidence: 90.0%
+   Reasoning: Contains UI/frontend keywords
+   Estimated Duration: 2400 seconds
+```
+
+### 🚀 AI-Powered Auto-Create System
+
+Generate complete, working applications from natural language descriptions in seconds!
+
+```bash
+# Generate TODO application
+ccswarm auto-create "Create a TODO app with task management" --output ./todo_app
+
+# Generate blog platform
+ccswarm auto-create "Build a blog with user authentication" --output ./blog
+
+# Generate real-time chat
+ccswarm auto-create "Create real-time chat application" --output ./chat
+
+# Generate e-commerce site
+ccswarm auto-create "Build online shopping platform" --output ./shop
+```
+
+#### What Gets Generated
+
+```
+my_app/
+├── index.html        # React entry point
+├── app.js           # React components
+├── styles.css       # Professional styling
+├── server.js        # Express.js REST API
+├── package.json     # Dependencies
+├── Dockerfile       # Container config
+├── docker-compose.yml
+├── app.test.js      # Test structure
+├── README.md        # Documentation
+└── .gitignore       # Git configuration
+```
+
+#### Auto-Create Features
+
+- **Intelligent Analysis**: Detects app type from natural language
+- **Task Decomposition**: Breaks requirements into agent tasks
+- **Multi-Agent Execution**: Frontend, Backend, DevOps, QA collaborate
+- **Complete Applications**: Fully functional, ready to run
+- **Best Practices**: Modern standards, clean architecture
+- **Customization**: Adapts to auth, real-time, mobile requirements
+
 ### Agent Management
 
 ```bash
@@ -303,6 +406,73 @@ ccswarm session list [--all]
 
 # Execute quality review
 ccswarm review [--agent backend] [--strict]
+```
+
+### 🖥️ Terminal User Interface (TUI)
+
+ccswarm provides a powerful TUI for real-time monitoring and control:
+
+```bash
+# Start TUI
+ccswarm tui
+```
+
+#### TUI Features
+
+- **📊 Overview Tab**: System metrics, agent status, and provider distribution
+- **🤖 Agents Tab**: Detailed agent management and monitoring
+- **📋 Tasks Tab**: Task queue management and progress tracking
+- **📜 Logs Tab**: Real-time log streaming with filtering
+- **🎯 Delegation Tab**: Master delegation interface with three modes:
+  - **Analyze Mode**: Get task recommendations from Master
+  - **Delegate Mode**: Manually assign tasks to agents
+  - **Stats Mode**: View delegation patterns and analytics
+
+#### TUI Key Bindings
+
+| Key | Action | Description |
+|-----|--------|-------------|
+| `Tab`/`Shift+Tab` | Switch tabs | Navigate between Overview, Agents, Tasks, Logs, Delegation |
+| `↑/↓` or `j/k` | Navigate | Move through lists and selections |
+| `Enter` | Activate | Start agents, view details, or delegate tasks |
+| `Space` | Mode switch | Switch delegation modes (Analyze/Delegate/Stats) |
+| `n` | New agent | Create new agent session |
+| `d` | Delete | Remove selected agent or session |
+| `t` | Add task | Create new task with smart parsing |
+| `c` | Command | Open command prompt for advanced operations |
+| `r` | Refresh | Update all data |
+| `q` | Quit | Exit TUI |
+
+#### TUI Command System
+
+Press `c` to access the command prompt with smart features:
+
+```bash
+# Available commands in TUI
+help                    # Show all commands
+status                  # Show system status
+agents                  # List all agents
+tasks                   # List all tasks
+task <description>      # Add new task with smart parsing
+agent <type>            # Create new agent
+start_agent <name>      # Start specific agent
+session <action>        # Session management
+monitor [filter]        # Real-time monitoring
+delegate <agent> <task> # Direct task delegation
+refresh                 # Refresh data
+clear                   # Clear logs
+```
+
+#### Smart Task Creation
+
+The TUI supports intelligent task parsing:
+
+```bash
+# Examples in TUI command prompt
+task Fix login bug [high] [bugfix]           # High priority bugfix
+task Add API docs [docs]                     # Documentation task  
+task Write tests for auth [test]             # Testing task
+task Create dashboard [medium] [feature]     # Medium priority feature
 ```
 
 ### Git Worktree Management
@@ -718,6 +888,12 @@ impl ThinkMode {
 - [x] Real-time monitoring & output streaming
 - [x] Multi-provider support (Claude Code, Aider, Codex, Custom)
 - [x] Terminal User Interface (TUI) with live updates
+- [x] **Master Task Delegation System** (NEW!)
+  - [x] Intelligent task analysis and agent assignment
+  - [x] Multiple delegation strategies (Content, Load, Expertise, Workflow, Hybrid)
+  - [x] CLI delegation commands with statistics
+  - [x] TUI delegation interface with real-time analysis
+  - [x] Interactive delegation mode
 - [ ] WebUI dashboard
 - [ ] Machine learning-based task optimization
 - [ ] Plugin system

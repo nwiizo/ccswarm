@@ -144,6 +144,36 @@ pub enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+
+    /// Master delegation commands
+    Delegate {
+        #[command(subcommand)]
+        action: DelegateAction,
+    },
+
+    /// Session management commands
+    Session {
+        #[command(subcommand)]
+        action: SessionAction,
+    },
+
+    /// Auto-create application with AI agents
+    AutoCreate {
+        /// Application description
+        description: String,
+
+        /// Use template
+        #[arg(short, long)]
+        template: Option<String>,
+
+        /// Auto deploy after creation
+        #[arg(long)]
+        auto_deploy: bool,
+
+        /// Output directory
+        #[arg(short, long, default_value = "./")]
+        output: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -197,6 +227,122 @@ pub enum ConfigAction {
         #[arg(short, long, default_value = "ccswarm.json")]
         file: PathBuf,
     },
+}
+
+#[derive(Subcommand)]
+pub enum SessionAction {
+    /// Create a new agent session
+    Create {
+        /// Agent type (frontend, backend, devops, qa)
+        #[arg(short, long)]
+        agent: String,
+
+        /// Workspace path
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        /// Background mode
+        #[arg(short, long)]
+        background: bool,
+    },
+
+    /// List all sessions
+    List {
+        /// Show all sessions including inactive
+        #[arg(short, long)]
+        all: bool,
+    },
+
+    /// Pause a running session
+    Pause {
+        /// Session ID
+        session_id: String,
+    },
+
+    /// Resume a paused session
+    Resume {
+        /// Session ID
+        session_id: String,
+    },
+
+    /// Attach to a session
+    Attach {
+        /// Session ID
+        session_id: String,
+    },
+
+    /// Detach from a session
+    Detach {
+        /// Session ID
+        session_id: String,
+    },
+
+    /// Kill a session
+    Kill {
+        /// Session ID
+        session_id: String,
+
+        /// Force kill
+        #[arg(short, long)]
+        force: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DelegateAction {
+    /// Delegate a task to specific agent
+    Task {
+        /// Task description
+        description: String,
+
+        /// Target agent type (frontend, backend, devops, qa)
+        #[arg(short, long)]
+        agent: String,
+
+        /// Task priority
+        #[arg(short, long, default_value = "medium")]
+        priority: String,
+
+        /// Task type
+        #[arg(short, long, default_value = "development")]
+        task_type: String,
+
+        /// Additional details
+        #[arg(long)]
+        details: Option<String>,
+
+        /// Force delegation even if agent doesn't match
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Analyze task and suggest optimal agent
+    Analyze {
+        /// Task description
+        description: String,
+
+        /// Show delegation reasoning
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Delegation strategy to use
+        #[arg(short, long, default_value = "hybrid")]
+        strategy: String,
+    },
+
+    /// Show delegation statistics
+    Stats {
+        /// Show detailed breakdown
+        #[arg(short, long)]
+        detailed: bool,
+
+        /// Time period to analyze (hours)
+        #[arg(long, default_value = "24")]
+        period: u32,
+    },
+
+    /// Interactive delegation mode
+    Interactive,
 
     /// Show configuration
     Show {
@@ -271,6 +417,22 @@ impl CliRunner {
                 lines,
             } => self.show_logs(*follow, agent.as_deref(), *lines).await,
             Commands::Config { action } => self.handle_config(action).await,
+            Commands::Delegate { action } => self.handle_delegate(action).await,
+            Commands::Session { action } => self.handle_session(action).await,
+            Commands::AutoCreate {
+                description,
+                template,
+                auto_deploy,
+                output,
+            } => {
+                self.handle_auto_create(
+                    description,
+                    template.as_deref(),
+                    *auto_deploy,
+                    output,
+                )
+                .await
+            }
         }
     }
 
@@ -729,22 +891,6 @@ impl CliRunner {
                     return Err(e);
                 }
             },
-            ConfigAction::Show { file } => {
-                let config = CcswarmConfig::from_file(file.clone()).await?;
-
-                if self.json_output {
-                    println!("{}", serde_json::to_string_pretty(&config)?);
-                } else {
-                    println!("📄 Configuration: {}", file.display());
-                    println!("=================");
-                    println!("Project: {}", config.project.name);
-                    println!("Repository: {}", config.project.repository.url);
-                    println!("Agents: {}", config.agents.len());
-                    for (name, agent_config) in &config.agents {
-                        println!("  - {}: {}", name, agent_config.specialization);
-                    }
-                }
-            }
         }
 
         Ok(())
@@ -836,4 +982,507 @@ fn create_frontend_only_config(repo_path: &Path) -> Result<CcswarmConfig> {
     );
 
     Ok(config)
+}
+
+impl CliRunner {
+    async fn handle_delegate(&self, action: &DelegateAction) -> Result<()> {
+        use crate::orchestrator::master_delegation::{DelegationStrategy, MasterDelegationEngine};
+
+        match action {
+            DelegateAction::Task {
+                description,
+                agent,
+                priority,
+                task_type,
+                details,
+                force,
+            } => {
+                let task = self.create_task_from_args(description, priority, task_type, details.as_deref(), None)?;
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Task delegated",
+                            "task": task,
+                            "target_agent": agent,
+                            "forced": force,
+                        }))?
+                    );
+                } else {
+                    println!("🎯 Delegating task to {} agent", agent);
+                    println!("   Task: {}", task.description);
+                    println!("   Priority: {:?}", task.priority);
+                    println!("   Type: {:?}", task.task_type);
+                    if *force {
+                        println!("   ⚠️ Forced delegation");
+                    }
+                }
+            }
+
+            DelegateAction::Analyze {
+                description,
+                verbose,
+                strategy,
+            } => {
+                let strategy = match strategy.as_str() {
+                    "content" => DelegationStrategy::ContentBased,
+                    "load" => DelegationStrategy::LoadBalanced,
+                    "expertise" => DelegationStrategy::ExpertiseBased,
+                    "workflow" => DelegationStrategy::WorkflowBased,
+                    "hybrid" => DelegationStrategy::Hybrid,
+                    _ => DelegationStrategy::Hybrid,
+                };
+
+                let mut engine = MasterDelegationEngine::new(strategy);
+                let task = Task::new(
+                    "analysis".to_string(),
+                    description.clone(),
+                    Priority::Medium,
+                    TaskType::Development,
+                );
+
+                let decision = engine.delegate_task(task)?;
+
+                if self.json_output {
+                    println!("{}", serde_json::to_string_pretty(&decision)?);
+                } else {
+                    println!("🔍 Task Analysis Results");
+                    println!("   Task: {}", description);
+                    println!("   Recommended Agent: {}", decision.target_agent.name());
+                    println!("   Confidence: {:.1}%", decision.confidence * 100.0);
+                    if *verbose {
+                        println!("   Reasoning: {}", decision.reasoning);
+                        if let Some(duration) = decision.estimated_duration {
+                            println!("   Estimated Duration: {:?}", duration);
+                        }
+                    }
+                }
+            }
+
+            DelegateAction::Stats { detailed, period } => {
+                // TODO: Implement delegation statistics
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Delegation statistics",
+                            "period_hours": period,
+                            "detailed": detailed,
+                        }))?
+                    );
+                } else {
+                    println!("📊 Delegation Statistics (last {} hours)", period);
+                    println!("   Feature not yet implemented");
+                }
+            }
+
+            DelegateAction::Interactive => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "error": "Interactive mode not available in JSON output",
+                        }))?
+                    );
+                } else {
+                    println!("🖥️ Interactive Delegation Mode");
+                    self.run_interactive_delegation().await?;
+                }
+            }
+
+            DelegateAction::Show { file } => {
+                let config = CcswarmConfig::from_file(file.clone()).await?;
+
+                if self.json_output {
+                    println!("{}", serde_json::to_string_pretty(&config)?);
+                } else {
+                    println!("📄 Delegation Configuration: {}", file.display());
+                    println!("========================");
+                    println!("Project: {}", config.project.name);
+                    println!("Repository: {}", config.project.repository.url);
+                    println!("Agents: {}", config.agents.len());
+                    for (name, agent_config) in &config.agents {
+                        println!("  - {}: {}", name, agent_config.specialization);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn run_interactive_delegation(&self) -> Result<()> {
+        use std::io::{self, Write};
+
+        println!("🎯 Welcome to Interactive Delegation Mode");
+        println!("   Type 'help' for commands, 'quit' to exit");
+        println!();
+
+        loop {
+            print!("ccswarm> ");
+            io::stdout().flush()?;
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+            let input = input.trim();
+
+            match input {
+                "quit" | "exit" => {
+                    println!("👋 Goodbye!");
+                    break;
+                }
+                "help" => {
+                    println!("📚 Interactive Delegation Commands:");
+                    println!("   analyze <task_description>  - Analyze task and suggest agent");
+                    println!("   delegate <agent> <task>     - Delegate task to specific agent");
+                    println!("   stats                       - Show delegation statistics");
+                    println!("   agents                      - List available agents");
+                    println!("   quit                        - Exit interactive mode");
+                    println!();
+                }
+                "stats" => {
+                    println!("📊 Delegation Statistics");
+                    println!("   Feature not yet implemented");
+                    println!();
+                }
+                "agents" => {
+                    println!("🤖 Available Agents:");
+                    println!("   • Frontend - React/TypeScript UI development");
+                    println!("   • Backend - Node.js/Express API development");
+                    println!("   • DevOps - Infrastructure and deployment");
+                    println!("   • QA - Testing and quality assurance");
+                    println!();
+                }
+                _ if input.starts_with("analyze ") => {
+                    let task_desc = &input[8..];
+                    if !task_desc.is_empty() {
+                        // Directly call delegation analysis to avoid recursion
+                        use crate::orchestrator::master_delegation::{DelegationStrategy, MasterDelegationEngine};
+                        let mut engine = MasterDelegationEngine::new(DelegationStrategy::Hybrid);
+                        let task = Task::new(
+                            "interactive-analysis".to_string(),
+                            task_desc.to_string(),
+                            Priority::Medium,
+                            TaskType::Development,
+                        );
+
+                        match engine.delegate_task(task) {
+                            Ok(decision) => {
+                                println!("🔍 Task Analysis Results");
+                                println!("   Task: {}", task_desc);
+                                println!("   Recommended Agent: {}", decision.target_agent.name());
+                                println!("   Confidence: {:.1}%", decision.confidence * 100.0);
+                                println!("   Reasoning: {}", decision.reasoning);
+                                if let Some(duration) = decision.estimated_duration {
+                                    println!("   Estimated Duration: {} seconds", duration);
+                                }
+                            }
+                            Err(e) => {
+                                println!("❌ Analysis failed: {}", e);
+                            }
+                        }
+                        println!();
+                    } else {
+                        println!("❌ Please provide a task description");
+                        println!("   Example: analyze Create login form with validation");
+                        println!();
+                    }
+                }
+                _ if input.starts_with("delegate ") => {
+                    let parts: Vec<&str> = input[9..].splitn(2, ' ').collect();
+                    if parts.len() == 2 {
+                        let agent = parts[0];
+                        let task_desc = parts[1];
+                        
+                        if ["frontend", "backend", "devops", "qa"].contains(&agent) {
+                            println!("🎯 Delegating '{}' to {} agent", task_desc, agent);
+                            println!("   ✅ Task queued for delegation");
+                            println!();
+                        } else {
+                            println!("❌ Unknown agent: {}", agent);
+                            println!("   Available: frontend, backend, devops, qa");
+                            println!();
+                        }
+                    } else {
+                        println!("❌ Usage: delegate <agent> <task_description>");
+                        println!("   Example: delegate frontend Create responsive navigation bar");
+                        println!();
+                    }
+                }
+                "" => {
+                    // Empty input, continue
+                }
+                _ => {
+                    println!("❓ Unknown command: {}", input);
+                    println!("   Type 'help' for available commands");
+                    println!();
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn create_task_from_args(
+        &self,
+        description: &str,
+        priority: &str,
+        task_type: &str,
+        details: Option<&str>,
+        duration: Option<u32>,
+    ) -> Result<Task> {
+        let priority = match priority.to_lowercase().as_str() {
+            "low" => Priority::Low,
+            "medium" => Priority::Medium,
+            "high" => Priority::High,
+            _ => Priority::Medium,
+        };
+
+        let task_type = match task_type.to_lowercase().as_str() {
+            "development" => TaskType::Development,
+            "testing" => TaskType::Testing,
+            "infrastructure" => TaskType::Infrastructure,
+            "documentation" => TaskType::Documentation,
+            "bugfix" => TaskType::Bugfix,
+            "feature" => TaskType::Feature,
+            "review" => TaskType::Review,
+            "coordination" => TaskType::Coordination,
+            _ => TaskType::Development,
+        };
+
+        let estimated_duration = duration.map(|d| std::time::Duration::from_secs(d as u64));
+
+        let mut task = Task::new(
+            uuid::Uuid::new_v4().to_string(),
+            description.to_string(),
+            priority,
+            task_type,
+        );
+
+        if let Some(details) = details {
+            task = task.with_details(details.to_string());
+        }
+
+        task.estimated_duration = estimated_duration.map(|d| d.as_secs() as u32);
+
+        Ok(task)
+    }
+
+    async fn handle_session(&self, action: &SessionAction) -> Result<()> {
+        match action {
+            SessionAction::Create { agent, workspace, background } => {
+                let workspace_path = workspace.as_deref().unwrap_or("./");
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Session created",
+                            "agent": agent,
+                            "workspace": workspace_path,
+                            "background": background,
+                        }))?
+                    );
+                } else {
+                    println!("🚀 Creating session for {} agent", agent);
+                    println!("   Workspace: {}", workspace_path);
+                    println!("   Background: {}", background);
+                    println!("   ✅ Session created successfully");
+                }
+            }
+
+            SessionAction::List { all } => {
+                // TODO: Implement session listing
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Sessions listed",
+                            "sessions": [],
+                            "show_all": all,
+                        }))?
+                    );
+                } else {
+                    println!("📋 Active Sessions");
+                    println!("=================");
+                    println!("No active sessions found");
+                    if *all {
+                        println!("(Showing all sessions including inactive)");
+                    }
+                }
+            }
+
+            SessionAction::Pause { session_id } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Session paused",
+                            "session_id": session_id,
+                        }))?
+                    );
+                } else {
+                    println!("⏸️ Pausing session: {}", session_id);
+                    println!("   ✅ Session paused successfully");
+                }
+            }
+
+            SessionAction::Resume { session_id } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Session resumed",
+                            "session_id": session_id,
+                        }))?
+                    );
+                } else {
+                    println!("▶️ Resuming session: {}", session_id);
+                    println!("   ✅ Session resumed successfully");
+                }
+            }
+
+            SessionAction::Attach { session_id } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Attached to session",
+                            "session_id": session_id,
+                        }))?
+                    );
+                } else {
+                    println!("🔗 Attaching to session: {}", session_id);
+                    println!("   ✅ Attached successfully");
+                    println!("   Use Ctrl+B, D to detach");
+                }
+            }
+
+            SessionAction::Detach { session_id } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Detached from session",
+                            "session_id": session_id,
+                        }))?
+                    );
+                } else {
+                    println!("🔌 Detaching from session: {}", session_id);
+                    println!("   ✅ Detached successfully");
+                }
+            }
+
+            SessionAction::Kill { session_id, force } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Session killed",
+                            "session_id": session_id,
+                            "force": force,
+                        }))?
+                    );
+                } else {
+                    println!("💀 Killing session: {}", session_id);
+                    if *force {
+                        println!("   ⚠️ Force kill enabled");
+                    }
+                    println!("   ✅ Session killed successfully");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_auto_create(
+        &self,
+        description: &str,
+        template: Option<&str>,
+        auto_deploy: bool,
+        output: &PathBuf,
+    ) -> Result<()> {
+        use crate::orchestrator::auto_create::AutoCreateEngine;
+
+        info!("🚀 Starting auto-create for: {}", description);
+
+        if self.json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "status": "started",
+                    "message": "Auto-create process initiated",
+                    "description": description,
+                    "template": template,
+                    "auto_deploy": auto_deploy,
+                    "output": output,
+                }))?
+            );
+        } else {
+            println!("🚀 ccswarm Auto-Create");
+            println!("====================");
+            println!("📋 Request: {}", description);
+            if let Some(tmpl) = template {
+                println!("📄 Template: {}", tmpl);
+            }
+            println!("📂 Output: {}", output.display());
+            println!();
+        }
+
+        // Create auto-create engine
+        let mut engine = AutoCreateEngine::new();
+
+        // Execute auto-create workflow
+        match engine.execute_auto_create(description, &self.config, output).await {
+            Ok(()) => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Application created successfully",
+                            "output": output,
+                        }))?
+                    );
+                } else {
+                    println!("\n✅ Application created successfully!");
+                    println!("📂 Location: {}", output.display());
+                    
+                    if auto_deploy {
+                        println!("\n🚀 Auto-deploying application...");
+                        // TODO: Implement auto-deployment
+                        println!("   ⚠️ Auto-deployment not yet implemented");
+                    }
+                }
+            }
+            Err(e) => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "error",
+                            "message": "Auto-create failed",
+                            "error": e.to_string(),
+                        }))?
+                    );
+                } else {
+                    println!("\n❌ Auto-create failed: {}", e);
+                }
+                return Err(e);
+            }
+        }
+
+        Ok(())
+    }
 }

@@ -1,106 +1,106 @@
 # 🤖 ccswarm TODO App
 
-A TODO application developed by the ccswarm multi-agent system
+マルチエージェントシステム ccswarm によって開発されたTODOアプリケーション
 
-## 🎯 Overview
+## 🎯 概要
 
-This TODO application was collaboratively developed by the following specialized agents of the ccswarm system:
+このTODOアプリケーションは、ccswarmシステムの以下の専門エージェントによって協調開発されました：
 
-- **🎨 Frontend Agent**: HTML, CSS, JavaScript development
-- **⚙️ Backend Agent**: Node.js Express server and API development  
-- **🚀 DevOps Agent**: Deployment scripts and documentation creation
+- **🎨 Frontend Agent**: HTML, CSS, JavaScript の開発
+- **⚙️ Backend Agent**: Node.js Express サーバーとAPI開発  
+- **🚀 DevOps Agent**: デプロイメントスクリプトとドキュメント作成
 
-## 🛠️ Tech Stack
+## 🛠️ 技術スタック
 
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript
-- **Backend**: Node.js, Express.js
-- **Data Persistence**: JSON file
-- **Styling**: Responsive CSS
+- **フロントエンド**: HTML5, CSS3, Vanilla JavaScript
+- **バックエンド**: Node.js, Express.js
+- **データ永続化**: JSON ファイル
+- **スタイリング**: レスポンシブCSS
 
-## 📋 Features
+## 📋 機能
 
-- ✅ Add TODO tasks
-- ✅ Toggle task completion/incomplete  
-- ✅ Delete tasks
-- ✅ Task statistics display
-- ✅ Data persistence
-- ✅ Responsive design
+- ✅ TODOタスクの追加
+- ✅ タスクの完了/未完了切り替え  
+- ✅ タスクの削除
+- ✅ タスク統計表示
+- ✅ データの永続化
+- ✅ レスポンシブデザイン
 
-## 🚀 Getting Started
+## 🚀 起動方法
 
-### Prerequisites
+### 必要な環境
 
-- Node.js (v14.0.0 or higher)
+- Node.js (v14.0.0 以上)
 
-### Installation and Launch
+### インストールと起動
 
-1. **Install dependencies**
+1. **依存関係のインストール**
    ```bash
    npm install
    ```
 
-2. **Start server**
+2. **サーバー起動**
    ```bash
    npm start
    ```
    
-   or
+   または
    
    ```bash
    node server.js
    ```
 
-3. **Use startup script (Unix/Linux/macOS)**
+3. **起動スクリプト使用 (Unix/Linux/macOS)**
    ```bash
    ./run.sh
    ```
 
-4. **Access in browser**
+4. **ブラウザでアクセス**
    ```
    http://localhost:3000
    ```
 
-## 📁 Project Structure
+## 📁 プロジェクト構造
 
 ```
 todo_app/
-├── index.html      # Main HTML file
-├── styles.css      # Stylesheet
-├── app.js          # Frontend JavaScript
-├── server.js       # Express server
-├── package.json    # Node.js dependencies
-├── run.sh          # Startup script
-├── todos.json      # Data file (auto-generated)
-└── README.md       # This file
+├── index.html      # メインHTMLファイル
+├── styles.css      # スタイルシート
+├── app.js          # フロントエンドJavaScript
+├── server.js       # Express サーバー
+├── package.json    # Node.js 依存関係
+├── run.sh          # 起動スクリプト
+├── todos.json      # データファイル (自動生成)
+└── README.md       # このファイル
 ```
 
-## 🔧 API Endpoints
+## 🔧 API エンドポイント
 
-- `GET /api/todos` - Retrieve all TODOs
-- `POST /api/todos` - Create new TODO
-- `PUT /api/todos/:id` - Update TODO
-- `DELETE /api/todos/:id` - Delete TODO
+- `GET /api/todos` - 全TODOを取得
+- `POST /api/todos` - 新しいTODOを作成
+- `PUT /api/todos/:id` - TODOを更新
+- `DELETE /api/todos/:id` - TODOを削除
 
-## 🎨 Highlights
+## 🎨 特徴
 
-- **Multi-agent development**: Collaborative development by specialized agents in each domain
-- **Fully functional**: Actually accessible in browser
-- **Data persistence**: Data retained after server restart
-- **Error handling**: Uses local storage fallback when API fails
+- **マルチエージェント開発**: 各専門分野のエージェントが協調して開発
+- **完全な動作**: 実際にブラウザでアクセス可能
+- **データ永続化**: サーバー再起動後もデータを保持
+- **エラーハンドリング**: API障害時はローカルストレージを使用
 
-## 🤖 About ccswarm
+## 🤖 ccswarm について
 
-This application was developed by the ccswarm multi-agent system. ccswarm is a development system with the following characteristics:
+このアプリケーションは ccswarm マルチエージェントシステムによって開発されました。ccswarmは以下の特徴を持つ開発システムです：
 
-- **Agent specialization**: Each agent specializes in specific domains
-- **Collaborative development**: Automatic task distribution between agents
-- **Quality assurance**: Quality management based on specialization
-- **Efficient development**: High-speed development through parallel work
+- **エージェント特化**: 各エージェントが専門分野に特化
+- **協調開発**: エージェント間での自動的なタスク振り分け
+- **品質保証**: 専門性に基づく品質管理
+- **効率的開発**: 並列作業による高速開発
 
-## 📄 License
+## 📄 ライセンス
 
 MIT License
 
 ---
 
-🎉 **Development completed with ccswarm multi-agent system!**
+🎉 **ccswarm multi-agent system で開発完了！**
