@@ -24,14 +24,12 @@ mod identity_tests {
     }
 
     fn create_test_task(description: &str, task_type: TaskType) -> Task {
-        Task {
-            id: Uuid::new_v4().to_string(),
-            description: description.to_string(),
-            details: None,
-            priority: Priority::Medium,
+        Task::new(
+            Uuid::new_v4().to_string(),
+            description.to_string(),
+            Priority::Medium,
             task_type,
-            estimated_duration: None,
-        }
+        )
     }
 
     #[test]

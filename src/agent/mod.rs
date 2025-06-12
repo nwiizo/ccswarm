@@ -271,14 +271,13 @@ impl ClaudeCodeAgent {
             ),
         };
 
-        Task {
-            id: Uuid::new_v4().to_string(),
+        Task::new(
+            Uuid::new_v4().to_string(),
             description,
-            details: Some("Boundary verification test".to_string()),
-            priority: Priority::Low,
+            Priority::Low,
             task_type,
-            estimated_duration: None,
-        }
+        )
+        .with_details("Boundary verification test".to_string())
     }
 
     /// Execute a task with full identity and boundary checking

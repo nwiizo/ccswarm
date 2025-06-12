@@ -245,14 +245,13 @@ impl AutoCreateEngine {
 
     /// Convert template to actual task
     fn template_to_task(&self, template: TaskTemplate) -> Task {
-        Task {
-            id: Uuid::new_v4().to_string(),
-            description: template.description,
-            details: None,
-            priority: template.priority,
-            task_type: template.task_type,
-            estimated_duration: template.estimated_duration,
-        }
+        Task::new(
+            Uuid::new_v4().to_string(),
+            template.description,
+            template.priority,
+            template.task_type,
+        )
+        .with_duration(template.estimated_duration.unwrap_or(3600))
     }
 
     /// Execute auto-create workflow

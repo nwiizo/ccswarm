@@ -194,7 +194,7 @@ Located in `src/auto_create/templates/`:
 - CLAUDE.md files reinforce agent identity
 - Continuous monitoring prevents drift
 - Automatic correction for boundary violations
-- Located in `examples/claude-md-templates/`
+- Located in `demos/multi-agent/claude-md-templates/`
 
 ### Safety Features
 - Auto-accept with risk assessment (1-10 scale)
@@ -232,11 +232,11 @@ cargo test identity       # Agent boundaries
 # Integration tests
 cargo test --test integration_tests
 
-# Examples
-cargo run --example todo_app_builder
-cargo run --example monitoring_demo
-cargo run --example session_persistent_demo
-cargo run --example multi_provider_demo
+# Examples (now in demos/)
+cargo run --example todo_app_builder         # See demos/todo-app/
+cargo run --example monitoring_demo          # See demos/multi-agent/
+cargo run --example session_persistent_demo  # See demos/session-persistence/
+cargo run --example auto_create_demo         # See demos/auto-create/
 ```
 
 ## ⚙️ Configuration
@@ -303,3 +303,67 @@ tail -f logs/ccswarm.log                           # System logs
 - **Provider errors**: Verify API keys and commands
 - **Worktree conflicts**: Use `ccswarm worktree clean`
 - **Auto-accept blocked**: Check risk assessment logs
+
+## 🔍 Quality Review System
+
+### Overview
+Master Claude performs automated quality reviews on completed tasks, creating remediation tasks when issues are found.
+
+### Review Process
+- **Interval**: Every 30 seconds
+- **Scope**: All completed tasks in agent history
+- **Metrics**: Test coverage, code complexity, security, documentation
+
+### Quality Standards (src/identity/mod.rs)
+```rust
+pub struct QualityStandards {
+    pub min_test_coverage: f64,      // Default: 0.85 (85%)
+    pub max_complexity: u32,         // Cyclomatic complexity limit
+    pub security_scan_required: bool,
+    pub performance_threshold: Duration,
+}
+```
+
+### Review Message Flow
+```rust
+// When quality issues are detected:
+AgentMessage::QualityIssue {
+    agent_id: String,
+    task_id: String,
+    issues: Vec<String>,  // e.g., ["Low test coverage", "High complexity"]
+}
+```
+
+### Remediation Task Creation
+When issues are found, a remediation task is automatically created:
+- **Task Type**: `TaskType::Remediation`
+- **Priority**: Always `High`
+- **Assignment**: Same agent that completed original task
+- **Parent Task**: Links to original task for tracking
+
+### Fix Instructions Mapping
+```rust
+"Low test coverage" → "Add unit tests to achieve 85% coverage"
+"High complexity" → "Refactor to reduce cyclomatic complexity"
+"Security vulnerability" → "Fix security issues and validate inputs"
+"Missing documentation" → "Add comprehensive documentation"
+```
+
+### Review History Tracking
+```rust
+pub struct ReviewHistoryEntry {
+    pub task_id: String,
+    pub agent_id: String,
+    pub review_date: DateTime<Utc>,
+    pub issues_found: Vec<String>,
+    pub remediation_task_id: Option<String>,
+    pub review_passed: bool,
+    pub iteration: u32,  // Tracks review attempts
+}
+```
+
+### Implementation Files
+- **Quality Review**: `src/orchestrator/mod.rs::perform_quality_review()`
+- **Message Handler**: `src/orchestrator/mod.rs::handle_agent_message()`
+- **Task Types**: `src/agent/task.rs` (added `Remediation` variant)
+- **Tests**: `src/orchestrator/review_test.rs`

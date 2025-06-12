@@ -329,7 +329,7 @@ mod integration_tests {
         ];
 
         // 1. Add all tasks to queue
-        for (agent_type, description) in &workflow_tasks {
+        for (_agent_type, description) in &workflow_tasks {
             let task = Task::new(
                 Uuid::new_v4().to_string(),
                 description.to_string(),

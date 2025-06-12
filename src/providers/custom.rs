@@ -308,14 +308,12 @@ impl ProviderExecutor for CustomExecutor {
         working_dir: &Path,
     ) -> Result<String> {
         // Create a mock task for prompt execution
-        let mock_task = Task {
-            id: format!("prompt-{}", uuid::Uuid::new_v4()),
-            description: "Direct prompt execution".to_string(),
-            details: None,
-            priority: crate::agent::Priority::Medium,
-            task_type: TaskType::Development,
-            estimated_duration: None,
-        };
+        let mock_task = Task::new(
+            format!("prompt-{}", uuid::Uuid::new_v4()),
+            "Direct prompt execution".to_string(),
+            crate::agent::Priority::Medium,
+            TaskType::Development,
+        );
 
         let context = self.generate_context_info(identity, &mock_task);
         let args = self.prepare_command_args(prompt, &context, identity, &mock_task);
@@ -495,14 +493,13 @@ mod tests {
     }
 
     fn create_test_task() -> Task {
-        Task {
-            id: Uuid::new_v4().to_string(),
-            description: "Deploy application".to_string(),
-            details: Some("Deploy to staging environment".to_string()),
-            priority: crate::agent::Priority::High,
-            task_type: TaskType::Infrastructure,
-            estimated_duration: None,
-        }
+        Task::new(
+            Uuid::new_v4().to_string(),
+            "Deploy application".to_string(),
+            crate::agent::Priority::High,
+            TaskType::Infrastructure,
+        )
+        .with_details("Deploy to staging environment".to_string())
     }
 
     #[test]

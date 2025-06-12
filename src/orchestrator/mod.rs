@@ -1,6 +1,9 @@
 pub mod auto_create;
 pub mod master_delegation;
 
+#[cfg(test)]
+mod review_test;
+
 use anyhow::{Context, Result};
 use async_channel::{Receiver, Sender};
 use chrono::{DateTime, Utc};
@@ -52,6 +55,18 @@ pub struct MasterClaude {
     pub state: Arc<RwLock<OrchestratorState>>,
 }
 
+/// Review history entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewHistoryEntry {
+    pub task_id: String,
+    pub agent_id: String,
+    pub review_date: DateTime<Utc>,
+    pub issues_found: Vec<String>,
+    pub remediation_task_id: Option<String>,
+    pub review_passed: bool,
+    pub iteration: u32,
+}
+
 /// State of the orchestrator
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestratorState {
@@ -62,6 +77,7 @@ pub struct OrchestratorState {
     pub failed_tasks: u64,
     pub active_agents: Vec<String>,
     pub pending_tasks: Vec<Task>,
+    pub review_history: HashMap<String, Vec<ReviewHistoryEntry>>, // task_id -> review entries
 }
 
 /// Status of the orchestrator
@@ -97,6 +113,7 @@ impl MasterClaude {
             failed_tasks: 0,
             active_agents: Vec::new(),
             pending_tasks: Vec::new(),
+            review_history: HashMap::new(),
         }));
 
         Ok(Self {
@@ -174,12 +191,13 @@ impl MasterClaude {
         let agents = self.agents.clone();
         let bus = self.coordination_bus.clone();
         let state = self.state.clone();
+        let task_queue_tx = self.task_queue_tx.clone();
 
         tokio::spawn(async move {
             loop {
                 match bus.receive_message().await {
                     Ok(message) => {
-                        if let Err(e) = Self::handle_agent_message(message, &agents, &state).await {
+                        if let Err(e) = Self::handle_agent_message(message, &agents, &state, &task_queue_tx).await {
                             error!("Error handling agent message: {}", e);
                         }
                     }
@@ -298,6 +316,11 @@ impl MasterClaude {
 
     /// Select the optimal agent for a task
     async fn select_optimal_agent(&self, task: &Task) -> Result<String> {
+        // For remediation tasks, use the assigned agent if specified
+        if task.task_type == TaskType::Remediation && task.assigned_to.is_some() {
+            return Ok(task.assigned_to.as_ref().unwrap().clone());
+        }
+        
         // Determine required specialization
         let required_role = match task.task_type {
             TaskType::Development => {
@@ -312,6 +335,7 @@ impl MasterClaude {
             }
             TaskType::Infrastructure => "DevOps",
             TaskType::Testing => "QA",
+            TaskType::Remediation => "Backend", // Fallback for unassigned remediation
             _ => "Backend", // Default
         };
 
@@ -356,6 +380,95 @@ impl MasterClaude {
             .unwrap();
 
         Ok(selected)
+    }
+
+    /// Create a remediation task for quality issues
+    #[allow(dead_code)]
+    async fn create_remediation_task(
+        &self,
+        original_task_id: &str,
+        agent_id: &str,
+        issues: Vec<String>,
+    ) -> Result<Task> {
+        // Generate specific fix instructions based on the issues
+        let instructions = self.generate_fix_instructions(&issues).await?;
+        
+        // Create remediation task
+        let task_id = format!("remediate-{}-{}", original_task_id, Uuid::new_v4());
+        
+        let description = format!(
+            "Fix quality issues in task {}: {}",
+            original_task_id,
+            instructions
+        );
+        
+        let details = format!(
+            "Quality issues found:\n{}\n\nSpecific instructions:\n{}",
+            issues.join("\n- "),
+            instructions
+        );
+        
+        let remediation_task = Task::new(
+            task_id,
+            description,
+            crate::agent::Priority::High,  // High priority for quality fixes
+            TaskType::Remediation,
+        )
+        .with_details(details)
+        .assign_to(agent_id.to_string())
+        .with_parent_task(original_task_id.to_string())
+        .with_quality_issues(issues)
+        .with_duration(1800); // 30 minutes estimate
+        
+        Ok(remediation_task)
+    }
+    
+    /// Generate specific fix instructions using Master Claude's intelligence
+    #[allow(dead_code)]
+    async fn generate_fix_instructions(&self, issues: &[String]) -> Result<String> {
+        // For now, generate instructions based on the issue types
+        // In a full implementation, this would use Claude API to generate intelligent instructions
+        
+        let mut instructions = Vec::new();
+        
+        for issue in issues {
+            let instruction = match issue.as_str() {
+                "Low test coverage" => {
+                    "1. Add unit tests to achieve at least 85% coverage\n\
+                     2. Focus on edge cases and error paths\n\
+                     3. Use test-driven development for any new code\n\
+                     4. Run coverage report and ensure all critical paths are tested"
+                }
+                "High complexity" => {
+                    "1. Break down complex functions into smaller, focused functions\n\
+                     2. Extract repeated logic into helper functions\n\
+                     3. Simplify conditional logic using early returns\n\
+                     4. Consider using design patterns to reduce complexity"
+                }
+                "Security vulnerability" => {
+                    "1. Review and fix all security warnings\n\
+                     2. Validate all user inputs\n\
+                     3. Use parameterized queries for database operations\n\
+                     4. Update dependencies to latest secure versions"
+                }
+                "Missing documentation" => {
+                    "1. Add comprehensive docstrings to all public functions\n\
+                     2. Include parameter descriptions and return value documentation\n\
+                     3. Add usage examples where appropriate\n\
+                     4. Update README with any new functionality"
+                }
+                _ => {
+                    "1. Review the specific issue and determine root cause\n\
+                     2. Implement the most appropriate fix\n\
+                     3. Add tests to prevent regression\n\
+                     4. Document the changes made"
+                }
+            };
+            
+            instructions.push(format!("For '{}': \n{}", issue, instruction));
+        }
+        
+        Ok(instructions.join("\n\n"))
     }
 
     /// Check health of all agents
@@ -413,6 +526,7 @@ impl MasterClaude {
         message: AgentMessage,
         agents: &DashMap<String, ClaudeCodeAgent>,
         state: &RwLock<OrchestratorState>,
+        task_queue_tx: &Sender<Task>,
     ) -> Result<()> {
         match message {
             AgentMessage::StatusUpdate { agent_id, status } => {
@@ -435,6 +549,33 @@ impl MasterClaude {
                 s.total_tasks_processed += 1;
                 if result.success {
                     s.successful_tasks += 1;
+                    
+                    // Check if this was a remediation task and trigger re-review
+                    if task_id.starts_with("remediate-") {
+                        // Find the original task ID from review history
+                        let original_task_id = s.review_history.iter()
+                            .find_map(|(orig_id, entries)| {
+                                entries.iter()
+                                    .find(|e| e.remediation_task_id.as_ref() == Some(&task_id))
+                                    .map(|_| orig_id.clone())
+                            });
+                            
+                        if let Some(orig_task_id) = original_task_id {
+                            info!("Remediation task {} completed, scheduling re-review of original task {}", 
+                                  task_id, orig_task_id);
+                            
+                            // Mark the remediation as complete in history
+                            if let Some(entries) = s.review_history.get_mut(&orig_task_id) {
+                                if let Some(entry) = entries.iter_mut()
+                                    .find(|e| e.remediation_task_id.as_ref() == Some(&task_id)) {
+                                    entry.review_passed = true;
+                                }
+                            }
+                            
+                            // TODO: Schedule immediate re-review of the original task
+                            // For now, the periodic review will catch it
+                        }
+                    }
                 } else {
                     s.failed_tasks += 1;
                 }
@@ -449,6 +590,67 @@ impl MasterClaude {
                     agent_id, task_id, reason
                 );
                 // TODO: Implement assistance logic
+            }
+            AgentMessage::QualityIssue {
+                agent_id,
+                task_id,
+                issues,
+            } => {
+                error!(
+                    "Quality issues found in task {} by agent {}: {:?}",
+                    task_id, agent_id, issues
+                );
+                
+                // Create a simple remediation task without full orchestrator context
+                let remediation_task_id = format!("remediate-{}-{}", task_id, Uuid::new_v4());
+                
+                let fix_instructions = issues.iter()
+                    .map(|issue| match issue.as_str() {
+                        "Low test coverage" => "Add unit tests to achieve 85% coverage",
+                        "High complexity" => "Refactor to reduce cyclomatic complexity",
+                        "Security vulnerability" => "Fix security issues and validate inputs",
+                        "Missing documentation" => "Add comprehensive documentation",
+                        _ => "Review and fix the reported issue"
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                
+                let remediation_task = Task::new(
+                    remediation_task_id,
+                    format!("Fix quality issues in task {}: {}", task_id, fix_instructions),
+                    crate::agent::Priority::High,
+                    TaskType::Remediation,
+                )
+                .with_details(format!("Issues found: {}", issues.join(", ")))
+                .assign_to(agent_id.clone())
+                .with_parent_task(task_id.clone())
+                .with_quality_issues(issues.clone())
+                .with_duration(1800);
+                
+                // Send remediation task to the task queue
+                task_queue_tx.send(remediation_task.clone()).await
+                    .context("Failed to queue remediation task")?;
+                
+                // Track in review history
+                let mut s = state.write().await;
+                let review_entry = ReviewHistoryEntry {
+                    task_id: task_id.clone(),
+                    agent_id: agent_id.clone(),
+                    review_date: Utc::now(),
+                    issues_found: issues.clone(),
+                    remediation_task_id: Some(remediation_task.id.clone()),
+                    review_passed: false,
+                    iteration: s.review_history.get(&task_id)
+                        .map(|entries| entries.len() as u32 + 1)
+                        .unwrap_or(1),
+                };
+                
+                s.review_history.entry(task_id.clone())
+                    .or_insert_with(Vec::new)
+                    .push(review_entry);
+                
+                info!("Created remediation task {} for agent {} to fix issues in task {}", 
+                     remediation_task.id, agent_id, task_id);
             }
             _ => {}
         }

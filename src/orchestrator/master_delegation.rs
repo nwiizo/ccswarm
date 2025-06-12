@@ -485,14 +485,12 @@ mod tests {
     fn test_content_based_delegation() {
         let mut engine = MasterDelegationEngine::new(DelegationStrategy::ContentBased);
 
-        let task = Task {
-            id: "test-1".to_string(),
-            description: "Create HTML component with CSS styling".to_string(),
-            details: None,
-            priority: Priority::High,
-            task_type: TaskType::Development,
-            estimated_duration: None,
-        };
+        let task = Task::new(
+            "test-1".to_string(),
+            "Create HTML component with CSS styling".to_string(),
+            Priority::High,
+            TaskType::Development,
+        );
 
         let decision = engine.delegate_task(task).unwrap();
 
@@ -505,14 +503,12 @@ mod tests {
     fn test_testing_task_delegation() {
         let mut engine = MasterDelegationEngine::new(DelegationStrategy::ContentBased);
 
-        let task = Task {
-            id: "test-2".to_string(),
-            description: "Write unit tests for API endpoints".to_string(),
-            details: None,
-            priority: Priority::High,
-            task_type: TaskType::Testing,
-            estimated_duration: None,
-        };
+        let task = Task::new(
+            "test-2".to_string(),
+            "Write unit tests for API endpoints".to_string(),
+            Priority::High,
+            TaskType::Testing,
+        );
 
         let decision = engine.delegate_task(task).unwrap();
 

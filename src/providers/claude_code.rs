@@ -398,14 +398,13 @@ mod tests {
     }
 
     fn create_test_task() -> Task {
-        Task {
-            id: Uuid::new_v4().to_string(),
-            description: "Create a React component".to_string(),
-            details: Some("Build a button component with TypeScript".to_string()),
-            priority: crate::agent::Priority::Medium,
-            task_type: TaskType::Development,
-            estimated_duration: None,
-        }
+        Task::new(
+            Uuid::new_v4().to_string(),
+            "Create a React component".to_string(),
+            crate::agent::Priority::Medium,
+            TaskType::Development,
+        )
+        .with_details("Build a button component with TypeScript".to_string())
     }
 
     #[test]

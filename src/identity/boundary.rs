@@ -371,14 +371,13 @@ mod tests {
     #[tokio::test]
     async fn test_frontend_accepts_ui_task() {
         let checker = TaskBoundaryChecker::new(default_frontend_role());
-        let task = Task {
-            id: "1".to_string(),
-            description: "Create a React component for user profile".to_string(),
-            details: Some("Using TypeScript and Tailwind CSS".to_string()),
-            priority: Priority::Medium,
-            task_type: TaskType::Development,
-            estimated_duration: None,
-        };
+        let task = Task::new(
+            "1".to_string(),
+            "Create a React component for user profile".to_string(),
+            Priority::Medium,
+            TaskType::Development,
+        )
+        .with_details("Using TypeScript and Tailwind CSS".to_string());
 
         let result = checker.evaluate_task(&task).await;
 
@@ -391,14 +390,12 @@ mod tests {
     #[tokio::test]
     async fn test_frontend_delegates_backend_task() {
         let checker = TaskBoundaryChecker::new(default_frontend_role());
-        let task = Task {
-            id: "2".to_string(),
-            description: "Create REST API endpoint for authentication".to_string(),
-            details: None,
-            priority: Priority::High,
-            task_type: TaskType::Development,
-            estimated_duration: None,
-        };
+        let task = Task::new(
+            "2".to_string(),
+            "Create REST API endpoint for authentication".to_string(),
+            Priority::High,
+            TaskType::Development,
+        );
 
         let result = checker.evaluate_task(&task).await;
 
@@ -413,14 +410,12 @@ mod tests {
     #[tokio::test]
     async fn test_unclear_task_triggers_clarification() {
         let checker = TaskBoundaryChecker::new(default_backend_role());
-        let task = Task {
-            id: "3".to_string(),
-            description: "Update the user system".to_string(),
-            details: None,
-            priority: Priority::Medium,
-            task_type: TaskType::Development,
-            estimated_duration: None,
-        };
+        let task = Task::new(
+            "3".to_string(),
+            "Update the user system".to_string(),
+            Priority::Medium,
+            TaskType::Development,
+        );
 
         let result = checker.evaluate_task(&task).await;
 

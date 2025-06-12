@@ -19,6 +19,7 @@
 - **🔄 Git Worktree Isolation**: Parallel development without conflicts
 - **✅ Auto-Accept Mode**: Safe automated execution with risk assessment
 - **🔒 Execution Mode**: Runs with `--dangerously-skip-permissions` by default
+- **🔍 Quality Review System**: Master Claude reviews agent work and provides fix instructions
 
 ## 🚀 Quick Start
 
@@ -71,6 +72,9 @@ ccswarm auto-create "Create blog with auth" --output ./blog
 ```
 ┌─────────────────────────────────────────┐
 │         Master Claude                   │ ← Orchestration & Delegation
+│     ├─ Task Assignment                  │
+│     ├─ Quality Review (30s interval)    │
+│     └─ Remediation Task Generation      │
 ├─────────────────────────────────────────┤
 │     Session-Persistent Manager          │ ← 93% Token Reduction
 │     ├─ Session Pool & Reuse            │
@@ -302,6 +306,36 @@ ccswarm session resume <session-id>
 
 ### Execution Mode
 By default, ccswarm runs with `dangerous_skip: true`, which adds the `--dangerously-skip-permissions` flag to Claude Code commands for automated execution.
+
+## 🔍 Quality Review System
+
+### How It Works
+Master Claude performs quality reviews on completed tasks every 30 seconds:
+
+1. **Review Process**
+   - Scans completed tasks for quality issues
+   - Checks test coverage, complexity, security, and documentation
+   - Identifies specific problems
+
+2. **Automated Remediation**
+   - Creates fix tasks with detailed instructions
+   - Assigns to original agent with high priority
+   - Tracks remediation progress
+
+3. **Fix Instructions**
+   - Low test coverage → Add unit tests to achieve 85% coverage
+   - High complexity → Refactor into smaller functions
+   - Security issues → Fix vulnerabilities and validate inputs
+   - Missing docs → Add comprehensive documentation
+
+### Review Workflow
+```
+Task Completed → Quality Review → Issues Found → Remediation Task Created
+                     ↓                                    ↓
+                 No Issues                         Agent Fixes Issues
+                     ↓                                    ↓
+                 Task Approved                      Re-review After Fix
+```
 
 ## 📊 Monitoring
 

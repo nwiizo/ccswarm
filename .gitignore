@@ -34,3 +34,39 @@ yarn-error.log*
 # Temporary files
 *.tmp
 *.temp
+
+# Demo files and directories
+demos/*
+!demos/README.md
+!demos/.gitkeep
+!demos/*/.gitkeep
+
+# Demo-specific exclusions
+demos/*/node_modules/
+demos/*/target/
+demos/*/dist/
+demos/*/build/
+demos/*/.env
+demos/*/.env.*
+demos/*/package-lock.json
+demos/*/yarn.lock
+demos/*/Cargo.lock
+demos/*/*.log
+demos/*/*.pid
+demos/*/*.db
+demos/*/*.sqlite
+demos/*/coverage/
+demos/*/.cache/
+demos/*/.next/
+demos/*/.nuxt/
+demos/*/.vuepress/dist/
+demos/*/.serverless/
+demos/*/.fusebox/
+demos/*/.dynamodb/
+demos/*/.tern-port
+demos/*/.vscode-test/
+demos/*/.yarn/cache/
+demos/*/.yarn/unplugged/
+demos/*/.yarn/build-state.yml
+demos/*/.yarn/install-state.gz
+demos/*/.pnp.*

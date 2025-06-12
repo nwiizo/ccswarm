@@ -21,6 +21,7 @@ pub enum TaskType {
     Review,
     Bugfix,
     Feature,
+    Remediation,  // Task to fix quality issues
 }
 
 /// A task to be executed by an agent
@@ -43,6 +44,15 @@ pub struct Task {
 
     /// Estimated duration in seconds
     pub estimated_duration: Option<u32>,
+    
+    /// Agent assigned to this task
+    pub assigned_to: Option<String>,
+    
+    /// Parent task ID (for remediation tasks)
+    pub parent_task_id: Option<String>,
+    
+    /// Quality issues to fix (for remediation tasks)
+    pub quality_issues: Option<Vec<String>>,
 }
 
 impl Task {
@@ -55,6 +65,9 @@ impl Task {
             priority,
             task_type,
             estimated_duration: None,
+            assigned_to: None,
+            parent_task_id: None,
+            quality_issues: None,
         }
     }
 
@@ -67,6 +80,24 @@ impl Task {
     /// Set estimated duration
     pub fn with_duration(mut self, seconds: u32) -> Self {
         self.estimated_duration = Some(seconds);
+        self
+    }
+    
+    /// Assign task to a specific agent
+    pub fn assign_to(mut self, agent_id: String) -> Self {
+        self.assigned_to = Some(agent_id);
+        self
+    }
+    
+    /// Set parent task ID (for remediation tasks)
+    pub fn with_parent_task(mut self, parent_id: String) -> Self {
+        self.parent_task_id = Some(parent_id);
+        self
+    }
+    
+    /// Set quality issues to fix
+    pub fn with_quality_issues(mut self, issues: Vec<String>) -> Self {
+        self.quality_issues = Some(issues);
         self
     }
 }

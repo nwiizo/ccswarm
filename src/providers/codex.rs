@@ -308,6 +308,15 @@ impl CodexExecutor {
                  - Testing considerations\n\
                  - Documentation updates\n"
             }
+            TaskType::Remediation => {
+                "REMEDIATION TASK\n\
+                 Please fix the quality issues identified with:\n\
+                 - Address all specific issues listed\n\
+                 - Follow provided instructions exactly\n\
+                 - Add tests to prevent regression\n\
+                 - Improve overall code quality\n\
+                 - Verify all issues are resolved\n"
+            }
         };
 
         let task_description = format!("DESCRIPTION:\n{}\n\n", task.description);
@@ -625,14 +634,13 @@ mod tests {
     }
 
     fn create_test_task() -> Task {
-        Task {
-            id: Uuid::new_v4().to_string(),
-            description: "Create a modal component".to_string(),
-            details: Some("Implement a reusable modal with TypeScript".to_string()),
-            priority: crate::agent::Priority::Medium,
-            task_type: TaskType::Development,
-            estimated_duration: None,
-        }
+        Task::new(
+            Uuid::new_v4().to_string(),
+            "Create a modal component".to_string(),
+            crate::agent::Priority::Medium,
+            TaskType::Development,
+        )
+        .with_details("Implement a reusable modal with TypeScript".to_string())
     }
 
     #[test]

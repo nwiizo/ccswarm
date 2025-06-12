@@ -194,6 +194,13 @@ impl AiderExecutor {
                  - Follow feature specifications carefully\n\
                  - Add appropriate tests and documentation\n"
             }
+            TaskType::Remediation => {
+                "- Fix the quality issues identified in the review\n\
+                 - Follow the specific instructions provided\n\
+                 - Ensure all issues are resolved completely\n\
+                 - Add tests to prevent regression\n\
+                 - Improve code quality as needed\n"
+            }
         };
 
         let git_instructions = if self.config.auto_commit {
@@ -582,14 +589,13 @@ mod tests {
     }
 
     fn create_test_task() -> Task {
-        Task {
-            id: Uuid::new_v4().to_string(),
-            description: "Add authentication endpoint".to_string(),
-            details: Some("Implement JWT-based authentication".to_string()),
-            priority: crate::agent::Priority::High,
-            task_type: TaskType::Development,
-            estimated_duration: None,
-        }
+        Task::new(
+            Uuid::new_v4().to_string(),
+            "Add authentication endpoint".to_string(),
+            crate::agent::Priority::High,
+            TaskType::Development,
+        )
+        .with_details("Implement JWT-based authentication".to_string())
     }
 
     #[test]

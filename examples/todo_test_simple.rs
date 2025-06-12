@@ -19,9 +19,9 @@ use ccswarm::coordination::{AgentMessage, CoordinationBus, StatusTracker, TaskQu
 use ccswarm::identity::{
     default_backend_role, default_devops_role, default_frontend_role, default_qa_role,
 };
-use ccswarm::monitoring::{MonitoringSystem, OutputEntry, OutputType};
+use ccswarm::monitoring::{MonitoringSystem, OutputType};
 use ccswarm::session::{AgentSession, SessionManager};
-use ccswarm::streaming::StreamingManager;
+use ccswarm::streaming::{StreamingManager, StreamConfig};
 use ccswarm::workspace::SimpleWorkspaceManager;
 
 #[tokio::main]
@@ -47,9 +47,16 @@ async fn main() -> Result<()> {
     let task_queue = TaskQueue::new().await?;
     let status_tracker = StatusTracker::new().await?;
     let session_manager = SessionManager::new()?;
-    let monitoring_system = MonitoringSystem::new();
-    let streaming_manager = StreamingManager::new(100); // 100ms refresh rate
-    let auto_accept_engine = AutoAcceptEngine::new(AutoAcceptConfig::safe_defaults());
+    let monitoring_system = std::sync::Arc::new(MonitoringSystem::new());
+    let stream_config = StreamConfig {
+        buffer_size: 1000,
+        refresh_rate_ms: 100,
+        max_line_length: 2000,
+        enable_filtering: true,
+        enable_highlighting: true,
+    };
+    let streaming_manager = StreamingManager::new(monitoring_system.clone(), stream_config);
+    let auto_accept_engine = AutoAcceptEngine::new(AutoAcceptConfig::default());
 
     info!("📋 Defining TODO application tasks with enhanced features...");
 
@@ -202,8 +209,8 @@ async fn main() -> Result<()> {
 
         // Register with monitoring system
         monitoring_system
-            .register_agent(&session.id, &session.agent_id)
-            .await?;
+            .register_agent(session.id.clone())
+            .unwrap();
     }
 
     info!("🎯 Starting enhanced TODO application development simulation...");
@@ -224,10 +231,21 @@ async fn main() -> Result<()> {
 
             // Check auto-accept capability
             let can_auto_accept = if session.auto_accept {
-                auto_accept_engine
-                    .should_auto_accept(&task.description, &[])
-                    .await
-                    .unwrap_or(false)
+                // Create an operation for the task
+                let operation = ccswarm::auto_accept::Operation {
+                    operation_type: ccswarm::auto_accept::OperationType::EditFile,
+                    description: task.description.clone(),
+                    affected_files: vec![],
+                    commands: vec![],
+                    risk_level: 3, // Default medium risk
+                    reversible: true,
+                    task: Some(task.clone()),
+                };
+                
+                match auto_accept_engine.should_auto_accept(&operation) {
+                    Ok(ccswarm::auto_accept::AutoAcceptDecision::Accept(_)) => true,
+                    _ => false,
+                }
             } else {
                 false
             };
@@ -239,19 +257,18 @@ async fn main() -> Result<()> {
             // Log task start to monitoring
             monitoring_system
                 .add_output(
-                    &session.id,
-                    OutputEntry::new(
-                        session.agent_id.clone(),
-                        OutputType::Info,
-                        format!(
-                            "Starting task: {} ({})",
-                            task.description,
-                            if can_auto_accept { "AUTO" } else { "MANUAL" }
-                        ),
-                        Some(task.id.clone()),
+                    session.id.clone(),
+                    agent_type.clone(),
+                    OutputType::Info,
+                    format!(
+                        "Starting task: {} ({})",
+                        task.description,
+                        if can_auto_accept { "AUTO" } else { "MANUAL" }
                     ),
+                    Some(task.id.clone()),
+                    session.id.clone(),
                 )
-                .await;
+                .unwrap();
 
             // Update status before execution
             agent.update_status(AgentStatus::Working);
@@ -290,15 +307,14 @@ async fn main() -> Result<()> {
                         // Log success to monitoring
                         monitoring_system
                             .add_output(
-                                &session.id,
-                                OutputEntry::new(
-                                    session.agent_id.clone(),
-                                    OutputType::Success,
-                                    format!("Task completed: {}", task.description),
-                                    Some(task.id.clone()),
-                                ),
+                                session.id.clone(),
+                                agent_type.clone(),
+                                OutputType::Info,
+                                format!("Task completed: {}", task.description),
+                                Some(task.id.clone()),
+                                session.id.clone(),
                             )
-                            .await;
+                            .unwrap();
 
                         // Send completion message
                         coordination_bus
@@ -319,15 +335,14 @@ async fn main() -> Result<()> {
                         // Log error to monitoring
                         monitoring_system
                             .add_output(
-                                &session.id,
-                                OutputEntry::new(
-                                    session.agent_id.clone(),
-                                    OutputType::Error,
-                                    format!("Task failed: {}", error_msg),
-                                    Some(task.id.clone()),
-                                ),
+                                session.id.clone(),
+                                agent_type.clone(),
+                                OutputType::Error,
+                                format!("Task failed: {}", error_msg),
+                                Some(task.id.clone()),
+                                session.id.clone(),
                             )
-                            .await;
+                            .unwrap();
                     }
                 }
                 Err(e) => {
@@ -337,15 +352,14 @@ async fn main() -> Result<()> {
                     // Log error to monitoring
                     monitoring_system
                         .add_output(
-                            &session.id,
-                            OutputEntry::new(
-                                session.agent_id.clone(),
-                                OutputType::Error,
-                                format!("Execution error: {}", e),
-                                Some(task.id.clone()),
-                            ),
+                            session.id.clone(),
+                            agent_type.clone(),
+                            OutputType::Error,
+                            format!("Execution error: {}", e),
+                            Some(task.id.clone()),
+                            session.id.clone(),
                         )
-                        .await;
+                        .unwrap();
                 }
             }
 
@@ -380,10 +394,10 @@ async fn main() -> Result<()> {
     info!("🔄 Active sessions: {}", session_list.len());
 
     // Display monitoring statistics
-    let stats = monitoring_system.get_statistics().await;
+    let stats = monitoring_system.get_stats();
     info!(
         "📈 Monitoring stats: {} total entries across {} agents",
-        stats.total_entries, stats.active_agents
+        stats.total_entries, stats.active_streams
     );
 
     // Final status report with session information
@@ -449,7 +463,7 @@ fn select_agent_for_task(
             _ => false,
         };
 
-        if matches && session.is_available() {
+        if matches && matches!(session.status, ccswarm::session::SessionStatus::Active) {
             return Some(index);
         }
     }
