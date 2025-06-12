@@ -2,10 +2,14 @@
 name = "ccswarm"
 version = "0.1.0"
 edition = "2021"
-authors = ["ccswarm developers"]
-description = "Claude Code統括型マルチエージェントシステム (Git不使用版)"
+authors = ["nwiizo"]
+description = "AI-powered multi-agent orchestration system with 93% token reduction"
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/nwiizo/ccswarm"
+homepage = "https://github.com/nwiizo/ccswarm"
+keywords = ["ai", "claude", "agents", "orchestration", "automation"]
+categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 # Async runtime
