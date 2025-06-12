@@ -16,9 +16,7 @@ use crate::agent::persistent::PersistentClaudeAgent;
 use crate::agent::{Task, TaskResult};
 use crate::config::ClaudeConfig;
 use crate::identity::AgentRole;
-use crate::session::worktree_session::{
-    WorktreeSessionConfig, WorktreeSessionManager,
-};
+use crate::session::worktree_session::{WorktreeSessionConfig, WorktreeSessionManager};
 
 /// Session pool entry with metadata
 #[derive(Debug, Clone)]

@@ -4,7 +4,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 /// Demonstrates the auto-create functionality of ccswarm
-/// 
+///
 /// This example shows how to use the `ccswarm auto-create` command
 /// to automatically generate a complete application with multiple agents
 /// working together.
@@ -71,7 +71,7 @@ mod tests {
         // Parse and execute
         let cli = Cli::parse_from(args);
         let runner = ccswarm::cli::CliRunner::new(&cli).await.unwrap();
-        
+
         // Should execute without errors
         runner.run(&cli.command).await.unwrap();
     }

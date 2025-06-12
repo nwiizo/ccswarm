@@ -1,5 +1,5 @@
 /// Claude Code Session-Persistent Architecture Demonstration
-/// 
+///
 /// This example demonstrates the Session-Persistent Agent Architecture
 /// using only Claude Code provider for simplicity:
 /// - tmux-based session management with pause/resume/detach
@@ -15,9 +15,7 @@ use tracing::info;
 
 // Import ccswarm core features
 use ccswarm::auto_accept::{AutoAcceptConfig, OperationType};
-use ccswarm::identity::{
-    default_backend_role, default_devops_role, default_frontend_role,
-};
+use ccswarm::identity::{default_backend_role, default_devops_role, default_frontend_role};
 use ccswarm::monitoring::{MonitoringSystem, OutputType};
 use ccswarm::session::{AgentSession, SessionManager};
 use ccswarm::workspace::SimpleWorkspaceManager;
@@ -76,13 +74,13 @@ async fn main() -> Result<()> {
     // Initialize session manager and monitoring
     let session_manager = SessionManager::new()?;
     let monitoring_system = MonitoringSystem::new();
-    
+
     // Configure auto-accept with custom safety rules for Claude Code
     let auto_accept_config = AutoAcceptConfig {
         enabled: true,
         max_file_changes: 10,
         require_tests_pass: true,
-        max_execution_time: 600, // 10 minutes
+        max_execution_time: 600,  // 10 minutes
         require_clean_git: false, // Allow dirty git for demo
         emergency_stop: false,
         trusted_operations: vec![
@@ -111,7 +109,6 @@ async fn main() -> Result<()> {
             2, // Very low risk
             DemoTaskType::Development,
         ),
-
         // Documentation task - ideal for Claude Code
         DemoTask::new(
             "cc-docs-1",
@@ -119,7 +116,6 @@ async fn main() -> Result<()> {
             1, // Extremely low risk
             DemoTaskType::Documentation,
         ),
-
         // Code refactoring - medium risk
         DemoTask::new(
             "cc-refactor-1",
@@ -127,7 +123,6 @@ async fn main() -> Result<()> {
             4, // Medium risk
             DemoTaskType::Development,
         ),
-
         // Testing task - good for auto-accept
         DemoTask::new(
             "cc-test-1",
@@ -135,7 +130,6 @@ async fn main() -> Result<()> {
             3, // Low-medium risk
             DemoTaskType::Testing,
         ),
-
         // Infrastructure configuration - higher risk
         DemoTask::new(
             "cc-infra-1",
@@ -146,7 +140,10 @@ async fn main() -> Result<()> {
     ];
 
     for task in &demo_tasks {
-        info!("📝 Task: {} (Risk: {}/10)", task.description, task.risk_level);
+        info!(
+            "📝 Task: {} (Risk: {}/10)",
+            task.description, task.risk_level
+        );
     }
 
     info!("\n🤖 Creating Claude Code agent sessions...");
@@ -160,7 +157,7 @@ async fn main() -> Result<()> {
             false, // foreground mode
         ),
         (
-            "Claude Code Backend", 
+            "Claude Code Backend",
             default_backend_role(),
             true,  // auto_accept for API tasks
             false, // foreground mode
@@ -183,7 +180,12 @@ async fn main() -> Result<()> {
             format!("{}-session", name.to_lowercase().replace(" ", "-")),
             role.clone(),
             project_dir
-                .join(&name.to_lowercase().replace(" ", "_").replace("claude_code_", ""))
+                .join(
+                    &name
+                        .to_lowercase()
+                        .replace(" ", "_")
+                        .replace("claude_code_", ""),
+                )
                 .to_string_lossy()
                 .to_string(),
             Some(format!("{} session using Claude Code provider", name)),
@@ -202,24 +204,29 @@ async fn main() -> Result<()> {
         }
 
         // Register with monitoring
-        let _ = monitoring_system.register_agent(session.agent_id.clone()).map_err(|e| anyhow::anyhow!(e))?;
+        let _ = monitoring_system
+            .register_agent(session.agent_id.clone())
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         sessions.push((name.to_string(), session));
     }
 
     // Demonstrate Claude Code session persistence
     info!("\n🔄 Demonstrating Claude Code Session Persistence...");
-    
+
     // Simulate session pause and resume with Claude Code
     if let Some((name, session)) = sessions.get(0) {
         info!("Pausing {} Claude Code session...", name);
         session_manager.pause_session(&session.id)?;
-        
+
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        
-        info!("Resuming {} Claude Code session (context preserved)...", name);
+
+        info!(
+            "Resuming {} Claude Code session (context preserved)...",
+            name
+        );
         session_manager.resume_session(&session.id)?;
-        
+
         info!("✅ Claude Code session context preserved - no token regeneration!");
     }
 
@@ -236,28 +243,34 @@ async fn main() -> Result<()> {
 
         // Select Claude Code agent based on task type
         let agent_index = select_claude_code_agent(&task, &sessions);
-        
+
         if let Some(index) = agent_index {
             let (name, session) = &sessions[index];
-            
+
             // Get current session state for Claude Code
-            let current_session = session_manager.get_session(&session.id)
+            let current_session = session_manager
+                .get_session(&session.id)
                 .unwrap_or_else(|| session.clone());
-            
+
             // Claude Code specific risk assessment
-            let should_auto_accept = task.risk_level <= 4 
-                && current_session.auto_accept 
-                && matches!(task.task_type, 
-                    DemoTaskType::Development | 
-                    DemoTaskType::Documentation | 
-                    DemoTaskType::Testing
+            let should_auto_accept = task.risk_level <= 4
+                && current_session.auto_accept
+                && matches!(
+                    task.task_type,
+                    DemoTaskType::Development | DemoTaskType::Documentation | DemoTaskType::Testing
                 );
-            
+
             if should_auto_accept {
-                info!("  ✅ Claude Code auto-accepting task (risk: {})", task.risk_level);
+                info!(
+                    "  ✅ Claude Code auto-accepting task (risk: {})",
+                    task.risk_level
+                );
                 auto_accepted += 1;
             } else {
-                info!("  🔍 Claude Code requires manual review (risk: {})", task.risk_level);
+                info!(
+                    "  🔍 Claude Code requires manual review (risk: {})",
+                    task.risk_level
+                );
                 manual_review += 1;
             }
 
@@ -286,7 +299,7 @@ async fn main() -> Result<()> {
                     Some(task.id.clone()),
                     session.id.clone(),
                 );
-                
+
                 tokio::time::sleep(std::time::Duration::from_millis(400)).await;
             }
 
@@ -302,7 +315,7 @@ async fn main() -> Result<()> {
 
             completed += 1;
         }
-        
+
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
 
@@ -311,19 +324,26 @@ async fn main() -> Result<()> {
     info!("Claude Code Provider: ✅ Active");
     info!("Total Tasks: {}", demo_tasks_len);
     info!("Completed: {}", completed);
-    info!("Auto-Accepted: {} ({}% efficiency gain)", 
-        auto_accepted, 
-        if completed > 0 { (auto_accepted as f64 / completed as f64 * 100.0) as u32 } else { 0 }
+    info!(
+        "Auto-Accepted: {} ({}% efficiency gain)",
+        auto_accepted,
+        if completed > 0 {
+            (auto_accepted as f64 / completed as f64 * 100.0) as u32
+        } else {
+            0
+        }
     );
     info!("Manual Review: {}", manual_review);
 
     // Demonstrate Claude Code token savings
     let traditional_tokens = demo_tasks_len * 45_000; // Claude Code typical context
     let persistent_tokens = 45_000 + (demo_tasks_len * 800); // Claude Code efficiency
-    let savings = if traditional_tokens > 0 { 
-        ((traditional_tokens - persistent_tokens) as f64 / traditional_tokens as f64 * 100.0) as u32 
-    } else { 0 };
-    
+    let savings = if traditional_tokens > 0 {
+        ((traditional_tokens - persistent_tokens) as f64 / traditional_tokens as f64 * 100.0) as u32
+    } else {
+        0
+    };
+
     info!("\n💰 Claude Code Token Usage:");
     info!("Traditional: ~{} tokens", traditional_tokens);
     info!("Session-Persistent: ~{} tokens", persistent_tokens);
@@ -332,13 +352,28 @@ async fn main() -> Result<()> {
     // Show Claude Code session statistics
     info!("\n🔄 Claude Code Session Statistics:");
     for (name, session) in &sessions {
-        let current_session = session_manager.get_session(&session.id)
+        let current_session = session_manager
+            .get_session(&session.id)
             .unwrap_or_else(|| session.clone());
         info!("{}:", name);
         info!("  - Provider: Claude Code");
         info!("  - Status: {:?}", current_session.status);
-        info!("  - Auto-Accept: {}", if current_session.auto_accept { "✅ Enabled" } else { "❌ Disabled" });
-        info!("  - Background: {}", if current_session.background_mode { "Yes" } else { "No" });
+        info!(
+            "  - Auto-Accept: {}",
+            if current_session.auto_accept {
+                "✅ Enabled"
+            } else {
+                "❌ Disabled"
+            }
+        );
+        info!(
+            "  - Background: {}",
+            if current_session.background_mode {
+                "Yes"
+            } else {
+                "No"
+            }
+        );
         info!("  - Tasks: {}", current_session.tasks_processed);
     }
 
@@ -347,10 +382,10 @@ async fn main() -> Result<()> {
     if let Some((name, session)) = sessions.get(0) {
         info!("Detaching {} Claude Code session...", name);
         session_manager.detach_session(&session.id)?;
-        
+
         info!("Claude Code session running detached - no context loss");
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        
+
         info!("Reattaching to Claude Code session...");
         session_manager.attach_session(&session.id)?;
         info!("✅ Claude Code session reattached successfully!");
@@ -374,27 +409,33 @@ async fn main() -> Result<()> {
     }
 
     info!("\n🎉 Claude Code Session-Persistent Demo Complete!");
-    info!("✨ Achieved {}% token reduction with Claude Code only!", savings);
+    info!(
+        "✨ Achieved {}% token reduction with Claude Code only!",
+        savings
+    );
     info!("🤖 Claude Code provider successfully demonstrated session persistence");
 
     Ok(())
 }
 
 /// Select Claude Code agent based on task type and availability
-fn select_claude_code_agent(
-    task: &DemoTask,
-    sessions: &[(String, AgentSession)],
-) -> Option<usize> {
+fn select_claude_code_agent(task: &DemoTask, sessions: &[(String, AgentSession)]) -> Option<usize> {
     let description = task.description.to_lowercase();
-    
+
     for (index, (name, session)) in sessions.iter().enumerate() {
         let name_lower = name.to_lowercase();
-        
+
         let matches = match task.task_type {
             DemoTaskType::Development => {
-                if description.contains("react") || description.contains("component") || description.contains("typescript") {
+                if description.contains("react")
+                    || description.contains("component")
+                    || description.contains("typescript")
+                {
                     name_lower.contains("frontend")
-                } else if description.contains("api") || description.contains("middleware") || description.contains("auth") {
+                } else if description.contains("api")
+                    || description.contains("middleware")
+                    || description.contains("auth")
+                {
                     name_lower.contains("backend")
                 } else {
                     true // Any Claude Code agent can handle general development
@@ -402,14 +443,18 @@ fn select_claude_code_agent(
             }
             DemoTaskType::Infrastructure => name_lower.contains("devops"),
             DemoTaskType::Documentation => true, // Claude Code excels at documentation
-            DemoTaskType::Testing => name_lower.contains("backend") || name_lower.contains("frontend"), // Both can handle testing
+            DemoTaskType::Testing => {
+                name_lower.contains("backend") || name_lower.contains("frontend")
+            } // Both can handle testing
         };
-        
+
         if matches && session.is_runnable() {
             return Some(index);
         }
     }
-    
+
     // Fallback to first available Claude Code agent
-    sessions.iter().position(|(_, session)| session.is_runnable())
+    sessions
+        .iter()
+        .position(|(_, session)| session.is_runnable())
 }

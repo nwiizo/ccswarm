@@ -109,7 +109,7 @@ pub struct App {
     /// Input state
     pub input_mode: InputMode,
     pub input_buffer: String,
-    
+
     /// Delegation state
     pub delegation_mode: DelegationMode,
     pub delegation_input: String,
@@ -297,38 +297,45 @@ impl App {
     /// Start an available agent
     pub async fn start_agent(&mut self, agent_id: &str) -> Result<()> {
         let mut agent_info = None;
-        
+
         // Find the agent and collect info
         if let Some(agent) = self.agents.iter_mut().find(|a| a.id == agent_id) {
             // Change status to Working
             agent.status = AgentStatus::Working;
             agent.last_activity = Utc::now();
-            
+
             // Collect info for logging
             agent_info = Some((agent.name.clone(), agent.specialization.clone()));
-            
+
             // Update system stats
             self.active_agents += 1;
         }
-        
+
         // Log after borrowing ends
         if let Some((name, specialization)) = agent_info {
-            self.add_log("System", &format!("🚀 Starting agent: {} ({})", name, specialization)).await;
-            
+            self.add_log(
+                "System",
+                &format!("🚀 Starting agent: {} ({})", name, specialization),
+            )
+            .await;
+
             // If this is a Master agent, provide special logging
             if specialization.contains("Master") {
-                self.add_log("Master", "🎯 Master Claude Code orchestrator activated").await;
-                self.add_log("Master", "📋 Ready to coordinate multi-agent tasks").await;
+                self.add_log("Master", "🎯 Master Claude Code orchestrator activated")
+                    .await;
+                self.add_log("Master", "📋 Ready to coordinate multi-agent tasks")
+                    .await;
             }
         }
-        
+
         Ok(())
     }
 
     /// Start agent by ID or name
     pub async fn start_agent_by_id(&mut self, identifier: &str) -> Result<()> {
         // Find agent by ID or name
-        let agent_to_start = self.agents
+        let agent_to_start = self
+            .agents
             .iter()
             .find(|a| a.id == identifier || a.name == identifier)
             .map(|a| a.id.clone());
@@ -336,7 +343,8 @@ impl App {
         if let Some(agent_id) = agent_to_start {
             self.start_agent(&agent_id).await?;
         } else {
-            self.add_log("System", &format!("Agent not found: {}", identifier)).await;
+            self.add_log("System", &format!("Agent not found: {}", identifier))
+                .await;
         }
         Ok(())
     }
@@ -418,7 +426,7 @@ impl App {
         let statuses = self.status_tracker.get_all_statuses().await?;
 
         self.agents.clear();
-        
+
         // Always add Master Claude Code agent
         let master_agent = AgentInfo {
             id: "master-claude-code".to_string(),
@@ -438,7 +446,7 @@ impl App {
         // Add other default agents
         let default_agents = vec![
             ("qa-agent", "qa", "QA Specialist"),
-            ("devops-agent", "devops", "DevOps Specialist"), 
+            ("devops-agent", "devops", "DevOps Specialist"),
             ("test-agent", "test", "Test Specialist"),
             ("error-agent", "error", "Error Handler"),
             ("backend-agent", "backend", "Backend Specialist"),
@@ -724,7 +732,8 @@ impl App {
                 if let Some(agent_id) = args.get(0) {
                     self.start_agent_by_id(agent_id).await?;
                 } else {
-                    self.add_log("System", "Usage: start_agent <agent_id|agent_name>").await;
+                    self.add_log("System", "Usage: start_agent <agent_id|agent_name>")
+                        .await;
                 }
             }
             "start" => self.start_orchestrator().await?,
@@ -833,7 +842,8 @@ impl App {
 
     /// Show detailed status
     async fn show_detailed_status(&mut self) -> Result<()> {
-        self.add_log("System", "=== Detailed System Status ===").await;
+        self.add_log("System", "=== Detailed System Status ===")
+            .await;
         self.add_log("System", &format!("System Status: {}", self.system_status))
             .await;
         self.add_log("System", &format!("Total Agents: {}", self.total_agents))
@@ -847,10 +857,18 @@ impl App {
             &format!("Completed Tasks: {}", self.completed_tasks),
         )
         .await;
-        
+
         // Show Master Claude Code status specifically
-        if let Some(master) = self.agents.iter().find(|a| a.specialization.contains("Master")) {
-            self.add_log("System", &format!("👑 Master Claude Code: {:?}", master.status)).await;
+        if let Some(master) = self
+            .agents
+            .iter()
+            .find(|a| a.specialization.contains("Master"))
+        {
+            self.add_log(
+                "System",
+                &format!("👑 Master Claude Code: {:?}", master.status),
+            )
+            .await;
         }
         Ok(())
     }
@@ -951,13 +969,15 @@ impl App {
     pub async fn start_delegation_input(&mut self) -> Result<()> {
         self.input_mode = InputMode::DelegationInput;
         self.delegation_input.clear();
-        
+
         match self.delegation_mode {
             DelegationMode::Analyze => {
-                self.add_log("Master", "Enter task description to analyze:").await;
+                self.add_log("Master", "Enter task description to analyze:")
+                    .await;
             }
             DelegationMode::Delegate => {
-                self.add_log("Master", "Enter task description to delegate:").await;
+                self.add_log("Master", "Enter task description to delegate:")
+                    .await;
             }
             _ => {}
         }
@@ -980,10 +1000,15 @@ impl App {
 
     /// Analyze task for delegation
     async fn analyze_task_for_delegation(&mut self, task_description: &str) -> Result<()> {
-        self.add_log("Master", &format!("🔍 Analyzing task: '{}'", task_description)).await;
+        self.add_log(
+            "Master",
+            &format!("🔍 Analyzing task: '{}'", task_description),
+        )
+        .await;
 
         // Use basic rule-based analysis for demo
-        let (recommended_agent, confidence, reasoning) = self.analyze_task_content(task_description);
+        let (recommended_agent, confidence, reasoning) =
+            self.analyze_task_content(task_description);
 
         let delegation_info = DelegationInfo {
             task_description: task_description.to_string(),
@@ -995,11 +1020,17 @@ impl App {
 
         self.delegation_decisions.push(delegation_info);
 
-        self.add_log("Master", &format!(
-            "✅ Analysis complete: {} agent recommended ({:.1}% confidence)",
-            recommended_agent, confidence * 100.0
-        )).await;
-        self.add_log("Master", &format!("📝 Reasoning: {}", reasoning)).await;
+        self.add_log(
+            "Master",
+            &format!(
+                "✅ Analysis complete: {} agent recommended ({:.1}% confidence)",
+                recommended_agent,
+                confidence * 100.0
+            ),
+        )
+        .await;
+        self.add_log("Master", &format!("📝 Reasoning: {}", reasoning))
+            .await;
 
         Ok(())
     }
@@ -1009,7 +1040,8 @@ impl App {
         // Parse input as "agent_type task_description"
         let parts: Vec<&str> = input.splitn(2, ' ').collect();
         if parts.len() < 2 {
-            self.add_log("Master", "Usage: <agent_type> <task_description>").await;
+            self.add_log("Master", "Usage: <agent_type> <task_description>")
+                .await;
             return Ok(());
         }
 
@@ -1019,19 +1051,26 @@ impl App {
         // Validate agent type
         let valid_agents = ["frontend", "backend", "devops", "qa"];
         if !valid_agents.contains(&agent_type) {
-            self.add_log("Master", &format!(
-                "Invalid agent type: {}. Valid agents: {}", 
-                agent_type, 
-                valid_agents.join(", ")
-            )).await;
+            self.add_log(
+                "Master",
+                &format!(
+                    "Invalid agent type: {}. Valid agents: {}",
+                    agent_type,
+                    valid_agents.join(", ")
+                ),
+            )
+            .await;
             return Ok(());
         }
 
-        self.add_log("Master", &format!(
-            "🎯 Delegating task to {} agent: '{}'", 
-            agent_type, 
-            task_description
-        )).await;
+        self.add_log(
+            "Master",
+            &format!(
+                "🎯 Delegating task to {} agent: '{}'",
+                agent_type, task_description
+            ),
+        )
+        .await;
 
         // Create and add task to queue
         let task = crate::agent::Task::new(
@@ -1054,7 +1093,11 @@ impl App {
 
         self.delegation_decisions.push(delegation_info);
 
-        self.add_log("Master", &format!("✅ Task delegated to {} agent successfully", agent_type)).await;
+        self.add_log(
+            "Master",
+            &format!("✅ Task delegated to {} agent successfully", agent_type),
+        )
+        .await;
         self.refresh_data().await?;
 
         Ok(())
@@ -1065,34 +1108,76 @@ impl App {
         let desc_lower = task_description.to_lowercase();
 
         // Frontend keywords
-        if desc_lower.contains("ui") || desc_lower.contains("html") || desc_lower.contains("css") ||
-           desc_lower.contains("javascript") || desc_lower.contains("component") || 
-           desc_lower.contains("react") || desc_lower.contains("vue") || desc_lower.contains("frontend") {
-            return ("Frontend".to_string(), 0.9, "Contains UI/frontend keywords".to_string());
+        if desc_lower.contains("ui")
+            || desc_lower.contains("html")
+            || desc_lower.contains("css")
+            || desc_lower.contains("javascript")
+            || desc_lower.contains("component")
+            || desc_lower.contains("react")
+            || desc_lower.contains("vue")
+            || desc_lower.contains("frontend")
+        {
+            return (
+                "Frontend".to_string(),
+                0.9,
+                "Contains UI/frontend keywords".to_string(),
+            );
         }
 
         // Backend keywords
-        if desc_lower.contains("api") || desc_lower.contains("server") || desc_lower.contains("database") ||
-           desc_lower.contains("backend") || desc_lower.contains("endpoint") || desc_lower.contains("node") ||
-           desc_lower.contains("express") || desc_lower.contains("rest") {
-            return ("Backend".to_string(), 0.9, "Contains API/backend keywords".to_string());
+        if desc_lower.contains("api")
+            || desc_lower.contains("server")
+            || desc_lower.contains("database")
+            || desc_lower.contains("backend")
+            || desc_lower.contains("endpoint")
+            || desc_lower.contains("node")
+            || desc_lower.contains("express")
+            || desc_lower.contains("rest")
+        {
+            return (
+                "Backend".to_string(),
+                0.9,
+                "Contains API/backend keywords".to_string(),
+            );
         }
 
         // Testing keywords
-        if desc_lower.contains("test") || desc_lower.contains("testing") || desc_lower.contains("qa") ||
-           desc_lower.contains("quality") || desc_lower.contains("validation") || desc_lower.contains("unit") {
-            return ("QA".to_string(), 0.9, "Contains testing/QA keywords".to_string());
+        if desc_lower.contains("test")
+            || desc_lower.contains("testing")
+            || desc_lower.contains("qa")
+            || desc_lower.contains("quality")
+            || desc_lower.contains("validation")
+            || desc_lower.contains("unit")
+        {
+            return (
+                "QA".to_string(),
+                0.9,
+                "Contains testing/QA keywords".to_string(),
+            );
         }
 
         // Infrastructure keywords
-        if desc_lower.contains("deploy") || desc_lower.contains("ci/cd") || desc_lower.contains("docker") ||
-           desc_lower.contains("infrastructure") || desc_lower.contains("pipeline") || 
-           desc_lower.contains("build") || desc_lower.contains("devops") {
-            return ("DevOps".to_string(), 0.9, "Contains infrastructure/DevOps keywords".to_string());
+        if desc_lower.contains("deploy")
+            || desc_lower.contains("ci/cd")
+            || desc_lower.contains("docker")
+            || desc_lower.contains("infrastructure")
+            || desc_lower.contains("pipeline")
+            || desc_lower.contains("build")
+            || desc_lower.contains("devops")
+        {
+            return (
+                "DevOps".to_string(),
+                0.9,
+                "Contains infrastructure/DevOps keywords".to_string(),
+            );
         }
 
         // Default to backend for general development
-        ("Backend".to_string(), 0.6, "General development task, defaulting to backend".to_string())
+        (
+            "Backend".to_string(),
+            0.6,
+            "General development task, defaulting to backend".to_string(),
+        )
     }
 
     /// Get delegation statistics
@@ -1106,7 +1191,9 @@ impl App {
         let mut total_confidence = 0.0;
 
         for decision in &self.delegation_decisions {
-            *agent_counts.entry(decision.recommended_agent.clone()).or_insert(0) += 1;
+            *agent_counts
+                .entry(decision.recommended_agent.clone())
+                .or_insert(0) += 1;
             total_confidence += decision.confidence;
         }
 
@@ -1114,7 +1201,10 @@ impl App {
 
         let mut stats = format!("📊 Delegation Statistics:\n");
         stats.push_str(&format!("Total delegations: {}\n", total));
-        stats.push_str(&format!("Average confidence: {:.1}%\n", avg_confidence * 100.0));
+        stats.push_str(&format!(
+            "Average confidence: {:.1}%\n",
+            avg_confidence * 100.0
+        ));
         stats.push_str("Agent distribution:\n");
 
         for (agent, count) in agent_counts {
@@ -1142,7 +1232,6 @@ impl App {
         Ok(())
     }
 }
-
 
 /// Parse agent status from string
 fn parse_agent_status(status: &str) -> AgentStatus {

@@ -12,7 +12,9 @@ use tracing::{info, warn};
 // ccswarmライブラリのインポート
 use ccswarm::agent::simple::SimpleClaudeAgent;
 use ccswarm::agent::{AgentStatus, Priority, Task, TaskType};
-use ccswarm::auto_accept::{AutoAcceptConfig, AutoAcceptEngine, AutoAcceptDecision, Operation, OperationType};
+use ccswarm::auto_accept::{
+    AutoAcceptConfig, AutoAcceptDecision, AutoAcceptEngine, Operation, OperationType,
+};
 use ccswarm::config::ClaudeConfig;
 use ccswarm::coordination::{CoordinationBus, StatusTracker, TaskQueue};
 use ccswarm::identity::{
@@ -140,7 +142,9 @@ async fn main() -> Result<()> {
             Priority::Low,
             TaskType::Infrastructure,
         )
-        .with_details("Create GitHub Actions workflow for automated testing and deployment".to_string()),
+        .with_details(
+            "Create GitHub Actions workflow for automated testing and deployment".to_string(),
+        ),
         Task::new(
             "todo-infra-2".to_string(),
             "Create Docker configuration".to_string(),
@@ -236,10 +240,7 @@ async fn main() -> Result<()> {
     let qa_session = session_manager.create_session(
         "qa-session-001".to_string(),
         default_qa_role(),
-        project_dir
-            .join("agents/qa")
-            .to_string_lossy()
-            .to_string(),
+        project_dir.join("agents/qa").to_string_lossy().to_string(),
         Some("QA testing and validation".to_string()),
         true, // auto_start
     )?;
@@ -320,7 +321,7 @@ async fn main() -> Result<()> {
                     reversible: true,
                     task: Some(task.clone()),
                 };
-                
+
                 match auto_accept_engine.should_auto_accept(&operation) {
                     Ok(AutoAcceptDecision::Accept(_)) => true,
                     Ok(AutoAcceptDecision::Reject(_)) => false,
@@ -574,31 +575,31 @@ fn select_agent_for_task(
             (TaskType::Testing, "qa") => true,
             (TaskType::Testing, "devops") => true,
             (TaskType::Testing, _) => false, // Will fall back to any available agent
-            
+
             // Infrastructure tasks to devops
             (TaskType::Infrastructure, "devops") => true,
-            
+
             // Development tasks prefer backend then frontend
             (TaskType::Development, "backend") => true,
             (TaskType::Development, "frontend") => true,
-            
+
             // Feature tasks prefer frontend then backend
             (TaskType::Feature, "frontend") => true,
             (TaskType::Feature, "backend") => true,
-            
+
             // Documentation to devops
             (TaskType::Documentation, "devops") => true,
-            
+
             // Review tasks to QA
             (TaskType::Review, "qa") => true,
             (TaskType::Review, "devops") => true,
-            
+
             // Bugfix can go to any technical agent
             (TaskType::Bugfix, "backend") => true,
             (TaskType::Bugfix, "frontend") => true,
             (TaskType::Bugfix, "devops") => true,
             (TaskType::Bugfix, "qa") => true,
-            
+
             _ => false,
         };
 
@@ -1386,7 +1387,7 @@ describe('TODO API Endpoints', () => {
 });"#;
 
             fs::write(project_dir.join("test/api.test.js"), test_content).await?;
-            
+
             // Create test directory and add package.json test script
             fs::create_dir_all(project_dir.join("test")).await?;
             info!("✅ Generated API unit tests");
@@ -1456,7 +1457,11 @@ describe('TODO App Integration Tests', () => {
     });
 });"#;
 
-            fs::write(project_dir.join("test/integration.test.js"), integration_test).await?;
+            fs::write(
+                project_dir.join("test/integration.test.js"),
+                integration_test,
+            )
+            .await?;
             info!("✅ Generated integration tests");
         }
 
@@ -1623,7 +1628,11 @@ jobs:
         # Add your deployment commands here"#;
 
             fs::create_dir_all(project_dir.join(".github/workflows")).await?;
-            fs::write(project_dir.join(".github/workflows/ci-cd.yml"), github_actions).await?;
+            fs::write(
+                project_dir.join(".github/workflows/ci-cd.yml"),
+                github_actions,
+            )
+            .await?;
             info!("✅ Generated GitHub Actions CI/CD pipeline");
         }
 

@@ -1,8 +1,8 @@
+pub mod claude_session;
 pub mod coordinator;
 pub mod persistent_session;
 pub mod session_pool;
 pub mod worktree_session;
-pub mod claude_session;
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};

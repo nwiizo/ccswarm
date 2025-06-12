@@ -13,16 +13,16 @@ use crate::identity::AgentIdentity;
 pub struct PersistentClaudeSession {
     /// Agent identity
     pub identity: AgentIdentity,
-    
+
     /// Working directory
     pub working_dir: PathBuf,
-    
+
     /// Claude configuration
     pub claude_config: ClaudeConfig,
-    
+
     /// Session ID
     pub session_id: String,
-    
+
     /// Environment variables
     pub env_vars: HashMap<String, String>,
 }
@@ -35,12 +35,15 @@ impl PersistentClaudeSession {
         claude_config: ClaudeConfig,
     ) -> Result<Self> {
         let session_id = format!("session-{}-{}", identity.agent_id, uuid::Uuid::new_v4());
-        
+
         let mut env_vars = HashMap::new();
         env_vars.insert("AGENT_ID".to_string(), identity.agent_id.clone());
-        env_vars.insert("AGENT_TYPE".to_string(), identity.specialization.name().to_string());
+        env_vars.insert(
+            "AGENT_TYPE".to_string(),
+            identity.specialization.name().to_string(),
+        );
         env_vars.insert("SESSION_ID".to_string(), session_id.clone());
-        
+
         Ok(Self {
             identity,
             working_dir,
@@ -49,14 +52,14 @@ impl PersistentClaudeSession {
             env_vars,
         })
     }
-    
+
     /// Initialize session
     pub async fn initialize(&mut self) -> Result<()> {
         info!("🚀 Initializing session: {}", self.session_id);
-        
+
         // Create working directory if needed
         tokio::fs::create_dir_all(&self.working_dir).await?;
-        
+
         // Establish identity
         let identity_prompt = format!(
             "You are a {} agent. Your workspace is {}. Your specialization is in {}.",
@@ -64,22 +67,22 @@ impl PersistentClaudeSession {
             self.working_dir.display(),
             self.identity.specialization.name()
         );
-        
+
         self.execute_prompt(&identity_prompt).await?;
-        
+
         Ok(())
     }
-    
+
     /// Execute task
     pub async fn execute_task(&mut self, task: Task) -> Result<TaskResult> {
         info!("📋 Executing task {}: {}", task.id, task.description);
-        
+
         // Generate task prompt
         let prompt = self.generate_task_prompt(&task);
-        
+
         // Execute with Claude
         let response = self.execute_prompt(&prompt).await?;
-        
+
         // Create task result
         Ok(TaskResult {
             success: true,
@@ -94,11 +97,11 @@ impl PersistentClaudeSession {
             duration: std::time::Duration::from_secs(10),
         })
     }
-    
+
     /// Execute command
     pub async fn execute_command(&mut self, command: &str) -> Result<String> {
         info!("🔧 Executing command: {}", command);
-        
+
         // Execute shell command in working directory
         let output = Command::new("sh")
             .arg("-c")
@@ -106,21 +109,21 @@ impl PersistentClaudeSession {
             .current_dir(&self.working_dir)
             .output()
             .await?;
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        
+
         if !output.status.success() {
             warn!("Command failed: {}", stderr);
         }
-        
+
         Ok(format!("{}\n{}", stdout, stderr))
     }
-    
+
     /// Execute prompt with Claude (simulated for now)
     async fn execute_prompt(&self, prompt: &str) -> Result<String> {
         info!("🤖 Claude prompt: {}", prompt);
-        
+
         // In real implementation, this would call Claude Code CLI
         // For now, simulate response based on task
         let response = if prompt.contains("React") || prompt.contains("frontend") {
@@ -132,10 +135,10 @@ impl PersistentClaudeSession {
         } else {
             "Task completed successfully"
         };
-        
+
         Ok(response.to_string())
     }
-    
+
     /// Generate task prompt
     fn generate_task_prompt(&self, task: &Task) -> String {
         format!(

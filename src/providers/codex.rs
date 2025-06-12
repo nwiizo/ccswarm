@@ -342,7 +342,12 @@ impl CodexExecutor {
 
     /// Parse OpenAI response into TaskResult for testing
     #[cfg(test)]
-    fn parse_response(&self, response: OpenAIResponse, task: &Task, duration: std::time::Duration) -> TaskResult {
+    fn parse_response(
+        &self,
+        response: OpenAIResponse,
+        task: &Task,
+        duration: std::time::Duration,
+    ) -> TaskResult {
         if let Some(choice) = response.choices.first() {
             TaskResult {
                 success: true,
@@ -406,7 +411,6 @@ impl CodexExecutor {
             }
         }
     }
-
 }
 
 #[async_trait]

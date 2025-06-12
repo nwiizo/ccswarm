@@ -1,5 +1,5 @@
-pub mod master_delegation;
 pub mod auto_create;
+pub mod master_delegation;
 
 use anyhow::{Context, Result};
 use async_channel::{Receiver, Sender};

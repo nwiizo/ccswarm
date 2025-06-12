@@ -1,5 +1,5 @@
 /// Session-Persistent Architecture Demonstration
-/// 
+///
 /// This example demonstrates the Session-Persistent Agent Architecture
 /// that achieves 93% token reduction through:
 /// - tmux-based session management with pause/resume/detach
@@ -15,9 +15,7 @@ use tracing::info;
 
 // Import ccswarm core features
 use ccswarm::auto_accept::{AutoAcceptConfig, OperationType};
-use ccswarm::identity::{
-    default_backend_role, default_devops_role, default_frontend_role,
-};
+use ccswarm::identity::{default_backend_role, default_devops_role, default_frontend_role};
 use ccswarm::monitoring::{MonitoringSystem, OutputType};
 use ccswarm::session::{AgentSession, SessionManager};
 use ccswarm::workspace::SimpleWorkspaceManager;
@@ -76,13 +74,13 @@ async fn main() -> Result<()> {
     // Initialize session manager and monitoring
     let session_manager = SessionManager::new()?;
     let monitoring_system = MonitoringSystem::new();
-    
+
     // Configure auto-accept with custom safety rules
     let auto_accept_config = AutoAcceptConfig {
         enabled: true,
         max_file_changes: 20,
         require_tests_pass: true,
-        max_execution_time: 600, // 10 minutes
+        max_execution_time: 600,  // 10 minutes
         require_clean_git: false, // Allow dirty git for demo
         emergency_stop: false,
         trusted_operations: vec![
@@ -92,10 +90,7 @@ async fn main() -> Result<()> {
             OperationType::FormatCode,
             OperationType::LintCode,
         ],
-        restricted_files: vec![
-            "*.env".to_string(),
-            "Cargo.toml".to_string(),
-        ],
+        restricted_files: vec!["*.env".to_string(), "Cargo.toml".to_string()],
     };
 
     info!("📋 Creating demonstration tasks to showcase all features...");
@@ -109,7 +104,6 @@ async fn main() -> Result<()> {
             2, // Low risk
             DemoTaskType::Development,
         ),
-
         // Risky task requiring manual review
         DemoTask::new(
             "demo-risky-1",
@@ -117,7 +111,6 @@ async fn main() -> Result<()> {
             8, // High risk
             DemoTaskType::Development,
         ),
-
         // Multi-file task to test monitoring
         DemoTask::new(
             "demo-multi-1",
@@ -125,7 +118,6 @@ async fn main() -> Result<()> {
             4, // Medium risk
             DemoTaskType::Development,
         ),
-
         // Documentation task for auto-accept
         DemoTask::new(
             "demo-docs-1",
@@ -133,7 +125,6 @@ async fn main() -> Result<()> {
             1, // Very low risk
             DemoTaskType::Documentation,
         ),
-
         // Infrastructure task for background processing
         DemoTask::new(
             "demo-infra-1",
@@ -144,7 +135,10 @@ async fn main() -> Result<()> {
     ];
 
     for task in &demo_tasks {
-        info!("📝 Added task: {} (Risk: {}/10)", task.description, task.risk_level);
+        info!(
+            "📝 Added task: {} (Risk: {}/10)",
+            task.description, task.risk_level
+        );
     }
 
     info!("🤖 Creating multi-agent sessions with persistence...");
@@ -200,24 +194,26 @@ async fn main() -> Result<()> {
         }
 
         // Register with monitoring
-        let _ = monitoring_system.register_agent(session.agent_id.clone()).map_err(|e| anyhow::anyhow!(e))?;
+        let _ = monitoring_system
+            .register_agent(session.agent_id.clone())
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         sessions.push((name.to_string(), session));
     }
 
     // Demonstrate session persistence
     info!("\n🔄 Demonstrating Session Persistence (93% token reduction)...");
-    
+
     // Simulate session pause and resume
     if let Some((name, session)) = sessions.get(0) {
         info!("Pausing {} session...", name);
         session_manager.pause_session(&session.id)?;
-        
+
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        
+
         info!("Resuming {} session (context preserved)...", name);
         session_manager.resume_session(&session.id)?;
-        
+
         info!("✅ Session preserved - no context regeneration needed!");
     }
 
@@ -234,24 +230,31 @@ async fn main() -> Result<()> {
 
         // Select agent based on task type
         let agent_index = select_agent_for_task(&task, &sessions);
-        
+
         if let Some(index) = agent_index {
             let (name, session) = &sessions[index];
-            
+
             // Get the latest session state to check auto_accept
-            let current_session = session_manager.get_session(&session.id)
+            let current_session = session_manager
+                .get_session(&session.id)
                 .unwrap_or_else(|| session.clone());
-            
+
             // Simple risk assessment
-            let should_auto_accept = task.risk_level <= 5 
-                && current_session.auto_accept 
-                && matches!(task.task_type, DemoTaskType::Development | DemoTaskType::Documentation);
-            
+            let should_auto_accept = task.risk_level <= 5
+                && current_session.auto_accept
+                && matches!(
+                    task.task_type,
+                    DemoTaskType::Development | DemoTaskType::Documentation
+                );
+
             if should_auto_accept {
                 info!("  ✅ Auto-accepting task (risk level: {})", task.risk_level);
                 auto_accepted += 1;
             } else {
-                info!("  🔍 Requires manual review (risk level: {})", task.risk_level);
+                info!(
+                    "  🔍 Requires manual review (risk level: {})",
+                    task.risk_level
+                );
                 manual_review += 1;
             }
 
@@ -280,7 +283,7 @@ async fn main() -> Result<()> {
                     Some(task.id.clone()),
                     session.id.clone(),
                 );
-                
+
                 tokio::time::sleep(std::time::Duration::from_millis(300)).await;
             }
 
@@ -296,7 +299,7 @@ async fn main() -> Result<()> {
 
             completed += 1;
         }
-        
+
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
 
@@ -304,22 +307,32 @@ async fn main() -> Result<()> {
     info!("════════════════════════════════════════");
     info!("Total Tasks: {}", demo_tasks_len);
     info!("Completed: {}", completed);
-    info!("Auto-Accepted: {} ({}% reduction in human review)", 
-        auto_accepted, 
-        if completed > 0 { (auto_accepted as f64 / completed as f64 * 100.0) as u32 } else { 0 }
+    info!(
+        "Auto-Accepted: {} ({}% reduction in human review)",
+        auto_accepted,
+        if completed > 0 {
+            (auto_accepted as f64 / completed as f64 * 100.0) as u32
+        } else {
+            0
+        }
     );
     info!("Manual Review: {}", manual_review);
 
     // Demonstrate token savings
     let traditional_tokens = demo_tasks_len * 50_000; // Avg context per task
     let persistent_tokens = 50_000 + (demo_tasks_len * 1_000); // Initial + incremental
-    let savings = if traditional_tokens > 0 { 
-        ((traditional_tokens - persistent_tokens) as f64 / traditional_tokens as f64 * 100.0) as u32 
-    } else { 0 };
-    
+    let savings = if traditional_tokens > 0 {
+        ((traditional_tokens - persistent_tokens) as f64 / traditional_tokens as f64 * 100.0) as u32
+    } else {
+        0
+    };
+
     info!("\n💰 Token Usage Comparison:");
     info!("Traditional Architecture: ~{} tokens", traditional_tokens);
-    info!("Session-Persistent Architecture: ~{} tokens", persistent_tokens);
+    info!(
+        "Session-Persistent Architecture: ~{} tokens",
+        persistent_tokens
+    );
     info!("Token Reduction: {}% 🎉", savings);
 
     // Show session statistics
@@ -327,8 +340,18 @@ async fn main() -> Result<()> {
     for (name, session) in &sessions {
         info!("{} Session:", name);
         info!("  - Status: {:?}", session.status);
-        info!("  - Auto-Accept: {}", if session.auto_accept { "Enabled" } else { "Disabled" });
-        info!("  - Background Mode: {}", if session.background_mode { "Yes" } else { "No" });
+        info!(
+            "  - Auto-Accept: {}",
+            if session.auto_accept {
+                "Enabled"
+            } else {
+                "Disabled"
+            }
+        );
+        info!(
+            "  - Background Mode: {}",
+            if session.background_mode { "Yes" } else { "No" }
+        );
         info!("  - Tasks Processed: {}", session.tasks_processed);
     }
 
@@ -337,10 +360,10 @@ async fn main() -> Result<()> {
     if let Some((name, session)) = sessions.get(0) {
         info!("Detaching {} session...", name);
         session_manager.detach_session(&session.id)?;
-        
+
         info!("Session detached - agent continues working in background");
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        
+
         info!("Reattaching to session...");
         session_manager.attach_session(&session.id)?;
         info!("✅ Reattached - no context loss!");
@@ -364,21 +387,21 @@ async fn main() -> Result<()> {
     }
 
     info!("\n🎉 Session-Persistent Architecture demonstration complete!");
-    info!("✨ Achieved {}% token reduction through intelligent session management!", savings);
+    info!(
+        "✨ Achieved {}% token reduction through intelligent session management!",
+        savings
+    );
 
     Ok(())
 }
 
 /// Select agent based on task type and availability
-fn select_agent_for_task(
-    task: &DemoTask,
-    sessions: &[(String, AgentSession)],
-) -> Option<usize> {
+fn select_agent_for_task(task: &DemoTask, sessions: &[(String, AgentSession)]) -> Option<usize> {
     let description = task.description.to_lowercase();
-    
+
     for (index, (name, session)) in sessions.iter().enumerate() {
         let name_lower = name.to_lowercase();
-        
+
         let matches = match task.task_type {
             DemoTaskType::Development => {
                 if description.contains("react") || description.contains("component") {
@@ -393,12 +416,14 @@ fn select_agent_for_task(
             DemoTaskType::Documentation => true, // Any agent can document
             DemoTaskType::Testing => name_lower.contains("backend"), // Backend handles testing
         };
-        
+
         if matches && session.is_runnable() {
             return Some(index);
         }
     }
-    
+
     // Fallback to first available
-    sessions.iter().position(|(_, session)| session.is_runnable())
+    sessions
+        .iter()
+        .position(|(_, session)| session.is_runnable())
 }

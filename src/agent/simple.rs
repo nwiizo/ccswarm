@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use crate::agent::{AgentStatus, Task, TaskResult, Priority, TaskType};
+use crate::agent::{AgentStatus, Priority, Task, TaskResult, TaskType};
 use crate::config::ClaudeConfig;
 use crate::identity::{AgentIdentity, AgentRole};
 use crate::workspace::SimpleWorkspaceManager;

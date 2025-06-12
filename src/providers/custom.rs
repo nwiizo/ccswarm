@@ -265,31 +265,41 @@ impl CustomExecutor {
     /// Generate help text for the custom configuration
     pub fn generate_help_text(&self, identity: &AgentIdentity, task: &Task) -> String {
         let mut help = String::new();
-        
+
         help.push_str("Custom Command Configuration:\n");
         help.push_str(&format!("Command: {}\n", self.config.command));
         help.push_str(&format!("Arguments: {:?}\n", self.config.args));
-        help.push_str(&format!("Working Directory: {:?}\n", self.config.working_directory));
-        help.push_str(&format!("Timeout: {:?} seconds\n", self.config.timeout_seconds));
+        help.push_str(&format!(
+            "Working Directory: {:?}\n",
+            self.config.working_directory
+        ));
+        help.push_str(&format!(
+            "Timeout: {:?} seconds\n",
+            self.config.timeout_seconds
+        ));
         help.push_str(&format!("Supports JSON: {}\n", self.config.supports_json));
-        
+
         help.push_str("\nAvailable Placeholders:\n");
-        help.push_str(&format!("{{prompt}} -> Task prompt will be substituted here\n"));
+        help.push_str(&format!(
+            "{{prompt}} -> Task prompt will be substituted here\n"
+        ));
         help.push_str(&format!("{{agent_id}} -> {} \n", identity.agent_id));
         help.push_str(&format!("{{task_id}} -> {}\n", task.id));
         help.push_str(&format!("{{task_description}} -> {}\n", task.description));
-        help.push_str(&format!("{{workspace}} -> {}\n", identity.workspace_path.display()));
-        
+        help.push_str(&format!(
+            "{{workspace}} -> {}\n",
+            identity.workspace_path.display()
+        ));
+
         if !self.config.env_vars.is_empty() {
             help.push_str("\nEnvironment Variables:\n");
             for (key, value) in &self.config.env_vars {
                 help.push_str(&format!("{} = {}\n", key, value));
             }
         }
-        
+
         help
     }
-
 }
 
 #[async_trait]

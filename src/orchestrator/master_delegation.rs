@@ -1,5 +1,5 @@
 /// Master Agent Task Delegation System
-/// 
+///
 /// This module implements intelligent task delegation where a Master agent
 /// analyzes tasks and assigns them to the most appropriate specialized agents.
 use anyhow::Result;
@@ -110,14 +110,24 @@ impl MasterDelegationEngine {
                 priority: 10,
                 condition: DelegationCondition::Or(vec![
                     DelegationCondition::DescriptionContains(vec![
-                        "html".to_string(), "css".to_string(), "javascript".to_string(),
-                        "ui".to_string(), "component".to_string(), "frontend".to_string(),
-                        "react".to_string(), "vue".to_string(), "angular".to_string(),
+                        "html".to_string(),
+                        "css".to_string(),
+                        "javascript".to_string(),
+                        "ui".to_string(),
+                        "component".to_string(),
+                        "frontend".to_string(),
+                        "react".to_string(),
+                        "vue".to_string(),
+                        "angular".to_string(),
                     ]),
                     DelegationCondition::TaskTypeEquals(TaskType::Feature),
                 ]),
                 target_agent: AgentRole::Frontend {
-                    technologies: vec!["HTML".to_string(), "CSS".to_string(), "JavaScript".to_string()],
+                    technologies: vec![
+                        "HTML".to_string(),
+                        "CSS".to_string(),
+                        "JavaScript".to_string(),
+                    ],
                     responsibilities: vec!["UI Development".to_string()],
                     boundaries: vec!["No backend work".to_string()],
                 },
@@ -128,9 +138,14 @@ impl MasterDelegationEngine {
                 priority: 10,
                 condition: DelegationCondition::Or(vec![
                     DelegationCondition::DescriptionContains(vec![
-                        "api".to_string(), "server".to_string(), "database".to_string(),
-                        "backend".to_string(), "endpoint".to_string(), "rest".to_string(),
-                        "node".to_string(), "express".to_string(),
+                        "api".to_string(),
+                        "server".to_string(),
+                        "database".to_string(),
+                        "backend".to_string(),
+                        "endpoint".to_string(),
+                        "rest".to_string(),
+                        "node".to_string(),
+                        "express".to_string(),
                     ]),
                     DelegationCondition::TaskTypeEquals(TaskType::Development),
                 ]),
@@ -146,13 +161,20 @@ impl MasterDelegationEngine {
                 priority: 9,
                 condition: DelegationCondition::Or(vec![
                     DelegationCondition::DescriptionContains(vec![
-                        "test".to_string(), "testing".to_string(), "qa".to_string(),
-                        "quality".to_string(), "validation".to_string(),
+                        "test".to_string(),
+                        "testing".to_string(),
+                        "qa".to_string(),
+                        "quality".to_string(),
+                        "validation".to_string(),
                     ]),
                     DelegationCondition::TaskTypeEquals(TaskType::Testing),
                 ]),
                 target_agent: AgentRole::QA {
-                    technologies: vec!["Jest".to_string(), "Mocha".to_string(), "Puppeteer".to_string()],
+                    technologies: vec![
+                        "Jest".to_string(),
+                        "Mocha".to_string(),
+                        "Puppeteer".to_string(),
+                    ],
                     responsibilities: vec!["Testing".to_string(), "Quality Assurance".to_string()],
                     boundaries: vec!["No production code".to_string()],
                 },
@@ -163,8 +185,11 @@ impl MasterDelegationEngine {
                 priority: 9,
                 condition: DelegationCondition::Or(vec![
                     DelegationCondition::DescriptionContains(vec![
-                        "deploy".to_string(), "ci/cd".to_string(), "docker".to_string(),
-                        "infrastructure".to_string(), "pipeline".to_string(),
+                        "deploy".to_string(),
+                        "ci/cd".to_string(),
+                        "docker".to_string(),
+                        "infrastructure".to_string(),
+                        "pipeline".to_string(),
                     ]),
                     DelegationCondition::TaskTypeEquals(TaskType::Infrastructure),
                 ]),
@@ -180,12 +205,16 @@ impl MasterDelegationEngine {
 
     /// Update agent metrics
     pub fn update_agent_metrics(&mut self, agent_role: AgentRole, metrics: AgentMetrics) {
-        self.agent_metrics.insert(agent_role.name().to_string(), metrics);
+        self.agent_metrics
+            .insert(agent_role.name().to_string(), metrics);
     }
 
     /// Delegate a task to the most appropriate agent
     pub fn delegate_task(&mut self, task: Task) -> Result<DelegationDecision> {
-        info!("🎯 Master analyzing task for delegation: {}", task.description);
+        info!(
+            "🎯 Master analyzing task for delegation: {}",
+            task.description
+        );
 
         let decision = match self.strategy {
             DelegationStrategy::ContentBased => self.delegate_content_based(&task)?,
@@ -216,7 +245,7 @@ impl MasterDelegationEngine {
         for rule in &self.delegation_rules {
             if let Some(confidence) = self.evaluate_condition(&rule.condition, task, &task_lower) {
                 let total_confidence = confidence + rule.confidence_boost;
-                
+
                 if best_match.is_none() || total_confidence > best_match.as_ref().unwrap().1 {
                     best_match = Some((rule.clone(), total_confidence.min(1.0)));
                 }
@@ -228,7 +257,11 @@ impl MasterDelegationEngine {
                 task: task.clone(),
                 target_agent: rule.target_agent,
                 confidence,
-                reasoning: format!("Matched rule: {} with {:.1}% confidence", rule.name, confidence * 100.0),
+                reasoning: format!(
+                    "Matched rule: {} with {:.1}% confidence",
+                    rule.name,
+                    confidence * 100.0
+                ),
                 priority_adjustment: None,
                 estimated_duration: task.estimated_duration,
                 dependencies: vec![],
@@ -255,11 +288,11 @@ impl MasterDelegationEngine {
     fn delegate_load_balanced(&self, task: &Task) -> Result<DelegationDecision> {
         // Find agent with lowest current workload
         let mut best_agent: Option<(AgentRole, f64)> = None;
-        
+
         for (_, metrics) in &self.agent_metrics {
             let workload = metrics.current_tasks as f64 / 10.0; // Normalize to 0-1
             let availability_score = metrics.availability * (1.0 - workload);
-            
+
             if best_agent.is_none() || availability_score > best_agent.as_ref().unwrap().1 {
                 best_agent = Some((metrics.agent_role.clone(), availability_score));
             }
@@ -270,7 +303,10 @@ impl MasterDelegationEngine {
                 task: task.clone(),
                 target_agent: agent,
                 confidence: score,
-                reasoning: format!("Load-balanced assignment with availability score {:.1}%", score * 100.0),
+                reasoning: format!(
+                    "Load-balanced assignment with availability score {:.1}%",
+                    score * 100.0
+                ),
                 priority_adjustment: None,
                 estimated_duration: task.estimated_duration,
                 dependencies: vec![],
@@ -287,7 +323,7 @@ impl MasterDelegationEngine {
 
         for (_, metrics) in &self.agent_metrics {
             let expertise_score = metrics.specialization_score * metrics.success_rate;
-            
+
             if best_match.is_none() || expertise_score > best_match.as_ref().unwrap().1 {
                 best_match = Some((metrics.agent_role.clone(), expertise_score));
             }
@@ -298,7 +334,10 @@ impl MasterDelegationEngine {
                 task: task.clone(),
                 target_agent: agent,
                 confidence: score,
-                reasoning: format!("Expertise-based assignment with score {:.1}%", score * 100.0),
+                reasoning: format!(
+                    "Expertise-based assignment with score {:.1}%",
+                    score * 100.0
+                ),
                 priority_adjustment: None,
                 estimated_duration: task.estimated_duration,
                 dependencies: vec![],
@@ -314,10 +353,10 @@ impl MasterDelegationEngine {
         // Analyze task dependencies and workflow
         // For now, fall back to content-based with workflow awareness
         let mut decision = self.delegate_content_based(task)?;
-        
+
         // Add workflow analysis
         decision.reasoning = format!("{} (workflow-aware)", decision.reasoning);
-        
+
         Ok(decision)
     }
 
@@ -326,7 +365,7 @@ impl MasterDelegationEngine {
         // Combine multiple strategies
         let content_decision = self.delegate_content_based(task)?;
         let load_decision = self.delegate_load_balanced(task)?;
-        
+
         // Choose the decision with higher confidence
         if content_decision.confidence >= load_decision.confidence {
             Ok(DelegationDecision {
@@ -342,10 +381,18 @@ impl MasterDelegationEngine {
     }
 
     /// Evaluate a delegation condition
-    fn evaluate_condition(&self, condition: &DelegationCondition, task: &Task, task_lower: &str) -> Option<f64> {
+    fn evaluate_condition(
+        &self,
+        condition: &DelegationCondition,
+        task: &Task,
+        task_lower: &str,
+    ) -> Option<f64> {
         match condition {
             DelegationCondition::DescriptionContains(keywords) => {
-                let matches = keywords.iter().filter(|keyword| task_lower.contains(&keyword.to_lowercase())).count();
+                let matches = keywords
+                    .iter()
+                    .filter(|keyword| task_lower.contains(&keyword.to_lowercase()))
+                    .count();
                 if matches > 0 {
                     Some(matches as f64 / keywords.len() as f64)
                 } else {
@@ -371,21 +418,21 @@ impl MasterDelegationEngine {
                 Some(0.5) // Placeholder
             }
             DelegationCondition::And(conditions) => {
-                let scores: Vec<f64> = conditions.iter()
+                let scores: Vec<f64> = conditions
+                    .iter()
                     .filter_map(|c| self.evaluate_condition(c, task, task_lower))
                     .collect();
-                
+
                 if scores.len() == conditions.len() {
                     Some(scores.iter().sum::<f64>() / scores.len() as f64)
                 } else {
                     None
                 }
             }
-            DelegationCondition::Or(conditions) => {
-                conditions.iter()
-                    .filter_map(|c| self.evaluate_condition(c, task, task_lower))
-                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            }
+            DelegationCondition::Or(conditions) => conditions
+                .iter()
+                .filter_map(|c| self.evaluate_condition(c, task, task_lower))
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)),
         }
     }
 
@@ -396,13 +443,19 @@ impl MasterDelegationEngine {
         let mut total_confidence = 0.0;
 
         for decision in &self.task_history {
-            *agent_counts.entry(decision.target_agent.name().to_string()).or_insert(0) += 1;
+            *agent_counts
+                .entry(decision.target_agent.name().to_string())
+                .or_insert(0) += 1;
             total_confidence += decision.confidence;
         }
 
         DelegationStats {
             total_delegations,
-            average_confidence: if total_delegations > 0 { total_confidence / total_delegations as f64 } else { 0.0 },
+            average_confidence: if total_delegations > 0 {
+                total_confidence / total_delegations as f64
+            } else {
+                0.0
+            },
             agent_distribution: agent_counts,
             strategy: self.strategy.clone(),
         }
@@ -432,7 +485,7 @@ mod tests {
     #[test]
     fn test_content_based_delegation() {
         let mut engine = MasterDelegationEngine::new(DelegationStrategy::ContentBased);
-        
+
         let task = Task {
             id: "test-1".to_string(),
             description: "Create HTML component with CSS styling".to_string(),
@@ -443,7 +496,7 @@ mod tests {
         };
 
         let decision = engine.delegate_task(task).unwrap();
-        
+
         assert!(matches!(decision.target_agent, AgentRole::Frontend { .. }));
         assert!(decision.confidence > 0.5);
         assert!(decision.reasoning.contains("Frontend"));
@@ -452,7 +505,7 @@ mod tests {
     #[test]
     fn test_testing_task_delegation() {
         let mut engine = MasterDelegationEngine::new(DelegationStrategy::ContentBased);
-        
+
         let task = Task {
             id: "test-2".to_string(),
             description: "Write unit tests for API endpoints".to_string(),
@@ -463,7 +516,7 @@ mod tests {
         };
 
         let decision = engine.delegate_task(task).unwrap();
-        
+
         assert!(matches!(decision.target_agent, AgentRole::QA { .. }));
         assert!(decision.confidence > 0.8);
     }

@@ -84,9 +84,9 @@ fn draw_overview(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(9), // System stats with better spacing
+            Constraint::Length(9),  // System stats with better spacing
             Constraint::Length(10), // Provider stats with more detail
-            Constraint::Min(8),    // Agent summary with minimum height
+            Constraint::Min(8),     // Agent summary with minimum height
         ])
         .split(area);
 
@@ -122,13 +122,15 @@ fn draw_enhanced_system_stats(f: &mut Frame, area: Rect, app: &App) {
                 .title(" 🤖 Active Agents ")
                 .title_alignment(Alignment::Center),
         )
-        .gauge_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .gauge_style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .percent(agent_percentage)
         .label(format!(
-            "{}/{} ({}%)", 
-            app.active_agents, 
-            app.total_agents,
-            agent_percentage
+            "{}/{} ({}%)",
+            app.active_agents, app.total_agents, agent_percentage
         ));
     f.render_widget(total_agents, chunks[0]);
 
@@ -142,7 +144,11 @@ fn draw_enhanced_system_stats(f: &mut Frame, area: Rect, app: &App) {
                 .title(" Pending Tasks ")
                 .title_alignment(Alignment::Center),
         )
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center);
     f.render_widget(pending_tasks, chunks[1]);
 
@@ -156,7 +162,11 @@ fn draw_enhanced_system_stats(f: &mut Frame, area: Rect, app: &App) {
                 .title(" Completed Tasks ")
                 .title_alignment(Alignment::Center),
         )
-        .style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center);
     f.render_widget(completed_tasks, chunks[2]);
 
@@ -166,7 +176,11 @@ fn draw_enhanced_system_stats(f: &mut Frame, area: Rect, app: &App) {
         "Stopped" => ("🔴", Color::Red),
         _ => ("🟡", Color::Yellow),
     };
-    let status_text = format!("{} {}\nsystem", status_icon, app.system_status.to_lowercase());
+    let status_text = format!(
+        "{} {}\nsystem",
+        status_icon,
+        app.system_status.to_lowercase()
+    );
     let system_status = Paragraph::new(status_text)
         .block(
             Block::default()
@@ -175,7 +189,11 @@ fn draw_enhanced_system_stats(f: &mut Frame, area: Rect, app: &App) {
                 .title(" System Status ")
                 .title_alignment(Alignment::Center),
         )
-        .style(Style::default().fg(status_color).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(status_color)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center);
     f.render_widget(system_status, chunks[3]);
 }
@@ -192,10 +210,26 @@ fn draw_enhanced_provider_stats(f: &mut Frame, area: Rect, app: &App) {
 
     // Create provider stats table
     let header = Row::new(vec![
-        Cell::from("Provider").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Count").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Percentage").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Status").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Cell::from("Provider").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Count").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Percentage").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Status").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]);
 
     let rows: Vec<Row> = provider_counts
@@ -211,17 +245,22 @@ fn draw_enhanced_provider_stats(f: &mut Frame, area: Rect, app: &App) {
             };
 
             let percentage = (*count as f32 / app.agents.len().max(1) as f32) * 100.0;
-            let status = if *count > 0 { "🟢 Active" } else { "⚪ Inactive" };
+            let status = if *count > 0 {
+                "🟢 Active"
+            } else {
+                "⚪ Inactive"
+            };
 
             Row::new(vec![
                 Cell::from(format!("{} {}", icon, provider))
                     .style(Style::default().fg(color).add_modifier(Modifier::BOLD)),
-                Cell::from(format!("{}", count))
-                    .style(Style::default().fg(Color::Yellow)),
-                Cell::from(format!("{:.1}%", percentage))
-                    .style(Style::default().fg(Color::Cyan)),
-                Cell::from(status)
-                    .style(Style::default().fg(if *count > 0 { Color::Green } else { Color::Gray })),
+                Cell::from(format!("{}", count)).style(Style::default().fg(Color::Yellow)),
+                Cell::from(format!("{:.1}%", percentage)).style(Style::default().fg(Color::Cyan)),
+                Cell::from(status).style(Style::default().fg(if *count > 0 {
+                    Color::Green
+                } else {
+                    Color::Gray
+                })),
             ])
         })
         .collect();
@@ -261,46 +300,71 @@ fn draw_enhanced_agent_summary(f: &mut Frame, area: Rect, app: &App) {
 
     // Enhanced agents table
     let header = Row::new(vec![
-        Cell::from("Agent").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Type").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Status").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Tasks").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Cell::from("Agent").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Type").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Status").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Tasks").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]);
 
-    let rows: Vec<Row> = app.agents.iter().take(6).map(|agent| {
-        let (status_color, status_text, status_icon) = match agent.status {
-            crate::agent::AgentStatus::Available => (Color::Green, "Available", "✅"),
-            crate::agent::AgentStatus::Working => (Color::Cyan, "Working", "⚙️"),
-            crate::agent::AgentStatus::Error(_) => (Color::Red, "Error", "❌"),
-            crate::agent::AgentStatus::Initializing => (Color::Yellow, "Init", "🔄"),
-            crate::agent::AgentStatus::WaitingForReview => (Color::Magenta, "Review", "⏳"),
-            crate::agent::AgentStatus::ShuttingDown => (Color::DarkGray, "Shutdown", "⏹️"),
-        };
+    let rows: Vec<Row> = app
+        .agents
+        .iter()
+        .take(6)
+        .map(|agent| {
+            let (status_color, status_text, status_icon) = match agent.status {
+                crate::agent::AgentStatus::Available => (Color::Green, "Available", "✅"),
+                crate::agent::AgentStatus::Working => (Color::Cyan, "Working", "⚙️"),
+                crate::agent::AgentStatus::Error(_) => (Color::Red, "Error", "❌"),
+                crate::agent::AgentStatus::Initializing => (Color::Yellow, "Init", "🔄"),
+                crate::agent::AgentStatus::WaitingForReview => (Color::Magenta, "Review", "⏳"),
+                crate::agent::AgentStatus::ShuttingDown => (Color::DarkGray, "Shutdown", "⏹️"),
+            };
 
-        let is_master = agent.specialization.contains("Master");
-        let (name_icon, name_color) = if is_master {
-            ("👑", Color::Yellow)
-        } else {
-            match agent.specialization.as_str() {
-                s if s.contains("Frontend") => ("🎨", Color::Cyan),
-                s if s.contains("Backend") => ("⚙️", Color::Green),
-                s if s.contains("DevOps") => ("🔧", Color::Blue),
-                s if s.contains("QA") => ("🧪", Color::Magenta),
-                _ => ("🤖", Color::White),
-            }
-        };
+            let is_master = agent.specialization.contains("Master");
+            let (name_icon, name_color) = if is_master {
+                ("👑", Color::Yellow)
+            } else {
+                match agent.specialization.as_str() {
+                    s if s.contains("Frontend") => ("🎨", Color::Cyan),
+                    s if s.contains("Backend") => ("⚙️", Color::Green),
+                    s if s.contains("DevOps") => ("🔧", Color::Blue),
+                    s if s.contains("QA") => ("🧪", Color::Magenta),
+                    _ => ("🤖", Color::White),
+                }
+            };
 
-        Row::new(vec![
-            Cell::from(format!("{} {}", name_icon, agent.name))
-                .style(Style::default().fg(name_color).add_modifier(if is_master { Modifier::BOLD } else { Modifier::empty() })),
-            Cell::from(agent.specialization.clone())
-                .style(Style::default().fg(Color::White)),
-            Cell::from(format!("{} {}", status_icon, status_text))
-                .style(Style::default().fg(status_color)),
-            Cell::from(format!("{}", agent.tasks_completed))
-                .style(Style::default().fg(Color::Yellow)),
-        ])
-    }).collect();
+            Row::new(vec![
+                Cell::from(format!("{} {}", name_icon, agent.name)).style(
+                    Style::default().fg(name_color).add_modifier(if is_master {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+                ),
+                Cell::from(agent.specialization.clone()).style(Style::default().fg(Color::White)),
+                Cell::from(format!("{} {}", status_icon, status_text))
+                    .style(Style::default().fg(status_color)),
+                Cell::from(format!("{}", agent.tasks_completed))
+                    .style(Style::default().fg(Color::Yellow)),
+            ])
+        })
+        .collect();
 
     let agents_table = Table::new(
         rows,
@@ -371,10 +435,26 @@ fn draw_agents(f: &mut Frame, area: Rect, app: &App) {
     // Create table rows for better formatting
     let header = Row::new(vec![
         Cell::from("#").style(Style::default().fg(Color::DarkGray)),
-        Cell::from("Name").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Provider").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Type").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Status").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Cell::from("Name").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Provider").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Type").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Status").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]);
 
     let rows: Vec<Row> = app
@@ -416,14 +496,24 @@ fn draw_agents(f: &mut Frame, area: Rect, app: &App) {
 
             Row::new(vec![
                 Cell::from(format!("{}", i + 1)).style(Style::default().fg(Color::DarkGray)),
-                Cell::from(format!("{} {}", name_icon, agent.name))
-                    .style(Style::default().fg(name_color).add_modifier(if is_master { Modifier::BOLD } else { Modifier::empty() })),
-                Cell::from(provider_display)
-                    .style(Style::default().fg(if is_master { Color::Yellow } else { Color::Blue })),
-                Cell::from(agent.specialization.clone())
-                    .style(Style::default().fg(type_color)),
-                Cell::from(format!("{} {}", status_icon, status_text))
-                    .style(Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
+                Cell::from(format!("{} {}", name_icon, agent.name)).style(
+                    Style::default().fg(name_color).add_modifier(if is_master {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+                ),
+                Cell::from(provider_display).style(Style::default().fg(if is_master {
+                    Color::Yellow
+                } else {
+                    Color::Blue
+                })),
+                Cell::from(agent.specialization.clone()).style(Style::default().fg(type_color)),
+                Cell::from(format!("{} {}", status_icon, status_text)).style(
+                    Style::default()
+                        .fg(status_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ])
         })
         .collect();
@@ -445,13 +535,13 @@ fn draw_agents(f: &mut Frame, area: Rect, app: &App) {
             .border_type(BorderType::Rounded)
             .title(" 🤖 Agent Management Dashboard ")
             .title_alignment(Alignment::Center)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(Color::White)),
     )
     .highlight_style(
         Style::default()
             .bg(Color::Blue)
             .fg(Color::White)
-            .add_modifier(Modifier::BOLD)
+            .add_modifier(Modifier::BOLD),
     )
     .highlight_symbol("► ");
 
@@ -593,13 +683,13 @@ fn draw_logs(f: &mut Frame, area: Rect, app: &App) {
         .split(area);
 
     // Log level summary bar
-    let log_counts = app.logs.iter().fold(
-        std::collections::HashMap::new(),
-        |mut acc, log| {
+    let log_counts = app
+        .logs
+        .iter()
+        .fold(std::collections::HashMap::new(), |mut acc, log| {
             *acc.entry(log.level.as_str()).or_insert(0) += 1;
             acc
-        }
-    );
+        });
 
     let summary_text = format!(
         "📊 Logs: 🔴 {} errors | 🟡 {} warnings | 🟢 {} info | 🔵 {} debug | Total: {}",
@@ -652,22 +742,18 @@ fn draw_logs(f: &mut Frame, area: Rect, app: &App) {
                     format!("{} ", log.timestamp.format("%H:%M:%S")),
                     Style::default().fg(Color::DarkGray),
                 ),
-                Span::styled(
-                    format!("{} ", level_icon),
-                    Style::default().fg(level_color),
-                ),
+                Span::styled(format!("{} ", level_icon), Style::default().fg(level_color)),
                 Span::styled(
                     format!("{:<5} ", log.level),
-                    Style::default().fg(level_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(level_color)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!("{} {:<10} ", agent_icon, agent_name),
                     Style::default().fg(agent_color),
                 ),
-                Span::styled(
-                    log.message.clone(),
-                    Style::default().fg(Color::White),
-                ),
+                Span::styled(log.message.clone(), Style::default().fg(Color::White)),
             ])];
             ListItem::new(content)
         })
@@ -698,9 +784,9 @@ fn draw_delegation(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5),  // Mode selector
-            Constraint::Min(10),    // Main content
-            Constraint::Length(8),  // Instructions/Help
+            Constraint::Length(5), // Mode selector
+            Constraint::Min(10),   // Main content
+            Constraint::Length(8), // Instructions/Help
         ])
         .split(area);
 
@@ -737,7 +823,7 @@ fn draw_delegation_mode_selector(f: &mut Frame, area: Rect, app: &App) {
 
     for (i, (title, mode, color)) in modes.iter().enumerate() {
         let is_selected = *mode == app.delegation_mode;
-        
+
         let block = if is_selected {
             Block::default()
                 .borders(Borders::ALL)
@@ -763,7 +849,11 @@ fn draw_delegation_mode_selector(f: &mut Frame, area: Rect, app: &App) {
 
         let paragraph = Paragraph::new(description)
             .block(block)
-            .style(Style::default().fg(if is_selected { Color::White } else { Color::Gray }))
+            .style(Style::default().fg(if is_selected {
+                Color::White
+            } else {
+                Color::Gray
+            }))
             .alignment(Alignment::Center);
 
         f.render_widget(paragraph, mode_chunks[i]);
@@ -801,13 +891,12 @@ fn draw_delegation_analysis(f: &mut Frame, area: Rect, app: &App) {
             };
 
             let content = vec![Line::from(vec![
-                Span::styled(
-                    format!("{} ", agent_icon),
-                    Style::default().fg(Color::Cyan),
-                ),
+                Span::styled(format!("{} ", agent_icon), Style::default().fg(Color::Cyan)),
                 Span::styled(
                     format!("{:<8} ", decision.recommended_agent),
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!("({:.0}%) ", decision.confidence * 100.0),
@@ -905,22 +994,42 @@ fn draw_delegation_interface(f: &mut Frame, area: Rect, app: &App) {
     let agent_items: Vec<ListItem> = vec![
         ListItem::new(Line::from(vec![
             Span::styled("🎨 ", Style::default().fg(Color::Cyan)),
-            Span::styled("Frontend", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Frontend",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" - UI/UX Development", Style::default().fg(Color::Gray)),
         ])),
         ListItem::new(Line::from(vec![
             Span::styled("⚙️ ", Style::default().fg(Color::Green)),
-            Span::styled("Backend", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Backend",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" - API/Database Work", Style::default().fg(Color::Gray)),
         ])),
         ListItem::new(Line::from(vec![
             Span::styled("🔧 ", Style::default().fg(Color::Blue)),
-            Span::styled("DevOps", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "DevOps",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" - Infrastructure/Deploy", Style::default().fg(Color::Gray)),
         ])),
         ListItem::new(Line::from(vec![
             Span::styled("🧪 ", Style::default().fg(Color::Magenta)),
-            Span::styled("QA", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "QA",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" - Testing/Quality", Style::default().fg(Color::Gray)),
         ])),
     ];
@@ -986,13 +1095,12 @@ fn draw_delegation_interface(f: &mut Frame, area: Rect, app: &App) {
             };
 
             let content = vec![Line::from(vec![
-                Span::styled(
-                    format!("{} ", agent_icon),
-                    Style::default().fg(Color::Cyan),
-                ),
+                Span::styled(format!("{} ", agent_icon), Style::default().fg(Color::Cyan)),
                 Span::styled(
                     format!("{:<8} ", decision.recommended_agent),
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!("{} ", decision.created_at.format("%H:%M")),
@@ -1007,14 +1115,13 @@ fn draw_delegation_interface(f: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let delegations_list = List::new(delegation_items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .title(" 📋 Recent Delegations ")
-                .title_alignment(Alignment::Center),
-        );
+    let delegations_list = List::new(delegation_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .title(" 📋 Recent Delegations ")
+            .title_alignment(Alignment::Center),
+    );
 
     f.render_widget(delegations_list, right_chunks[1]);
 }
@@ -1053,7 +1160,9 @@ fn draw_delegation_stats(f: &mut Frame, area: Rect, app: &App) {
     let mut total_confidence = 0.0;
 
     for decision in &app.delegation_decisions {
-        *agent_counts.entry(decision.recommended_agent.clone()).or_insert(0) += 1;
+        *agent_counts
+            .entry(decision.recommended_agent.clone())
+            .or_insert(0) += 1;
         total_confidence += decision.confidence;
     }
 
@@ -1062,9 +1171,21 @@ fn draw_delegation_stats(f: &mut Frame, area: Rect, app: &App) {
 
     // Create agent distribution table
     let header = Row::new(vec![
-        Cell::from("Agent").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Count").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Cell::from("Percentage").style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Cell::from("Agent").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Count").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Percentage").style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]);
 
     let rows: Vec<Row> = agent_counts
@@ -1080,12 +1201,13 @@ fn draw_delegation_stats(f: &mut Frame, area: Rect, app: &App) {
             };
 
             Row::new(vec![
-                Cell::from(format!("{} {}", agent_icon, agent))
-                    .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Cell::from(format!("{}", count))
-                    .style(Style::default().fg(Color::Yellow)),
-                Cell::from(format!("{:.1}%", percentage))
-                    .style(Style::default().fg(Color::Green)),
+                Cell::from(format!("{} {}", agent_icon, agent)).style(
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Cell::from(format!("{}", count)).style(Style::default().fg(Color::Yellow)),
+                Cell::from(format!("{:.1}%", percentage)).style(Style::default().fg(Color::Green)),
             ])
         })
         .collect();
@@ -1241,10 +1363,7 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
                             .bg(Color::DarkGray)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled(
-                        format!(" {} ", desc),
-                        Style::default().fg(Color::Gray),
-                    ),
+                    Span::styled(format!(" {} ", desc), Style::default().fg(Color::Gray)),
                     Span::raw(" │ "),
                 ]
                 .into_iter()
@@ -1302,27 +1421,25 @@ fn draw_input_popup(f: &mut Frame, app: &App) {
              • task <description> - Add new task\n\
              • status - Show system status"
         }
-        InputMode::DelegationInput => {
-            match app.delegation_mode {
-                DelegationMode::Analyze => {
-                    "🔍 Analyze Task for Delegation:\n\n\
+        InputMode::DelegationInput => match app.delegation_mode {
+            DelegationMode::Analyze => {
+                "🔍 Analyze Task for Delegation:\n\n\
                      Enter task description to get Master's recommendation\n\
                      💡 Examples:\n\
                      • \"Create login form with validation\"\n\
                      • \"Fix API endpoint error handling\"\n\
                      • \"Write unit tests for user service\""
-                }
-                DelegationMode::Delegate => {
-                    "🎯 Delegate Task to Agent:\n\n\
+            }
+            DelegationMode::Delegate => {
+                "🎯 Delegate Task to Agent:\n\n\
                      Format: <agent_type> <task_description>\n\
                      💡 Examples:\n\
                      • \"frontend Create responsive navigation\"\n\
                      • \"backend Add user authentication API\"\n\
                      • \"qa Write integration tests\""
-                }
-                _ => "Enter delegation input:"
             }
-        }
+            _ => "Enter delegation input:",
+        },
         _ => "Enter your input:",
     };
 
@@ -1345,7 +1462,11 @@ fn draw_input_popup(f: &mut Frame, app: &App) {
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD));
+        .border_style(
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let input_area = input_block.inner(area);
     f.render_widget(input_block, area);
@@ -1375,7 +1496,11 @@ fn draw_input_popup(f: &mut Frame, app: &App) {
                 .title(" Input ")
                 .border_style(Style::default().fg(Color::Cyan)),
         )
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        .style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        );
     f.render_widget(input_paragraph, chunks[1]);
 
     // Help text
@@ -1398,8 +1523,7 @@ fn draw_input_popup(f: &mut Frame, app: &App) {
         ),
         Span::styled(" Cancel ", Style::default().fg(Color::Gray)),
     ])];
-    let help_paragraph = Paragraph::new(help_text)
-        .alignment(Alignment::Center);
+    let help_paragraph = Paragraph::new(help_text).alignment(Alignment::Center);
     f.render_widget(help_paragraph, chunks[2]);
 }
 

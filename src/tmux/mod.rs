@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
 
 /// Error types for tmux operations
 #[derive(Debug, thiserror::Error)]

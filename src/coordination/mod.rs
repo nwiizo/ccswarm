@@ -51,7 +51,7 @@ pub enum AgentMessage {
         agent_id: String,
         timestamp: DateTime<Utc>,
     },
-    
+
     /// Inter-agent direct message
     InterAgentMessage {
         from_agent: String,

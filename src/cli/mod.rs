@@ -425,13 +425,8 @@ impl CliRunner {
                 auto_deploy,
                 output,
             } => {
-                self.handle_auto_create(
-                    description,
-                    template.as_deref(),
-                    *auto_deploy,
-                    output,
-                )
-                .await
+                self.handle_auto_create(description, template.as_deref(), *auto_deploy, output)
+                    .await
             }
         }
     }
@@ -997,8 +992,14 @@ impl CliRunner {
                 details,
                 force,
             } => {
-                let task = self.create_task_from_args(description, priority, task_type, details.as_deref(), None)?;
-                
+                let task = self.create_task_from_args(
+                    description,
+                    priority,
+                    task_type,
+                    details.as_deref(),
+                    None,
+                )?;
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -1160,7 +1161,9 @@ impl CliRunner {
                     let task_desc = &input[8..];
                     if !task_desc.is_empty() {
                         // Directly call delegation analysis to avoid recursion
-                        use crate::orchestrator::master_delegation::{DelegationStrategy, MasterDelegationEngine};
+                        use crate::orchestrator::master_delegation::{
+                            DelegationStrategy, MasterDelegationEngine,
+                        };
                         let mut engine = MasterDelegationEngine::new(DelegationStrategy::Hybrid);
                         let task = Task::new(
                             "interactive-analysis".to_string(),
@@ -1196,7 +1199,7 @@ impl CliRunner {
                     if parts.len() == 2 {
                         let agent = parts[0];
                         let task_desc = parts[1];
-                        
+
                         if ["frontend", "backend", "devops", "qa"].contains(&agent) {
                             println!("🎯 Delegating '{}' to {} agent", task_desc, agent);
                             println!("   ✅ Task queued for delegation");
@@ -1273,9 +1276,13 @@ impl CliRunner {
 
     async fn handle_session(&self, action: &SessionAction) -> Result<()> {
         match action {
-            SessionAction::Create { agent, workspace, background } => {
+            SessionAction::Create {
+                agent,
+                workspace,
+                background,
+            } => {
                 let workspace_path = workspace.as_deref().unwrap_or("./");
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -1444,7 +1451,10 @@ impl CliRunner {
         let mut engine = AutoCreateEngine::new();
 
         // Execute auto-create workflow
-        match engine.execute_auto_create(description, &self.config, output).await {
+        match engine
+            .execute_auto_create(description, &self.config, output)
+            .await
+        {
             Ok(()) => {
                 if self.json_output {
                     println!(
@@ -1458,7 +1468,7 @@ impl CliRunner {
                 } else {
                     println!("\n✅ Application created successfully!");
                     println!("📂 Location: {}", output.display());
-                    
+
                     if auto_deploy {
                         println!("\n🚀 Auto-deploying application...");
                         // TODO: Implement auto-deployment

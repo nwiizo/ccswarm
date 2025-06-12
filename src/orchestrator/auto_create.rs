@@ -43,7 +43,7 @@ pub struct AutoCreateEngine {
 impl AutoCreateEngine {
     pub fn new() -> Self {
         let mut templates = HashMap::new();
-        
+
         // TODOアプリテンプレート
         templates.insert(AppType::Todo, vec![
             TaskTemplate {
@@ -92,61 +92,68 @@ impl AutoCreateEngine {
                 estimated_duration: Some(1200),
             },
         ]);
-        
+
         // ブログアプリテンプレート
-        templates.insert(AppType::Blog, vec![
-            TaskTemplate {
-                id: "blog-frontend".to_string(),
-                description: "Create blog frontend with article list, detail view, and comments".to_string(),
-                target_agent: "frontend".to_string(),
-                priority: Priority::High,
-                task_type: TaskType::Feature,
-                dependencies: vec![],
-                estimated_duration: Some(2400),
-            },
-            TaskTemplate {
-                id: "blog-backend".to_string(),
-                description: "Create blog API with authentication and content management".to_string(),
-                target_agent: "backend".to_string(),
-                priority: Priority::High,
-                task_type: TaskType::Feature,
-                dependencies: vec![],
-                estimated_duration: Some(3600),
-            },
-        ]);
-        
+        templates.insert(
+            AppType::Blog,
+            vec![
+                TaskTemplate {
+                    id: "blog-frontend".to_string(),
+                    description:
+                        "Create blog frontend with article list, detail view, and comments"
+                            .to_string(),
+                    target_agent: "frontend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(2400),
+                },
+                TaskTemplate {
+                    id: "blog-backend".to_string(),
+                    description: "Create blog API with authentication and content management"
+                        .to_string(),
+                    target_agent: "backend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(3600),
+                },
+            ],
+        );
+
         Self {
             templates,
             delegation_engine: MasterDelegationEngine::new(DelegationStrategy::Hybrid),
         }
     }
-    
+
     /// Analyze user request and decompose into tasks
     pub async fn analyze_and_decompose(&mut self, description: &str) -> Result<Vec<Task>> {
         info!("🤖 Analyzing request: {}", description);
-        
+
         // Detect application type from description
         let app_type = self.detect_app_type(description);
         info!("📱 Detected app type: {:?}", app_type);
-        
+
         // Get base tasks from template
         let mut tasks = self.get_template_tasks(&app_type);
-        
+
         // Customize tasks based on specific requirements
         self.customize_tasks(&mut tasks, description);
-        
+
         // Convert templates to actual tasks
-        let tasks = tasks.into_iter()
+        let tasks = tasks
+            .into_iter()
             .map(|template| self.template_to_task(template))
             .collect();
-        
+
         Ok(tasks)
     }
-    
+
     /// Detect application type from description
     fn detect_app_type(&self, description: &str) -> AppType {
         let desc_lower = description.to_lowercase();
-        
+
         if desc_lower.contains("todo") || desc_lower.contains("task") {
             AppType::Todo
         } else if desc_lower.contains("blog") || desc_lower.contains("article") {
@@ -161,7 +168,7 @@ impl AutoCreateEngine {
             AppType::Custom("generic".to_string())
         }
     }
-    
+
     /// Get template tasks for app type
     fn get_template_tasks(&self, app_type: &AppType) -> Vec<TaskTemplate> {
         match self.templates.get(app_type) {
@@ -191,11 +198,11 @@ impl AutoCreateEngine {
             }
         }
     }
-    
+
     /// Customize tasks based on specific requirements
     fn customize_tasks(&self, tasks: &mut Vec<TaskTemplate>, description: &str) {
         let desc_lower = description.to_lowercase();
-        
+
         // Add authentication if mentioned
         if desc_lower.contains("auth") || desc_lower.contains("login") {
             tasks.push(TaskTemplate {
@@ -208,7 +215,7 @@ impl AutoCreateEngine {
                 estimated_duration: Some(1800),
             });
         }
-        
+
         // Add real-time features if mentioned
         if desc_lower.contains("real-time") || desc_lower.contains("websocket") {
             tasks.push(TaskTemplate {
@@ -221,7 +228,7 @@ impl AutoCreateEngine {
                 estimated_duration: Some(1200),
             });
         }
-        
+
         // Add mobile responsiveness if mentioned
         if desc_lower.contains("mobile") || desc_lower.contains("responsive") {
             if let Some(frontend_task) = tasks.iter_mut().find(|t| t.target_agent == "frontend") {
@@ -229,7 +236,7 @@ impl AutoCreateEngine {
             }
         }
     }
-    
+
     /// Convert template to actual task
     fn template_to_task(&self, template: TaskTemplate) -> Task {
         Task {
@@ -241,7 +248,7 @@ impl AutoCreateEngine {
             estimated_duration: template.estimated_duration,
         }
     }
-    
+
     /// Execute auto-create workflow
     pub async fn execute_auto_create(
         &mut self,
@@ -250,32 +257,34 @@ impl AutoCreateEngine {
         output_path: &PathBuf,
     ) -> Result<()> {
         info!("🚀 Starting auto-create workflow");
-        
+
         // Step 1: Create output directory
         tokio::fs::create_dir_all(output_path).await?;
         info!("📂 Created output directory: {}", output_path.display());
-        
+
         // Step 2: Analyze and decompose tasks
         let tasks = self.analyze_and_decompose(description).await?;
         info!("📋 Generated {} tasks", tasks.len());
-        
+
         // Step 3: Create simulated execution results
         info!("\n🤖 Simulating agent execution...");
         for task in &tasks {
             let decision = self.delegation_engine.delegate_task(task.clone())?;
-            info!("   {} → {}: {}", 
+            info!(
+                "   {} → {}: {}",
                 "Master",
                 decision.target_agent.name(),
                 task.description
             );
-            
+
             // Simulate agent execution by creating files
-            self.simulate_agent_execution(&decision, task, output_path).await?;
+            self.simulate_agent_execution(&decision, task, output_path)
+                .await?;
         }
-        
+
         // Step 4: Create project structure
         self.create_project_structure(output_path).await?;
-        
+
         // Step 5: Summary
         info!("\n📊 Auto-create completed!");
         info!("   📂 Project created at: {}", output_path.display());
@@ -283,10 +292,10 @@ impl AutoCreateEngine {
         info!("      cd {}", output_path.display());
         info!("      npm install");
         info!("      npm start");
-        
+
         Ok(())
     }
-    
+
     /// Simulate agent execution by creating actual files
     async fn simulate_agent_execution(
         &self,
@@ -315,7 +324,7 @@ impl AutoCreateEngine {
         }
         Ok(())
     }
-    
+
     /// Create frontend files
     async fn create_frontend_files(&self, output_path: &PathBuf) -> Result<()> {
         // Create index.html
@@ -335,9 +344,9 @@ impl AutoCreateEngine {
     <script type="text/babel" src="app.js"></script>
 </body>
 </html>"#;
-        
+
         tokio::fs::write(output_path.join("index.html"), html_content).await?;
-        
+
         // Create app.js
         let app_content = r#"const { useState, useEffect } = React;
 
@@ -436,9 +445,9 @@ function TodoApp() {
 }
 
 ReactDOM.render(<TodoApp />, document.getElementById('root'));"#;
-        
+
         tokio::fs::write(output_path.join("app.js"), app_content).await?;
-        
+
         // Create styles.css
         let styles_content = r#"* {
     margin: 0;
@@ -541,12 +550,12 @@ input[type="text"] {
 .todo-list button:hover {
     background: #e53e3e;
 }"#;
-        
+
         tokio::fs::write(output_path.join("styles.css"), styles_content).await?;
-        
+
         Ok(())
     }
-    
+
     /// Create backend files
     async fn create_backend_files(&self, output_path: &PathBuf) -> Result<()> {
         // Create server.js
@@ -615,12 +624,12 @@ app.listen(PORT, () => {
     console.log(`   PUT    http://localhost:${PORT}/api/todos/:id`);
     console.log(`   DELETE http://localhost:${PORT}/api/todos/:id`);
 });"#;
-        
+
         tokio::fs::write(output_path.join("server.js"), server_content).await?;
-        
+
         Ok(())
     }
-    
+
     /// Create DevOps files
     async fn create_devops_files(&self, output_path: &PathBuf) -> Result<()> {
         // Create package.json
@@ -643,9 +652,9 @@ app.listen(PORT, () => {
     "jest": "^29.5.0"
   }
 }"#;
-        
+
         tokio::fs::write(output_path.join("package.json"), package_content).await?;
-        
+
         // Create Dockerfile
         let dockerfile_content = r#"FROM node:18-alpine
 
@@ -659,9 +668,9 @@ COPY . .
 EXPOSE 3001
 
 CMD ["npm", "start"]"#;
-        
+
         tokio::fs::write(output_path.join("Dockerfile"), dockerfile_content).await?;
-        
+
         // Create docker-compose.yml
         let compose_content = r#"version: '3.8'
 
@@ -673,12 +682,12 @@ services:
     environment:
       - NODE_ENV=production
     restart: unless-stopped"#;
-        
+
         tokio::fs::write(output_path.join("docker-compose.yml"), compose_content).await?;
-        
+
         Ok(())
     }
-    
+
     /// Create test files
     async fn create_test_files(&self, output_path: &PathBuf) -> Result<()> {
         // Create basic test file
@@ -704,12 +713,12 @@ describe('TODO API', () => {
         expect(true).toBe(true);
     });
 });"#;
-        
+
         tokio::fs::write(output_path.join("app.test.js"), test_content).await?;
-        
+
         Ok(())
     }
-    
+
     /// Create project structure
     async fn create_project_structure(&self, output_path: &PathBuf) -> Result<()> {
         // Create README.md
@@ -775,9 +784,9 @@ docker-compose up
 
 ---
 Generated with ❤️ by ccswarm"#;
-        
+
         tokio::fs::write(output_path.join("README.md"), readme_content).await?;
-        
+
         // Create .gitignore
         let gitignore_content = r#"node_modules/
 .env
@@ -785,10 +794,9 @@ Generated with ❤️ by ccswarm"#;
 *.log
 dist/
 build/"#;
-        
+
         tokio::fs::write(output_path.join(".gitignore"), gitignore_content).await?;
-        
+
         Ok(())
     }
-    
 }
