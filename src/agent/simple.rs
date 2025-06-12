@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use crate::agent::{AgentStatus, Priority, Task, TaskResult, TaskType};
+use crate::agent::{AgentStatus, Task, TaskResult};
 use crate::config::ClaudeConfig;
 use crate::identity::{AgentIdentity, AgentRole};
 use crate::workspace::SimpleWorkspaceManager;
@@ -250,6 +250,7 @@ struct SimulatedResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::{Priority, TaskType};
     use crate::identity::default_frontend_role;
     use tempfile::TempDir;
 

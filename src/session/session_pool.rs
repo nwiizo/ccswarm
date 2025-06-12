@@ -798,7 +798,7 @@ pub struct GlobalPerformanceStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::default_frontend_role;
+
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -826,7 +826,7 @@ mod tests {
         worktree_config.repo_path = temp_dir.path().to_path_buf();
 
         let pool_config = SessionPoolConfig::default();
-        let pool = SessionPool::new(worktree_config, pool_config)
+        let _pool = SessionPool::new(worktree_config, pool_config)
             .await
             .unwrap();
 

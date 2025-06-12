@@ -1,7 +1,6 @@
 use anyhow::Result;
 use ccswarm::cli::{Cli, Commands};
 use clap::Parser;
-use std::path::PathBuf;
 
 /// Demonstrates the auto-create functionality of ccswarm
 ///

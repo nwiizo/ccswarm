@@ -471,7 +471,7 @@ impl App {
         }
 
         // Load dynamic agents from coordination system
-        for (_i, status) in statuses.iter().enumerate() {
+        for status in statuses.iter() {
             if let (Some(agent_id), Some(status_val)) = (
                 status.get("agent_id").and_then(|v| v.as_str()),
                 status.get("status").and_then(|v| v.as_str()),
@@ -714,7 +714,7 @@ impl App {
             "agents" => self.list_agents_command().await?,
             "tasks" => self.list_tasks_command().await?,
             "task" => {
-                if args.get(0).is_some() {
+                if !args.is_empty() {
                     let full_desc = args.join(" ");
                     self.execute_add_task(&full_desc).await?;
                 } else {
@@ -722,14 +722,14 @@ impl App {
                 }
             }
             "agent" => {
-                if let Some(agent_type) = args.get(0) {
+                if let Some(agent_type) = args.first() {
                     self.execute_create_agent(agent_type).await?;
                 } else {
                     self.add_log("System", "Usage: agent <type>").await;
                 }
             }
             "start_agent" | "activate" => {
-                if let Some(agent_id) = args.get(0) {
+                if let Some(agent_id) = args.first() {
                     self.start_agent_by_id(agent_id).await?;
                 } else {
                     self.add_log("System", "Usage: start_agent <agent_id|agent_name>")
@@ -1199,7 +1199,7 @@ impl App {
 
         let avg_confidence = total_confidence / total as f64;
 
-        let mut stats = format!("📊 Delegation Statistics:\n");
+        let mut stats = "📊 Delegation Statistics:\n".to_string();
         stats.push_str(&format!("Total delegations: {}\n", total));
         stats.push_str(&format!(
             "Average confidence: {:.1}%\n",

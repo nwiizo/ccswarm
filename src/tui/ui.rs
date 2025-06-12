@@ -649,7 +649,7 @@ fn draw_tasks(f: &mut Frame, area: Rect, app: &App) {
 
     // Task details
     if let Some(task) = app.tasks.get(app.selected_task) {
-        let details = vec![
+        let details = [
             format!("ID: {}", task.id),
             format!("Description: {}", task.description),
             format!("Priority: {}", task.priority),

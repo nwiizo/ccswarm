@@ -12,12 +12,15 @@ use tokio::process::Command;
 
 use crate::agent::{Task, TaskResult};
 use crate::identity::AgentIdentity;
+use std::path::Path;
 
 /// Supported AI providers for ccswarm agents
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum AIProvider {
     /// Claude Code (default)
+    #[default]
     ClaudeCode,
     /// Aider AI coding assistant
     Aider,
@@ -59,12 +62,6 @@ impl AIProvider {
     }
 }
 
-impl Default for AIProvider {
-    fn default() -> Self {
-        AIProvider::ClaudeCode
-    }
-}
-
 /// Common configuration trait for all providers
 #[async_trait]
 pub trait ProviderConfig: Send + Sync + Clone {
@@ -89,7 +86,7 @@ pub trait ProviderExecutor: Send + Sync {
         &self,
         prompt: &str,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<String>;
 
     /// Execute a task with full context
@@ -97,11 +94,11 @@ pub trait ProviderExecutor: Send + Sync {
         &self,
         task: &Task,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<TaskResult>;
 
     /// Test provider connectivity and functionality
-    async fn health_check(&self, working_dir: &PathBuf) -> Result<ProviderHealthStatus>;
+    async fn health_check(&self, working_dir: &Path) -> Result<ProviderHealthStatus>;
 
     /// Get provider-specific capabilities
     fn get_capabilities(&self) -> ProviderCapabilities;

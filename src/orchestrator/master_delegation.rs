@@ -243,7 +243,7 @@ impl MasterDelegationEngine {
         let task_lower = task.description.to_lowercase();
 
         for rule in &self.delegation_rules {
-            if let Some(confidence) = self.evaluate_condition(&rule.condition, task, &task_lower) {
+            if let Some(confidence) = Self::evaluate_condition(&rule.condition, task, &task_lower) {
                 let total_confidence = confidence + rule.confidence_boost;
 
                 if best_match.is_none() || total_confidence > best_match.as_ref().unwrap().1 {
@@ -289,7 +289,7 @@ impl MasterDelegationEngine {
         // Find agent with lowest current workload
         let mut best_agent: Option<(AgentRole, f64)> = None;
 
-        for (_, metrics) in &self.agent_metrics {
+        for metrics in self.agent_metrics.values() {
             let workload = metrics.current_tasks as f64 / 10.0; // Normalize to 0-1
             let availability_score = metrics.availability * (1.0 - workload);
 
@@ -321,7 +321,7 @@ impl MasterDelegationEngine {
     fn delegate_expertise_based(&self, task: &Task) -> Result<DelegationDecision> {
         let mut best_match: Option<(AgentRole, f64)> = None;
 
-        for (_, metrics) in &self.agent_metrics {
+        for metrics in self.agent_metrics.values() {
             let expertise_score = metrics.specialization_score * metrics.success_rate;
 
             if best_match.is_none() || expertise_score > best_match.as_ref().unwrap().1 {
@@ -382,7 +382,6 @@ impl MasterDelegationEngine {
 
     /// Evaluate a delegation condition
     fn evaluate_condition(
-        &self,
         condition: &DelegationCondition,
         task: &Task,
         task_lower: &str,
@@ -420,7 +419,7 @@ impl MasterDelegationEngine {
             DelegationCondition::And(conditions) => {
                 let scores: Vec<f64> = conditions
                     .iter()
-                    .filter_map(|c| self.evaluate_condition(c, task, task_lower))
+                    .filter_map(|c| Self::evaluate_condition(c, task, task_lower))
                     .collect();
 
                 if scores.len() == conditions.len() {
@@ -431,7 +430,7 @@ impl MasterDelegationEngine {
             }
             DelegationCondition::Or(conditions) => conditions
                 .iter()
-                .filter_map(|c| self.evaluate_condition(c, task, task_lower))
+                .filter_map(|c| Self::evaluate_condition(c, task, task_lower))
                 .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)),
         }
     }

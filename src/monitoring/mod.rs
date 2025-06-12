@@ -167,7 +167,7 @@ impl AgentOutputStream {
         buffer
             .iter()
             .rev()
-            .filter(|entry| filter.map_or(true, |f| entry.matches_filter(f)))
+            .filter(|entry| filter.is_none_or(|f| entry.matches_filter(f)))
             .take(count)
             .cloned()
             .collect::<Vec<_>>()
@@ -191,6 +191,11 @@ impl AgentOutputStream {
     /// Get the total number of buffered entries
     pub fn len(&self) -> usize {
         self.buffer.lock().map(|b| b.len()).unwrap_or(0)
+    }
+
+    /// Check if the buffer is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -466,8 +471,6 @@ impl OutputSubscriber for ConsoleOutputSubscriber {
     }
 
     fn accepts(&self, entry: &OutputEntry) -> bool {
-        self.filter
-            .as_ref()
-            .map_or(true, |f| entry.matches_filter(f))
+        self.filter.as_ref().is_none_or(|f| entry.matches_filter(f))
     }
 }

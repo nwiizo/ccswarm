@@ -372,7 +372,7 @@ impl AutoAcceptEngine {
     pub fn record_operation(&mut self, session_id: String, operation: Operation) {
         self.operation_history
             .entry(session_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(operation);
     }
 
@@ -396,17 +396,14 @@ impl AutoAcceptEngine {
                 file.contains(&format!("/{}/", dir_name))
                     || file.starts_with(&format!("{}/", dir_name))
                     || file.contains(&format!("/{}", dir_name)) // Also match if at end
-            } else if pattern.starts_with("**/") {
-                let suffix = &pattern[3..];
+            } else if let Some(suffix) = pattern.strip_prefix("**/") {
                 file.contains(suffix)
             } else if pattern.starts_with('*') && pattern.ends_with('*') {
                 let middle = &pattern[1..pattern.len() - 1];
                 file.contains(middle)
-            } else if pattern.starts_with('*') {
-                let suffix = &pattern[1..];
+            } else if let Some(suffix) = pattern.strip_prefix('*') {
                 file.ends_with(suffix)
-            } else if pattern.ends_with('*') {
-                let prefix = &pattern[..pattern.len() - 1];
+            } else if let Some(prefix) = pattern.strip_suffix('*') {
                 file.starts_with(prefix)
             } else {
                 file == pattern

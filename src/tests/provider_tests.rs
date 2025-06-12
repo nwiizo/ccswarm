@@ -339,7 +339,7 @@ mod provider_tests {
     #[tokio::test]
     async fn test_provider_configuration_serialization() {
         let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("test_config.json");
+        let _config_path = temp_dir.path().join("test_config.json");
 
         // Create configuration with multiple providers
         let claude_config = ProviderConfiguration::claude_code(ClaudeCodeConfig {

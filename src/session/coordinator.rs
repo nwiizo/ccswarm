@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
@@ -598,7 +598,7 @@ impl SessionCoordinator {
     }
 
     /// Process coordination messages from file system
-    async fn process_coordination_messages(coordination_dir: &PathBuf) -> Result<()> {
+    async fn process_coordination_messages(coordination_dir: &Path) -> Result<()> {
         let messages_dir = coordination_dir.join("messages");
 
         if !messages_dir.exists() {
@@ -678,7 +678,7 @@ impl CoordinationBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::default_frontend_role;
+
     use tempfile::TempDir;
 
     #[tokio::test]

@@ -480,17 +480,8 @@ impl StreamingManager {
         };
 
         // Main loop to process messages
-        loop {
-            // Wait for messages from the monitoring system
-            match receiver.recv().await {
-                Ok(entry) => {
-                    self.distribute_entry(entry).await;
-                }
-                Err(_) => {
-                    // Channel closed, exit loop
-                    break;
-                }
-            }
+        while let Ok(entry) = receiver.recv().await {
+            self.distribute_entry(entry).await;
         }
     }
 
@@ -503,10 +494,8 @@ impl StreamingManager {
 
         let mut sent_count = 0;
         for subscription in subscriptions.values() {
-            if subscription.should_receive(&entry) {
-                if subscription.send(entry.clone()).is_ok() {
-                    sent_count += 1;
-                }
+            if subscription.should_receive(&entry) && subscription.send(entry.clone()).is_ok() {
+                sent_count += 1;
             }
         }
 

@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Instant;
 
 use super::{CodexConfig, ProviderCapabilities, ProviderExecutor, ProviderHealthStatus};
@@ -419,7 +419,7 @@ impl ProviderExecutor for CodexExecutor {
         &self,
         prompt: &str,
         identity: &AgentIdentity,
-        _working_dir: &PathBuf,
+        _working_dir: &Path,
     ) -> Result<String> {
         let system_prompt = self.generate_system_prompt(identity);
 
@@ -453,7 +453,7 @@ impl ProviderExecutor for CodexExecutor {
         &self,
         task: &Task,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<TaskResult> {
         let start = Instant::now();
 
@@ -516,7 +516,7 @@ impl ProviderExecutor for CodexExecutor {
         }
     }
 
-    async fn health_check(&self, _working_dir: &PathBuf) -> Result<ProviderHealthStatus> {
+    async fn health_check(&self, _working_dir: &Path) -> Result<ProviderHealthStatus> {
         let start = Instant::now();
 
         // Make a simple API call to check health

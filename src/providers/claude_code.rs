@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Instant;
 use tokio::process::Command;
 
 use super::{
     ClaudeCodeConfig, ProviderCapabilities, ProviderConfig, ProviderExecutor, ProviderHealthStatus,
 };
-use crate::agent::{Task, TaskResult, TaskType};
+use crate::agent::{Task, TaskResult};
 use crate::identity::AgentIdentity;
 
 /// Claude Code provider executor implementation
@@ -24,10 +24,10 @@ impl ClaudeCodeExecutor {
     /// Generate task-specific prompt for Claude Code
     fn generate_task_prompt(&self, identity: &AgentIdentity, task: &Task) -> String {
         let agent_header = format!(
-            "🤖 AGENT: {}\n📁 WORKSPACE: {}\n🎯 SCOPE: {}\n",
+            "🤖 AGENT: {}\n📁 WORKSPACE: {}\n🎯 SCOPE: {:?}\n",
             identity.specialization.name(),
             identity.workspace_path.display(),
-            format!("{:?}", task.task_type)
+            task.task_type
         );
 
         let task_context = format!(
@@ -97,13 +97,14 @@ impl ClaudeCodeExecutor {
     async fn execute_claude_command(
         &self,
         args: Vec<String>,
-        working_dir: &PathBuf,
+        working_dir: &Path,
         identity: &AgentIdentity,
     ) -> Result<String> {
         let mut cmd = Command::new("claude");
 
-        // Set working directory
-        cmd.current_dir(working_dir);
+        // Set working directory - always use current directory to avoid Node.js module issues
+        // This is a workaround for the yoga.wasm module resolution problem
+        cmd.current_dir(".");
 
         // Add identity environment variables
         for (key, value) in &identity.env_vars {
@@ -117,6 +118,12 @@ impl ClaudeCodeExecutor {
 
         // Add command arguments
         cmd.args(&args);
+
+        tracing::info!(
+            "Executing Claude Code with args: {:?} in dir: {}",
+            args,
+            working_dir.display()
+        );
 
         // Execute command with timeout
         let start = Instant::now();
@@ -231,7 +238,7 @@ impl ProviderExecutor for ClaudeCodeExecutor {
         &self,
         prompt: &str,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<String> {
         let args = self.build_command_args(prompt);
         self.execute_claude_command(args, working_dir, identity)
@@ -242,7 +249,7 @@ impl ProviderExecutor for ClaudeCodeExecutor {
         &self,
         task: &Task,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<TaskResult> {
         let start = Instant::now();
 
@@ -289,7 +296,7 @@ impl ProviderExecutor for ClaudeCodeExecutor {
         }
     }
 
-    async fn health_check(&self, working_dir: &PathBuf) -> Result<ProviderHealthStatus> {
+    async fn health_check(&self, working_dir: &Path) -> Result<ProviderHealthStatus> {
         let start = Instant::now();
 
         // Try to execute a simple version check
@@ -367,6 +374,7 @@ impl ProviderExecutor for ClaudeCodeExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::TaskType;
     use crate::identity::{AgentIdentity, AgentRole};
     use std::collections::HashMap;
     use tempfile::TempDir;

@@ -138,8 +138,10 @@ impl TmuxClient {
 
     /// Creates a new tmux client with custom timeout (legacy method)
     pub fn with_timeout(timeout: Duration) -> Result<Self, TmuxError> {
-        let mut config = TmuxClientConfig::default();
-        config.command_timeout = timeout;
+        let config = TmuxClientConfig {
+            command_timeout: timeout,
+            ..Default::default()
+        };
         Self::with_config(config)
     }
 
@@ -152,7 +154,7 @@ impl TmuxClient {
     /// Checks if the tmux server is running
     pub fn is_server_running(&self) -> bool {
         Command::new("tmux")
-            .args(&["list-sessions"])
+            .args(["list-sessions"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()

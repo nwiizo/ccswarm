@@ -179,7 +179,7 @@ impl ClaudeCodeSession {
                     _ => {}
                 }
             }
-            prompt.push_str("\n");
+            prompt.push('\n');
         }
 
         // Add current task
@@ -357,7 +357,7 @@ You are a specialized {} agent. Maintain strict boundaries and provide concise, 
 
     /// Verify identity response contains required markers
     fn verify_identity_response(&self, response: &str) -> bool {
-        response.contains("🤖 AGENT:") && response.contains(&self.identity.specialization.name())
+        response.contains("🤖 AGENT:") && response.contains(self.identity.specialization.name())
     }
 
     /// Execute a single task with session persistence

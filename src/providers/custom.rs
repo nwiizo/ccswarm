@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Instant;
 use tokio::process::Command;
 
@@ -94,18 +94,17 @@ impl CustomExecutor {
     async fn execute_custom_command(
         &self,
         args: Vec<String>,
-        working_dir: &PathBuf,
+        working_dir: &Path,
         identity: &AgentIdentity,
     ) -> Result<String> {
         let mut cmd = Command::new(&self.config.command);
 
         // Set working directory
-        let work_dir = self
-            .config
-            .working_directory
-            .as_ref()
-            .unwrap_or(working_dir);
-        cmd.current_dir(work_dir);
+        if let Some(ref dir) = self.config.working_directory {
+            cmd.current_dir(dir);
+        } else {
+            cmd.current_dir(working_dir);
+        }
 
         // Add identity environment variables
         for (key, value) in &identity.env_vars {
@@ -280,9 +279,7 @@ impl CustomExecutor {
         help.push_str(&format!("Supports JSON: {}\n", self.config.supports_json));
 
         help.push_str("\nAvailable Placeholders:\n");
-        help.push_str(&format!(
-            "{{prompt}} -> Task prompt will be substituted here\n"
-        ));
+        help.push_str("{prompt} -> Task prompt will be substituted here\n");
         help.push_str(&format!("{{agent_id}} -> {} \n", identity.agent_id));
         help.push_str(&format!("{{task_id}} -> {}\n", task.id));
         help.push_str(&format!("{{task_description}} -> {}\n", task.description));
@@ -308,7 +305,7 @@ impl ProviderExecutor for CustomExecutor {
         &self,
         prompt: &str,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<String> {
         // Create a mock task for prompt execution
         let mock_task = Task {
@@ -331,7 +328,7 @@ impl ProviderExecutor for CustomExecutor {
         &self,
         task: &Task,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<TaskResult> {
         let start = Instant::now();
 
@@ -393,7 +390,7 @@ impl ProviderExecutor for CustomExecutor {
         }
     }
 
-    async fn health_check(&self, working_dir: &PathBuf) -> Result<ProviderHealthStatus> {
+    async fn health_check(&self, working_dir: &Path) -> Result<ProviderHealthStatus> {
         let start = Instant::now();
 
         // Try to execute a simple version or help command
@@ -476,6 +473,7 @@ mod tests {
     use super::*;
     use crate::identity::{AgentIdentity, AgentRole};
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use tempfile::TempDir;
     use uuid::Uuid;
 

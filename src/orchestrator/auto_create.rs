@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 use tracing::info;
 use uuid::Uuid;
 
@@ -38,6 +38,12 @@ pub struct TaskTemplate {
 pub struct AutoCreateEngine {
     templates: HashMap<AppType, Vec<TaskTemplate>>,
     delegation_engine: MasterDelegationEngine,
+}
+
+impl Default for AutoCreateEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AutoCreateEngine {
@@ -253,8 +259,8 @@ impl AutoCreateEngine {
     pub async fn execute_auto_create(
         &mut self,
         description: &str,
-        _config: &CcswarmConfig,
-        output_path: &PathBuf,
+        config: &CcswarmConfig,
+        output_path: &Path,
     ) -> Result<()> {
         info!("🚀 Starting auto-create workflow");
 
@@ -266,20 +272,36 @@ impl AutoCreateEngine {
         let tasks = self.analyze_and_decompose(description).await?;
         info!("📋 Generated {} tasks", tasks.len());
 
-        // Step 3: Create simulated execution results
-        info!("\n🤖 Simulating agent execution...");
-        for task in &tasks {
-            let decision = self.delegation_engine.delegate_task(task.clone())?;
-            info!(
-                "   {} → {}: {}",
-                "Master",
-                decision.target_agent.name(),
-                task.description
-            );
+        // Step 3: Check if we should use real Claude API or simulation
+        let use_real_api = std::env::var("CCSWARM_USE_REAL_API")
+            .unwrap_or_default()
+            .to_lowercase()
+            == "true";
 
-            // Simulate agent execution by creating files
-            self.simulate_agent_execution(&decision, task, output_path)
+        info!(
+            "📋 API mode check: CCSWARM_USE_REAL_API={}",
+            std::env::var("CCSWARM_USE_REAL_API").unwrap_or_else(|_| "not set".to_string())
+        );
+
+        if use_real_api {
+            info!("\n🤖 Executing with real Claude API...");
+            self.execute_with_real_agents(tasks, config, output_path)
                 .await?;
+        } else {
+            info!("\n🤖 Simulating agent execution...");
+            for task in &tasks {
+                let decision = self.delegation_engine.delegate_task(task.clone())?;
+                info!(
+                    "   {} → {}: {}",
+                    "Master",
+                    decision.target_agent.name(),
+                    task.description
+                );
+
+                // Simulate agent execution by creating files
+                self.simulate_agent_execution(&decision, task, output_path)
+                    .await?;
+            }
         }
 
         // Step 4: Create project structure
@@ -301,7 +323,7 @@ impl AutoCreateEngine {
         &self,
         decision: &DelegationDecision,
         _task: &Task,
-        output_path: &PathBuf,
+        output_path: &Path,
     ) -> Result<()> {
         match decision.target_agent.name() {
             "Frontend" => {
@@ -325,8 +347,192 @@ impl AutoCreateEngine {
         Ok(())
     }
 
+    /// Execute tasks with real Claude API agents
+    async fn execute_with_real_agents(
+        &mut self,
+        tasks: Vec<Task>,
+        _config: &CcswarmConfig,
+        output_path: &Path,
+    ) -> Result<()> {
+        use crate::identity::AgentIdentity;
+        use crate::providers::claude_code::ClaudeCodeExecutor;
+        use crate::providers::{ClaudeCodeConfig, ProviderExecutor};
+        use std::collections::HashMap;
+
+        // Create output directory as workspace
+        let workspace_path = output_path.to_path_buf();
+        
+        // Store outputs for Master review
+        let mut task_outputs: Vec<(Task, crate::identity::AgentRole, String)> = Vec::new();
+
+        for task in tasks {
+            let decision = self.delegation_engine.delegate_task(task.clone())?;
+            info!(
+                "   {} → {}: {}",
+                "Master",
+                decision.target_agent.name(),
+                task.description
+            );
+
+            // Create agent identity
+            let agent_identity = AgentIdentity {
+                agent_id: format!(
+                    "{}-{}",
+                    decision.target_agent.name().to_lowercase(),
+                    Uuid::new_v4()
+                ),
+                specialization: decision.target_agent.clone(),
+                workspace_path: workspace_path.clone(),
+                env_vars: HashMap::new(),
+                session_id: Uuid::new_v4().to_string(),
+                parent_process_id: std::process::id().to_string(),
+                initialized_at: chrono::Utc::now(),
+            };
+
+            // Create Claude config with proper settings
+            let claude_config = ClaudeCodeConfig {
+                model: "claude-3.5-sonnet".to_string(), // Use default model name
+                dangerous_skip: true,
+                think_mode: None, // Disable think mode for now
+                json_output: false,
+                api_key: None,
+                custom_commands: vec![],
+                mcp_servers: HashMap::new(),
+            };
+
+            // Create executor
+            let executor = ClaudeCodeExecutor::new(claude_config);
+
+            // Create a simple test prompt first
+            let test_prompt = format!(
+                "You are a {} agent working on: {}. Please create a simple file for this task in the current directory.",
+                decision.target_agent.name(),
+                task.description
+            );
+
+            // Execute with a simple prompt
+            match executor
+                .execute_prompt(&test_prompt, &agent_identity, &workspace_path)
+                .await
+            {
+                Ok(output) => {
+                    info!("      ✅ Task completed successfully");
+                    info!(
+                        "      📝 Output: {}",
+                        output.chars().take(200).collect::<String>()
+                    );
+                    
+                    // Store output for Master review
+                    task_outputs.push((task.clone(), decision.target_agent.clone(), output));
+                }
+                Err(e) => {
+                    info!("      ❌ Execution error: {}", e);
+                    // Continue with simulation fallback
+                    self.simulate_agent_execution(&decision, &task, output_path)
+                        .await?;
+                    // Add simulated output for review
+                    task_outputs.push((
+                        task.clone(), 
+                        decision.target_agent.clone(), 
+                        format!("Simulated output for {} task", decision.target_agent.name())
+                    ));
+                }
+            }
+        }
+
+        // Master reviews all outputs
+        if !task_outputs.is_empty() {
+            info!("\n👑 Master reviewing agent outputs...");
+            self.master_review_outputs(&task_outputs, output_path).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Master reviews agent outputs for quality
+    async fn master_review_outputs(
+        &self,
+        task_outputs: &[(Task, crate::identity::AgentRole, String)],
+        output_path: &Path,
+    ) -> Result<()> {
+        use crate::providers::claude_code::ClaudeCodeExecutor;
+        use crate::providers::{ClaudeCodeConfig, ProviderExecutor};
+        use crate::identity::{AgentIdentity, AgentRole};
+        use std::collections::HashMap;
+        
+        // Create Master identity
+        let master_identity = AgentIdentity {
+            agent_id: format!("master-{}", Uuid::new_v4()),
+            specialization: AgentRole::Master {
+                oversight_roles: vec![
+                    "technical_lead".to_string(),
+                    "quality_assurance".to_string(),
+                    "code_review".to_string(),
+                ],
+                quality_standards: crate::identity::QualityStandards {
+                    min_test_coverage: 0.9,
+                    max_complexity: 15,
+                    security_scan_required: true,
+                    performance_threshold: std::time::Duration::from_secs(5),
+                },
+            },
+            workspace_path: output_path.to_path_buf(),
+            env_vars: HashMap::new(),
+            session_id: Uuid::new_v4().to_string(),
+            parent_process_id: std::process::id().to_string(),
+            initialized_at: chrono::Utc::now(),
+        };
+        
+        // Create Master Claude config
+        let claude_config = ClaudeCodeConfig {
+            model: "claude-3.5-sonnet".to_string(),
+            dangerous_skip: true,
+            think_mode: None,
+            json_output: false,
+            api_key: None,
+            custom_commands: vec![],
+            mcp_servers: HashMap::new(),
+        };
+        
+        let executor = ClaudeCodeExecutor::new(claude_config);
+        
+        // Build review prompt
+        let mut review_prompt = String::from("You are the Master orchestrator reviewing the work of specialized agents. Please review the following outputs and provide:\n\n");
+        review_prompt.push_str("1. Quality assessment (1-10 scale)\n");
+        review_prompt.push_str("2. Completeness check\n");
+        review_prompt.push_str("3. Suggestions for improvement\n");
+        review_prompt.push_str("4. Overall verdict (APPROVED/NEEDS_REVISION)\n\n");
+        
+        for (task, agent, output) in task_outputs {
+            review_prompt.push_str(&format!("\n📋 Task: {}\n", task.description));
+            review_prompt.push_str(&format!("🤖 Agent: {}\n", agent.name()));
+            review_prompt.push_str(&format!("📝 Output: {}\n", output.chars().take(500).collect::<String>()));
+            review_prompt.push_str("---\n");
+        }
+        
+        review_prompt.push_str("\nProvide your review in a structured format.");
+        
+        // Execute Master review
+        match executor.execute_prompt(&review_prompt, &master_identity, output_path).await {
+            Ok(review) => {
+                info!("👑 Master Review Complete:");
+                info!("{}", review.chars().take(500).collect::<String>());
+                
+                // Save review to file
+                let review_path = output_path.join("MASTER_REVIEW.md");
+                tokio::fs::write(&review_path, format!("# Master Review\n\n{}", review)).await?;
+                info!("📄 Review saved to: {}", review_path.display());
+            }
+            Err(e) => {
+                info!("❌ Master review failed: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+
     /// Create frontend files
-    async fn create_frontend_files(&self, output_path: &PathBuf) -> Result<()> {
+    async fn create_frontend_files(&self, output_path: &Path) -> Result<()> {
         // Create index.html
         let html_content = r#"<!DOCTYPE html>
 <html lang="en">
@@ -557,7 +763,7 @@ input[type="text"] {
     }
 
     /// Create backend files
-    async fn create_backend_files(&self, output_path: &PathBuf) -> Result<()> {
+    async fn create_backend_files(&self, output_path: &Path) -> Result<()> {
         // Create server.js
         let server_content = r#"const express = require('express');
 const cors = require('cors');
@@ -631,7 +837,7 @@ app.listen(PORT, () => {
     }
 
     /// Create DevOps files
-    async fn create_devops_files(&self, output_path: &PathBuf) -> Result<()> {
+    async fn create_devops_files(&self, output_path: &Path) -> Result<()> {
         // Create package.json
         let package_content = r#"{
   "name": "todo-app-ccswarm",
@@ -689,7 +895,7 @@ services:
     }
 
     /// Create test files
-    async fn create_test_files(&self, output_path: &PathBuf) -> Result<()> {
+    async fn create_test_files(&self, output_path: &Path) -> Result<()> {
         // Create basic test file
         let test_content = r#"// Basic tests for TODO app
 describe('TODO API', () => {
@@ -720,7 +926,7 @@ describe('TODO API', () => {
     }
 
     /// Create project structure
-    async fn create_project_structure(&self, output_path: &PathBuf) -> Result<()> {
+    async fn create_project_structure(&self, output_path: &Path) -> Result<()> {
         // Create README.md
         let readme_content = r#"# TODO App - Generated by ccswarm 🤖
 

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Instant;
 use tokio::process::Command;
 
@@ -206,7 +206,7 @@ impl AiderExecutor {
     }
 
     /// Build Aider command arguments
-    fn build_command_args(&self, prompt: &str, _working_dir: &PathBuf) -> Vec<String> {
+    fn build_command_args(&self, prompt: &str, _working_dir: &Path) -> Vec<String> {
         let mut args = Vec::new();
 
         // Add model specification
@@ -242,7 +242,7 @@ impl AiderExecutor {
     async fn execute_aider_command(
         &self,
         args: Vec<String>,
-        working_dir: &PathBuf,
+        working_dir: &Path,
         identity: &AgentIdentity,
     ) -> Result<String> {
         let executable = if let Some(path) = &self.config.executable_path {
@@ -401,7 +401,7 @@ impl ProviderExecutor for AiderExecutor {
         &self,
         prompt: &str,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<String> {
         let args = self.build_command_args(prompt, working_dir);
         self.execute_aider_command(args, working_dir, identity)
@@ -412,7 +412,7 @@ impl ProviderExecutor for AiderExecutor {
         &self,
         task: &Task,
         identity: &AgentIdentity,
-        working_dir: &PathBuf,
+        working_dir: &Path,
     ) -> Result<TaskResult> {
         let start = Instant::now();
 
@@ -467,7 +467,7 @@ impl ProviderExecutor for AiderExecutor {
         }
     }
 
-    async fn health_check(&self, working_dir: &PathBuf) -> Result<ProviderHealthStatus> {
+    async fn health_check(&self, working_dir: &Path) -> Result<ProviderHealthStatus> {
         let start = Instant::now();
 
         let executable = if let Some(path) = &self.config.executable_path {
@@ -560,6 +560,7 @@ mod tests {
     use super::*;
     use crate::identity::{AgentIdentity, AgentRole};
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use tempfile::TempDir;
     use uuid::Uuid;
 

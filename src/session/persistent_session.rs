@@ -22,6 +22,9 @@ use crate::agent::{Task, TaskResult};
 use crate::config::ClaudeConfig;
 use crate::identity::{AgentIdentity, AgentRole};
 
+/// Type alias for session storage
+type SessionStorage = Arc<RwLock<HashMap<String, Arc<Mutex<PersistentClaudeAgent>>>>>;
+
 /// Session information for tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistentSessionInfo {
@@ -372,7 +375,7 @@ impl PersistentSessionManager {
 
     /// Cleanup sessions based on timeout and lifetime rules
     async fn cleanup_sessions(
-        sessions: &Arc<RwLock<HashMap<String, Arc<Mutex<PersistentClaudeAgent>>>>>,
+        sessions: &SessionStorage,
         session_info: &Arc<RwLock<HashMap<String, PersistentSessionInfo>>>,
         idle_timeout: Duration,
         max_lifetime: Duration,
@@ -414,7 +417,7 @@ impl PersistentSessionManager {
 
     /// Remove a specific session
     async fn remove_session(
-        sessions: &Arc<RwLock<HashMap<String, Arc<Mutex<PersistentClaudeAgent>>>>>,
+        sessions: &SessionStorage,
         session_info: &Arc<RwLock<HashMap<String, PersistentSessionInfo>>>,
         agent_id: &str,
     ) -> Result<()> {
