@@ -243,7 +243,7 @@ mod integration_tests {
         let (config, _temp_dir) = create_test_config().await;
         let repo_path = std::path::PathBuf::from(&config.project.repository.url);
 
-        let _master = MasterClaude::new(config, repo_path).await.unwrap();
+        let master = MasterClaude::new(config, repo_path).await.unwrap();
 
         assert!(master.id.starts_with("master-claude-"));
         assert_eq!(master.agents.len(), 0); // Agents not initialized yet
@@ -329,7 +329,7 @@ mod integration_tests {
         ];
 
         // 1. Add all tasks to queue
-        for (_agent_type, description) in &workflow_tasks {
+        for (agent_type, description) in &workflow_tasks {
             let task = Task::new(
                 Uuid::new_v4().to_string(),
                 description.to_string(),
@@ -342,7 +342,7 @@ mod integration_tests {
         // 2. Simulate agents picking up tasks
         let mut completed_tasks = Vec::new();
 
-        for (_agent_type, description) in &workflow_tasks {
+        for (agent_type, description) in &workflow_tasks {
             let agent_id = format!("{}-agent", agent_type);
 
             // Update agent status to working

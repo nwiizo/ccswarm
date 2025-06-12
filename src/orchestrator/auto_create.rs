@@ -361,7 +361,7 @@ impl AutoCreateEngine {
 
         // Create output directory as workspace
         let workspace_path = output_path.to_path_buf();
-        
+
         // Store outputs for Master review
         let mut task_outputs: Vec<(Task, crate::identity::AgentRole, String)> = Vec::new();
 
@@ -421,7 +421,7 @@ impl AutoCreateEngine {
                         "      📝 Output: {}",
                         output.chars().take(200).collect::<String>()
                     );
-                    
+
                     // Store output for Master review
                     task_outputs.push((task.clone(), decision.target_agent.clone(), output));
                 }
@@ -432,9 +432,9 @@ impl AutoCreateEngine {
                         .await?;
                     // Add simulated output for review
                     task_outputs.push((
-                        task.clone(), 
-                        decision.target_agent.clone(), 
-                        format!("Simulated output for {} task", decision.target_agent.name())
+                        task.clone(),
+                        decision.target_agent.clone(),
+                        format!("Simulated output for {} task", decision.target_agent.name()),
                     ));
                 }
             }
@@ -443,7 +443,8 @@ impl AutoCreateEngine {
         // Master reviews all outputs
         if !task_outputs.is_empty() {
             info!("\n👑 Master reviewing agent outputs...");
-            self.master_review_outputs(&task_outputs, output_path).await?;
+            self.master_review_outputs(&task_outputs, output_path)
+                .await?;
         }
 
         Ok(())
@@ -455,11 +456,11 @@ impl AutoCreateEngine {
         task_outputs: &[(Task, crate::identity::AgentRole, String)],
         output_path: &Path,
     ) -> Result<()> {
+        use crate::identity::{AgentIdentity, AgentRole};
         use crate::providers::claude_code::ClaudeCodeExecutor;
         use crate::providers::{ClaudeCodeConfig, ProviderExecutor};
-        use crate::identity::{AgentIdentity, AgentRole};
         use std::collections::HashMap;
-        
+
         // Create Master identity
         let master_identity = AgentIdentity {
             agent_id: format!("master-{}", Uuid::new_v4()),
@@ -482,7 +483,7 @@ impl AutoCreateEngine {
             parent_process_id: std::process::id().to_string(),
             initialized_at: chrono::Utc::now(),
         };
-        
+
         // Create Master Claude config
         let claude_config = ClaudeCodeConfig {
             model: "claude-3.5-sonnet".to_string(),
@@ -493,31 +494,37 @@ impl AutoCreateEngine {
             custom_commands: vec![],
             mcp_servers: HashMap::new(),
         };
-        
+
         let executor = ClaudeCodeExecutor::new(claude_config);
-        
+
         // Build review prompt
         let mut review_prompt = String::from("You are the Master orchestrator reviewing the work of specialized agents. Please review the following outputs and provide:\n\n");
         review_prompt.push_str("1. Quality assessment (1-10 scale)\n");
         review_prompt.push_str("2. Completeness check\n");
         review_prompt.push_str("3. Suggestions for improvement\n");
         review_prompt.push_str("4. Overall verdict (APPROVED/NEEDS_REVISION)\n\n");
-        
+
         for (task, agent, output) in task_outputs {
             review_prompt.push_str(&format!("\n📋 Task: {}\n", task.description));
             review_prompt.push_str(&format!("🤖 Agent: {}\n", agent.name()));
-            review_prompt.push_str(&format!("📝 Output: {}\n", output.chars().take(500).collect::<String>()));
+            review_prompt.push_str(&format!(
+                "📝 Output: {}\n",
+                output.chars().take(500).collect::<String>()
+            ));
             review_prompt.push_str("---\n");
         }
-        
+
         review_prompt.push_str("\nProvide your review in a structured format.");
-        
+
         // Execute Master review
-        match executor.execute_prompt(&review_prompt, &master_identity, output_path).await {
+        match executor
+            .execute_prompt(&review_prompt, &master_identity, output_path)
+            .await
+        {
             Ok(review) => {
                 info!("👑 Master Review Complete:");
                 info!("{}", review.chars().take(500).collect::<String>());
-                
+
                 // Save review to file
                 let review_path = output_path.join("MASTER_REVIEW.md");
                 tokio::fs::write(&review_path, format!("# Master Review\n\n{}", review)).await?;
@@ -527,7 +534,7 @@ impl AutoCreateEngine {
                 info!("❌ Master review failed: {}", e);
             }
         }
-        
+
         Ok(())
     }
 

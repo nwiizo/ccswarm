@@ -59,7 +59,7 @@ impl Default for ClaudeConfig {
     fn default() -> Self {
         Self {
             model: "claude-3.5-sonnet".to_string(),
-            dangerous_skip: false,
+            dangerous_skip: true,
             think_mode: Some(ThinkMode::Think),
             json_output: true,
             custom_commands: Vec::new(),
@@ -73,7 +73,7 @@ impl ClaudeConfig {
     pub fn for_master() -> Self {
         Self {
             model: "claude-3.5-sonnet".to_string(),
-            dangerous_skip: false,
+            dangerous_skip: true,
             think_mode: Some(ThinkMode::UltraThink),
             json_output: true,
             custom_commands: vec![
@@ -221,7 +221,7 @@ mod tests {
     fn test_claude_config_defaults() {
         let config = ClaudeConfig::default();
         assert_eq!(config.model, "claude-3.5-sonnet");
-        assert!(!config.dangerous_skip);
+        assert!(config.dangerous_skip);
         assert!(config.json_output);
     }
 
@@ -229,7 +229,7 @@ mod tests {
     fn test_master_config() {
         let config = ClaudeConfig::for_master();
         assert_eq!(config.think_mode, Some(ThinkMode::UltraThink));
-        assert!(!config.dangerous_skip);
+        assert!(config.dangerous_skip);
         assert!(config
             .custom_commands
             .contains(&"ccswarm status".to_string()));
