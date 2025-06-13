@@ -1,6 +1,6 @@
-# CLAUDE.md
+# CLAUDE.md - ccswarm v0.2.0 Development Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with the ccswarm codebase. Updated for v0.2.0 with enhanced quality review, improved session management, and comprehensive command documentation.
 
 ## 🚀 Essential Commands
 
@@ -54,14 +54,16 @@ cargo run -- monitor --agent backend --filter "error,warning"
 RUST_LOG=debug cargo run -- start  # Debug mode
 ```
 
-## 🏗️ Architecture Overview
+## 🏗️ Architecture Overview (v0.2.0)
 
-ccswarm is an AI-powered multi-agent orchestration system with four key features:
+ccswarm is an AI-powered multi-agent orchestration system with enhanced features:
 
-1. **Session-Persistent Architecture** - 93% token reduction through conversation history preservation
-2. **Master Delegation System** - Intelligent task analysis and agent assignment  
-3. **Auto-Create System** - Generate complete applications from natural language
-4. **Multi-Provider Support** - Claude Code, Aider, OpenAI Codex, Custom tools
+1. **Session-Persistent Architecture** - 93% token reduction with improved pooling and load balancing
+2. **Master Delegation System** - Intelligent task analysis with enhanced routing algorithms
+3. **Auto-Create System** - Generate complete applications with expanded template support
+4. **Multi-Provider Support** - Claude Code, Aider, OpenAI Codex, Custom tools with better configuration
+5. **Quality Review System** - Automated quality checks with iterative remediation tracking
+6. **Enhanced TUI** - Real-time monitoring with improved task management and filtering
 
 ### Core Modules (`src/`)
 - `agent/` - Agent implementations with persistent sessions
@@ -189,37 +191,45 @@ Located in `src/auto_create/templates/`:
 }
 ```
 
-### Identity Management
+### Identity Management (v0.2.0 Enhanced)
 - Each agent maintains strict role boundaries
 - CLAUDE.md files reinforce agent identity
 - Continuous monitoring prevents drift
 - Automatic correction for boundary violations
-- Located in `demos/multi-agent/claude-md-templates/`
+- Located in `examples/claude-md-templates/`
+- Improved boundary checking algorithms
+- Better handling of cross-domain tasks
 
-### Safety Features
-- Auto-accept with risk assessment (1-10 scale)
-- File protection patterns (`.env`, `*.key`, etc.)
-- Emergency stop system
-- Pre/post execution validation
-- Audit trails via session tracking
+### Safety Features (v0.2.0 Enhanced)
+- Auto-accept with improved risk assessment (1-10 scale)
+- Extended file protection patterns (`.env`, `*.key`, `*.pem`, etc.)
+- Emergency stop system with graceful shutdown
+- Enhanced pre/post execution validation
+- Comprehensive audit trails via session tracking
+- Better handling of sensitive operations
+- Improved error recovery mechanisms
 
-## 📊 TUI Commands
+## 📊 TUI Commands (v0.2.0 Enhanced)
 
 Access command mode with 'c':
-- `task <description>` - Add task with `[high]`, `[test]`, etc.
+- `task <description>` - Add task with enhanced modifiers
 - `agent <type>` - Create agent (frontend/backend/devops/qa)
-- `filter <pattern>` - Filter output
-- `session <cmd>` - Session management (list/attach/pause/resume)
-- `worktree <cmd>` - Worktree operations
-- `monitor <agent>` - Focus on specific agent
-- `help` - Show all commands
+- `filter <pattern>` - Advanced output filtering
+- `session <cmd>` - Session management (list/attach/pause/resume/stats)
+- `worktree <cmd>` - Worktree operations (list/clean/status)
+- `monitor <agent>` - Focus on specific agent with metrics
+- `review <cmd>` - Quality review commands (status/history/trigger)
+- `delegate <cmd>` - Delegation commands (analyze/task/stats)
+- `help` - Show all commands with descriptions
 
-### Task Modifiers
+### Task Modifiers (Enhanced)
 - `[high]`, `[medium]`, `[low]` - Priority
-- `[bug]`, `[feature]`, `[test]` - Type
+- `[bug]`, `[feature]`, `[test]`, `[docs]`, `[refactor]` - Type
 - `[auto]` - Enable auto-accept if safe
+- `[review]` - Force quality review after completion
+- `[urgent]` - Bypass queue for critical tasks
 
-## 🧪 Testing
+## 🧪 Testing (v0.2.0)
 
 ```bash
 # Module tests
@@ -228,15 +238,20 @@ cargo test auto_accept    # Safety validation
 cargo test monitoring     # Real-time streaming
 cargo test provider       # Multi-provider
 cargo test identity       # Agent boundaries
+cargo test quality_review # Quality review system
+cargo test delegation     # Task delegation
+cargo test tui           # Terminal UI
 
 # Integration tests
 cargo test --test integration_tests
+cargo test --test quality_integration_tests  # New in v0.2.0
 
 # Examples (now in demos/)
 cargo run --example todo_app_builder         # See demos/todo-app/
 cargo run --example monitoring_demo          # See demos/multi-agent/
 cargo run --example session_persistent_demo  # See demos/session-persistence/
 cargo run --example auto_create_demo         # See demos/auto-create/
+cargo run --example quality_review_demo      # See demos/quality-review/
 ```
 
 ## ⚙️ Configuration
@@ -271,16 +286,23 @@ cargo run --example auto_create_demo         # See demos/auto-create/
 ```bash
 # Automatic migration
 cargo run -- config migrate --input old-config.json --output ccswarm.json
+
+# Validate configuration
+cargo run -- config validate --file ccswarm.json
+
+# Generate template with all options
+cargo run -- config generate --template full --output ccswarm-full.json
 ```
 
-## ⚠️ Critical Notes
+## ⚠️ Critical Notes (v0.2.0)
 
 ### Performance
-- Session reuse reduces API costs by ~90%
+- Session reuse reduces API costs by ~93% with improved pooling
 - Batch processing amortizes identity overhead
-- Git worktree isolation requires disk space
-- JSON coordination may have slight latency
-- Real-time monitoring adds <5% overhead
+- Git worktree isolation requires disk space (~100MB per agent)
+- JSON coordination optimized for <100ms latency
+- Real-time monitoring adds <3% overhead with v0.2.0 optimizations
+- Quality review adds minimal overhead with async processing
 
 ### Security
 - tmux session isolation per agent
@@ -298,11 +320,13 @@ tmux ls                                            # View active sessions
 tail -f logs/ccswarm.log                           # System logs
 ```
 
-### Common Issues
-- **Session not found**: Check `ccswarm session list`
-- **Provider errors**: Verify API keys and commands
-- **Worktree conflicts**: Use `ccswarm worktree clean`
-- **Auto-accept blocked**: Check risk assessment logs
+### Common Issues (v0.2.0)
+- **Session not found**: Check `ccswarm session list` or `ccswarm session stats`
+- **Provider errors**: Verify API keys with `ccswarm config validate`
+- **Worktree conflicts**: Use `ccswarm worktree clean` or `ccswarm worktree status`
+- **Auto-accept blocked**: Check risk assessment logs in `logs/safety.log`
+- **Quality review failures**: Check `ccswarm review history` for details
+- **TUI rendering issues**: Try `ccswarm tui --reset` to clear state
 
 ## 🔍 Quality Review System
 
@@ -362,8 +386,24 @@ pub struct ReviewHistoryEntry {
 }
 ```
 
-### Implementation Files
+### Implementation Files (v0.2.0)
 - **Quality Review**: `src/orchestrator/mod.rs::perform_quality_review()`
 - **Message Handler**: `src/orchestrator/mod.rs::handle_agent_message()`
 - **Task Types**: `src/agent/task.rs` (added `Remediation` variant)
+- **Review History**: `src/orchestrator/review_history.rs`
 - **Tests**: `src/orchestrator/review_test.rs`
+- **TUI Enhancements**: `src/tui/enhanced_commands.rs`
+- **Session Pool**: `src/session/pool_v2.rs`
+
+## 📚 Command Documentation
+
+Comprehensive command documentation is now available in `.claude/commands/` directory:
+- Each command has its own markdown file
+- Includes usage, options, examples, and related commands
+- Auto-generated help from these docs
+
+Access with:
+```bash
+ls .claude/commands/
+cat .claude/commands/init.md  # Example
+```

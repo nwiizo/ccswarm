@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> ⚠️ **BETA SOFTWARE**: This is pre-release software under active development. Features may change, and bugs may exist. Please report issues on GitHub.
+> 🚀 **Version 0.2.0** - Now with enhanced quality review, improved session management, and comprehensive command documentation!
 
 [![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
@@ -9,17 +9,20 @@
 
 **ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. It features session persistence, intelligent task delegation, auto-create functionality, and real-time monitoring through a Terminal UI.
 
-## 🌟 Key Features
+## 🌟 Key Features (v0.2.0)
 
 - **🤖 Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
 - **💾 Session Persistence**: 93% token reduction through conversation history
 - **🎯 Intelligent Delegation**: Master Claude analyzes and assigns tasks optimally
 - **🚀 Auto-Create System**: Generate complete applications from natural language
-- **📊 Real-time TUI**: Monitor agent activity with live updates
+- **📊 Enhanced TUI**: Real-time monitoring with improved task management and filtering
 - **🔄 Git Worktree Isolation**: Parallel development without conflicts
 - **✅ Auto-Accept Mode**: Safe automated execution with risk assessment
 - **🔒 Execution Mode**: Runs with `--dangerously-skip-permissions` by default
-- **🔍 Quality Review System**: Master Claude reviews agent work and provides fix instructions
+- **🔍 Quality Review System**: Automated quality checks with remediation task generation
+- **📚 Command Documentation**: Comprehensive docs in `.claude/commands/`
+- **🎛️ Improved Session Pool**: Better load balancing and resource management
+- **🔧 Enhanced Config System**: More flexible provider and agent configuration
 
 ## 🚀 Quick Start
 
@@ -106,6 +109,8 @@ pub enum AgentRole {
 
 ## 📋 Core Commands
 
+> 📖 **Full command documentation available in `.claude/commands/`**
+
 ### Basic Operations
 ```bash
 # Initialize project
@@ -114,33 +119,42 @@ ccswarm init --name "Project" --agents frontend,backend
 # Start system
 ccswarm start
 
-# Launch TUI
+# Launch TUI (enhanced in v0.2.0)
 ccswarm tui
 
 # Check status
 ccswarm status --detailed
+
+# Stop orchestrator
+ccswarm stop
 ```
 
 ### Task Management
 ```bash
-# Add task
+# Add task (enhanced in v0.2.0)
 ccswarm task "Create login form" --priority high --type feature
 
-# Delegate task
-ccswarm delegate analyze "Add authentication"
+# Delegate task with improved analysis
+ccswarm delegate analyze "Add authentication" --verbose
 ccswarm delegate task "Add auth" --agent backend --priority high
+
+# View delegation statistics
+ccswarm delegate stats --period 24h
 ```
 
-### Auto-Create Applications
+### Auto-Create Applications (Enhanced)
 ```bash
-# TODO app
+# TODO app with modern stack
 ccswarm auto-create "Create TODO app" --output ./todo
 
-# Blog with features
+# Blog with advanced features
 ccswarm auto-create "Blog with auth and comments" --output ./blog
 
-# E-commerce
+# E-commerce with full stack
 ccswarm auto-create "Online shop with cart" --output ./shop
+
+# Custom template support (v0.2.0)
+ccswarm auto-create "Project description" --template custom --output ./app
 ```
 
 ## 🎮 Terminal UI (TUI)
@@ -155,12 +169,15 @@ Start with `ccswarm tui`:
 - `t` - Add task
 - `q` - Quit
 
-### Command Mode (`c` key)
+### Command Mode (`c` key) - Enhanced in v0.2.0
 ```
-task <description> [high|medium|low] [feature|bug|test]
+task <description> [high|medium|low] [feature|bug|test|docs|refactor]
 agent <type>
-session list|attach|pause|resume
+session list|attach|pause|resume|stats
 filter <pattern>
+worktree list|clean
+monitor <agent>
+review status|history
 help
 ```
 
@@ -296,37 +313,46 @@ ccswarm session pause <session-id>
 ccswarm session resume <session-id>
 ```
 
-## 🛡️ Safety Features
+## 🛡️ Safety Features (Enhanced)
 
 ### Auto-Accept Mode
 - Risk assessment (1-10 scale)
-- File protection patterns
+- Enhanced file protection patterns
 - Emergency stop capability
-- Audit trails
+- Comprehensive audit trails
+- Pre/post execution validation
 
 ### Execution Mode
 By default, ccswarm runs with `dangerous_skip: true`, which adds the `--dangerously-skip-permissions` flag to Claude Code commands for automated execution.
 
-## 🔍 Quality Review System
+### New in v0.2.0
+- Improved risk assessment algorithms
+- Better handling of sensitive files
+- Enhanced validation patterns
+
+## 🔍 Quality Review System (v0.2.0 Enhanced)
 
 ### How It Works
-Master Claude performs quality reviews on completed tasks every 30 seconds:
+Master Claude performs automated quality reviews on completed tasks every 30 seconds:
 
 1. **Review Process**
    - Scans completed tasks for quality issues
    - Checks test coverage, complexity, security, and documentation
-   - Identifies specific problems
+   - Identifies specific problems with detailed metrics
+   - Tracks review history and iterations
 
 2. **Automated Remediation**
    - Creates fix tasks with detailed instructions
    - Assigns to original agent with high priority
    - Tracks remediation progress
+   - Supports iterative improvements
 
 3. **Fix Instructions**
    - Low test coverage → Add unit tests to achieve 85% coverage
-   - High complexity → Refactor into smaller functions
+   - High complexity → Refactor into smaller functions (max cyclomatic complexity: 10)
    - Security issues → Fix vulnerabilities and validate inputs
    - Missing docs → Add comprehensive documentation
+   - Performance issues → Optimize based on profiling data
 
 ### Review Workflow
 ```
@@ -366,13 +392,16 @@ cargo test
 # Specific module
 cargo test session
 cargo test identity
+cargo test quality_review  # New in v0.2.0
 
 # Integration tests
 cargo test --test integration_tests
 
-# Examples
-cargo run --example todo_app_builder
-cargo run --example monitoring_demo
+# Examples (relocated to demos/)
+cargo run --example todo_app_builder     # See demos/todo-app/
+cargo run --example monitoring_demo      # See demos/multi-agent/
+cargo run --example session_demo         # See demos/session-persistence/
+cargo run --example auto_create_demo     # See demos/auto-create/
 ```
 
 ## 🚨 Troubleshooting
@@ -406,6 +435,13 @@ ccswarm worktree clean
 1. Implement `ProviderExecutor` trait
 2. Add to `ProviderType` enum
 3. Update configuration parsing
+4. Add provider-specific configuration options
+
+### v0.2.0 Architecture Improvements
+- Enhanced session pool management
+- Improved task routing algorithms
+- Better error recovery mechanisms
+- Extended provider API support
 
 ### Contributing
 ```bash
@@ -418,6 +454,9 @@ cargo test
 # Format code
 cargo fmt
 cargo clippy -- -D warnings
+
+# Check documentation
+cargo doc --no-deps --open
 ```
 
 ## 📄 License
@@ -430,6 +469,28 @@ MIT License - see [LICENSE](LICENSE)
 - Rust community for excellent libraries
 - Contributors and early adopters
 
+## 📝 Release Notes (v0.2.0)
+
+### New Features
+- Enhanced quality review system with iteration tracking
+- Improved TUI with better task filtering and management
+- Comprehensive command documentation in `.claude/commands/`
+- Better session pool management and load balancing
+- Extended provider configuration options
+
+### Improvements
+- More robust error handling and recovery
+- Enhanced auto-create templates
+- Better git worktree management
+- Improved delegation algorithms
+- Performance optimizations
+
+### Bug Fixes
+- Fixed session persistence edge cases
+- Resolved TUI rendering issues
+- Corrected task priority handling
+- Fixed provider timeout issues
+
 ---
 
-**Experience the power of AI agent orchestration with ccswarm** 🚀
+**Experience the power of AI agent orchestration with ccswarm v0.2.0** 🚀
