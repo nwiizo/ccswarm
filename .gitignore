@@ -70,3 +70,7 @@ demos/*/.yarn/unplugged/
 demos/*/.yarn/build-state.yml
 demos/*/.yarn/install-state.gz
 demos/*/.pnp.*
+
+# Test projects
+test-project/
+test_todo_project/

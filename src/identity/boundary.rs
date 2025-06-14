@@ -50,20 +50,20 @@ impl TaskBoundaryChecker {
 
     /// Evaluate whether a task is within boundaries
     pub async fn evaluate_task(&self, task: &Task) -> TaskEvaluation {
-        // Check if explicitly allowed
-        if self.is_explicitly_allowed(task) {
-            return TaskEvaluation::Accept {
-                reason: "Task is within my specialization".to_string(),
-            };
-        }
-
-        // Check if explicitly forbidden
+        // Check if explicitly forbidden first to ensure proper delegation
         if self.is_explicitly_forbidden(task) {
             let target_agent = self.determine_correct_agent(task);
             return TaskEvaluation::Delegate {
                 reason: "Task is outside my specialization".to_string(),
                 target_agent: target_agent.clone(),
                 suggestion: self.generate_delegation_message(task, &target_agent),
+            };
+        }
+
+        // Check if explicitly allowed
+        if self.is_explicitly_allowed(task) {
+            return TaskEvaluation::Accept {
+                reason: "Task is within my specialization".to_string(),
             };
         }
 
@@ -112,8 +112,8 @@ impl TaskBoundaryChecker {
         if self.check_patterns(
             &task_text,
             &[
-                r"(?i)(api|backend|server|database|sql|auth|endpoint)",
-                r"(?i)(rest|graphql|microservice|grpc)",
+                r"(?i)(api|backend|server|database|sql|auth|endpoint|jwt)",
+                r"(?i)(rest|graphql|microservice|grpc|token.*validation)",
             ],
         ) {
             return self
@@ -243,7 +243,7 @@ impl TaskBoundaryChecker {
                     r"(?i)(database|sql|orm|prisma|typeorm)",
                     r"(?i)(server|backend|node.*api)",
                     r"(?i)(docker|kubernetes|terraform)",
-                    r"(?i)(auth.*server|jwt.*generate)",
+                    r"(?i)(auth.*server|jwt|token.*validation)",
                 ];
 
                 (
@@ -289,8 +289,9 @@ impl TaskBoundaryChecker {
                 let forbidden = vec![
                     r"(?i)(business.?logic|feature|functionality)",
                     r"(?i)(component|ui|frontend.*code)",
-                    r"(?i)(api.*implementation|endpoint.*logic)",
+                    r"(?i)(api|endpoint|rest|graphql)",
                     r"(?i)(database.*schema|migration.*create)",
+                    r"(?i)(controller|service|model|repository)",
                 ];
 
                 (

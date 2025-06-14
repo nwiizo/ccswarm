@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.2.0** - Now with enhanced quality review, improved session management, and comprehensive command documentation!
+> 🚀 **Version 0.2.2** - Enhanced with Anthropic-inspired interleaved thinking, advanced LLM quality judge, and improved CI/CD compatibility!
 
 [![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
@@ -9,7 +9,7 @@
 
 **ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. It features session persistence, intelligent task delegation, auto-create functionality, and real-time monitoring through a Terminal UI.
 
-## 🌟 Key Features (v0.2.0)
+## 🌟 Key Features (v0.2.2)
 
 - **🤖 Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
 - **💾 Session Persistence**: 93% token reduction through conversation history
@@ -19,12 +19,14 @@
 - **🔄 Git Worktree Isolation**: Parallel development without conflicts
 - **✅ Auto-Accept Mode**: Safe automated execution with risk assessment
 - **🔒 Execution Mode**: Runs with `--dangerously-skip-permissions` by default
-- **🔍 Quality Review System**: Automated quality checks with remediation task generation
+- **🔍 LLM Quality Judge**: Advanced code evaluation using Claude with multi-dimensional scoring
 - **📚 Command Documentation**: Comprehensive docs in `.claude/commands/`
 - **🎛️ Improved Session Pool**: Better load balancing and resource management
 - **🔧 Enhanced Config System**: More flexible provider and agent configuration
 
 ## 🚀 Quick Start
+
+> **Note**: Don't have Claude Code or API keys? Check out our [Standalone Deployment Guide](STANDALONE_DEPLOYMENT.md) to run ccswarm without any AI dependencies!
 
 ### 1. Installation
 
@@ -330,37 +332,64 @@ By default, ccswarm runs with `dangerous_skip: true`, which adds the `--dangerou
 - Better handling of sensitive files
 - Enhanced validation patterns
 
-## 🔍 Quality Review System (v0.2.0 Enhanced)
+## 🔍 LLM-as-Judge Quality Review (v0.2.2)
 
-### How It Works
-Master Claude performs automated quality reviews on completed tasks every 30 seconds:
+### Advanced Code Evaluation
+Master Claude now uses sophisticated LLM-based evaluation to assess code quality across 8 dimensions:
 
-1. **Review Process**
-   - Scans completed tasks for quality issues
-   - Checks test coverage, complexity, security, and documentation
-   - Identifies specific problems with detailed metrics
-   - Tracks review history and iterations
+1. **Multi-Dimensional Scoring (0.0-1.0)**
+   - **Correctness**: Does the code implement requirements correctly?
+   - **Maintainability**: Is it well-structured and easy to modify?
+   - **Test Quality**: Are tests comprehensive with good coverage?
+   - **Security**: Does it follow security best practices?
+   - **Performance**: Are there optimization opportunities?
+   - **Documentation**: Is the code properly documented?
+   - **Architecture**: Does it follow good design patterns?
+   - **Error Handling**: Is error handling robust?
 
-2. **Automated Remediation**
-   - Creates fix tasks with detailed instructions
-   - Assigns to original agent with high priority
-   - Tracks remediation progress
-   - Supports iterative improvements
+2. **Issue Severity Classification**
+   - **Critical**: Must fix immediately (e.g., security vulnerabilities)
+   - **High**: Should fix before deployment (e.g., missing auth)
+   - **Medium**: Should address soon (e.g., low test coverage)
+   - **Low**: Nice to fix (e.g., minor documentation gaps)
 
-3. **Fix Instructions**
-   - Low test coverage → Add unit tests to achieve 85% coverage
-   - High complexity → Refactor into smaller functions (max cyclomatic complexity: 10)
-   - Security issues → Fix vulnerabilities and validate inputs
-   - Missing docs → Add comprehensive documentation
-   - Performance issues → Optimize based on profiling data
+3. **Intelligent Remediation**
+   - LLM generates detailed, context-aware fix instructions
+   - Suggestions tailored to agent specialization
+   - Tracks confidence levels for each evaluation
+   - Provides specific code examples and best practices
+
+### Example Quality Evaluation
+```json
+{
+  "overall_score": 0.78,
+  "dimensions": {
+    "correctness": 0.90,
+    "test_quality": 0.65,
+    "security": 0.75,
+    "documentation": 0.70
+  },
+  "issues": [
+    {
+      "severity": "high",
+      "category": "TestCoverage",
+      "description": "Test coverage is 65%, below 85% requirement",
+      "suggested_fix": "Add unit tests for error cases"
+    }
+  ],
+  "feedback": "Good implementation but needs more comprehensive testing",
+  "passes_standards": false,
+  "confidence": 0.92
+}
+```
 
 ### Review Workflow
 ```
-Task Completed → Quality Review → Issues Found → Remediation Task Created
-                     ↓                                    ↓
-                 No Issues                         Agent Fixes Issues
-                     ↓                                    ↓
-                 Task Approved                      Re-review After Fix
+Task Completed → LLM Quality Review → Detailed Evaluation → Remediation Task
+                     ↓                      ↓                      ↓
+                 Score ≥ 0.85          Issues Found          Smart Fix Instructions
+                     ↓                      ↓                      ↓
+                 Task Approved         Agent Fixes            Re-evaluate
 ```
 
 ## 📊 Monitoring
@@ -442,6 +471,30 @@ ccswarm worktree clean
 - Improved task routing algorithms
 - Better error recovery mechanisms
 - Extended provider API support
+
+## 🚀 Standalone Deployment (No AI Dependencies)
+
+ccswarm can run without Claude Code or other AI providers! Check out the [**STANDALONE_DEPLOYMENT.md**](STANDALONE_DEPLOYMENT.md) guide for:
+
+- **Simulation Mode**: Run with simulated agents for testing and learning
+- **Built-in Templates**: Generate complete applications without AI providers
+- **Docker Deployment**: Containerized setup for easy deployment
+- **Custom Providers**: Create your own agent implementations
+- **Offline Operation**: Full functionality without internet connection
+
+### Quick Standalone Example
+```bash
+# Start in simulation mode
+CCSWARM_SIMULATION=true ccswarm start
+
+# Generate a complete TODO app without AI
+ccswarm auto-create "Create TODO app" --output ./my-app
+
+# Run the generated app
+cd my-app && npm install && npm start
+```
+
+For detailed instructions, examples, and Docker configurations, see [STANDALONE_DEPLOYMENT.md](STANDALONE_DEPLOYMENT.md).
 
 ### Contributing
 ```bash

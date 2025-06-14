@@ -431,10 +431,12 @@ mod tests {
 
     #[test]
     fn test_build_command_args() {
-        let mut config = ClaudeCodeConfig::default();
-        config.json_output = true;
-        config.dangerous_skip = true;
-        config.think_mode = Some("think_hard".to_string());
+        let config = ClaudeCodeConfig {
+            json_output: true,
+            dangerous_skip: true,
+            think_mode: Some("think_hard".to_string()),
+            ..Default::default()
+        };
 
         let executor = ClaudeCodeExecutor::new(config);
         let args = executor.build_command_args("test prompt");

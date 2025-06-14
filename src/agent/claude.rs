@@ -170,6 +170,17 @@ pub fn verify_identity_response(response: &str, identity: &AgentIdentity) -> boo
         .all(|phrase| response.contains(phrase))
 }
 
+/// Generate identity header for prompts
+pub fn generate_identity_header(identity: &AgentIdentity) -> String {
+    format!(
+        r#"🤖 AGENT: {}
+📁 WORKSPACE: {}
+🎯 SCOPE: Task execution"#,
+        identity.specialization.name(),
+        identity.workspace_path.display()
+    )
+}
+
 /// Generate task execution prompt with identity reinforcement
 pub fn generate_task_prompt(identity: &AgentIdentity, task: &Task) -> String {
     let role_name = identity.specialization.name();

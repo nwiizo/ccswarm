@@ -621,8 +621,10 @@ mod tests {
     #[tokio::test]
     async fn test_worktree_session_manager_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let mut config = WorktreeSessionConfig::default();
-        config.repo_path = temp_dir.path().to_path_buf();
+        let config = WorktreeSessionConfig {
+            repo_path: temp_dir.path().to_path_buf(),
+            ..Default::default()
+        };
 
         let manager = WorktreeSessionManager::new(config).unwrap();
         assert_eq!(manager.worktree_sessions.read().await.len(), 0);
@@ -631,8 +633,10 @@ mod tests {
     #[tokio::test]
     async fn test_combined_efficiency_stats() {
         let temp_dir = TempDir::new().unwrap();
-        let mut config = WorktreeSessionConfig::default();
-        config.repo_path = temp_dir.path().to_path_buf();
+        let config = WorktreeSessionConfig {
+            repo_path: temp_dir.path().to_path_buf(),
+            ..Default::default()
+        };
 
         let manager = WorktreeSessionManager::new(config).unwrap();
         let stats = manager.get_combined_efficiency_stats().await;

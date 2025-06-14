@@ -1,6 +1,9 @@
 pub mod auto_create;
+pub mod llm_quality_judge;
 pub mod master_delegation;
 
+#[cfg(test)]
+mod llm_quality_judge_test;
 #[cfg(test)]
 mod review_test;
 
@@ -16,6 +19,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use self::llm_quality_judge::LLMQualityJudge;
 use crate::agent::{AgentStatus, ClaudeCodeAgent, Task, TaskType};
 use crate::config::CcswarmConfig;
 use crate::coordination::{AgentMessage, CoordinationBus};
@@ -53,6 +57,9 @@ pub struct MasterClaude {
 
     /// Orchestrator state
     pub state: Arc<RwLock<OrchestratorState>>,
+
+    /// LLM-based quality judge
+    quality_judge: Arc<RwLock<LLMQualityJudge>>,
 }
 
 /// Review history entry
@@ -116,6 +123,8 @@ impl MasterClaude {
             review_history: HashMap::new(),
         }));
 
+        let quality_judge = Arc::new(RwLock::new(LLMQualityJudge::new()));
+
         Ok(Self {
             id,
             config: config.clone(),
@@ -126,6 +135,7 @@ impl MasterClaude {
             coordination_bus,
             worktree_manager,
             state,
+            quality_judge,
         })
     }
 
@@ -192,12 +202,21 @@ impl MasterClaude {
         let bus = self.coordination_bus.clone();
         let state = self.state.clone();
         let task_queue_tx = self.task_queue_tx.clone();
+        let judge = self.quality_judge.clone();
 
         tokio::spawn(async move {
             loop {
                 match bus.receive_message().await {
                     Ok(message) => {
-                        if let Err(e) = Self::handle_agent_message(message, &agents, &state, &task_queue_tx).await {
+                        if let Err(e) = Self::handle_agent_message(
+                            message,
+                            &agents,
+                            &state,
+                            &task_queue_tx,
+                            &judge,
+                        )
+                        .await
+                        {
                             error!("Error handling agent message: {}", e);
                         }
                     }
@@ -209,16 +228,26 @@ impl MasterClaude {
             }
         });
 
-        // Start quality review loop
+        // Start quality review loop with LLM judge
         let agents = self.agents.clone();
         let standards = self.quality_standards.clone();
         let bus = self.coordination_bus.clone();
+        let judge = self.quality_judge.clone();
+        let worktree_manager = self.worktree_manager.clone();
 
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
-                if let Err(e) = Self::perform_quality_review(&agents, &standards, &bus).await {
+                if let Err(e) = Self::perform_llm_quality_review(
+                    &agents,
+                    &standards,
+                    &bus,
+                    &judge,
+                    &worktree_manager,
+                )
+                .await
+                {
                     error!("Error performing quality review: {}", e);
                 }
             }
@@ -320,7 +349,7 @@ impl MasterClaude {
         if task.task_type == TaskType::Remediation && task.assigned_to.is_some() {
             return Ok(task.assigned_to.as_ref().unwrap().clone());
         }
-        
+
         // Determine required specialization
         let required_role = match task.task_type {
             TaskType::Development => {
@@ -336,7 +365,7 @@ impl MasterClaude {
             TaskType::Infrastructure => "DevOps",
             TaskType::Testing => "QA",
             TaskType::Remediation => "Backend", // Fallback for unassigned remediation
-            _ => "Backend", // Default
+            _ => "Backend",                     // Default
         };
 
         // Find available agents with matching specialization
@@ -392,26 +421,25 @@ impl MasterClaude {
     ) -> Result<Task> {
         // Generate specific fix instructions based on the issues
         let instructions = self.generate_fix_instructions(&issues).await?;
-        
+
         // Create remediation task
         let task_id = format!("remediate-{}-{}", original_task_id, Uuid::new_v4());
-        
+
         let description = format!(
             "Fix quality issues in task {}: {}",
-            original_task_id,
-            instructions
+            original_task_id, instructions
         );
-        
+
         let details = format!(
             "Quality issues found:\n{}\n\nSpecific instructions:\n{}",
             issues.join("\n- "),
             instructions
         );
-        
+
         let remediation_task = Task::new(
             task_id,
             description,
-            crate::agent::Priority::High,  // High priority for quality fixes
+            crate::agent::Priority::High, // High priority for quality fixes
             TaskType::Remediation,
         )
         .with_details(details)
@@ -419,18 +447,18 @@ impl MasterClaude {
         .with_parent_task(original_task_id.to_string())
         .with_quality_issues(issues)
         .with_duration(1800); // 30 minutes estimate
-        
+
         Ok(remediation_task)
     }
-    
+
     /// Generate specific fix instructions using Master Claude's intelligence
     #[allow(dead_code)]
     async fn generate_fix_instructions(&self, issues: &[String]) -> Result<String> {
         // For now, generate instructions based on the issue types
         // In a full implementation, this would use Claude API to generate intelligent instructions
-        
+
         let mut instructions = Vec::new();
-        
+
         for issue in issues {
             let instruction = match issue.as_str() {
                 "Low test coverage" => {
@@ -464,10 +492,10 @@ impl MasterClaude {
                      4. Document the changes made"
                 }
             };
-            
+
             instructions.push(format!("For '{}': \n{}", issue, instruction));
         }
-        
+
         Ok(instructions.join("\n\n"))
     }
 
@@ -527,6 +555,7 @@ impl MasterClaude {
         agents: &DashMap<String, ClaudeCodeAgent>,
         state: &RwLock<OrchestratorState>,
         task_queue_tx: &Sender<Task>,
+        judge: &Arc<RwLock<LLMQualityJudge>>,
     ) -> Result<()> {
         match message {
             AgentMessage::StatusUpdate { agent_id, status } => {
@@ -549,29 +578,32 @@ impl MasterClaude {
                 s.total_tasks_processed += 1;
                 if result.success {
                     s.successful_tasks += 1;
-                    
+
                     // Check if this was a remediation task and trigger re-review
                     if task_id.starts_with("remediate-") {
                         // Find the original task ID from review history
-                        let original_task_id = s.review_history.iter()
-                            .find_map(|(orig_id, entries)| {
-                                entries.iter()
+                        let original_task_id =
+                            s.review_history.iter().find_map(|(orig_id, entries)| {
+                                entries
+                                    .iter()
                                     .find(|e| e.remediation_task_id.as_ref() == Some(&task_id))
                                     .map(|_| orig_id.clone())
                             });
-                            
+
                         if let Some(orig_task_id) = original_task_id {
                             info!("Remediation task {} completed, scheduling re-review of original task {}", 
                                   task_id, orig_task_id);
-                            
+
                             // Mark the remediation as complete in history
                             if let Some(entries) = s.review_history.get_mut(&orig_task_id) {
-                                if let Some(entry) = entries.iter_mut()
-                                    .find(|e| e.remediation_task_id.as_ref() == Some(&task_id)) {
+                                if let Some(entry) = entries
+                                    .iter_mut()
+                                    .find(|e| e.remediation_task_id.as_ref() == Some(&task_id))
+                                {
                                     entry.review_passed = true;
                                 }
                             }
-                            
+
                             // TODO: Schedule immediate re-review of the original task
                             // For now, the periodic review will catch it
                         }
@@ -600,37 +632,93 @@ impl MasterClaude {
                     "Quality issues found in task {} by agent {}: {:?}",
                     task_id, agent_id, issues
                 );
-                
-                // Create a simple remediation task without full orchestrator context
+
+                // Create an enhanced remediation task with LLM-generated instructions
                 let remediation_task_id = format!("remediate-{}-{}", task_id, Uuid::new_v4());
-                
-                let fix_instructions = issues.iter()
-                    .map(|issue| match issue.as_str() {
-                        "Low test coverage" => "Add unit tests to achieve 85% coverage",
-                        "High complexity" => "Refactor to reduce cyclomatic complexity",
-                        "Security vulnerability" => "Fix security issues and validate inputs",
-                        "Missing documentation" => "Add comprehensive documentation",
-                        _ => "Review and fix the reported issue"
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                
+
+                // Get agent role for proper instruction generation
+                let agent_role = if let Some(agent) = agents.get(&agent_id) {
+                    agent.identity.specialization.name().to_string()
+                } else {
+                    "Unknown".to_string()
+                };
+
+                // Generate fix instructions from the issues
+                let detailed_instructions = {
+                    let judge_lock = judge.read().await;
+                    // Convert string issues to QualityIssue objects for instruction generation
+                    let quality_issues: Vec<llm_quality_judge::QualityIssue> = issues
+                        .iter()
+                        .map(|issue_str| {
+                            let (category, description, fix) = match issue_str.as_str() {
+                                s if s.contains("Low test coverage") => (
+                                    llm_quality_judge::IssueCategory::TestCoverage,
+                                    "Test coverage below requirements",
+                                    "Add unit tests to achieve 85% coverage",
+                                ),
+                                s if s.contains("High complexity") => (
+                                    llm_quality_judge::IssueCategory::CodeComplexity,
+                                    "Code complexity too high",
+                                    "Refactor to reduce cyclomatic complexity",
+                                ),
+                                s if s.contains("Security") => (
+                                    llm_quality_judge::IssueCategory::Security,
+                                    "Security issues detected",
+                                    "Fix security vulnerabilities and validate inputs",
+                                ),
+                                s if s.contains("documentation") => (
+                                    llm_quality_judge::IssueCategory::Documentation,
+                                    "Documentation issues",
+                                    "Add comprehensive documentation",
+                                ),
+                                s if s.contains("error handling") => (
+                                    llm_quality_judge::IssueCategory::ErrorHandling,
+                                    "Error handling issues",
+                                    "Add comprehensive error handling",
+                                ),
+                                _ => (
+                                    llm_quality_judge::IssueCategory::BestPractices,
+                                    issue_str.as_str(),
+                                    "Review and fix the reported issue",
+                                ),
+                            };
+
+                            llm_quality_judge::QualityIssue {
+                                severity: llm_quality_judge::IssueSeverity::High,
+                                category,
+                                description: description.to_string(),
+                                suggested_fix: fix.to_string(),
+                                affected_areas: vec![],
+                                fix_effort: 30,
+                            }
+                        })
+                        .collect();
+
+                    judge_lock.generate_fix_instructions(&quality_issues, &agent_role)
+                };
+
                 let remediation_task = Task::new(
                     remediation_task_id,
-                    format!("Fix quality issues in task {}: {}", task_id, fix_instructions),
+                    format!(
+                        "Fix quality issues in task {}: {}",
+                        task_id,
+                        issues.join(", ")
+                    ),
                     crate::agent::Priority::High,
                     TaskType::Remediation,
                 )
-                .with_details(format!("Issues found: {}", issues.join(", ")))
+                .with_details(detailed_instructions)
                 .assign_to(agent_id.clone())
                 .with_parent_task(task_id.clone())
                 .with_quality_issues(issues.clone())
                 .with_duration(1800);
-                
+
                 // Send remediation task to the task queue
-                task_queue_tx.send(remediation_task.clone()).await
+                task_queue_tx
+                    .send(remediation_task.clone())
+                    .await
                     .context("Failed to queue remediation task")?;
-                
+
                 // Track in review history
                 let mut s = state.write().await;
                 let review_entry = ReviewHistoryEntry {
@@ -640,16 +728,19 @@ impl MasterClaude {
                     issues_found: issues.clone(),
                     remediation_task_id: Some(remediation_task.id.clone()),
                     review_passed: false,
-                    iteration: s.review_history.get(&task_id)
+                    iteration: s
+                        .review_history
+                        .get(&task_id)
                         .map(|entries| entries.len() as u32 + 1)
                         .unwrap_or(1),
                 };
-                
-                s.review_history.entry(task_id.clone())
+
+                s.review_history
+                    .entry(task_id.clone())
                     .or_insert_with(Vec::new)
                     .push(review_entry);
-                
-                info!("Created remediation task {} for agent {} to fix issues in task {}", 
+
+                info!("Created remediation task {} for agent {} to fix issues in task {} with detailed instructions", 
                      remediation_task.id, agent_id, task_id);
             }
             _ => {}
@@ -658,13 +749,15 @@ impl MasterClaude {
         Ok(())
     }
 
-    /// Perform quality review on agent work
-    async fn perform_quality_review(
+    /// Perform LLM-based quality review on agent work
+    async fn perform_llm_quality_review(
         agents: &DashMap<String, ClaudeCodeAgent>,
         standards: &QualityStandards,
         bus: &CoordinationBus,
+        judge: &Arc<RwLock<LLMQualityJudge>>,
+        _worktree_manager: &Arc<WorktreeManager>,
     ) -> Result<()> {
-        info!("Performing quality review");
+        info!("Performing LLM-based quality review");
 
         for entry in agents.iter() {
             let agent = entry.value();
@@ -677,12 +770,96 @@ impl MasterClaude {
             // Review recent completed tasks
             for (task, result) in agent.task_history.iter().rev().take(5) {
                 if result.success {
-                    // TODO: Implement actual quality checks
-                    // - Test coverage analysis
-                    // - Code complexity checks
-                    // - Security scanning
-                    // - Performance benchmarks
+                    // Get agent workspace path
+                    let workspace_path = agent.identity.workspace_path.clone();
 
+                    // Perform LLM-based quality evaluation
+                    let mut judge_guard = judge.write().await;
+                    match judge_guard
+                        .evaluate_task(
+                            task,
+                            result,
+                            &agent.identity.specialization,
+                            &workspace_path.to_string_lossy(),
+                        )
+                        .await
+                    {
+                        Ok(evaluation) => {
+                            info!(
+                                "Quality evaluation for task {}: score={:.2}, passes={}",
+                                task.id, evaluation.overall_score, evaluation.passes_standards
+                            );
+
+                            // Check if quality standards are met
+                            if !evaluation.passes_standards
+                                || evaluation.overall_score < standards.min_test_coverage
+                            {
+                                // Convert evaluation to issues
+                                let issues = judge_guard.evaluation_to_issues(&evaluation);
+
+                                if !issues.is_empty() {
+                                    warn!(
+                                        "Task {} from agent {} failed quality standards: score={:.2}, confidence={:.2}",
+                                        task.id, agent.identity.agent_id, evaluation.overall_score, evaluation.confidence
+                                    );
+
+                                    // Log detailed feedback
+                                    info!("Quality feedback: {}", evaluation.feedback);
+
+                                    // Send quality issue message with detailed information
+                                    bus.send_message(AgentMessage::QualityIssue {
+                                        agent_id: agent.identity.agent_id.clone(),
+                                        task_id: task.id.clone(),
+                                        issues,
+                                    })
+                                    .await?;
+
+                                    // Store the detailed evaluation for remediation task creation
+                                    // This could be enhanced to pass the full evaluation through the message
+                                }
+                            } else {
+                                info!(
+                                    "Task {} from agent {} passed quality review with score {:.2}",
+                                    task.id, agent.identity.agent_id, evaluation.overall_score
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to evaluate task {} for agent {}: {}",
+                                task.id, agent.identity.agent_id, e
+                            );
+                            // Continue with next task
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Legacy quality review function (kept for backward compatibility)
+    #[allow(dead_code)]
+    async fn perform_quality_review(
+        agents: &DashMap<String, ClaudeCodeAgent>,
+        standards: &QualityStandards,
+        bus: &CoordinationBus,
+    ) -> Result<()> {
+        info!("Performing basic quality review");
+
+        for entry in agents.iter() {
+            let agent = entry.value();
+
+            // Skip if agent hasn't completed any tasks
+            if agent.task_history.is_empty() {
+                continue;
+            }
+
+            // Review recent completed tasks
+            for (task, result) in agent.task_history.iter().rev().take(5) {
+                if result.success {
+                    // Basic placeholder logic
                     let quality_score = 0.92; // Placeholder
 
                     if quality_score < standards.min_test_coverage {

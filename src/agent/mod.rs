@@ -1,4 +1,5 @@
 pub mod claude;
+pub mod interleaved_thinking;
 pub mod persistent;
 pub mod pool;
 pub mod simple;
@@ -13,6 +14,7 @@ use uuid::Uuid;
 
 pub use task::{Priority, Task, TaskResult, TaskType};
 
+use self::interleaved_thinking::{Decision, InterleavedThinkingEngine};
 use crate::config::ClaudeConfig;
 use crate::identity::boundary::TaskBoundaryChecker;
 use crate::identity::boundary::TaskEvaluation;
@@ -357,47 +359,173 @@ impl ClaudeCodeAgent {
         Ok(result)
     }
 
-    /// Execute task with identity monitoring
+    /// Execute task with identity monitoring and interleaved thinking
     async fn execute_task_with_monitoring(&mut self, task: Task) -> Result<TaskResult> {
         let start_time = std::time::Instant::now();
         let mut monitor = IdentityMonitor::new(&self.identity.agent_id);
+        let mut thinking_engine = InterleavedThinkingEngine::new().with_config(15, 0.6); // Max 15 steps, 0.6 confidence threshold
+
+        // Initial thinking step - analyze the task
+        let initial_observation = format!(
+            "Starting task: {}. Type: {:?}, Priority: {:?}",
+            task.description, task.task_type, task.priority
+        );
+        let initial_step = thinking_engine
+            .process_observation(&initial_observation, self.identity.specialization.name())
+            .await?;
 
         // Prepare task prompt with identity header
-        let prompt = claude::generate_task_prompt(&self.identity, &task);
+        let mut prompt = claude::generate_task_prompt(&self.identity, &task);
 
-        // Execute Claude Code
-        let output = self.execute_claude_command(&prompt).await?;
+        // Add thinking context if we need clarification
+        if let Decision::RequestContext { questions } = &initial_step.decision {
+            prompt.push_str(&format!(
+                "\n\nPlease consider these aspects: {}",
+                questions.join(", ")
+            ));
+        }
 
-        // Monitor the response
-        let identity_status = monitor.monitor_response(&output).await?;
+        // Execute Claude Code with progressive refinement
+        let mut final_output = String::new();
+        let mut execution_count = 0;
+        let max_executions = 3;
 
-        match identity_status {
-            IdentityStatus::Healthy => {
-                tracing::debug!("Identity maintained during task execution");
+        loop {
+            execution_count += 1;
+            let output = self.execute_claude_command(&prompt).await?;
+
+            // Process the output through thinking engine
+            let observation = self.extract_execution_observation(&output);
+            let thinking_step = thinking_engine
+                .process_observation(&observation, self.identity.specialization.name())
+                .await?;
+
+            // Monitor the response for identity
+            let identity_status = monitor.monitor_response(&output).await?;
+            self.handle_identity_status(identity_status, &mut monitor)
+                .await?;
+
+            // Handle thinking decision
+            match thinking_step.decision {
+                Decision::Continue { reason } => {
+                    tracing::debug!("Continuing execution: {}", reason);
+                    final_output = output;
+                    if execution_count >= max_executions {
+                        break;
+                    }
+                }
+                Decision::Refine { refinement, reason } => {
+                    tracing::info!("Refining approach: {} - {}", reason, refinement);
+                    prompt = self.refine_prompt(&prompt, &refinement, &task);
+                    final_output = output; // Keep last output
+                }
+                Decision::Complete { summary } => {
+                    tracing::info!("Task completed: {}", summary);
+                    final_output = output;
+                    break;
+                }
+                Decision::Pivot {
+                    new_approach,
+                    reason,
+                } => {
+                    tracing::warn!("Pivoting approach: {} - {}", reason, new_approach);
+                    prompt = self.generate_pivot_prompt(&task, &new_approach);
+                }
+                Decision::RequestContext { questions } => {
+                    tracing::info!("Additional context needed: {:?}", questions);
+                    // In a real implementation, this would request from orchestrator
+                    // For now, we'll add questions to prompt and continue
+                    prompt.push_str(&format!("\n\nPlease address: {}", questions.join(", ")));
+                }
+                Decision::Abort { reason } => {
+                    return Err(anyhow::anyhow!("Task aborted: {}", reason));
+                }
             }
-            IdentityStatus::DriftDetected(msg) => {
-                tracing::warn!("Identity drift detected: {}", msg);
-                // Attempt correction
-                self.correct_identity_drift(&mut monitor).await?;
-            }
-            IdentityStatus::BoundaryViolation(msg) => {
-                return Err(anyhow::anyhow!("Boundary violation detected: {}", msg));
-            }
-            IdentityStatus::CriticalFailure(msg) => {
-                return Err(anyhow::anyhow!("Critical identity failure: {}", msg));
+
+            if execution_count >= max_executions {
+                break;
             }
         }
+
+        // Generate thinking summary
+        let thinking_summary = thinking_engine.get_thinking_summary();
 
         Ok(TaskResult {
             success: true,
             output: serde_json::json!({
-                "response": output,
+                "response": final_output,
                 "agent": self.identity.agent_id,
                 "task_id": task.id,
+                "thinking_summary": thinking_summary,
+                "execution_iterations": execution_count,
             }),
             error: None,
             duration: start_time.elapsed(),
         })
+    }
+
+    /// Extract observation from execution output
+    fn extract_execution_observation(&self, output: &str) -> String {
+        // Look for key indicators in output
+        if output.contains("error") || output.contains("Error") {
+            format!(
+                "Execution encountered errors: {}",
+                output
+                    .lines()
+                    .find(|l| l.contains("error"))
+                    .unwrap_or("unknown error")
+            )
+        } else if output.contains("success") || output.contains("completed") {
+            "Execution completed successfully".to_string()
+        } else if output.contains("created") || output.contains("generated") {
+            "New artifacts generated".to_string()
+        } else {
+            format!("Execution output: {} characters", output.len())
+        }
+    }
+
+    /// Handle identity status from monitoring
+    async fn handle_identity_status(
+        &self,
+        status: IdentityStatus,
+        monitor: &mut IdentityMonitor,
+    ) -> Result<()> {
+        match status {
+            IdentityStatus::Healthy => {
+                tracing::debug!("Identity maintained during task execution");
+                Ok(())
+            }
+            IdentityStatus::DriftDetected(msg) => {
+                tracing::warn!("Identity drift detected: {}", msg);
+                self.correct_identity_drift(monitor).await
+            }
+            IdentityStatus::BoundaryViolation(msg) => {
+                Err(anyhow::anyhow!("Boundary violation detected: {}", msg))
+            }
+            IdentityStatus::CriticalFailure(msg) => {
+                Err(anyhow::anyhow!("Critical identity failure: {}", msg))
+            }
+        }
+    }
+
+    /// Refine prompt based on thinking engine feedback
+    fn refine_prompt(&self, original_prompt: &str, refinement: &str, task: &Task) -> String {
+        format!(
+            "{}\n\n## Refinement\n{}\n\nPlease apply this refinement while maintaining focus on: {}",
+            original_prompt, refinement, task.description
+        )
+    }
+
+    /// Generate pivot prompt for new approach
+    fn generate_pivot_prompt(&self, task: &Task, new_approach: &str) -> String {
+        format!(
+            "{}\n\n## New Approach\n{}\n\nTask: {}\nType: {:?}\nPriority: {:?}",
+            claude::generate_identity_header(&self.identity),
+            new_approach,
+            task.description,
+            task.task_type,
+            task.priority
+        )
     }
 
     /// Execute Claude Code command
@@ -523,3 +651,6 @@ mod tests {
         assert_eq!(agent.status, AgentStatus::Initializing);
     }
 }
+
+#[cfg(test)]
+mod interleaved_thinking_test;

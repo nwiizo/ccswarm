@@ -624,11 +624,13 @@ mod tests {
 
     #[test]
     fn test_build_command_args() {
-        let mut config = AiderConfig::default();
-        config.model = "claude-3.5-sonnet".to_string();
-        config.auto_commit = false;
-        config.git = true;
-        config.additional_args = vec!["--no-stream".to_string()];
+        let config = AiderConfig {
+            model: "claude-3.5-sonnet".to_string(),
+            auto_commit: false,
+            git: true,
+            additional_args: vec!["--no-stream".to_string()],
+            ..Default::default()
+        };
 
         let executor = AiderExecutor::new(config);
         let working_dir = PathBuf::from("/tmp");

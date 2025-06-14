@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod provider_tests {
+mod tests {
     use crate::providers::*;
     use std::collections::HashMap;
     use tempfile::TempDir;

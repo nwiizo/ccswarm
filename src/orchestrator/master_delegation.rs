@@ -136,7 +136,7 @@ impl MasterDelegationEngine {
             DelegationRule {
                 name: "Backend API Tasks".to_string(),
                 priority: 10,
-                condition: DelegationCondition::Or(vec![
+                condition: DelegationCondition::And(vec![
                     DelegationCondition::DescriptionContains(vec![
                         "api".to_string(),
                         "server".to_string(),
@@ -487,9 +487,9 @@ mod tests {
 
         let task = Task::new(
             "test-1".to_string(),
-            "Create HTML component with CSS styling".to_string(),
+            "Create React component with CSS styling for user interface".to_string(),
             Priority::High,
-            TaskType::Development,
+            TaskType::Feature,
         );
 
         let decision = engine.delegate_task(task).unwrap();

@@ -21,7 +21,7 @@ use ccswarm::identity::{
 };
 use ccswarm::monitoring::{MonitoringSystem, OutputType};
 use ccswarm::session::{AgentSession, SessionManager};
-use ccswarm::streaming::{StreamingManager, StreamConfig};
+use ccswarm::streaming::{StreamConfig, StreamingManager};
 use ccswarm::workspace::SimpleWorkspaceManager;
 
 #[tokio::main]
@@ -241,7 +241,7 @@ async fn main() -> Result<()> {
                     reversible: true,
                     task: Some(task.clone()),
                 };
-                
+
                 match auto_accept_engine.should_auto_accept(&operation) {
                     Ok(ccswarm::auto_accept::AutoAcceptDecision::Accept(_)) => true,
                     _ => false,

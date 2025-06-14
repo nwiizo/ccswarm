@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod integration_tests {
+mod tests {
     use crate::agent::{Priority, Task, TaskType};
     use crate::config::{
         AgentConfig, CcswarmConfig, ClaudeConfig, CoordinationConfig, MasterClaudeConfig,
@@ -182,7 +182,12 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_task_queue_operations() {
-        let queue = TaskQueue::new().await.unwrap();
+        use tempfile::TempDir;
+        let temp_dir = TempDir::new().unwrap();
+        let queue_dir = temp_dir.path().join("task-queue");
+        let queue = TaskQueue::with_dir(queue_dir.to_str().unwrap())
+            .await
+            .unwrap();
         let tasks = create_test_tasks();
 
         // Add all tasks

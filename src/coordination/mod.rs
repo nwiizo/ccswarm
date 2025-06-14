@@ -227,7 +227,12 @@ pub struct TaskQueue {
 impl TaskQueue {
     /// Create a new task queue
     pub async fn new() -> Result<Self> {
-        let task_dir = PathBuf::from("coordination/task-queue");
+        Self::with_dir("coordination/task-queue").await
+    }
+
+    /// Create a task queue with a specific directory (useful for testing)
+    pub async fn with_dir(dir: &str) -> Result<Self> {
+        let task_dir = PathBuf::from(dir);
         fs::create_dir_all(&task_dir).await?;
 
         Ok(Self { task_dir })
@@ -373,7 +378,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_queue() {
-        let queue = TaskQueue::new().await.unwrap();
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_dir = temp_dir.path().join("task-queue");
+        let queue = TaskQueue::with_dir(queue_dir.to_str().unwrap())
+            .await
+            .unwrap();
 
         let task = crate::agent::Task::new(
             "test-task".to_string(),

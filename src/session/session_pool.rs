@@ -805,8 +805,10 @@ mod tests {
     async fn test_session_pool_creation() {
         let temp_dir = TempDir::new().unwrap();
 
-        let mut worktree_config = WorktreeSessionConfig::default();
-        worktree_config.repo_path = temp_dir.path().to_path_buf();
+        let worktree_config = WorktreeSessionConfig {
+            repo_path: temp_dir.path().to_path_buf(),
+            ..Default::default()
+        };
 
         let pool_config = SessionPoolConfig::default();
 
@@ -822,8 +824,10 @@ mod tests {
     async fn test_session_score_calculation() {
         let temp_dir = TempDir::new().unwrap();
 
-        let mut worktree_config = WorktreeSessionConfig::default();
-        worktree_config.repo_path = temp_dir.path().to_path_buf();
+        let worktree_config = WorktreeSessionConfig {
+            repo_path: temp_dir.path().to_path_buf(),
+            ..Default::default()
+        };
 
         let pool_config = SessionPoolConfig::default();
         let _pool = SessionPool::new(worktree_config, pool_config)

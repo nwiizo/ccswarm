@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2021"
 authors = ["nwiizo"]
 description = "AI-powered multi-agent orchestration system with session management"
@@ -74,3 +74,23 @@ pretty_assertions = "1.4"
 [profile.release]
 opt-level = 3
 lto = true
+
+[[example]]
+name = "claude_code_demo"
+path = "examples/claude_code_demo.rs"
+
+[[example]]
+name = "monitoring_demo"
+path = "examples/monitoring_demo.rs"
+
+[[example]]
+name = "session_persistent_demo"
+path = "examples/session_persistent_demo.rs"
+
+[[example]]
+name = "todo_app_builder"
+path = "examples/todo_app_builder.rs"
+
+[[example]]
+name = "llm_quality_judge_demo"
+path = "examples/llm_quality_judge_demo.rs"
