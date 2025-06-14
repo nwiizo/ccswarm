@@ -11,7 +11,7 @@ use crate::orchestrator::MasterClaude;
 #[derive(Parser)]
 #[command(name = "ccswarm")]
 #[command(about = "Claude Code multi-agent orchestration system")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 pub struct Cli {
     /// Configuration file path
     #[arg(short, long, default_value = "ccswarm.json")]
