@@ -536,7 +536,7 @@ impl AgentPersonality {
         let base_risk = if has_risk_keywords { 0.7 } else { 0.3 };
         let tolerance_adjustment = self.traits.risk_tolerance * 0.4;
         
-        (base_risk - tolerance_adjustment).max(0.1).min(1.0)
+        (base_risk - tolerance_adjustment).clamp(0.1, 1.0)
     }
 
     /// Get skills relevant to a task
@@ -593,11 +593,11 @@ impl AgentPersonality {
             .sum::<f32>() / skill_count as f32;
         
         format!(
-            "Agent with {} skills (avg. {} XP), {} communication style, {} work rhythm",
+            "Agent with {} skills (avg. {} XP), {:?} communication style, {:?} work rhythm",
             skill_count,
             avg_skill_level as u32,
-            format!("{:?}", self.traits.communication_style),
-            format!("{:?}", self.working_style.work_rhythm)
+            self.traits.communication_style,
+            self.working_style.work_rhythm
         )
     }
     

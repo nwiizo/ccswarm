@@ -415,6 +415,7 @@ impl DialogueCoordinationBus {
     }
 
     /// Update conversation state based on new message
+    #[allow(dead_code)]
     fn update_conversation_state_static(&mut self, conversation: &mut Conversation, speaker_id: &str, message_type: &DialogueMessageType) {
         // Update current speaker
         conversation.conversation_state.current_speaker = Some(speaker_id.to_string());

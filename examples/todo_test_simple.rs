@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
         enable_filtering: true,
         enable_highlighting: true,
     };
-    let streaming_manager = StreamingManager::new(monitoring_system.clone(), stream_config);
+    let _streaming_manager = StreamingManager::new(monitoring_system.clone(), stream_config);
     let auto_accept_engine = AutoAcceptEngine::new(AutoAcceptConfig::default());
 
     info!("📋 Defining TODO application tasks with enhanced features...");

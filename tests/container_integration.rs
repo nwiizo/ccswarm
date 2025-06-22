@@ -6,15 +6,17 @@
 
 #[cfg(feature = "container")]
 use ccswarm::container::{
-    ContainerConfig, ContainerManager, ContainerProvider, ContainerStatus, DockerContainerProvider,
+    ContainerConfig, ContainerManager, ContainerProvider, ContainerStatus,
     ResourceLimits,
 };
 #[cfg(feature = "container")]
+use ccswarm::container::docker::DockerContainerProvider;
+#[cfg(feature = "container")]
 use std::time::Duration;
-use tokio::time::sleep;
-use tracing::info;
+#[cfg(feature = "container")]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+#[cfg(feature = "container")]
 /// Initialize test logging
 fn init_test_logging() {
     let _ = tracing_subscriber::registry()
@@ -26,6 +28,7 @@ fn init_test_logging() {
         .try_init();
 }
 
+#[cfg(feature = "container")]
 /// Check if Docker is available
 async fn is_docker_available() -> bool {
     match DockerContainerProvider::new().await {
@@ -35,6 +38,14 @@ async fn is_docker_available() -> bool {
             false
         }
     }
+}
+
+#[cfg(not(feature = "container"))]
+/// Check if Docker is available (stub for non-container builds)
+#[allow(dead_code)]
+async fn is_docker_available() -> bool {
+    eprintln!("Docker not available: container feature not enabled");
+    false
 }
 
 #[tokio::test]

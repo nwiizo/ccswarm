@@ -397,6 +397,7 @@ impl ClaudeCodeAgent {
     }
 
     /// Install Claude CLI in the container  
+    #[allow(dead_code)]
     async fn install_claude_in_container(
         &self,
         _container_id: &str,

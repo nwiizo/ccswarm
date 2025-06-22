@@ -55,6 +55,7 @@ impl IsolationMode {
     }
 
     /// Parse from string
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "worktree" | "git" | "gitworktree" => Some(Self::GitWorktree),
@@ -66,7 +67,7 @@ impl IsolationMode {
 }
 
 /// Configuration for agent isolation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IsolationConfig {
     /// The isolation mode to use
     pub mode: IsolationMode,
@@ -76,16 +77,6 @@ pub struct IsolationConfig {
 
     /// Container-specific settings (used when mode is Container or Hybrid)
     pub container: ContainerIsolationConfig,
-}
-
-impl Default for IsolationConfig {
-    fn default() -> Self {
-        Self {
-            mode: IsolationMode::default(),
-            enforce: false,
-            container: ContainerIsolationConfig::default(),
-        }
-    }
 }
 
 /// Container-specific isolation configuration

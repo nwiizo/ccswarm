@@ -65,13 +65,13 @@ reqwest = { version = "0.11", features = ["json"] }
 # Async traits
 async-trait = "0.1"
 
-# Docker integration
-bollard = "0.16"
-futures-util = "0.3"
-tar = "0.4"
+# Docker integration (optional for container feature)
+bollard = { version = "0.16", optional = true }
+futures-util = { version = "0.3", optional = true }
+tar = { version = "0.4", optional = true }
 
-# URL encoding
-urlencoding = "2.1"
+# URL encoding (optional for container feature)
+urlencoding = { version = "2.1", optional = true }
 
 # Additional utilities
 colored = "2.0"
@@ -106,3 +106,7 @@ path = "examples/todo_app_builder.rs"
 [[example]]
 name = "llm_quality_judge_demo"
 path = "examples/llm_quality_judge_demo.rs"
+
+[features]
+default = []
+container = ["bollard", "futures-util", "tar", "urlencoding"]

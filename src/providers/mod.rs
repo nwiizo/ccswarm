@@ -653,6 +653,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "Claude Code config validation may fail without proper environment"]
     async fn test_claude_code_config_validation() {
         let config = ClaudeCodeConfig::default();
         // Test validation logic - result depends on whether claude CLI is installed

@@ -1164,7 +1164,7 @@ impl CliRunner {
 
                 // Also clean up branches
                 let output = tokio::process::Command::new("git")
-                    .args(&["branch", "--list", "*agent*", "feature/*"])
+                    .args(["branch", "--list", "*agent*", "feature/*"])
                     .output()
                     .await?;
 

@@ -223,7 +223,7 @@ CMD ["node", "server.js"]
         .dimensions
         .insert("test_quality".to_string(), 0.1);
 
-    let security_judge = LLMQualityJudge::with_rubric(custom_rubric);
+    let _security_judge = LLMQualityJudge::with_rubric(custom_rubric);
     println!("   Created security-focused judge with custom weights");
 
     println!("\n✨ Demo completed successfully!");

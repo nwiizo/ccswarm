@@ -269,7 +269,7 @@ impl PhronesisManager {
         self.wisdom_entries.insert(wisdom_id.clone(), wisdom);
         self.wisdom_by_category
             .entry(category)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(wisdom_id);
     }
 

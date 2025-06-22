@@ -179,7 +179,7 @@ impl MasterClaude {
                 &PathBuf::from(&self.config.project.name),
                 &agent_config.branch,
                 agent_config.claude_config.clone(),
-                self.isolation_mode.clone(),
+                self.isolation_mode,
             )
             .await?;
 
@@ -805,7 +805,7 @@ impl MasterClaude {
 
                             // Check if quality standards are met
                             if !evaluation.passes_standards
-                                || evaluation.overall_score < (standards.min_test_coverage as f64 / 100.0)
+                                || evaluation.overall_score < (standards.min_test_coverage / 100.0)
                             {
                                 // Convert evaluation to issues
                                 let issues = judge_guard.evaluation_to_issues(&evaluation);
@@ -875,7 +875,7 @@ impl MasterClaude {
                     // Basic placeholder logic
                     let quality_score = 0.92; // Placeholder
 
-                    if quality_score < (standards.min_test_coverage as f64 / 100.0) {
+                    if quality_score < (standards.min_test_coverage / 100.0) {
                         warn!(
                             "Task {} from agent {} failed quality standards: score={}",
                             task.id, agent.identity.agent_id, quality_score

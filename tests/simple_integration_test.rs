@@ -8,7 +8,6 @@ use std::collections::HashMap;
 // Import the modules we're testing
 use ccswarm::agent::{
     personality::AgentPersonality,
-    Task, TaskType, Priority,
 };
 use ccswarm::session::{
     memory::{SessionMemory, WorkingMemoryType, EpisodeType, EpisodeOutcome},
@@ -200,7 +199,7 @@ async fn test_session_with_memory() -> Result<()> {
     test_session.consolidate_memories();
     
     // Test memory retrieval
-    let memories = test_session.retrieve_memories("authentication");
+    let _memories = test_session.retrieve_memories("authentication");
     // Should find relevant memories
     
     // Test memory summary

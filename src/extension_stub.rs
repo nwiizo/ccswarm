@@ -54,6 +54,12 @@ impl ImplementationPhase {
     }
 }
 
+impl Default for RiskAssessment {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RiskAssessment {
     pub fn new() -> Self {
         Self {
@@ -179,7 +185,7 @@ pub struct ExtensionStats {
 
 // Meta learning stub module
 pub mod meta_learning {
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Default)]
     pub struct MetaLearningSystem;
     
     impl MetaLearningSystem {
@@ -226,16 +232,17 @@ pub mod agent_extension {
     }
     
     pub trait SearchStrategy {
+        #[allow(async_fn_in_trait)]
         async fn search(&self, query: &SearchQuery) -> anyhow::Result<Vec<SearchResult>>;
     }
     
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Default)]
     pub struct DocumentationSearchStrategy;
     
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Default)]
     pub struct GitHubSearchStrategy;
     
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Default)]
     pub struct StackOverflowSearchStrategy;
     
     impl DocumentationSearchStrategy {

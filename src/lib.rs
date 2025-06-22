@@ -1,3 +1,9 @@
+//! ccswarm - AI-powered multi-agent orchestration system
+
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::module_inception)]
+#![allow(clippy::needless_borrows_for_generic_args)]
+
 pub mod agent;
 pub mod auto_accept;
 pub mod cli;
