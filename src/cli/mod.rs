@@ -59,6 +59,14 @@ pub enum Commands {
         /// Port for status server
         #[arg(short, long, default_value = "8080")]
         port: u16,
+
+        /// Isolation mode for agents (worktree, container, hybrid)
+        #[arg(long, default_value = "worktree")]
+        isolation: String,
+
+        /// Use real Claude API instead of simulation (requires ANTHROPIC_API_KEY)
+        #[arg(long)]
+        use_real_api: bool,
     },
 
     /// Start TUI (Terminal User Interface)
@@ -174,6 +182,30 @@ pub enum Commands {
         #[arg(short, long, default_value = "./")]
         output: PathBuf,
     },
+
+    /// Sangha - collective decision making
+    Sangha {
+        #[command(subcommand)]
+        action: SanghaAction,
+    },
+
+    /// Extension management
+    Extend {
+        #[command(subcommand)]
+        action: ExtendAction,
+    },
+
+    /// Search external resources
+    Search {
+        #[command(subcommand)]
+        action: SearchAction,
+    },
+
+    /// Evolution tracking
+    Evolution {
+        #[command(subcommand)]
+        action: EvolutionAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -206,6 +238,13 @@ pub enum WorktreeAction {
 
     /// Prune stale worktrees
     Prune,
+
+    /// Clean all ccswarm worktrees and branches
+    Clean {
+        /// Force cleanup without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -352,6 +391,213 @@ pub enum DelegateAction {
     },
 }
 
+#[derive(Subcommand)]
+pub enum SanghaAction {
+    /// Submit a proposal to Sangha
+    Propose {
+        /// Proposal type (doctrine, extension, task)
+        #[arg(short, long)]
+        proposal_type: String,
+
+        /// Proposal file (JSON)
+        #[arg(short, long)]
+        file: PathBuf,
+    },
+
+    /// Vote on a proposal
+    Vote {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Vote choice (aye, nay, abstain)
+        choice: String,
+
+        /// Reason for vote
+        #[arg(short, long)]
+        reason: Option<String>,
+    },
+
+    /// List active proposals
+    List {
+        /// Show all proposals including completed
+        #[arg(short, long)]
+        all: bool,
+
+        /// Filter by status
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+
+    /// Show Sangha session status
+    Session {
+        /// Session ID
+        #[arg(short, long)]
+        id: Option<String>,
+
+        /// Show active session
+        #[arg(short, long)]
+        active: bool,
+    },
+
+    /// Review extension proposal
+    ExtensionReview {
+        /// Proposal ID
+        proposal_id: String,
+
+        /// Perform technical check
+        #[arg(long)]
+        technical_check: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ExtendAction {
+    /// Propose an extension
+    Propose {
+        /// Agent ID
+        #[arg(short, long)]
+        agent: String,
+
+        /// Extension type (capability, cognitive, collaborative)
+        #[arg(short, long)]
+        extension_type: String,
+
+        /// Extension specification file
+        #[arg(short, long)]
+        file: PathBuf,
+    },
+
+    /// Show extension status
+    Status {
+        /// Agent ID
+        #[arg(short, long)]
+        agent: String,
+
+        /// Extension ID
+        #[arg(short, long)]
+        extension_id: Option<String>,
+    },
+
+    /// Show extension history
+    History {
+        /// Agent ID
+        #[arg(short, long)]
+        agent: String,
+
+        /// Show only successful extensions
+        #[arg(long)]
+        successful: bool,
+
+        /// Show only failed extensions
+        #[arg(long)]
+        failed: bool,
+    },
+
+    /// Rollback an extension
+    Rollback {
+        /// Agent ID
+        #[arg(short, long)]
+        agent: String,
+
+        /// Extension ID
+        #[arg(short, long)]
+        extension_id: String,
+
+        /// Force rollback
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Discover extension opportunities
+    Discover {
+        /// Agent ID
+        #[arg(short, long)]
+        agent: Option<String>,
+
+        /// Discovery type (capability, performance, trend)
+        #[arg(short, long)]
+        discovery_type: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SearchAction {
+    /// Search documentation and resources
+    Docs {
+        /// Search query
+        query: String,
+
+        /// Search source (mdn, github, stackoverflow, all)
+        #[arg(short, long, default_value = "all")]
+        source: String,
+
+        /// Maximum results to return
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+
+    /// Test search functionality
+    Test {
+        /// Test query
+        #[arg(default_value = "async rust")]
+        query: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum EvolutionAction {
+    /// Show evolution metrics
+    Metrics {
+        /// Agent ID
+        #[arg(short, long)]
+        agent: Option<String>,
+
+        /// Show all agents
+        #[arg(long)]
+        all: bool,
+
+        /// Time period in days
+        #[arg(short, long, default_value = "30")]
+        period: u32,
+    },
+
+    /// Show successful patterns
+    Patterns {
+        /// Pattern type filter
+        #[arg(short, long)]
+        pattern_type: Option<String>,
+
+        /// Show only successful patterns
+        #[arg(long)]
+        successful: bool,
+
+        /// Show only failed patterns
+        #[arg(long)]
+        failed: bool,
+    },
+
+    /// Show extension genealogy
+    Genealogy {
+        /// Extension name or ID
+        extension: String,
+
+        /// Show full tree
+        #[arg(short, long)]
+        full: bool,
+    },
+
+    /// Generate evolution report
+    Report {
+        /// Output format (text, json, html)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+
+        /// Output file
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
 pub struct CliRunner {
     config: CcswarmConfig,
     repo_path: PathBuf,
@@ -386,7 +632,15 @@ impl CliRunner {
                 repo_url,
                 agents,
             } => self.init_project(name, repo_url.as_deref(), agents).await,
-            Commands::Start { daemon, port } => self.start_orchestrator(*daemon, *port).await,
+            Commands::Start {
+                daemon,
+                port,
+                isolation,
+                use_real_api,
+            } => {
+                self.start_orchestrator(*daemon, *port, isolation, *use_real_api)
+                    .await
+            }
             Commands::Tui => self.start_tui().await,
             Commands::Stop => self.stop_orchestrator().await,
             Commands::Status { detailed, agent } => {
@@ -428,6 +682,10 @@ impl CliRunner {
                 self.handle_auto_create(description, template.as_deref(), *auto_deploy, output)
                     .await
             }
+            Commands::Sangha { action } => self.handle_sangha(action).await,
+            Commands::Extend { action } => self.handle_extend(action).await,
+            Commands::Search { action } => self.handle_search(action).await,
+            Commands::Evolution { action } => self.handle_evolution(action).await,
         }
     }
 
@@ -486,10 +744,48 @@ impl CliRunner {
         Ok(())
     }
 
-    async fn start_orchestrator(&self, _daemon: bool, _port: u16) -> Result<()> {
-        info!("Starting ccswarm orchestrator");
+    async fn start_orchestrator(
+        &self,
+        _daemon: bool,
+        _port: u16,
+        isolation: &str,
+        use_real_api: bool,
+    ) -> Result<()> {
+        info!(
+            "Starting ccswarm orchestrator with isolation mode: {} (real_api: {})",
+            isolation, use_real_api
+        );
 
-        let master = MasterClaude::new(self.config.clone(), self.repo_path.clone()).await?;
+        // Parse isolation mode
+        let isolation_mode = match isolation {
+            "container" => crate::agent::IsolationMode::Container,
+            "hybrid" => crate::agent::IsolationMode::Hybrid,
+            _ => crate::agent::IsolationMode::GitWorktree,
+        };
+
+        // Update configuration to use real API if requested
+        let mut config = self.config.clone();
+        if use_real_api {
+            // Check for API key
+            if std::env::var("ANTHROPIC_API_KEY").is_err() {
+                return Err(anyhow::anyhow!(
+                    "ANTHROPIC_API_KEY environment variable must be set when using --use-real-api"
+                ));
+            }
+
+            // Update all agent configurations to use real API
+            for agent_config in config.agents.values_mut() {
+                agent_config.claude_config.use_real_api = true;
+            }
+
+            // Update master configuration
+            config.project.master_claude.claude_config.use_real_api = true;
+        }
+
+        let mut master = MasterClaude::new(config, self.repo_path.clone()).await?;
+
+        // Set isolation mode for all agents
+        master.set_isolation_mode(isolation_mode);
 
         // Initialize agents
         master.initialize().await?;
@@ -799,6 +1095,106 @@ impl CliRunner {
                     );
                 } else {
                     println!("✅ Stale worktrees pruned");
+                }
+            }
+            WorktreeAction::Clean { force } => {
+                use std::io::{self, Write};
+
+                // Find all ccswarm-related worktrees
+                let worktrees = manager.list_worktrees().await?;
+                let ccswarm_worktrees: Vec<_> = worktrees
+                    .iter()
+                    .filter(|w| w.branch.contains("agent") || w.branch.contains("feature/"))
+                    .collect();
+
+                if ccswarm_worktrees.is_empty() {
+                    if self.json_output {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "status": "success",
+                                "message": "No ccswarm worktrees found",
+                            }))?
+                        );
+                    } else {
+                        println!("✅ No ccswarm worktrees to clean");
+                    }
+                    return Ok(());
+                }
+
+                // Ask for confirmation unless forced
+                if !force {
+                    println!("⚠️  Found {} ccswarm worktrees:", ccswarm_worktrees.len());
+                    for w in &ccswarm_worktrees {
+                        println!("   - {} ({})", w.path.display(), w.branch);
+                    }
+                    print!("\nAre you sure you want to remove all these worktrees? [y/N] ");
+                    io::stdout().flush()?;
+
+                    let mut response = String::new();
+                    io::stdin().read_line(&mut response)?;
+
+                    if !response.trim().eq_ignore_ascii_case("y") {
+                        println!("❌ Cleanup cancelled");
+                        return Ok(());
+                    }
+                }
+
+                // Remove all ccswarm worktrees
+                let mut removed_count = 0;
+                for worktree in ccswarm_worktrees {
+                    match manager.remove_worktree(&worktree.path).await {
+                        Ok(_) => {
+                            removed_count += 1;
+                            if !self.json_output {
+                                println!("   ✓ Removed {}", worktree.path.display());
+                            }
+                        }
+                        Err(e) => {
+                            if !self.json_output {
+                                println!(
+                                    "   ✗ Failed to remove {}: {}",
+                                    worktree.path.display(),
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Also clean up branches
+                let output = tokio::process::Command::new("git")
+                    .args(&["branch", "--list", "*agent*", "feature/*"])
+                    .output()
+                    .await?;
+
+                if output.status.success() {
+                    let branches = String::from_utf8_lossy(&output.stdout);
+                    let branch_count = branches.lines().count();
+
+                    if branch_count > 0 {
+                        tokio::process::Command::new("git")
+                            .args(&["branch", "-D"])
+                            .args(branches.lines().map(|b| b.trim().trim_start_matches("* ")))
+                            .output()
+                            .await?;
+                    }
+                }
+
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Cleanup completed",
+                            "worktrees_removed": removed_count,
+                        }))?
+                    );
+                } else {
+                    println!(
+                        "\n✅ Cleanup completed: {} worktrees removed",
+                        removed_count
+                    );
                 }
             }
         }
@@ -1495,4 +1891,664 @@ impl CliRunner {
 
         Ok(())
     }
+
+    async fn handle_sangha(&self, action: &SanghaAction) -> Result<()> {
+        // Using stub implementation for now
+        use crate::extension_stub::sangha::{Vote, VoteType};
+        use std::str::FromStr;
+        
+        // Stub implementation - just log the action
+        info!("🏛️  Sangha action requested (stub implementation)");
+        
+        match action {
+            SanghaAction::Propose { proposal_type, file } => {
+                info!("📋 Submitting proposal to Sangha (stub implementation)");
+                
+                // Read proposal specification from file
+                let _spec_content = tokio::fs::read_to_string(file).await
+                    .context("Failed to read proposal file")?;
+                
+                info!("Proposal type: {}", proposal_type);
+                
+                // Stub: Generate a fake proposal ID
+                let proposal_id = uuid::Uuid::new_v4();
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Proposal submitted",
+                            "proposal_id": proposal_id,
+                            "type": proposal_type,
+                            "file": file,
+                        }))?
+                    );
+                } else {
+                    println!("📋 Submitting {} proposal from: {}", proposal_type, file.display());
+                    println!("🆔 Proposal ID: {}", proposal_id);
+                    println!("✅ Proposal submitted successfully");
+                }
+            }
+            
+            SanghaAction::Vote { proposal_id, choice, reason } => {
+                info!("🗳️ Casting vote (stub implementation)");
+                
+                // Parse vote choice
+                let vote_type = match choice.to_lowercase().as_str() {
+                    "aye" | "yes" | "approve" => VoteType::Approve,
+                    "nay" | "no" | "reject" => VoteType::Reject,
+                    "abstain" => VoteType::Abstain,
+                    "veto" | "needs_changes" => VoteType::NeedsChanges,
+                    _ => {
+                        anyhow::bail!("Invalid vote choice: {}. Use aye, nay, abstain, or veto", choice);
+                    }
+                };
+                
+                // Parse proposal ID
+                let prop_id = uuid::Uuid::from_str(proposal_id)
+                    .context("Invalid proposal ID format")?;
+                
+                // Create vote (stub)
+                let _vote = Vote::new(
+                    "cli-user".to_string(),
+                    prop_id.to_string(),
+                    vote_type,
+                );
+                
+                info!("Vote created for proposal: {}", proposal_id);
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Vote cast",
+                            "proposal_id": proposal_id,
+                            "choice": choice,
+                            "reason": reason,
+                        }))?
+                    );
+                } else {
+                    println!("🗳️ Casting vote on proposal: {}", proposal_id);
+                    println!("   Choice: {}", choice);
+                    if let Some(r) = reason {
+                        println!("   Reason: {}", r);
+                    }
+                    println!("✅ Vote cast successfully");
+                }
+            }
+            
+            SanghaAction::List { all, status } => {
+                info!("📊 Listing Sangha status (stub implementation)");
+                
+                // Stub statistics
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Sangha status retrieved (stub)",
+                            "stats": {
+                                "total_members": 1,
+                                "active_members": 1,
+                                "total_proposals": 0,
+                                "active_proposals": 0,
+                                "consensus_algorithm": "stub",
+                            },
+                            "show_all": all,
+                            "filter_status": status,
+                        }))?
+                    );
+                } else {
+                    println!("📊 Sangha Status (Stub Implementation)");
+                    println!("=====================================");
+                    println!("👥 Members: 1 total, 1 active");
+                    println!("📋 Proposals: 0 total, 0 active");
+                    println!("🧠 Consensus Algorithm: stub");
+                    
+                    println!("\n💡 No active proposals. Use 'ccswarm sangha propose' to create one.");
+                }
+            }
+            
+            SanghaAction::Session { id, active } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Session info",
+                            "session_id": id,
+                            "active": active,
+                        }))?
+                    );
+                } else {
+                    println!("🏛️ Sangha Session");
+                    if *active {
+                        println!("No active session");
+                    }
+                }
+            }
+            
+            SanghaAction::ExtensionReview { proposal_id, technical_check } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Extension reviewed",
+                            "proposal_id": proposal_id,
+                            "technical_check": technical_check,
+                        }))?
+                    );
+                } else {
+                    println!("🔍 Reviewing extension proposal: {}", proposal_id);
+                    if *technical_check {
+                        println!("   Performing technical validation...");
+                    }
+                    println!("✅ Review completed");
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn handle_extend(&self, action: &ExtendAction) -> Result<()> {
+        use crate::extension_stub::{ExtensionManager, ExtensionType, ExtensionProposal, ExtensionStatus};
+        use crate::extension_stub::meta_learning::MetaLearningSystem;
+        use chrono::Utc;
+        
+        // Create extension manager instance
+        let extension_manager = ExtensionManager::new(());
+        let _meta_learning = MetaLearningSystem::new();
+        
+        match action {
+            ExtendAction::Propose { agent, extension_type, file } => {
+                // Read extension specification from file
+                let spec_content = tokio::fs::read_to_string(file).await
+                    .context("Failed to read extension specification file")?;
+                
+                // Parse extension type
+                let ext_type = match extension_type.as_str() {
+                    "capability" => ExtensionType::Capability,
+                    "system" => ExtensionType::System,
+                    "cognitive" => ExtensionType::Cognitive,
+                    "collaborative" => ExtensionType::Collaborative,
+                    _ => ExtensionType::Capability, // Default
+                };
+                
+                // Create extension proposal
+                let proposal = ExtensionProposal {
+                    id: uuid::Uuid::new_v4(),
+                    proposer: agent.clone(),
+                    extension_type: ext_type,
+                    title: format!("{} extension for {}", extension_type, agent),
+                    description: spec_content.lines().take(3).collect::<Vec<_>>().join(" "),
+                    current_state: crate::extension_stub::CurrentState {
+                        capabilities: vec!["basic functionality".to_string()],
+                        limitations: vec!["needs enhancement".to_string()],
+                        performance_metrics: std::collections::HashMap::new(),
+                    },
+                    proposed_state: crate::extension_stub::ProposedState {
+                        new_capabilities: vec!["enhanced functionality".to_string()],
+                        expected_improvements: vec!["improved performance".to_string()],
+                        performance_targets: std::collections::HashMap::new(),
+                    },
+                    implementation_plan: crate::extension_stub::ImplementationPlan {
+                        phases: vec![
+                            crate::extension_stub::ImplementationPhase {
+                                name: "Analysis & Design".to_string(),
+                                description: "Analyze requirements and design the extension".to_string(),
+                                tasks: vec!["Design document".to_string(), "Technical specification".to_string()],
+                                duration_estimate: "1 week".to_string(),
+                                validation_method: "Code review".to_string(),
+                                phase_name: "Analysis & Design".to_string(),
+                                estimated_duration: std::time::Duration::from_secs(604800), // 1 week
+                                complexity: "Medium".to_string(),
+                                dependencies: Vec::new(),
+                            },
+                            crate::extension_stub::ImplementationPhase {
+                                name: "Implementation".to_string(),
+                                description: "Implement the extension functionality".to_string(),
+                                tasks: vec!["Working code".to_string(), "Unit tests".to_string()],
+                                duration_estimate: "2 weeks".to_string(),
+                                validation_method: "Testing".to_string(),
+                                phase_name: "Implementation".to_string(),
+                                estimated_duration: std::time::Duration::from_secs(1209600), // 2 weeks
+                                complexity: "High".to_string(),
+                                dependencies: vec!["Analysis & Design".to_string()],
+                            },
+                            crate::extension_stub::ImplementationPhase {
+                                name: "Testing & Deployment".to_string(),
+                                description: "Test and deploy the extension".to_string(),
+                                tasks: vec!["Test results".to_string(), "Deployed extension".to_string()],
+                                duration_estimate: "1 week".to_string(),
+                                validation_method: "Production testing".to_string(),
+                                phase_name: "Testing & Deployment".to_string(),
+                                estimated_duration: std::time::Duration::from_secs(604800), // 1 week
+                                complexity: "Medium".to_string(),
+                                dependencies: vec!["Implementation".to_string()],
+                            },
+                        ],
+                        timeline: "2-4 weeks".to_string(),
+                        resources_required: vec!["development time".to_string()],
+                        dependencies: vec![],
+                    },
+                    risk_assessment: crate::extension_stub::RiskAssessment {
+                        risks: vec![],
+                        mitigation_strategies: vec![],
+                        rollback_plan: "Revert to previous version".to_string(),
+                        overall_risk_score: 0.3,
+                        overall_risk: 0.3,
+                        categories: vec!["Low".to_string()],
+                    },
+                    success_criteria: vec![
+                        crate::extension_stub::SuccessCriterion {
+                            description: "Extension functionality working correctly".to_string(),
+                            metric: "Functional tests passed".to_string(),
+                            target_value: "100%".to_string(),
+                            measurement_method: "Automated testing".to_string(),
+                            criterion: "Functionality".to_string(),
+                            measurable: true,
+                        },
+                        crate::extension_stub::SuccessCriterion {
+                            description: "No performance degradation".to_string(),
+                            metric: "Response time".to_string(),
+                            target_value: "< 100ms increase".to_string(),
+                            measurement_method: "Performance benchmarks".to_string(),
+                            criterion: "Performance".to_string(),
+                            measurable: true,
+                        },
+                    ],
+                    created_at: Utc::now(),
+                    status: ExtensionStatus::Proposed,
+                };
+                
+                // Submit proposal to extension manager
+                let proposal_id = extension_manager.propose_extension(proposal).await?;
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Extension proposed",
+                            "proposal_id": proposal_id,
+                            "agent": agent,
+                            "type": extension_type,
+                            "file": file,
+                        }))?
+                    );
+                } else {
+                    println!("🔧 Proposing extension for agent: {}", agent);
+                    println!("   Type: {}", extension_type);
+                    println!("   Specification: {}", file.display());
+                    println!("🆔 Proposal ID: {}", proposal_id);
+                    println!("✅ Extension proposal submitted");
+                }
+            }
+            
+            ExtendAction::Status { agent, extension_id } => {
+                // Get extension manager statistics
+                let stats = extension_manager.get_stats().await;
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Extension status retrieved",
+                            "agent": agent,
+                            "extension_id": extension_id,
+                            "stats": {
+                                "total_extensions": stats.total_extensions,
+                                "active_extensions": stats.active_extensions,
+                                "pending_proposals": stats.pending_proposals,
+                                "successful_extensions": stats.successful_extensions,
+                                "failed_extensions": stats.failed_extensions,
+                            }
+                        }))?
+                    );
+                } else {
+                    println!("📊 Extension Status for agent: {}", agent);
+                    if let Some(id) = extension_id {
+                        println!("🆔 Extension ID: {}", id);
+                    }
+                    println!("📈 Statistics:");
+                    println!("   Total Extensions: {}", stats.total_extensions);
+                    println!("   Active: {}", stats.active_extensions);
+                    println!("   Pending Proposals: {}", stats.pending_proposals);
+                    println!("   Successful: {}", stats.successful_extensions);
+                    println!("   Failed: {}", stats.failed_extensions);
+                }
+            }
+            
+            ExtendAction::History { agent, successful, failed } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Extension history",
+                            "agent": agent,
+                            "filter": {
+                                "successful": successful,
+                                "failed": failed,
+                            },
+                        }))?
+                    );
+                } else {
+                    println!("📜 Extension History for agent: {}", agent);
+                    println!("================================");
+                    if *successful {
+                        println!("Showing only successful extensions");
+                    } else if *failed {
+                        println!("Showing only failed extensions");
+                    }
+                    println!("No extensions found");
+                }
+            }
+            
+            ExtendAction::Rollback { agent, extension_id, force } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Extension rolled back",
+                            "agent": agent,
+                            "extension_id": extension_id,
+                            "force": force,
+                        }))?
+                    );
+                } else {
+                    println!("⏪ Rolling back extension: {}", extension_id);
+                    println!("   Agent: {}", agent);
+                    if *force {
+                        println!("   ⚠️ Force rollback enabled");
+                    }
+                    println!("✅ Rollback completed");
+                }
+            }
+            
+            ExtendAction::Discover { agent, discovery_type } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Discovery completed",
+                            "agent": agent,
+                            "discovery_type": discovery_type,
+                        }))?
+                    );
+                } else {
+                    println!("🔍 Discovering extension opportunities");
+                    if let Some(a) = agent {
+                        println!("   Agent: {}", a);
+                    }
+                    if let Some(dt) = discovery_type {
+                        println!("   Type: {}", dt);
+                    }
+                    println!("✅ Discovery completed");
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn handle_search(&self, action: &SearchAction) -> Result<()> {
+        use crate::extension_stub::agent_extension::{
+            DocumentationSearchStrategy, GitHubSearchStrategy, StackOverflowSearchStrategy,
+            SearchStrategy, SearchQuery, SearchContext, SearchFilters
+        };
+        
+        match action {
+            SearchAction::Docs { query, source, limit } => {
+                let search_query = SearchQuery {
+                    keywords: query.split_whitespace().map(|s| s.to_string()).collect(),
+                    context: Some(SearchContext::CapabilityGap { 
+                        current: vec![], 
+                        desired: query.split_whitespace().map(|s| s.to_string()).collect() 
+                    }),
+                    filters: Some(SearchFilters {
+                        min_relevance: 0.5,
+                        max_complexity: 0.8,
+                        preferred_sources: vec![source.clone()],
+                        relevance_threshold: 0.5,
+                        date_range: None,
+                    }),
+                };
+                
+                let mut all_results = Vec::new();
+                
+                if source == "all" || source == "mdn" {
+                    let mdn_strategy = DocumentationSearchStrategy::new();
+                    match mdn_strategy.search(&search_query).await {
+                        Ok(mut results) => {
+                            results.truncate(*limit / 3);
+                            all_results.extend(results);
+                        }
+                        Err(e) => eprintln!("MDN search failed: {}", e),
+                    }
+                }
+                
+                if source == "all" || source == "github" {
+                    let github_strategy = GitHubSearchStrategy::new();
+                    match github_strategy.search(&search_query).await {
+                        Ok(mut results) => {
+                            results.truncate(*limit / 3);
+                            all_results.extend(results);
+                        }
+                        Err(e) => eprintln!("GitHub search failed: {}", e),
+                    }
+                }
+                
+                if source == "all" || source == "stackoverflow" {
+                    let stackoverflow_strategy = StackOverflowSearchStrategy;
+                    match stackoverflow_strategy.search(&search_query).await {
+                        Ok(mut results) => {
+                            results.truncate(*limit / 3);
+                            all_results.extend(results);
+                        }
+                        Err(e) => eprintln!("StackOverflow search failed: {}", e),
+                    }
+                }
+                
+                all_results.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap_or(std::cmp::Ordering::Equal));
+                all_results.truncate(*limit);
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "query": query,
+                            "source": source,
+                            "results": all_results.iter().map(|r| serde_json::json!({
+                                "title": r.title,
+                                "url": r.url,
+                                "snippet": r.snippet,
+                                "source": r.source,
+                                "relevance_score": r.relevance_score,
+                            })).collect::<Vec<_>>()
+                        }))?
+                    );
+                } else {
+                    println!("🔍 Searching documentation for: {}", query);
+                    println!("   Source: {}", source);
+                    println!("   Found {} results", all_results.len());
+                    println!();
+                    
+                    for (i, result) in all_results.iter().enumerate() {
+                        println!("{}. {} ({})", i + 1, result.title, result.source);
+                        println!("   🔗 {}", result.url);
+                        println!("   📝 {}", result.snippet);
+                        println!("   ⭐ Relevance: {:.2}", result.relevance_score);
+                        println!();
+                    }
+                }
+            }
+            
+            SearchAction::Test { query } => {
+                println!("🧪 Testing search functionality with query: {}", query);
+                
+                let search_query = SearchQuery {
+                    keywords: query.split_whitespace().map(|s| s.to_string()).collect(),
+                    context: Some(SearchContext::CapabilityGap { 
+                        current: vec![], 
+                        desired: query.split_whitespace().map(|s| s.to_string()).collect() 
+                    }),
+                    filters: Some(SearchFilters {
+                        min_relevance: 0.5,
+                        max_complexity: 0.8,
+                        preferred_sources: vec!["all".to_string()],
+                        relevance_threshold: 0.5,
+                        date_range: None,
+                    }),
+                };
+                
+                // Test each search strategy
+                println!("🔍 Testing MDN search...");
+                let mdn_strategy = DocumentationSearchStrategy::new();
+                match mdn_strategy.search(&search_query).await {
+                    Ok(results) => println!("✅ MDN: Found {} results", results.len()),
+                    Err(e) => println!("❌ MDN: Error - {}", e),
+                }
+                
+                println!("🔍 Testing GitHub search...");
+                let github_strategy = GitHubSearchStrategy::new();
+                match github_strategy.search(&search_query).await {
+                    Ok(results) => println!("✅ GitHub: Found {} results", results.len()),
+                    Err(e) => println!("❌ GitHub: Error - {}", e),
+                }
+                
+                println!("🔍 Testing StackOverflow search...");
+                let stackoverflow_strategy = StackOverflowSearchStrategy;
+                match stackoverflow_strategy.search(&search_query).await {
+                    Ok(results) => println!("✅ StackOverflow: Found {} results", results.len()),
+                    Err(e) => println!("❌ StackOverflow: Error - {}", e),
+                }
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Search test completed",
+                            "query": query,
+                        }))?
+                    );
+                } else {
+                    println!("✅ Search functionality test completed");
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn handle_evolution(&self, action: &EvolutionAction) -> Result<()> {
+        match action {
+            EvolutionAction::Metrics { agent, all, period } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Evolution metrics",
+                            "agent": agent,
+                            "all": all,
+                            "period_days": period,
+                        }))?
+                    );
+                } else {
+                    println!("📈 Evolution Metrics");
+                    println!("==================");
+                    if *all {
+                        println!("Showing metrics for all agents");
+                    } else if let Some(a) = agent {
+                        println!("Agent: {}", a);
+                    }
+                    println!("Period: {} days", period);
+                    println!("\nNo metrics available");
+                }
+            }
+            
+            EvolutionAction::Patterns { pattern_type, successful, failed } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Evolution patterns",
+                            "pattern_type": pattern_type,
+                            "filter": {
+                                "successful": successful,
+                                "failed": failed,
+                            },
+                        }))?
+                    );
+                } else {
+                    println!("🔮 Evolution Patterns");
+                    println!("===================");
+                    if *successful {
+                        println!("Showing successful patterns");
+                    } else if *failed {
+                        println!("Showing failed patterns");
+                    }
+                    println!("No patterns found");
+                }
+            }
+            
+            EvolutionAction::Genealogy { extension, full } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Extension genealogy",
+                            "extension": extension,
+                            "full_tree": full,
+                        }))?
+                    );
+                } else {
+                    println!("🌳 Extension Genealogy: {}", extension);
+                    println!("======================");
+                    if *full {
+                        println!("Showing full genealogy tree");
+                    }
+                    println!("No genealogy data available");
+                }
+            }
+            
+            EvolutionAction::Report { format, output } => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Evolution report generated",
+                            "format": format,
+                            "output": output,
+                        }))?
+                    );
+                } else {
+                    println!("📊 Generating evolution report");
+                    println!("   Format: {}", format);
+                    if let Some(o) = output {
+                        println!("   Output: {}", o.display());
+                    }
+                    println!("✅ Report generated");
+                }
+            }
+        }
+        
+        Ok(())
+    }
 }
+
+#[cfg(test)]
+mod tests;

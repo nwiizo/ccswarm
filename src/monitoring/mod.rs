@@ -428,6 +428,9 @@ impl Default for MonitoringSystem {
     }
 }
 
+#[cfg(test)]
+mod tests;
+
 /// Simple console output subscriber for debugging
 pub struct ConsoleOutputSubscriber {
     id: String,

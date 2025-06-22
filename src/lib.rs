@@ -2,12 +2,19 @@ pub mod agent;
 pub mod auto_accept;
 pub mod cli;
 pub mod config;
+// Temporarily disabled due to Docker dependency issues
+// pub mod container;
 pub mod coordination;
+// Temporarily disabled due to compilation issues
+// pub mod extension;
+pub mod extension_stub;
 pub mod git;
 pub mod identity;
 pub mod monitoring;
 pub mod orchestrator;
 pub mod providers;
+// Temporarily disabled due to compilation issues  
+// pub mod sangha;
 pub mod session;
 pub mod streaming;
 pub mod tmux;

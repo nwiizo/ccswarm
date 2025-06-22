@@ -60,6 +60,9 @@ pub struct MasterClaude {
 
     /// LLM-based quality judge
     quality_judge: Arc<RwLock<LLMQualityJudge>>,
+
+    /// Isolation mode for agents
+    isolation_mode: crate::agent::IsolationMode,
 }
 
 /// Review history entry
@@ -136,12 +139,21 @@ impl MasterClaude {
             worktree_manager,
             state,
             quality_judge,
+            isolation_mode: crate::agent::IsolationMode::default(),
         })
+    }
+
+    /// Set isolation mode for all agents
+    pub fn set_isolation_mode(&mut self, mode: crate::agent::IsolationMode) {
+        self.isolation_mode = mode;
     }
 
     /// Initialize the orchestrator and all agents
     pub async fn initialize(&self) -> Result<()> {
-        info!("Initializing Master Claude orchestrator: {}", self.id);
+        info!(
+            "Initializing Master Claude orchestrator: {} with isolation mode: {:?}",
+            self.id, self.isolation_mode
+        );
 
         // Initialize agents based on configuration
         for (agent_name, agent_config) in &self.config.agents {
@@ -161,12 +173,13 @@ impl MasterClaude {
                 }
             };
 
-            // Create agent
-            let mut agent = ClaudeCodeAgent::new(
+            // Create agent with isolation mode
+            let mut agent = ClaudeCodeAgent::new_with_isolation(
                 role,
                 &PathBuf::from(&self.config.project.name),
                 &agent_config.branch,
                 agent_config.claude_config.clone(),
+                self.isolation_mode.clone(),
             )
             .await?;
 
@@ -792,7 +805,7 @@ impl MasterClaude {
 
                             // Check if quality standards are met
                             if !evaluation.passes_standards
-                                || evaluation.overall_score < standards.min_test_coverage
+                                || evaluation.overall_score < (standards.min_test_coverage as f64 / 100.0)
                             {
                                 // Convert evaluation to issues
                                 let issues = judge_guard.evaluation_to_issues(&evaluation);
@@ -862,7 +875,7 @@ impl MasterClaude {
                     // Basic placeholder logic
                     let quality_score = 0.92; // Placeholder
 
-                    if quality_score < standards.min_test_coverage {
+                    if quality_score < (standards.min_test_coverage as f64 / 100.0) {
                         warn!(
                             "Task {} from agent {} failed quality standards: score={}",
                             task.id, agent.identity.agent_id, quality_score

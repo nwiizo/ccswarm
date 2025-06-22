@@ -470,10 +470,10 @@ impl AutoCreateEngine {
                     "code_review".to_string(),
                 ],
                 quality_standards: crate::identity::QualityStandards {
-                    min_test_coverage: 0.9,
+                    min_test_coverage: 90.0,
                     max_complexity: 15,
                     security_scan_required: true,
-                    performance_threshold: std::time::Duration::from_secs(5),
+                    performance_threshold_secs: 5,
                 },
             },
             workspace_path: output_path.to_path_buf(),

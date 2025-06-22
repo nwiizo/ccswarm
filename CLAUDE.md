@@ -1,267 +1,156 @@
-# CLAUDE.md - ccswarm v0.2.0 Development Guide
+# CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with the ccswarm codebase. Updated for v0.2.0 with enhanced quality review, improved session management, and comprehensive command documentation.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 🚀 Essential Commands
+## ccswarm - AI Multi-Agent Orchestration System
 
-### Building and Testing
+ccswarm orchestrates specialized AI agents (Frontend, Backend, DevOps, QA) using a Master Claude coordinator. Built in Rust for performance and reliability.
+
+## Essential Commands
+
+### Build & Test
 ```bash
 # Build
-cargo build                      # Debug build
-cargo build --release           # Release build
+cargo build                    # Debug build
+cargo build --release         # Release build
 
-# Test
-cargo test                      # All tests
-cargo test -- --nocapture      # With output
-cargo test identity            # Specific module
+# Test  
+cargo test                    # All tests
+cargo test -- --nocapture    # Show print output
+cargo test identity          # Test specific module
 cargo test --test integration_tests  # Integration tests only
 
-# Code Quality
-cargo fmt                       # Format
-cargo clippy -- -D warnings     # Lint (fail on warnings)
-cargo check                     # Quick check
-cargo doc --no-deps --open      # Generate docs
+# Code Quality (run before commits)
+cargo fmt && cargo clippy -- -D warnings && cargo test
 ```
 
 ### Running ccswarm
 ```bash
 # Initialize project
 cargo run -- init --name "MyProject" --agents frontend,backend,devops
-cargo run -- init --name "AiderProject" --template aider-focused
 
-# Core operations
-cargo run -- start               # Start orchestrator
-cargo run -- tui                 # Terminal UI with real-time monitoring
-cargo run -- status --detailed   # System status
+# Start system
+cargo run -- start           # Start orchestrator
+cargo run -- tui            # Terminal UI for monitoring
 
-# Auto-create applications from natural language
+# Create applications from natural language
 cargo run -- auto-create "Create TODO app" --output ./my_app
-cargo run -- auto-create "Create blog with auth" --output ./blog
-cargo run -- auto-create "E-commerce site" --template ecommerce
 
-# Task delegation
-cargo run -- delegate analyze "Create login form" --verbose
-cargo run -- delegate task "Add auth" --agent backend --priority high
+# Task management
+cargo run -- task "Implement auth [high] [feature]"  # Add task with modifiers
+cargo run -- delegate task "Add authentication" --agent backend
+cargo run -- task list --status pending              # View tasks
 
-# Session management
-cargo run -- session list
-cargo run -- session attach <session-id>
-cargo run -- session pause <session-id>
-cargo run -- worktree list
+# Quality review
+cargo run -- review status              # Check review system status
+cargo run -- review trigger --all       # Manually trigger reviews
+cargo run -- review history --failed    # View failed reviews
 
-# Monitoring
-cargo run -- monitor --agent backend --filter "error,warning"
-RUST_LOG=debug cargo run -- start  # Debug mode
+# Session management (93% token savings!)
+cargo run -- session list               # View active sessions
+cargo run -- session stats --show-savings  # Session statistics
+
+# NEW: Sangha Collective Intelligence (v0.3.0)
+cargo run -- sangha propose --type extension --title "React Server Components"
+cargo run -- sangha vote <proposal-id> aye --reason "Improves performance"
+cargo run -- sangha list --status active
+
+# NEW: Agent Self-Extension with AI Search (v0.3.0)
+cargo run -- search mdn "react server components"
+cargo run -- search github "rust async patterns"
+cargo run -- search stackoverflow "jwt authentication"
+cargo run -- extend propose --title "Add RSC Support"
+cargo run -- extend status
 ```
 
-## 🏗️ Architecture Overview (v0.2.0)
-
-ccswarm is an AI-powered multi-agent orchestration system with enhanced features:
-
-1. **Session-Persistent Architecture** - 93% token reduction with improved pooling and load balancing
-2. **Master Delegation System** - Intelligent task analysis with enhanced routing algorithms
-3. **Auto-Create System** - Generate complete applications with expanded template support
-4. **Multi-Provider Support** - Claude Code, Aider, OpenAI Codex, Custom tools with better configuration
-5. **Quality Review System** - Automated quality checks with iterative remediation tracking
-6. **Enhanced TUI** - Real-time monitoring with improved task management and filtering
-
-### Core Modules (`src/`)
-- `agent/` - Agent implementations with persistent sessions
-- `identity/` - Agent roles and boundary checking (200 tokens vs 2000+)
-- `session/` - Session persistence, pooling, and worktree integration
-- `orchestrator/` - Master Claude, delegation, and auto-create logic
-- `providers/` - Multi-provider support (Claude Code, Aider, Codex)
-- `auto_accept/` - Safe automation with risk assessment (1-10 scale)
-- `monitoring/` & `streaming/` - Real-time output tracking
-- `tui/` - Terminal UI with live monitoring
-- `git/` - Worktree-based agent isolation
-- `coordination/` - Inter-agent communication bus
-- `tmux/` - tmux session management for agents
-
-### Agent Specializations
-```rust
-pub enum AgentRole {
-    Frontend,  // UI, React, styling, client-side only
-    Backend,   // APIs, server, database only
-    DevOps,    // Infrastructure, Docker, CI/CD only
-    QA,        // Testing, quality assurance only
-    Master,    // Orchestration, no direct coding
-}
-```
-
-## 💡 Session-Persistent Architecture
-
-### Session Management Features
-- Conversation history preservation (93% token reduction)
-- Session pooling with load balancing
-- Batch task execution for efficiency
-- Auto-scaling based on workload
-
-### Key Components
-- `src/session/persistent.rs` - Conversation history preservation
-- `src/session/worktree_session.rs` - Git worktree integration
-- `src/session/session_pool.rs` - Load balancing and auto-scaling
-- `src/session/manager.rs` - High-level session orchestration
-
-### Usage Pattern
-```rust
-// Single task
-let result = manager.execute_task(role, task, config).await?;
-
-// Batch execution (maximum efficiency)
-let results = manager.execute_task_batch(
-    role,
-    vec![task1, task2, task3, task4, task5],
-    config,
-).await?;
-
-// Session reuse
-let session = manager.get_or_create_session(role).await?;
-```
-
-## 🎯 Master Delegation System
-
-### Delegation Strategies
-1. **ContentBased** - Keyword and technology matching
-2. **LoadBalanced** - Workload distribution
-3. **ExpertiseBased** - Historical performance
-4. **WorkflowBased** - Task dependencies
-5. **Hybrid** (default) - Combines all strategies
-
-### Delegation Flow
-```
-Task → Master Analysis → Agent Assignment → Execution → Quality Review
-         ↓                    ↓
-    Confidence Score     Provider Selection
-```
-
-## 🚀 Auto-Create System
-
-### Supported Applications
-- TODO apps with CRUD operations
-- Blogs with authentication
-- E-commerce with shopping cart
-- Real-time chat with WebSockets
-- Custom applications via AI analysis
-
-### Generated Structure
-```
-my_app/
-├── index.html       # React entry
-├── app.js          # Components
-├── server.js       # Express API
-├── package.json    # Dependencies
-├── Dockerfile      # Containerization
-├── docker-compose.yml # Multi-container
-└── README.md       # Documentation
-```
-
-### Auto-Create Templates
-Located in `src/auto_create/templates/`:
-- `todo.rs` - Full CRUD TODO application
-- `blog.rs` - Blog with user authentication
-- `ecommerce.rs` - Shopping cart and catalog
-- `chat.rs` - Real-time WebSocket chat
-
-## 🔧 Key Implementation Patterns
-
-### Agent Task Flow
-1. Receive task from coordination bus
-2. Check provider readiness and auto-accept safety
-3. Validate task boundaries using identity system
-4. Execute in isolated tmux session
-5. Stream output in real-time
-6. Report results with metrics
-
-### Provider Configuration
-```json
-{
-  "providers": {
-    "claude_code": {
-      "command": "claude-code-agent",
-      "api_key_env": "ANTHROPIC_API_KEY",
-      "think_mode": "ultrathink"
-    },
-    "aider": {
-      "command": "aider",
-      "args": ["--model", "claude-3-5-sonnet"],
-      "auto_commit": true
-    }
-  }
-}
-```
-
-### Identity Management (v0.2.0 Enhanced)
-- Each agent maintains strict role boundaries
-- CLAUDE.md files reinforce agent identity
-- Continuous monitoring prevents drift
-- Automatic correction for boundary violations
-- Located in `examples/claude-md-templates/`
-- Improved boundary checking algorithms
-- Better handling of cross-domain tasks
-
-### Safety Features (v0.2.0 Enhanced)
-- Auto-accept with improved risk assessment (1-10 scale)
-- Extended file protection patterns (`.env`, `*.key`, `*.pem`, etc.)
-- Emergency stop system with graceful shutdown
-- Enhanced pre/post execution validation
-- Comprehensive audit trails via session tracking
-- Better handling of sensitive operations
-- Improved error recovery mechanisms
-
-## 📊 TUI Commands (v0.2.0 Enhanced)
-
-Access command mode with 'c':
-- `task <description>` - Add task with enhanced modifiers
-- `agent <type>` - Create agent (frontend/backend/devops/qa)
-- `filter <pattern>` - Advanced output filtering
-- `session <cmd>` - Session management (list/attach/pause/resume/stats)
-- `worktree <cmd>` - Worktree operations (list/clean/status)
-- `monitor <agent>` - Focus on specific agent with metrics
-- `review <cmd>` - Quality review commands (status/history/trigger)
-- `delegate <cmd>` - Delegation commands (analyze/task/stats)
-- `help` - Show all commands with descriptions
-
-### Task Modifiers (Enhanced)
-- `[high]`, `[medium]`, `[low]` - Priority
-- `[bug]`, `[feature]`, `[test]`, `[docs]`, `[refactor]` - Type
-- `[auto]` - Enable auto-accept if safe
-- `[review]` - Force quality review after completion
-- `[urgent]` - Bypass queue for critical tasks
-
-## 🧪 Testing (v0.2.0)
-
+### Development Mode
 ```bash
-# Module tests
-cargo test session        # Session management
-cargo test auto_accept    # Safety validation
-cargo test monitoring     # Real-time streaming
-cargo test provider       # Multi-provider
-cargo test identity       # Agent boundaries
-cargo test quality_review # Quality review system
-cargo test delegation     # Task delegation
-cargo test tui           # Terminal UI
+# Debug logging
+RUST_LOG=debug cargo run -- start
+RUST_LOG=ccswarm::session=trace cargo run -- start  # Session debugging
 
-# Integration tests
-cargo test --test integration_tests
-cargo test --test quality_integration_tests  # New in v0.2.0
+# Monitor tmux sessions
+tmux ls                      # View active agent sessions
+tmux attach -t <session>     # Attach to agent session
 
-# Examples (now in demos/)
-cargo run --example todo_app_builder         # See demos/todo-app/
-cargo run --example monitoring_demo          # See demos/multi-agent/
-cargo run --example session_persistent_demo  # See demos/session-persistence/
-cargo run --example auto_create_demo         # See demos/auto-create/
-cargo run --example quality_review_demo      # See demos/quality-review/
+# Stop orchestrator
+cargo run -- stop            # Graceful shutdown
+
+# View logs
+cargo run -- logs --tail 50  # Recent logs
+cargo run -- logs --filter error,warning  # Filtered logs
 ```
 
-## ⚙️ Configuration
+## Architecture Overview
 
-### ccswarm.json Structure
+### Core Concepts
+1. **Master-Agent Pattern**: Master Claude analyzes tasks and delegates to specialized agents
+2. **Session Persistence**: Maintains conversation history, reducing API tokens by 93%
+3. **Git Worktree Isolation**: Each agent works in isolated git worktrees
+4. **Provider Abstraction**: Supports Claude Code, Aider, OpenAI Codex, custom tools
+
+### Module Structure
+```
+src/
+├── agent/          # Agent task execution and lifecycle
+├── identity/       # Agent role boundaries (Frontend/Backend/DevOps/QA)
+├── session/        # Session persistence and pooling
+├── orchestrator/   # Master Claude and delegation logic
+├── providers/      # AI provider implementations
+├── auto_accept/    # Safe automation with risk assessment
+├── tui/           # Terminal UI implementation
+├── git/           # Worktree management
+├── coordination/   # Inter-agent communication bus
+├── sangha/         # Collective intelligence and democratic decision-making
+└── extension/      # Self-extension with AI search capabilities
+    ├── agent_extension.rs  # Search strategies and learning
+    ├── system_extension.rs # System-wide capability management
+    └── meta_learning.rs    # Pattern recognition and knowledge base
+```
+
+### Key Design Patterns
+
+1. **Agent Boundaries**: Each agent has strict role constraints enforced via identity system
+   - Frontend: UI, React, client-side only
+   - Backend: APIs, server, database only
+   - DevOps: Infrastructure, Docker, CI/CD only
+   - QA: Testing and quality assurance only
+
+2. **Session Management**: 
+   - Sessions persist across tasks (50 message history)
+   - Session pooling with automatic load balancing
+   - Batch task execution for efficiency
+
+3. **Quality Review** (v0.2.2):
+   - LLM evaluates code on 8 dimensions (correctness, maintainability, security, etc.)
+   - Automatic remediation task generation for failed reviews
+   - Runs every 30 seconds on completed tasks
+   - Default standards: 85% test coverage, complexity < 10
+   - Confidence scoring 0.0-1.0
+
+4. **Sangha Collective Intelligence** (v0.3.0):
+   - Buddhist-inspired democratic decision-making system
+   - Three consensus algorithms: Simple (51%), Byzantine (67%), Proof of Stake
+   - Structured proposals with voting, deliberation, and execution phases
+   - Cross-agent learning and swarm-wide adaptation
+
+5. **Self-Extension Framework** (v0.3.0):
+   - Agents actively search GitHub, MDN, Stack Overflow for capabilities
+   - AI-powered capability discovery and proposal generation
+   - Risk assessment and safe implementation protocols
+   - Knowledge base with pattern recognition and meta-learning
+
+6. **Safe Automation**:
+   - Risk assessment 1-10 scale
+   - File protection patterns (`.env`, `*.key`, etc.)
+   - Emergency stop capability
+
+### Configuration (ccswarm.json)
 ```json
 {
   "project": {
     "name": "MyProject",
-    "master_claude_instructions": "Orchestrate agents..."
+    "master_claude_instructions": "Custom orchestration instructions"
   },
   "agents": [
     {
@@ -270,140 +159,128 @@ cargo run --example quality_review_demo      # See demos/quality-review/
       "provider": "claude_code",
       "auto_accept": { "enabled": true, "risk_threshold": 5 }
     }
-  ],
-  "coordination": {
-    "method": "JSON_FILES",
-    "delegation_strategy": "Hybrid"
-  },
-  "session_management": {
-    "persistent_sessions": true,
-    "max_sessions_per_role": 3
-  }
+  ]
 }
 ```
 
-### Migration from Legacy Config
+## Testing Approach
+
 ```bash
-# Automatic migration
-cargo run -- config migrate --input old-config.json --output ccswarm.json
+# Unit tests by module
+cargo test session       # Session management
+cargo test identity      # Agent boundaries
+cargo test orchestrator  # Master logic
 
-# Validate configuration
-cargo run -- config validate --file ccswarm.json
+# Integration tests
+cargo test --test integration_tests
+cargo test --test quality_integration_tests
 
-# Generate template with all options
-cargo run -- config generate --template full --output ccswarm-full.json
+# Run specific test
+cargo test test_name -- --exact --nocapture
 ```
 
-## ⚠️ Critical Notes (v0.2.0)
+## Common Development Tasks
 
-### Performance
-- Session reuse reduces API costs by ~93% with improved pooling
-- Batch processing amortizes identity overhead
-- Git worktree isolation requires disk space (~100MB per agent)
-- JSON coordination optimized for <100ms latency
-- Real-time monitoring adds <3% overhead with v0.2.0 optimizations
-- Quality review adds minimal overhead with async processing
+### Adding New Provider
+1. Implement `Provider` trait in `src/providers/`
+2. Add provider config to `ProviderType` enum
+3. Update `ccswarm.json` schema
+4. Add integration tests
 
-### Security
-- tmux session isolation per agent
-- API key sandboxing per provider
-- Pattern-based file protection
-- Audit trails via session tracking
-- Emergency stop capability
+### Modifying Agent Behavior
+1. Update role constraints in `src/identity/`
+2. Modify CLAUDE.md template in `examples/claude-md-templates/`
+3. Test boundary enforcement with `cargo test identity`
 
-### Debugging
+### Debugging Issues
+- **Session errors**: Check `ccswarm session list`
+- **Provider failures**: Verify API keys in environment
+- **Worktree conflicts**: Run `ccswarm worktree clean`
+- **TUI issues**: Try `ccswarm tui --reset`
+- **Review failures**: Check `ccswarm review history --failed`
+- **Remediation tasks**: Use `ccswarm task list --type remediation`
+- **Sangha voting issues**: Check proposal status with `ccswarm sangha show <id>`
+- **Extension search failures**: Verify API keys and rate limits
+- **Knowledge base corruption**: Clear with `ccswarm extend reset --knowledge-base`
+
+## Performance Considerations
+
+- Session reuse reduces API costs by ~93%
+- Git worktrees require ~100MB disk space per agent
+- JSON coordination adds <100ms latency
+- TUI monitoring adds <3% overhead
+- Quality review runs async, minimal impact
+
+## Command Documentation
+
+Comprehensive command documentation is available in `.claude/commands/` directory. Each command has detailed help:
+
 ```bash
-RUST_LOG=debug cargo run -- start
-RUST_LOG=ccswarm::session=trace cargo run -- start  # Session debugging
-cargo run -- tui                                    # Real-time monitoring
-tmux ls                                            # View active sessions
-tail -f logs/ccswarm.log                           # System logs
+cargo run -- --help              # General help
+cargo run -- <command> --help    # Command-specific help
+ls .claude/commands/             # All command docs
 ```
 
-### Common Issues (v0.2.0)
-- **Session not found**: Check `ccswarm session list` or `ccswarm session stats`
-- **Provider errors**: Verify API keys with `ccswarm config validate`
-- **Worktree conflicts**: Use `ccswarm worktree clean` or `ccswarm worktree status`
-- **Auto-accept blocked**: Check risk assessment logs in `logs/safety.log`
-- **Quality review failures**: Check `ccswarm review history` for details
-- **TUI rendering issues**: Try `ccswarm tui --reset` to clear state
+## Environment Variables
 
-## 🔍 Quality Review System
-
-### Overview
-Master Claude performs automated quality reviews on completed tasks, creating remediation tasks when issues are found.
-
-### Review Process
-- **Interval**: Every 30 seconds
-- **Scope**: All completed tasks in agent history
-- **Metrics**: Test coverage, code complexity, security, documentation
-
-### Quality Standards (src/identity/mod.rs)
-```rust
-pub struct QualityStandards {
-    pub min_test_coverage: f64,      // Default: 0.85 (85%)
-    pub max_complexity: u32,         // Cyclomatic complexity limit
-    pub security_scan_required: bool,
-    pub performance_threshold: Duration,
-}
-```
-
-### Review Message Flow
-```rust
-// When quality issues are detected:
-AgentMessage::QualityIssue {
-    agent_id: String,
-    task_id: String,
-    issues: Vec<String>,  // e.g., ["Low test coverage", "High complexity"]
-}
-```
-
-### Remediation Task Creation
-When issues are found, a remediation task is automatically created:
-- **Task Type**: `TaskType::Remediation`
-- **Priority**: Always `High`
-- **Assignment**: Same agent that completed original task
-- **Parent Task**: Links to original task for tracking
-
-### Fix Instructions Mapping
-```rust
-"Low test coverage" → "Add unit tests to achieve 85% coverage"
-"High complexity" → "Refactor to reduce cyclomatic complexity"
-"Security vulnerability" → "Fix security issues and validate inputs"
-"Missing documentation" → "Add comprehensive documentation"
-```
-
-### Review History Tracking
-```rust
-pub struct ReviewHistoryEntry {
-    pub task_id: String,
-    pub agent_id: String,
-    pub review_date: DateTime<Utc>,
-    pub issues_found: Vec<String>,
-    pub remediation_task_id: Option<String>,
-    pub review_passed: bool,
-    pub iteration: u32,  // Tracks review attempts
-}
-```
-
-### Implementation Files (v0.2.0)
-- **Quality Review**: `src/orchestrator/mod.rs::perform_quality_review()`
-- **Message Handler**: `src/orchestrator/mod.rs::handle_agent_message()`
-- **Task Types**: `src/agent/task.rs` (added `Remediation` variant)
-- **Review History**: `src/orchestrator/review_history.rs`
-- **Tests**: `src/orchestrator/review_test.rs`
-- **TUI Enhancements**: `src/tui/enhanced_commands.rs`
-- **Session Pool**: `src/session/pool_v2.rs`
-
-## 📚 Command Documentation
-
-Comprehensive command documentation is now available in `.claude/commands/` directory:
-- Each command has its own markdown file
-- Includes usage, options, examples, and related commands
-- Auto-generated help from these docs
-
-Access with:
 ```bash
-ls .claude/commands/
-cat .claude/commands/init.md  # Example
+# Required API keys
+export ANTHROPIC_API_KEY="sk-..."
+export OPENAI_API_KEY="sk-..."      # If using OpenAI provider
+
+# Optional configuration
+export RUST_LOG=debug               # Debug logging
+export CCSWARM_HOME="$HOME/.ccswarm" # Config directory
 ```
+
+## Critical Implementation Notes
+
+1. **Always check agent boundaries** before task assignment
+2. **Session persistence is core** - never bypass for efficiency
+3. **tmux isolation is required** for agent safety
+4. **Auto-accept patterns must be conservative**
+5. **Quality review runs every 30 seconds** on completed tasks
+6. **Task modifiers**: `[high/medium/low]`, `[bug/feature/test/docs]`, `[auto]`, `[review]`
+7. **Sangha proposals require consensus** - use appropriate algorithm for change scope
+8. **Extension searches are rate-limited** - respect API limits for GitHub/MDN/SO
+9. **Knowledge base grows over time** - monitor storage and prune old patterns
+10. **Risk assessment is mandatory** for all self-extension proposals
+
+## New v0.3.0 Features in Detail
+
+### Sangha (Collective Intelligence)
+- **Purpose**: Democratic decision-making for agent swarms inspired by Buddhist Sangha
+- **Implementation**: Complete `src/sangha/` module with voting, consensus, and proposals
+- **CLI Commands**: `sangha propose`, `sangha vote`, `sangha list`, `sangha show`
+- **Consensus Algorithms**: Simple majority, Byzantine fault tolerant, Proof of Stake
+- **Real Examples**: React Server Components proposal with live voting system
+
+### Extension (Self-Improvement)
+- **Purpose**: Agents autonomously discover and propose new capabilities
+- **Implementation**: `src/extension/` with search strategies and learning frameworks
+- **API Integration**: Real connections to MDN, GitHub, Stack Overflow APIs
+- **CLI Commands**: `search <source> <query>`, `extend propose`, `extend status`
+- **Search Capabilities**: 
+  - MDN: `https://developer.mozilla.org/api/v1/search`
+  - GitHub: Uses `gh` CLI for repository and code search
+  - Stack Overflow: `https://api.stackexchange.com/2.3/search`
+- **Real Examples**: Live search results with relevance scoring and metadata
+
+### Search Integration Architecture
+```rust
+// Example of real API usage
+async fn search_mdn(&self, query: &SearchQuery) -> Result<Vec<SearchResult>> {
+    let url = format!("https://developer.mozilla.org/api/v1/search?q={}", 
+                     urlencoding::encode(&search_terms));
+    let response = client.get(&url).send().await?;
+    // Parse and return structured results with relevance scores
+}
+```
+
+### Proposal System Examples
+- **Sangha Proposal**: "React Server Components導入に関するSangha提案"
+- **Extension Proposal**: "フロントエンドエージェントにReact Server Components（RSC）能力を追加"
+- **Risk Assessment**: Automatic evaluation with mitigation strategies
+- **Implementation Plans**: Phased rollout with success criteria
+
+The codebase follows Rust best practices with comprehensive error handling, async/await patterns, and strong typing throughout.

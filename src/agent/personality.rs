@@ -1,7 +1,7 @@
 //! Agent personality system integrated with ccswarm
 //! Provides personality traits, skills, and adaptive behavior for agents
 
-use anyhow::Result;
+//use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -56,13 +56,25 @@ pub struct PersonalityTraits {
 }
 
 /// Communication style preferences
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CommunicationStyle {
     Direct,         // Clear, concise communication
     Collaborative,  // Consultative, team-oriented
     Analytical,     // Data-driven, detailed explanations
     Supportive,     // Encouraging, helpful tone
     Questioning,    // Inquisitive, explores options
+}
+
+impl CommunicationStyle {
+    pub fn collaboration_factor(&self) -> f32 {
+        match self {
+            CommunicationStyle::Direct => 0.6,
+            CommunicationStyle::Collaborative => 0.9,
+            CommunicationStyle::Analytical => 0.7,
+            CommunicationStyle::Supportive => 0.8,
+            CommunicationStyle::Questioning => 0.7,
+        }
+    }
 }
 
 /// Working style and preferences
@@ -73,6 +85,26 @@ pub struct WorkingStyle {
     pub quality_vs_speed: f32, // 0.0 = speed focused, 1.0 = quality focused
     pub documentation_preference: DocumentationStyle,
     pub testing_approach: TestingApproach,
+}
+
+impl WorkingStyle {
+    pub fn collaboration_factor(&self) -> f32 {
+        let base_factor = match self.work_rhythm {
+            WorkRhythm::Steady => 0.8,
+            WorkRhythm::Sprint => 0.5,
+            WorkRhythm::Iterative => 0.9,
+            WorkRhythm::Exploratory => 0.7,
+        };
+        
+        let size_factor = match self.preferred_task_size {
+            TaskSizePreference::Small => 0.6,
+            TaskSizePreference::Medium => 0.8,
+            TaskSizePreference::Large => 0.7,
+            TaskSizePreference::Adaptive => 0.9,
+        };
+        
+        (base_factor + size_factor) / 2.0
+    }
 }
 
 /// Task size preferences
@@ -238,17 +270,17 @@ impl AgentPersonality {
                     Some("Robust, scalable systems".to_string()),
                 )
             }
-            AgentRole::DevOps { platforms, .. } => {
+            AgentRole::DevOps { technologies, .. } => {
                 let mut skills = HashMap::new();
                 skills.insert("docker".to_string(), Skill::new("Docker".to_string(), 170));
                 skills.insert("kubernetes".to_string(), Skill::new("Kubernetes".to_string(), 140));
                 skills.insert("ci_cd".to_string(), Skill::new("CI/CD".to_string(), 160));
                 skills.insert("monitoring".to_string(), Skill::new("Monitoring".to_string(), 130));
                 
-                for platform in platforms {
+                for technology in technologies {
                     skills.insert(
-                        platform.to_lowercase(),
-                        Skill::new(platform.clone(), 100),
+                        technology.to_lowercase(),
+                        Skill::new(technology.clone(), 100),
                     );
                 }
 
@@ -273,17 +305,17 @@ impl AgentPersonality {
                     Some("Reliable, automated infrastructure".to_string()),
                 )
             }
-            AgentRole::QA { methodologies, .. } => {
+            AgentRole::QA { technologies, .. } => {
                 let mut skills = HashMap::new();
                 skills.insert("test_automation".to_string(), Skill::new("Test Automation".to_string(), 160));
                 skills.insert("manual_testing".to_string(), Skill::new("Manual Testing".to_string(), 180));
                 skills.insert("bug_analysis".to_string(), Skill::new("Bug Analysis".to_string(), 170));
                 skills.insert("quality_assurance".to_string(), Skill::new("Quality Assurance".to_string(), 150));
                 
-                for methodology in methodologies {
+                for technology in technologies {
                     skills.insert(
-                        methodology.to_lowercase(),
-                        Skill::new(methodology.clone(), 100),
+                        technology.to_lowercase(),
+                        Skill::new(technology.clone(), 100),
                     );
                 }
 
@@ -465,7 +497,7 @@ impl AgentPersonality {
         ];
 
         let lower_desc = description.to_lowercase();
-        let mut max_complexity = 0.2; // Base complexity
+        let mut max_complexity: f32 = 0.2; // Base complexity
 
         for (indicator, complexity) in &complexity_indicators {
             if lower_desc.contains(indicator) {
@@ -552,6 +584,33 @@ impl AgentPersonality {
             .map(|(name, _)| name.to_string())
             .collect()
     }
+    
+    /// Generate a description of the agent's personality
+    pub fn describe_personality(&self) -> String {
+        let skill_count = self.skills.len();
+        let avg_skill_level: f32 = self.skills.values()
+            .map(|s| s.experience_points as f32)
+            .sum::<f32>() / skill_count as f32;
+        
+        format!(
+            "Agent with {} skills (avg. {} XP), {} communication style, {} work rhythm",
+            skill_count,
+            avg_skill_level as u32,
+            format!("{:?}", self.traits.communication_style),
+            format!("{:?}", self.working_style.work_rhythm)
+        )
+    }
+    
+    /// Calculate composability score (how well this agent works with others)
+    pub fn composability_score(&self) -> f32 {
+        let base_score = (self.traits.collaboration + 
+                         self.traits.communication_style.collaboration_factor() +
+                         self.working_style.collaboration_factor()) / 3.0;
+        
+        // Adjust based on experience
+        let experience_factor = (self.experience_points as f32 / 1000.0).min(1.0);
+        base_score * (0.5 + 0.5 * experience_factor)
+    }
 }
 
 /// Task approach influenced by personality
@@ -587,6 +646,13 @@ impl Skill {
             success_rate: 0.7, // Start with moderate success rate
             improvement_rate: 1.0,
         }
+    }
+    
+    /// Add experience points to the skill
+    pub fn add_experience(&mut self, points: u32) {
+        self.experience_points += points;
+        self.level = SkillLevel::from_experience(self.experience_points);
+        self.last_used = Some(Utc::now());
     }
 }
 

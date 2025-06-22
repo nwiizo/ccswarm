@@ -34,7 +34,7 @@ pub struct AgentIdentity {
 }
 
 /// Agent specialization roles with their specific configurations
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
 pub enum AgentRole {
     Frontend {
         technologies: Vec<String>,
@@ -124,16 +124,29 @@ pub struct QualityStandards {
     pub min_test_coverage: f64,
     pub max_complexity: u32,
     pub security_scan_required: bool,
-    pub performance_threshold: Duration,
+    pub performance_threshold_secs: u64,
 }
+
+// Manual implementations for Hash and Eq that handle f64 properly
+impl std::hash::Hash for QualityStandards {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Convert f64 to bits for hashing
+        self.min_test_coverage.to_bits().hash(state);
+        self.max_complexity.hash(state);
+        self.security_scan_required.hash(state);
+        self.performance_threshold_secs.hash(state);
+    }
+}
+
+impl Eq for QualityStandards {}
 
 impl Default for QualityStandards {
     fn default() -> Self {
         Self {
-            min_test_coverage: 0.85,
+            min_test_coverage: 0.85, // 85%
             max_complexity: 10,
             security_scan_required: true,
-            performance_threshold: Duration::from_secs(5),
+            performance_threshold_secs: 5,
         }
     }
 }

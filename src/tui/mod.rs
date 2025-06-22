@@ -18,6 +18,9 @@ use tokio::time::Duration;
 use app::App;
 use event::EventHandler;
 
+#[cfg(test)]
+mod tests;
+
 /// Main TUI entry point
 pub async fn run_tui() -> Result<()> {
     // Setup terminal

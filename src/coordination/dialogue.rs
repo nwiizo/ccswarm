@@ -5,7 +5,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use uuid::Uuid;
 
 use super::{AgentMessage, CoordinationBus, CoordinationType};
@@ -299,18 +299,22 @@ impl DialogueCoordinationBus {
             conversation_type,
         };
 
+        // Store conversation data for notifications
+        let participants_clone = conversation.participants.clone();
+        let topic_clone = conversation.topic.clone();
+        
         self.conversations.insert(conversation_id.clone(), conversation);
 
         // Notify all participants
-        for participant in &conversation.participants {
+        for participant in &participants_clone {
             let message = AgentMessage::Coordination {
                 from_agent: "system".to_string(),
                 to_agent: participant.clone(),
                 message_type: CoordinationType::Custom("conversation_started".to_string()),
                 payload: serde_json::json!({
                     "conversation_id": conversation_id,
-                    "topic": conversation.topic,
-                    "participants": conversation.participants,
+                    "topic": topic_clone,
+                    "participants": participants_clone,
                 }),
             };
             self.coordination_bus.send_message(message).await?;
@@ -352,8 +356,43 @@ impl DialogueCoordinationBus {
         conversation.dialogue_history.push_back(entry.clone());
         conversation.last_activity = Utc::now();
 
-        // Update conversation state
-        self.update_conversation_state(conversation, &entry);
+        // Update conversation state - store needed data first
+        let speaker_id = entry.speaker_id.clone();
+        let message_type = entry.message_type.clone();
+        
+        // Release the mutable borrow on conversation before calling the method
+        conversation.conversation_state.current_speaker = Some(speaker_id.clone());
+        
+        // Update turn order
+        if let Some(pos) = conversation.conversation_state.turn_order
+            .iter()
+            .position(|id| id == &speaker_id) 
+        {
+            let speaker = conversation.conversation_state.turn_order.remove(pos).unwrap();
+            conversation.conversation_state.turn_order.push_front(speaker);
+        }
+
+        // Update conversation phase based on message type
+        conversation.conversation_state.phase = match message_type {
+            DialogueMessageType::Question => ConversationPhase::InformationGathering,
+            DialogueMessageType::Suggestion | DialogueMessageType::Proposal => ConversationPhase::ProblemSolving,
+            DialogueMessageType::Agreement | DialogueMessageType::Disagreement => ConversationPhase::DecisionMaking,
+            DialogueMessageType::StatusUpdate => ConversationPhase::Planning,
+            DialogueMessageType::Acknowledgment => ConversationPhase::Closing,
+            _ => conversation.conversation_state.phase.clone(),
+        };
+
+        // Update engagement levels
+        let engagement_boost = match message_type {
+            DialogueMessageType::Question | DialogueMessageType::Suggestion => 0.2,
+            DialogueMessageType::Information | DialogueMessageType::StatusUpdate => 0.1,
+            _ => 0.05,
+        };
+
+        conversation.conversation_state.engagement_levels
+            .entry(speaker_id.to_string())
+            .and_modify(|e| *e = (*e + engagement_boost).min(1.0))
+            .or_insert(0.5 + engagement_boost);
 
         // Send coordination messages to recipients
         for recipient in &entry.recipients {
@@ -376,21 +415,21 @@ impl DialogueCoordinationBus {
     }
 
     /// Update conversation state based on new message
-    fn update_conversation_state(&mut self, conversation: &mut Conversation, entry: &DialogueEntry) {
+    fn update_conversation_state_static(&mut self, conversation: &mut Conversation, speaker_id: &str, message_type: &DialogueMessageType) {
         // Update current speaker
-        conversation.conversation_state.current_speaker = Some(entry.speaker_id.clone());
+        conversation.conversation_state.current_speaker = Some(speaker_id.to_string());
 
         // Update turn order
         if let Some(pos) = conversation.conversation_state.turn_order
             .iter()
-            .position(|id| id == &entry.speaker_id) 
+            .position(|id| id == speaker_id) 
         {
             let speaker = conversation.conversation_state.turn_order.remove(pos).unwrap();
             conversation.conversation_state.turn_order.push_front(speaker);
         }
 
         // Update conversation phase based on message type
-        conversation.conversation_state.phase = match entry.message_type {
+        conversation.conversation_state.phase = match message_type {
             DialogueMessageType::Question => ConversationPhase::InformationGathering,
             DialogueMessageType::Suggestion | DialogueMessageType::Proposal => ConversationPhase::ProblemSolving,
             DialogueMessageType::Agreement | DialogueMessageType::Disagreement => ConversationPhase::DecisionMaking,
@@ -400,14 +439,14 @@ impl DialogueCoordinationBus {
         };
 
         // Update engagement levels
-        let engagement_boost = match entry.message_type {
+        let engagement_boost = match message_type {
             DialogueMessageType::Question | DialogueMessageType::Suggestion => 0.2,
             DialogueMessageType::Information | DialogueMessageType::StatusUpdate => 0.1,
             _ => 0.05,
         };
 
         conversation.conversation_state.engagement_levels
-            .entry(entry.speaker_id.clone())
+            .entry(speaker_id.to_string())
             .and_modify(|e| *e = (*e + engagement_boost).min(1.0))
             .or_insert(0.5 + engagement_boost);
     }
@@ -423,9 +462,15 @@ impl DialogueCoordinationBus {
             self.dialogue_patterns.push(pattern);
         }
 
-        // Update agent profiles
+        // Update agent profiles - collect data first to avoid borrow conflicts
+        let mut profile_updates = Vec::new();
         for entry in &conversation.dialogue_history {
-            self.update_agent_profile(&entry.speaker_id, entry, conversation).await?;
+            profile_updates.push((entry.speaker_id.clone(), entry.clone()));
+        }
+        let conversation_topic = conversation.topic.clone();
+        
+        for (speaker_id, entry) in profile_updates {
+            self.update_agent_profile_with_topic(&speaker_id, &entry, &conversation_topic).await?;
         }
 
         Ok(())
@@ -469,12 +514,12 @@ impl DialogueCoordinationBus {
         }
     }
 
-    /// Update agent dialogue profile
-    async fn update_agent_profile(
+    /// Update agent dialogue profile with topic
+    async fn update_agent_profile_with_topic(
         &mut self,
         agent_id: &str,
         entry: &DialogueEntry,
-        conversation: &Conversation,
+        conversation_topic: &str,
     ) -> Result<()> {
         let profile = self.agent_profiles
             .entry(agent_id.to_string())
@@ -538,7 +583,7 @@ impl DialogueCoordinationBus {
 
         // Update topic expertise
         profile.topic_expertise
-            .entry(conversation.topic.clone())
+            .entry(conversation_topic.to_string())
             .and_modify(|e| *e = (*e + 0.1).min(1.0))
             .or_insert(0.6);
 

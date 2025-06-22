@@ -53,6 +53,10 @@ pub struct ClaudeConfig {
     /// MCP servers configuration
     #[serde(rename = "mcpServers", default)]
     pub mcp_servers: HashMap<String, serde_json::Value>,
+
+    /// Use real API instead of simulation (requires ANTHROPIC_API_KEY)
+    #[serde(default)]
+    pub use_real_api: bool,
 }
 
 impl Default for ClaudeConfig {
@@ -64,6 +68,7 @@ impl Default for ClaudeConfig {
             json_output: true,
             custom_commands: Vec::new(),
             mcp_servers: HashMap::new(),
+            use_real_api: false,
         }
     }
 }
@@ -83,6 +88,7 @@ impl ClaudeConfig {
                 "ccswarm quality-gate".to_string(),
             ],
             mcp_servers: HashMap::new(),
+            use_real_api: false,
         }
     }
 
@@ -126,6 +132,7 @@ impl ClaudeConfig {
             json_output: true,
             custom_commands,
             mcp_servers: HashMap::new(),
+            use_real_api: false,
         }
     }
 }

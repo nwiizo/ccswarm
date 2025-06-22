@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.2.2** - Enhanced with Anthropic-inspired interleaved thinking, advanced LLM quality judge, and improved CI/CD compatibility!
+> 🚀 **Version 0.3.0** - Revolutionary Sangha collective intelligence and Self-Extension capabilities for autonomous agent evolution!
 
 [![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
@@ -9,8 +9,17 @@
 
 **ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. It features session persistence, intelligent task delegation, auto-create functionality, and real-time monitoring through a Terminal UI.
 
-## 🌟 Key Features (v0.2.2)
+## 🌟 Key Features (v0.3.0)
 
+### New in v0.3.0
+- **🏛️ Sangha Collective Intelligence**: Buddhist-inspired democratic decision-making system
+- **🔧 Self-Extension**: Agents search GitHub/MDN/StackOverflow to discover capabilities
+- **🔍 AI-Powered Search**: Real-time integration with documentation and code repositories
+- **📊 Smart Proposal System**: Structured proposals with consensus algorithms
+- **🧠 Learning Framework**: Pattern recognition and knowledge base management
+- **🛡️ Safe Implementation**: Risk assessment and rollback mechanisms
+
+### Core Features
 - **🤖 Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
 - **💾 Session Persistence**: 93% token reduction through conversation history
 - **🎯 Intelligent Delegation**: Master Claude analyzes and assigns tasks optimally
@@ -18,11 +27,7 @@
 - **📊 Enhanced TUI**: Real-time monitoring with improved task management and filtering
 - **🔄 Git Worktree Isolation**: Parallel development without conflicts
 - **✅ Auto-Accept Mode**: Safe automated execution with risk assessment
-- **🔒 Execution Mode**: Runs with `--dangerously-skip-permissions` by default
 - **🔍 LLM Quality Judge**: Advanced code evaluation using Claude with multi-dimensional scoring
-- **📚 Command Documentation**: Comprehensive docs in `.claude/commands/`
-- **🎛️ Improved Session Pool**: Better load balancing and resource management
-- **🔧 Enhanced Config System**: More flexible provider and agent configuration
 
 ## 🚀 Quick Start
 
@@ -458,6 +463,89 @@ ccswarm worktree list
 ccswarm worktree clean
 ```
 
+## 🏛️ Sangha & Self-Extension (New in v0.3.0)
+
+### Collective Intelligence with Sangha
+
+Implements Buddhist Sangha principles for democratic agent decision-making:
+
+```bash
+# Submit proposals for swarm consideration
+ccswarm sangha propose --type doctrine --title "Code Quality Standards"
+ccswarm sangha propose --type extension --title "React Server Components"
+ccswarm sangha propose --type task --title "Performance Optimization"
+
+# Vote on active proposals
+ccswarm sangha vote <proposal-id> aye --reason "Improves performance"
+ccswarm sangha vote <proposal-id> nay --reason "Too complex for current sprint"
+
+# View proposals and voting status
+ccswarm sangha list --status active
+ccswarm sangha show <proposal-id>
+```
+
+**Consensus Algorithms Available:**
+- **Simple Majority** (51%+): Fast decisions for routine changes
+- **Byzantine Fault Tolerant** (67%+): Critical system changes
+- **Proof of Stake**: Weighted voting based on agent expertise
+
+### Agent Self-Extension with AI Search
+
+Agents actively discover and propose new capabilities by searching:
+
+```bash
+# Search for solutions across multiple platforms
+ccswarm search mdn "react server components"
+ccswarm search github "rust async patterns"
+ccswarm search stackoverflow "jwt authentication"
+
+# Generate extension proposals from search results
+ccswarm extend propose --title "Add RSC Support" \
+  --description "Based on MDN research, implement React Server Components"
+
+# View extension status and learning progress
+ccswarm extend status
+ccswarm extend stats
+```
+
+**Real AI Search Integration:**
+- **MDN Web Docs**: Latest JavaScript/Web API documentation
+- **GitHub**: Popular repositories, patterns, and implementations
+- **Stack Overflow**: Community solutions and best practices
+
+### Example: Live Demo Results
+
+**Search Results (Real Data):**
+```
+🔍 GitHub Search Results for "react hooks":
+• react-use (⭐ 43,170) - Essential React Hooks collection
+• rehooks (⭐ 1,800) - Modern React Hooks library
+• awesome-react-hooks (⭐ 9,200) - Curated list of hooks
+
+📚 MDN Results for "web components":
+• Custom Elements API - Create reusable components
+• Shadow DOM API - Encapsulated component styling
+• HTML Templates - Declarative component templates
+```
+
+**Sangha Proposal Generated:**
+```
+Proposal ID: e66349a2-d64c-4b68-8e0b-01fbfee4d515
+Title: React Server Components Integration
+Type: Extension
+Status: Active (awaiting votes)
+Description: Add RSC support based on community research
+```
+
+**Extension Proposal Created:**
+```
+Proposal ID: c52fe40e-96ae-46a7-8013-8de551f001a7
+Agent: Frontend Specialist
+Capability: React Server Components
+Risk Level: Medium
+Expected Impact: 30% faster page loads, 25% smaller bundles
+```
+
 ## 🛠️ Development
 
 ### Adding Custom Providers
@@ -466,11 +554,12 @@ ccswarm worktree clean
 3. Update configuration parsing
 4. Add provider-specific configuration options
 
-### v0.2.0 Architecture Improvements
-- Enhanced session pool management
-- Improved task routing algorithms
-- Better error recovery mechanisms
-- Extended provider API support
+### v0.3.0 Architecture Improvements
+- Sangha collective intelligence system
+- Self-extension framework with search capabilities
+- Meta-learning and pattern recognition
+- Evolution tracking and metrics
+- Safe extension propagation mechanisms
 
 ## 🚀 Standalone Deployment (No AI Dependencies)
 
@@ -522,28 +611,33 @@ MIT License - see [LICENSE](LICENSE)
 - Rust community for excellent libraries
 - Contributors and early adopters
 
-## 📝 Release Notes (v0.2.0)
+## 📝 Release Notes (v0.3.0)
 
 ### New Features
-- Enhanced quality review system with iteration tracking
-- Improved TUI with better task filtering and management
-- Comprehensive command documentation in `.claude/commands/`
-- Better session pool management and load balancing
-- Extended provider configuration options
+- **Sangha Collective Intelligence**: Democratic decision-making system for agent swarms
+- **Self-Extension Framework**: Agents autonomously identify limitations and extend capabilities
+- **Evolution Tracking**: Monitor and analyze agent evolution over time
+- **Meta-Learning System**: Learn from successes and failures across the swarm
+- **Extension Propagation**: Share successful improvements between agents
+- **Search Integration**: Agents can search documentation, GitHub, Stack Overflow
+- **Risk Assessment**: Automatic evaluation and mitigation of extension risks
+- **Rollback Capability**: Safe experimentation with automatic rollback on failure
 
 ### Improvements
-- More robust error handling and recovery
-- Enhanced auto-create templates
-- Better git worktree management
-- Improved delegation algorithms
-- Performance optimizations
+- Enhanced architecture for autonomous agent evolution
+- Better separation of concerns with new module structure
+- Improved type safety and error handling
+- More comprehensive CLI commands for extension management
+- Advanced pattern recognition capabilities
 
-### Bug Fixes
-- Fixed session persistence edge cases
-- Resolved TUI rendering issues
-- Corrected task priority handling
-- Fixed provider timeout issues
+### Technical Implementation
+- **Sangha Module**: Complete voting system with consensus algorithms
+- **Extension Module**: AI-powered search and capability discovery
+- **Search Integration**: Real API connections to MDN, GitHub, Stack Exchange
+- **Proposal System**: Structured templates with risk assessment
+- **Learning Framework**: Knowledge base with pattern recognition
+- **CLI Integration**: Full command support for all features
 
 ---
 
-**Experience the power of AI agent orchestration with ccswarm v0.2.0** 🚀
+**Experience the power of autonomous agent evolution with ccswarm v0.3.0** 🚀

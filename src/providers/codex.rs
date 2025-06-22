@@ -213,7 +213,7 @@ impl CodexExecutor {
                      Instead, focus on coordination, planning, and quality review. \
                      Delegate specific implementation tasks to specialized agents.\n",
                     oversight_roles.join(", "),
-                    quality_standards.min_test_coverage * 100.0,
+                    quality_standards.min_test_coverage,
                     quality_standards.max_complexity,
                     if quality_standards.security_scan_required { "Required" } else { "Optional" }
                 )

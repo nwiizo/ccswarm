@@ -74,3 +74,9 @@ demos/*/.pnp.*
 # Test projects
 test-project/
 test_todo_project/
+demo-project*/
+
+# Temporary documentation files
+COMPILATION_FIX_SUMMARY.md
+blog_post*.md
+*.draft.md
