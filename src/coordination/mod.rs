@@ -8,6 +8,8 @@ use tracing::{debug, error, info};
 
 use crate::agent::{AgentStatus, TaskResult};
 
+pub mod dialogue;
+
 /// Messages sent between agents and the orchestrator
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AgentMessage {

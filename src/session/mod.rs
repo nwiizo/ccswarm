@@ -1,5 +1,6 @@
 pub mod claude_session;
 pub mod coordinator;
+pub mod memory;
 pub mod persistent_session;
 pub mod session_pool;
 pub mod worktree_session;

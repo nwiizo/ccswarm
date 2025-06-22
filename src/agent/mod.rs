@@ -1,9 +1,13 @@
 pub mod claude;
 pub mod interleaved_thinking;
+pub mod isolation;
 pub mod persistent;
+pub mod personality;
+pub mod phronesis;
 pub mod pool;
 pub mod simple;
 pub mod task;
+pub mod whiteboard;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -12,7 +16,14 @@ use std::path::PathBuf;
 use tokio::process::Command;
 use uuid::Uuid;
 
+pub use isolation::{IsolationConfig, IsolationMode};
+// Temporarily disable personality exports to fix compilation
+// pub use personality::{
+//     AgentPersonality, PersonalityTraits, Skill, SkillCategory, SkillLevel, WorkingStyle, TaskApproach,
+// };
+pub use phronesis::{PhronesisManager, PracticalWisdom, WisdomCategory, LearningEventType};
 pub use task::{Priority, Task, TaskResult, TaskType};
+pub use whiteboard::{Whiteboard, WhiteboardEntry, EntryType, AnnotationMarker};
 
 use self::interleaved_thinking::{Decision, InterleavedThinkingEngine};
 use crate::config::ClaudeConfig;
@@ -63,6 +74,21 @@ pub struct ClaudeCodeAgent {
 
     /// Last activity timestamp
     pub last_activity: DateTime<Utc>,
+
+    /// Isolation mode for this agent
+    pub isolation_mode: IsolationMode,
+
+    /// Container ID if running in container mode
+    pub container_id: Option<String>,
+
+    /// Agent's personality formed by skills and experiences
+    // pub personality: Personality,
+    
+    /// Whiteboard for thought visualization
+    pub whiteboard: Whiteboard,
+    
+    /// Practical wisdom (phronesis) manager
+    pub phronesis: PhronesisManager,
 }
 
 impl ClaudeCodeAgent {
@@ -73,6 +99,24 @@ impl ClaudeCodeAgent {
         branch_prefix: &str,
         claude_config: ClaudeConfig,
     ) -> Result<Self> {
+        Self::new_with_isolation(
+            role,
+            workspace_root,
+            branch_prefix,
+            claude_config,
+            IsolationMode::default(),
+        )
+        .await
+    }
+
+    /// Create a new agent with specific isolation mode
+    pub async fn new_with_isolation(
+        role: AgentRole,
+        workspace_root: &std::path::Path,
+        branch_prefix: &str,
+        claude_config: ClaudeConfig,
+        isolation_mode: IsolationMode,
+    ) -> Result<Self> {
         let agent_id = format!("{}-agent-{}", role.name().to_lowercase(), Uuid::new_v4());
         let session_id = Uuid::new_v4().to_string();
         let worktree_path = workspace_root.join(format!("agents/{}", &agent_id));
@@ -80,13 +124,21 @@ impl ClaudeCodeAgent {
 
         let identity = AgentIdentity {
             agent_id: agent_id.clone(),
-            specialization: role,
+            specialization: role.clone(),
             workspace_path: worktree_path.clone(),
             env_vars: Self::create_env_vars(&agent_id, &session_id),
             session_id,
             parent_process_id: std::process::id().to_string(),
             initialized_at: Utc::now(),
         };
+
+        let mut personality = Personality::new(agent_id.clone());
+
+        // Initialize personality based on role
+        Self::initialize_personality_for_role(&mut personality, &role);
+
+        let whiteboard = Whiteboard::new(agent_id.clone());
+        let phronesis = PhronesisManager::new(agent_id.clone());
 
         let agent = Self {
             identity,
@@ -97,9 +149,115 @@ impl ClaudeCodeAgent {
             current_task: None,
             task_history: Vec::new(),
             last_activity: Utc::now(),
+            isolation_mode,
+            container_id: None,
+            personality,
+            whiteboard,
+            phronesis,
         };
 
         Ok(agent)
+    }
+
+    /// Initialize personality based on agent role
+    fn initialize_personality_for_role(personality: &mut Personality, role: &AgentRole) {
+        match role {
+            AgentRole::Frontend { .. } => {
+                // Frontend skills
+                personality.add_skill(Skill::new(
+                    "UI Design".to_string(),
+                    SkillCategory::Creative,
+                    "ユーザーインターフェースの設計と実装".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "React Development".to_string(),
+                    SkillCategory::Technical,
+                    "Reactを使用したコンポーネント開発".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "UX Analysis".to_string(),
+                    SkillCategory::Analytical,
+                    "ユーザー体験の分析と改善".to_string(),
+                ));
+                personality.motto = Some("美しく使いやすいインターフェースを作る".to_string());
+            }
+            AgentRole::Backend { .. } => {
+                // Backend skills
+                personality.add_skill(Skill::new(
+                    "API Design".to_string(),
+                    SkillCategory::Technical,
+                    "RESTful APIの設計と実装".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "Database Optimization".to_string(),
+                    SkillCategory::Analytical,
+                    "データベースクエリの最適化".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "System Architecture".to_string(),
+                    SkillCategory::Leadership,
+                    "システム全体のアーキテクチャ設計".to_string(),
+                ));
+                personality.motto = Some("堅牢で効率的なシステムを構築する".to_string());
+            }
+            AgentRole::DevOps { .. } => {
+                // DevOps skills
+                personality.add_skill(Skill::new(
+                    "CI/CD Pipeline".to_string(),
+                    SkillCategory::Technical,
+                    "継続的インテグレーション/デプロイメント".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "Infrastructure as Code".to_string(),
+                    SkillCategory::Technical,
+                    "インフラのコード化と自動化".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "Monitoring & Alerting".to_string(),
+                    SkillCategory::Analytical,
+                    "システム監視とアラート設定".to_string(),
+                ));
+                personality.motto = Some("自動化と効率化で開発を加速する".to_string());
+            }
+            AgentRole::QA { .. } => {
+                // QA skills
+                personality.add_skill(Skill::new(
+                    "Test Strategy".to_string(),
+                    SkillCategory::Analytical,
+                    "テスト戦略の立案と実行".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "Bug Detection".to_string(),
+                    SkillCategory::Analytical,
+                    "バグの発見と原因分析".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "Quality Documentation".to_string(),
+                    SkillCategory::Communication,
+                    "品質レポートの作成と共有".to_string(),
+                ));
+                personality.motto = Some("品質を守り、ユーザー体験を向上させる".to_string());
+            }
+            AgentRole::Master { .. } => {
+                // Master skills
+                personality.add_skill(Skill::new(
+                    "Team Coordination".to_string(),
+                    SkillCategory::Leadership,
+                    "チームの調整とタスク配分".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "Strategic Planning".to_string(),
+                    SkillCategory::Leadership,
+                    "戦略的な計画立案".to_string(),
+                ));
+                personality.add_skill(Skill::new(
+                    "Communication Bridge".to_string(),
+                    SkillCategory::Communication,
+                    "エージェント間のコミュニケーション促進".to_string(),
+                ));
+                personality.motto = Some("チーム全体を導き、成功へと導く".to_string());
+            }
+        }
     }
 
     /// Create environment variables for agent identity
@@ -119,10 +277,19 @@ impl ClaudeCodeAgent {
 
     /// Initialize the agent (setup worktree, identity, etc.)
     pub async fn initialize(&mut self) -> Result<()> {
-        tracing::info!("Initializing agent: {}", self.identity.agent_id);
+        tracing::info!(
+            "Initializing agent: {} with isolation mode: {:?}",
+            self.identity.agent_id,
+            self.isolation_mode
+        );
 
-        // Setup Git worktree
+        // Setup Git worktree (always needed for code synchronization)
         self.setup_worktree().await?;
+
+        // If using container isolation, create and configure container
+        if self.isolation_mode.requires_docker() {
+            self.setup_container().await?;
+        }
 
         // Generate and write CLAUDE.md
         self.generate_claude_md().await?;
@@ -282,6 +449,92 @@ impl ClaudeCodeAgent {
         .with_details("Boundary verification test".to_string())
     }
 
+    /// Setup container for agent execution
+    async fn setup_container(&mut self) -> Result<()> {
+        use crate::container::{ContainerConfig, ContainerProvider};
+
+        tracing::info!("Setting up container for agent: {}", self.identity.agent_id);
+
+        let provider = crate::container::docker::DockerContainerProvider::new().await?;
+
+        // Create container configuration based on agent role
+        let mut config = ContainerConfig::for_agent(
+            self.identity.specialization.name(),
+            &self.identity.agent_id,
+        );
+
+        // Add worktree as volume mount
+        config.add_volume(
+            self.worktree_path.to_string_lossy().to_string(),
+            "/workspace".to_string(),
+            false, // read-write
+        );
+
+        // Add environment variables
+        for (key, value) in &self.identity.env_vars {
+            config.env.insert(key.clone(), value.clone());
+        }
+
+        // Create and start container
+        let container = provider
+            .create_container(&format!("ccswarm-{}", self.identity.agent_id), &config)
+            .await?;
+        provider.start_container(&container.id).await?;
+
+        // Install Claude CLI in container
+        self.install_claude_in_container(&container.id, &provider)
+            .await?;
+
+        self.container_id = Some(container.id);
+
+        tracing::info!(
+            "Container setup complete for agent: {}",
+            self.identity.agent_id
+        );
+        Ok(())
+    }
+
+    /// Install Claude CLI in the container
+    async fn install_claude_in_container(
+        &self,
+        container_id: &str,
+        provider: &impl crate::container::ContainerProvider,
+    ) -> Result<()> {
+        tracing::info!("Installing Claude CLI in container");
+
+        // Commands to install Claude CLI based on the container's base image
+        let install_commands = match &self.identity.specialization {
+            AgentRole::Frontend { .. } => vec![
+                vec!["sh".to_string(), "-c".to_string(), "npm install -g @anthropic/claude-cli || true".to_string()],
+            ],
+            AgentRole::Backend { .. } => vec![
+                vec!["sh".to_string(), "-c".to_string(), "curl -fsSL https://cli.claude.ai/install.sh | sh || true".to_string()],
+            ],
+            AgentRole::DevOps { .. } => vec![
+                vec!["sh".to_string(), "-c".to_string(), "apk add --no-cache curl && curl -fsSL https://cli.claude.ai/install.sh | sh || true".to_string()],
+            ],
+            AgentRole::QA { .. } => vec![
+                vec!["sh".to_string(), "-c".to_string(), "pip install claude-cli || true".to_string()],
+            ],
+            AgentRole::Master { .. } => vec![
+                vec!["sh".to_string(), "-c".to_string(), "curl -fsSL https://cli.claude.ai/install.sh | sh || true".to_string()],
+            ],
+        };
+
+        for cmd in install_commands {
+            match provider.exec_in_container(container_id, cmd).await {
+                Ok(output) => {
+                    tracing::debug!("Claude CLI installation output: {}", output);
+                }
+                Err(e) => {
+                    tracing::warn!("Claude CLI installation command failed: {}", e);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Execute a task with full identity and boundary checking
     pub async fn execute_task(&mut self, task: Task) -> Result<TaskResult> {
         self.status = AgentStatus::Working;
@@ -335,6 +588,22 @@ impl ClaudeCodeAgent {
             }
             TaskEvaluation::Reject { reason } => {
                 tracing::warn!("Task rejected by {}: {}", self.identity.agent_id, reason);
+                
+                // Record rejection as a learning event
+                self.phronesis.record_learning_event(
+                    LearningEventType::Discovery {
+                        finding: format!("Task outside boundaries: {}", reason),
+                        significance: "Boundary protection activated".to_string(),
+                    },
+                    &format!("Task rejected for: {}", task.description),
+                    std::collections::HashMap::new(),
+                    crate::agent::phronesis::LearningOutcome {
+                        lesson_learned: format!("This type of task should be handled by a different agent: {}", reason),
+                        actionable_insight: Some("Delegate to appropriate specialist".to_string()),
+                        applicable_situations: vec!["Task delegation".to_string()],
+                    },
+                );
+                
                 TaskResult {
                     success: false,
                     output: serde_json::json!({}),
@@ -365,6 +634,17 @@ impl ClaudeCodeAgent {
         let mut monitor = IdentityMonitor::new(&self.identity.agent_id);
         let mut thinking_engine = InterleavedThinkingEngine::new().with_config(15, 0.6); // Max 15 steps, 0.6 confidence threshold
 
+        // Create whiteboard section for this task
+        let task_section_id = self.whiteboard.create_section(&format!("Task: {}", task.description));
+        
+        // Record initial task analysis on whiteboard
+        let initial_note = self.whiteboard.add_note(
+            &format!("タスク開始: {}. タイプ: {:?}, 優先度: {:?}", 
+                task.description, task.task_type, task.priority),
+            vec!["task_start".to_string()],
+        );
+        self.whiteboard.add_to_section(&task_section_id, &initial_note);
+
         // Initial thinking step - analyze the task
         let initial_observation = format!(
             "Starting task: {}. Type: {:?}, Priority: {:?}",
@@ -390,15 +670,32 @@ impl ClaudeCodeAgent {
         let mut execution_count = 0;
         let max_executions = 3;
 
+        // Start a thought trace on whiteboard
+        let thought_trace_id = self.whiteboard.start_thought_trace();
+        self.whiteboard.add_to_section(&task_section_id, &thought_trace_id);
+
         loop {
             execution_count += 1;
             let output = self.execute_claude_command(&prompt).await?;
+
+            // Record execution attempt on whiteboard
+            let exec_note = self.whiteboard.add_note(
+                &format!("実行試行 #{}: 出力長 {} 文字", execution_count, output.len()),
+                vec!["execution".to_string()],
+            );
+            self.whiteboard.add_to_section(&task_section_id, &exec_note);
 
             // Process the output through thinking engine
             let observation = self.extract_execution_observation(&output);
             let thinking_step = thinking_engine
                 .process_observation(&observation, self.identity.specialization.name())
                 .await?;
+            
+            // Record thinking on whiteboard
+            self.whiteboard.add_thought(
+                &thought_trace_id,
+                &format!("観察: {}", observation),
+            );
 
             // Monitor the response for identity
             let identity_status = monitor.monitor_response(&output).await?;
@@ -409,6 +706,7 @@ impl ClaudeCodeAgent {
             match thinking_step.decision {
                 Decision::Continue { reason } => {
                     tracing::debug!("Continuing execution: {}", reason);
+                    self.whiteboard.add_thought(&thought_trace_id, &format!("継続: {}", reason));
                     final_output = output;
                     if execution_count >= max_executions {
                         break;
@@ -416,11 +714,19 @@ impl ClaudeCodeAgent {
                 }
                 Decision::Refine { refinement, reason } => {
                     tracing::info!("Refining approach: {} - {}", reason, refinement);
+                    self.whiteboard.add_thought(&thought_trace_id, &format!("改善: {} - {}", reason, refinement));
+                    
+                    // Record refinement as hypothesis
+                    let hypothesis_id = self.whiteboard.add_hypothesis(&refinement, 0.7);
+                    self.whiteboard.add_to_section(&task_section_id, &hypothesis_id);
+                    
                     prompt = self.refine_prompt(&prompt, &refinement, &task);
                     final_output = output; // Keep last output
                 }
                 Decision::Complete { summary } => {
                     tracing::info!("Task completed: {}", summary);
+                    self.whiteboard.add_thought(&thought_trace_id, &format!("完了: {}", summary));
+                    self.whiteboard.set_conclusion(&thought_trace_id, &summary);
                     final_output = output;
                     break;
                 }
@@ -429,15 +735,20 @@ impl ClaudeCodeAgent {
                     reason,
                 } => {
                     tracing::warn!("Pivoting approach: {} - {}", reason, new_approach);
+                    self.whiteboard.add_thought(&thought_trace_id, &format!("方針転換: {} - {}", reason, new_approach));
+                    self.whiteboard.annotate(&thought_trace_id, "大幅な方針変更", AnnotationMarker::Important);
                     prompt = self.generate_pivot_prompt(&task, &new_approach);
                 }
                 Decision::RequestContext { questions } => {
                     tracing::info!("Additional context needed: {:?}", questions);
+                    self.whiteboard.add_thought(&thought_trace_id, &format!("追加情報必要: {:?}", questions));
                     // In a real implementation, this would request from orchestrator
                     // For now, we'll add questions to prompt and continue
                     prompt.push_str(&format!("\n\nPlease address: {}", questions.join(", ")));
                 }
                 Decision::Abort { reason } => {
+                    self.whiteboard.add_thought(&thought_trace_id, &format!("中断: {}", reason));
+                    self.whiteboard.annotate(&thought_trace_id, "タスク中断", AnnotationMarker::Important);
                     return Err(anyhow::anyhow!("Task aborted: {}", reason));
                 }
             }
@@ -449,6 +760,22 @@ impl ClaudeCodeAgent {
 
         // Generate thinking summary
         let thinking_summary = thinking_engine.get_thinking_summary();
+
+        // Update agent's experience based on task completion
+        self.update_agent_experience(&task);
+        
+        // Record success in phronesis system
+        let lesson = format!(
+            "Task completed in {} steps with {:.1}% confidence",
+            thinking_summary.total_steps,
+            thinking_summary.avg_confidence * 100.0
+        );
+        self.phronesis.record_success(
+            &task.id,
+            "Interleaved thinking with whiteboard",
+            &format!("Task completed in {} iterations", execution_count),
+            &lesson,
+        );
 
         Ok(TaskResult {
             success: true,
@@ -486,7 +813,7 @@ impl ClaudeCodeAgent {
 
     /// Handle identity status from monitoring
     async fn handle_identity_status(
-        &self,
+        &mut self,
         status: IdentityStatus,
         monitor: &mut IdentityMonitor,
     ) -> Result<()> {
@@ -497,12 +824,42 @@ impl ClaudeCodeAgent {
             }
             IdentityStatus::DriftDetected(msg) => {
                 tracing::warn!("Identity drift detected: {}", msg);
+                
+                // Record drift as learning event
+                self.phronesis.record_learning_event(
+                    LearningEventType::Refinement {
+                        original_approach: "Standard execution".to_string(),
+                        improved_approach: "Identity boundary reinforcement".to_string(),
+                    },
+                    &format!("Identity drift: {}", msg),
+                    std::collections::HashMap::new(),
+                    crate::agent::phronesis::LearningOutcome {
+                        lesson_learned: "Identity boundaries need reinforcement".to_string(),
+                        actionable_insight: Some("Add stronger identity markers in prompts".to_string()),
+                        applicable_situations: vec!["Identity maintenance".to_string()],
+                    },
+                );
+                
                 self.correct_identity_drift(monitor).await
             }
             IdentityStatus::BoundaryViolation(msg) => {
+                // Record boundary violation
+                self.phronesis.record_failure(
+                    "current_task",
+                    "BoundaryViolation",
+                    &msg,
+                    "Task attempted to cross agent boundaries",
+                );
                 Err(anyhow::anyhow!("Boundary violation detected: {}", msg))
             }
             IdentityStatus::CriticalFailure(msg) => {
+                // Record critical failure
+                self.phronesis.record_failure(
+                    "current_task",
+                    "CriticalIdentityFailure",
+                    &msg,
+                    "Critical identity system failure requires investigation",
+                );
                 Err(anyhow::anyhow!("Critical identity failure: {}", msg))
             }
         }
@@ -530,6 +887,32 @@ impl ClaudeCodeAgent {
 
     /// Execute Claude Code command
     async fn execute_claude_command(&self, prompt: &str) -> Result<String> {
+        match self.isolation_mode {
+            IsolationMode::Container => self.execute_claude_in_container(prompt).await,
+            IsolationMode::GitWorktree => self.execute_claude_in_worktree(prompt).await,
+            IsolationMode::Hybrid => {
+                // Try container first, fall back to worktree
+                match self.execute_claude_in_container(prompt).await {
+                    Ok(result) => Ok(result),
+                    Err(e) => {
+                        tracing::warn!(
+                            "Container execution failed, falling back to worktree: {}",
+                            e
+                        );
+                        self.execute_claude_in_worktree(prompt).await
+                    }
+                }
+            }
+        }
+    }
+
+    /// Execute Claude Code command in git worktree
+    async fn execute_claude_in_worktree(&self, prompt: &str) -> Result<String> {
+        // Check if we should use real API instead of simulation
+        if self.claude_config.use_real_api {
+            return self.execute_claude_real_api(prompt).await;
+        }
+
         let mut cmd = Command::new("claude");
 
         // Set working directory
@@ -572,6 +955,113 @@ impl ClaudeCodeAgent {
         }
     }
 
+    /// Execute Claude using real API
+    async fn execute_claude_real_api(&self, prompt: &str) -> Result<String> {
+        use crate::providers::claude_api::ClaudeApiClient;
+
+        tracing::info!(
+            "Using real Claude API for agent: {}",
+            self.identity.agent_id
+        );
+
+        // Create API client
+        let api_client = ClaudeApiClient::new(None)?;
+
+        // Format the full prompt with agent identity
+        let full_prompt = format!(
+            "{}\n\n{}",
+            claude::generate_identity_header(&self.identity),
+            prompt
+        );
+
+        // Make API call
+        let response = api_client
+            .simple_completion(
+                &self.claude_config.model,
+                &full_prompt,
+                4096, // Max tokens
+            )
+            .await?;
+
+        // Format response to match expected output format
+        if self.claude_config.json_output {
+            // Wrap response in JSON format similar to CLI output
+            let json_response = serde_json::json!({
+                "response": response,
+                "agent": self.identity.agent_id,
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+            });
+            Ok(serde_json::to_string(&json_response)?)
+        } else {
+            Ok(response)
+        }
+    }
+
+    /// Execute Claude Code command in container
+    async fn execute_claude_in_container(&self, prompt: &str) -> Result<String> {
+        // Check if we should use real API instead of simulation
+        if self.claude_config.use_real_api {
+            return self.execute_claude_real_api(prompt).await;
+        }
+
+        use crate::container::ContainerProvider;
+
+        let container_id = self
+            .container_id
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No container ID available for container execution"))?;
+
+        // Build the command to execute in container
+        let mut cmd_args = vec!["claude", "-p", prompt];
+
+        if self.claude_config.json_output {
+            cmd_args.push("--json");
+        }
+
+        if self.claude_config.dangerous_skip {
+            cmd_args.push("--dangerously-skip-permissions");
+        }
+
+        let think_mode_str;
+        if let Some(think_mode) = &self.claude_config.think_mode {
+            cmd_args.push("--think");
+            think_mode_str = think_mode.to_string();
+            cmd_args.push(&think_mode_str);
+        }
+
+        // Execute via container provider
+        let provider = crate::container::docker::DockerContainerProvider::new().await?;
+
+        // Set up environment variables
+        let mut env_vars = vec![];
+        for (key, value) in &self.identity.env_vars {
+            env_vars.push(format!("{}={}", key, value));
+        }
+
+        // Join command args into a single command string
+        let command = cmd_args.join(" ");
+
+        // Create full command with environment variables and working directory
+        let full_command = vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            format!(
+                "cd {} && {} {}",
+                self.worktree_path.to_string_lossy(),
+                env_vars.join(" "),
+                command
+            ),
+        ];
+
+        let output = provider
+            .exec_in_container(container_id, full_command)
+            .await?;
+
+        // The exec_in_container returns the output directly
+        // We'll assume success if we get output
+        Ok(output)
+    }
+
     /// Correct identity drift
     async fn correct_identity_drift(&self, monitor: &mut IdentityMonitor) -> Result<()> {
         let correction_prompt = monitor.generate_correction_prompt(
@@ -598,6 +1088,22 @@ impl ClaudeCodeAgent {
             "timestamp": Utc::now(),
             "worktree": self.worktree_path.to_string_lossy(),
             "branch": self.branch_name,
+            "personality": {
+                "description": self.personality.describe_personality(),
+                "working_style": self.personality.working_style,
+                "traits": self.personality.traits,
+                "composability_score": self.personality.composability_score(),
+                "skills": self.personality.skills.iter().map(|(name, skill)| {
+                    serde_json::json!({
+                        "name": name,
+                        "category": skill.category,
+                        "level": skill.level,
+                        "experience": skill.experience_points,
+                    })
+                }).collect::<Vec<_>>(),
+            },
+            "whiteboard_summary": self.whiteboard.summarize(),
+            "phronesis_summary": self.phronesis.summarize(),
         });
 
         // Write to coordination directory
@@ -613,6 +1119,113 @@ impl ClaudeCodeAgent {
         Ok(())
     }
 
+    /// Update agent's experience based on completed task
+    pub fn update_agent_experience(&mut self, task: &Task) {
+        // タスクタイプに基づいて経験値を付与
+        let experience_points = match task.priority {
+            Priority::Critical => 100,
+            Priority::High => 50,
+            Priority::Medium => 30,
+            Priority::Low => 10,
+        };
+
+        // タスクタイプに関連するスキルを特定して経験値を追加
+        match task.task_type {
+            TaskType::Development => {
+                // 技術的スキルに経験値を追加
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Technical {
+                        skill.add_experience(experience_points);
+                        tracing::debug!(
+                            "Added {} experience to skill: {}",
+                            experience_points,
+                            skill.name
+                        );
+                    }
+                }
+            }
+            TaskType::Testing => {
+                // 分析的スキルに経験値を追加
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Analytical {
+                        skill.add_experience(experience_points);
+                    }
+                }
+            }
+            TaskType::Documentation => {
+                // コミュニケーションスキルに経験値を追加
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Communication {
+                        skill.add_experience(experience_points);
+                    }
+                }
+            }
+            TaskType::Review => {
+                // 分析的およびリーダーシップスキルに経験値を追加
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Analytical
+                        || skill.category == SkillCategory::Leadership
+                    {
+                        skill.add_experience(experience_points / 2);
+                    }
+                }
+            }
+            TaskType::Coordination => {
+                // リーダーシップとコミュニケーションスキルに経験値を追加
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Leadership
+                        || skill.category == SkillCategory::Communication
+                    {
+                        skill.add_experience(experience_points);
+                    }
+                }
+            }
+            TaskType::Infrastructure => {
+                // 技術的スキルに経験値を追加
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Technical {
+                        skill.add_experience(experience_points);
+                    }
+                }
+            }
+            TaskType::Bugfix => {
+                // 技術的および分析的スキルに経験値を追加
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Technical
+                        || skill.category == SkillCategory::Analytical
+                    {
+                        skill.add_experience(experience_points);
+                    }
+                }
+            }
+            TaskType::Feature => {
+                // 技術的および創造的スキルに経験値を追加
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Technical
+                        || skill.category == SkillCategory::Creative
+                    {
+                        skill.add_experience(experience_points);
+                    }
+                }
+            }
+            TaskType::Remediation => {
+                // 分析的スキルに経験値を追加（品質改善のため）
+                for skill in self.personality.skills.values_mut() {
+                    if skill.category == SkillCategory::Analytical {
+                        skill.add_experience(experience_points * 2); // 修正作業は多くの経験になる
+                    }
+                }
+            }
+        }
+
+        // 個性の説明を更新してログ出力
+        tracing::info!(
+            "Agent {} personality update: {}",
+            self.identity.agent_id,
+            self.personality.describe_personality()
+        );
+    }
+
     /// Shutdown the agent gracefully
     pub async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down agent: {}", self.identity.agent_id);
@@ -626,6 +1239,30 @@ impl ClaudeCodeAgent {
             duration: std::time::Duration::from_secs(0),
         })
         .await?;
+
+        // Clean up container if using container isolation
+        if let Some(container_id) = &self.container_id {
+            tracing::info!("Cleaning up container: {}", container_id);
+            match self.cleanup_container(container_id).await {
+                Ok(_) => tracing::info!("Container cleanup complete"),
+                Err(e) => tracing::warn!("Container cleanup failed: {}", e),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Clean up container resources
+    async fn cleanup_container(&self, container_id: &str) -> Result<()> {
+        use crate::container::ContainerProvider;
+
+        let provider = crate::container::docker::DockerContainerProvider::new().await?;
+
+        // Stop the container
+        provider.stop_container(container_id).await?;
+
+        // Remove the container
+        provider.remove_container(container_id).await?;
 
         Ok(())
     }
