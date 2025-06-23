@@ -1,5 +1,5 @@
 //! ホワイトボード - エージェントの思考の見える化
-//! 
+//!
 //! 「複雑な問題を解くとき、人間は紙に書きながら考える。
 //! エージェントにも同じような場所が必要だ」という概念を実装。
 
@@ -22,10 +22,7 @@ pub enum EntryType {
         elements: Vec<DiagramElement>,
     },
     /// アイデアやメモ
-    Note {
-        content: String,
-        tags: Vec<String>,
-    },
+    Note { content: String, tags: Vec<String> },
     /// 仮説や推論
     Hypothesis {
         statement: String,
@@ -33,9 +30,7 @@ pub enum EntryType {
         evidence: Vec<String>,
     },
     /// TODOリスト
-    TodoList {
-        items: Vec<TodoItem>,
-    },
+    TodoList { items: Vec<TodoItem> },
     /// 比較表
     ComparisonTable {
         options: Vec<String>,
@@ -89,11 +84,11 @@ pub struct Annotation {
 /// 注釈のマーカータイプ
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AnnotationMarker {
-    Important,      // 重要
-    Question,       // 疑問
-    Verification,   // 要検証
-    Correction,     // 訂正
-    Insight,        // 洞察
+    Important,    // 重要
+    Question,     // 疑問
+    Verification, // 要検証
+    Correction,   // 訂正
+    Insight,      // 洞察
 }
 
 /// 修正履歴
@@ -145,10 +140,10 @@ impl Whiteboard {
             annotations: Vec::new(),
             revisions: Vec::new(),
         };
-        
+
         self.entries.insert(entry_id.clone(), entry);
         self.entry_order.push_back(entry_id.clone());
-        
+
         entry_id
     }
 
@@ -163,8 +158,12 @@ impl Whiteboard {
     /// 計算結果を更新
     pub fn update_calculation_result(&mut self, entry_id: &str, result: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
-        
-        if let EntryType::Calculation { expression, result: ref mut res } = &mut entry.entry_type {
+
+        if let EntryType::Calculation {
+            expression,
+            result: ref mut res,
+        } = &mut entry.entry_type
+        {
             entry.revisions.push(Revision {
                 timestamp: Utc::now(),
                 description: format!("計算結果を追加: {}", result),
@@ -197,8 +196,12 @@ impl Whiteboard {
     /// 仮説に証拠を追加
     pub fn add_evidence(&mut self, entry_id: &str, evidence: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
-        
-        if let EntryType::Hypothesis { evidence: ref mut ev, .. } = &mut entry.entry_type {
+
+        if let EntryType::Hypothesis {
+            evidence: ref mut ev,
+            ..
+        } = &mut entry.entry_type
+        {
             ev.push(evidence.to_string());
             entry.revisions.push(Revision {
                 timestamp: Utc::now(),
@@ -222,7 +225,7 @@ impl Whiteboard {
     /// 思考を追加
     pub fn add_thought(&mut self, entry_id: &str, thought: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
-        
+
         if let EntryType::ThoughtTrace { thoughts, .. } = &mut entry.entry_type {
             thoughts.push(thought.to_string());
             Some(())
@@ -234,8 +237,12 @@ impl Whiteboard {
     /// 結論を設定
     pub fn set_conclusion(&mut self, entry_id: &str, conclusion: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
-        
-        if let EntryType::ThoughtTrace { conclusion: ref mut conc, .. } = &mut entry.entry_type {
+
+        if let EntryType::ThoughtTrace {
+            conclusion: ref mut conc,
+            ..
+        } = &mut entry.entry_type
+        {
             *conc = Some(conclusion.to_string());
             entry.revisions.push(Revision {
                 timestamp: Utc::now(),
@@ -249,16 +256,21 @@ impl Whiteboard {
     }
 
     /// 注釈を追加
-    pub fn annotate(&mut self, entry_id: &str, content: &str, marker: AnnotationMarker) -> Option<()> {
+    pub fn annotate(
+        &mut self,
+        entry_id: &str,
+        content: &str,
+        marker: AnnotationMarker,
+    ) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
-        
+
         let annotation = Annotation {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
             content: content.to_string(),
             marker,
         };
-        
+
         entry.annotations.push(annotation);
         Some(())
     }
@@ -272,7 +284,7 @@ impl Whiteboard {
             entry_ids: Vec::new(),
             created_at: Utc::now(),
         };
-        
+
         self.sections.insert(section_id.clone(), section);
         section_id
     }
@@ -280,7 +292,8 @@ impl Whiteboard {
     /// エントリーをセクションに追加
     pub fn add_to_section(&mut self, section_id: &str, entry_id: &str) -> Option<()> {
         let section = self.sections.get_mut(section_id)?;
-        if self.entries.contains_key(entry_id) && !section.entry_ids.contains(&entry_id.to_string()) {
+        if self.entries.contains_key(entry_id) && !section.entry_ids.contains(&entry_id.to_string())
+        {
             section.entry_ids.push(entry_id.to_string());
             Some(())
         } else {
@@ -299,7 +312,10 @@ impl Whiteboard {
     }
 
     /// 特定のタイプのエントリーを検索
-    pub fn find_entries_by_type(&self, entry_type_filter: impl Fn(&EntryType) -> bool) -> Vec<&WhiteboardEntry> {
+    pub fn find_entries_by_type(
+        &self,
+        entry_type_filter: impl Fn(&EntryType) -> bool,
+    ) -> Vec<&WhiteboardEntry> {
         self.entries
             .values()
             .filter(|entry| entry_type_filter(&entry.entry_type))
@@ -322,7 +338,7 @@ impl Whiteboard {
                 EntryType::ComparisonTable { .. } => "comparisons",
                 EntryType::ThoughtTrace { .. } => "thought_traces",
             };
-            
+
             *type_counts.entry(type_name.to_string()).or_insert(0) += 1;
             total_annotations += entry.annotations.len();
             total_revisions += entry.revisions.len();
@@ -359,14 +375,14 @@ mod tests {
     #[test]
     fn test_whiteboard_calculation() {
         let mut whiteboard = Whiteboard::new("test-agent".to_string());
-        
+
         // 計算を追加
         let entry_id = whiteboard.add_calculation("317 × 456");
         assert_eq!(whiteboard.entries.len(), 1);
-        
+
         // 結果を更新
         whiteboard.update_calculation_result(&entry_id, "144,552");
-        
+
         let entry = &whiteboard.entries[&entry_id];
         if let EntryType::Calculation { expression, result } = &entry.entry_type {
             assert_eq!(expression, "317 × 456");
@@ -374,22 +390,26 @@ mod tests {
         } else {
             panic!("Wrong entry type");
         }
-        
+
         assert_eq!(entry.revisions.len(), 1);
     }
 
     #[test]
     fn test_thought_trace() {
         let mut whiteboard = Whiteboard::new("test-agent".to_string());
-        
+
         let trace_id = whiteboard.start_thought_trace();
         whiteboard.add_thought(&trace_id, "最初は単純な解法を考えた");
         whiteboard.add_thought(&trace_id, "でも、エッジケースで問題が発生");
         whiteboard.add_thought(&trace_id, "別のアプローチを試してみる");
         whiteboard.set_conclusion(&trace_id, "再帰的な解法が最適");
-        
+
         let entry = &whiteboard.entries[&trace_id];
-        if let EntryType::ThoughtTrace { thoughts, conclusion } = &entry.entry_type {
+        if let EntryType::ThoughtTrace {
+            thoughts,
+            conclusion,
+        } = &entry.entry_type
+        {
             assert_eq!(thoughts.len(), 3);
             assert_eq!(conclusion.as_ref().unwrap(), "再帰的な解法が最適");
         }
@@ -398,11 +418,15 @@ mod tests {
     #[test]
     fn test_annotations() {
         let mut whiteboard = Whiteboard::new("test-agent".to_string());
-        
+
         let note_id = whiteboard.add_note("APIのレスポンスが遅い", vec!["performance".to_string()]);
         whiteboard.annotate(&note_id, "キャッシュを検討", AnnotationMarker::Important);
-        whiteboard.annotate(&note_id, "本当に遅いのか測定が必要", AnnotationMarker::Verification);
-        
+        whiteboard.annotate(
+            &note_id,
+            "本当に遅いのか測定が必要",
+            AnnotationMarker::Verification,
+        );
+
         let entry = &whiteboard.entries[&note_id];
         assert_eq!(entry.annotations.len(), 2);
     }

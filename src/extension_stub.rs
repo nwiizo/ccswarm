@@ -1,8 +1,8 @@
 //! Temporary stub for extension module
 //! This provides minimal implementations for types used in CLI
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,17 +152,20 @@ pub struct ImplementationPlan {
 // Stub implementations for required methods
 impl ExtensionManager {
     pub fn new(_: ()) -> Self {
-        Self { }
+        Self {}
     }
-    
+
     pub async fn submit_proposal(&self, _proposal: ExtensionProposal) -> anyhow::Result<()> {
         Ok(())
     }
-    
-    pub async fn propose_extension(&self, _proposal: ExtensionProposal) -> anyhow::Result<uuid::Uuid> {
+
+    pub async fn propose_extension(
+        &self,
+        _proposal: ExtensionProposal,
+    ) -> anyhow::Result<uuid::Uuid> {
         Ok(uuid::Uuid::new_v4())
     }
-    
+
     pub async fn get_stats(&self) -> ExtensionStats {
         ExtensionStats {
             total_extensions: 0,
@@ -187,7 +190,7 @@ pub struct ExtensionStats {
 pub mod meta_learning {
     #[derive(Debug, Clone, Default)]
     pub struct MetaLearningSystem;
-    
+
     impl MetaLearningSystem {
         pub fn new() -> Self {
             Self
@@ -195,24 +198,32 @@ pub mod meta_learning {
     }
 }
 
-// Agent extension stub module  
+// Agent extension stub module
 pub mod agent_extension {
     // use serde::{Deserialize, Serialize};
-    
+
     #[derive(Debug, Clone)]
     pub struct SearchQuery {
         pub keywords: Vec<String>,
         pub context: Option<SearchContext>,
         pub filters: Option<SearchFilters>,
     }
-    
+
     #[derive(Debug, Clone)]
     pub enum SearchContext {
-        Documentation { domain: String, language: String },
-        CapabilityGap { current: Vec<String>, desired: Vec<String> },
-        General { domain: String },
+        Documentation {
+            domain: String,
+            language: String,
+        },
+        CapabilityGap {
+            current: Vec<String>,
+            desired: Vec<String>,
+        },
+        General {
+            domain: String,
+        },
     }
-    
+
     #[derive(Debug, Clone)]
     pub struct SearchFilters {
         pub relevance_threshold: f32,
@@ -221,7 +232,7 @@ pub mod agent_extension {
         pub max_complexity: f32,
         pub preferred_sources: Vec<String>,
     }
-    
+
     #[derive(Debug, Clone)]
     pub struct SearchResult {
         pub title: String,
@@ -230,51 +241,51 @@ pub mod agent_extension {
         pub relevance_score: f32,
         pub source: String,
     }
-    
+
     pub trait SearchStrategy {
         #[allow(async_fn_in_trait)]
         async fn search(&self, query: &SearchQuery) -> anyhow::Result<Vec<SearchResult>>;
     }
-    
+
     #[derive(Debug, Clone, Default)]
     pub struct DocumentationSearchStrategy;
-    
+
     #[derive(Debug, Clone, Default)]
     pub struct GitHubSearchStrategy;
-    
+
     #[derive(Debug, Clone, Default)]
     pub struct StackOverflowSearchStrategy;
-    
+
     impl DocumentationSearchStrategy {
         pub fn new() -> Self {
             Self
         }
     }
-    
+
     impl GitHubSearchStrategy {
         pub fn new() -> Self {
             Self
         }
     }
-    
+
     impl StackOverflowSearchStrategy {
         pub fn new() -> Self {
             Self
         }
     }
-    
+
     impl SearchStrategy for DocumentationSearchStrategy {
         async fn search(&self, _query: &SearchQuery) -> anyhow::Result<Vec<SearchResult>> {
             Ok(vec![])
         }
     }
-    
+
     impl SearchStrategy for GitHubSearchStrategy {
         async fn search(&self, _query: &SearchQuery) -> anyhow::Result<Vec<SearchResult>> {
             Ok(vec![])
         }
     }
-    
+
     impl SearchStrategy for StackOverflowSearchStrategy {
         async fn search(&self, _query: &SearchQuery) -> anyhow::Result<Vec<SearchResult>> {
             Ok(vec![])
@@ -284,10 +295,10 @@ pub mod agent_extension {
 
 // Sangha stub module for CLI
 pub mod sangha {
-    use serde::{Deserialize, Serialize};
     use chrono::{DateTime, Utc};
+    use serde::{Deserialize, Serialize};
     use uuid::Uuid;
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct SanghaMember {
         pub id: String,
@@ -296,7 +307,7 @@ pub mod sangha {
         pub reputation: f32,
         pub active: bool,
     }
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Vote {
         pub voter_id: String,
@@ -305,7 +316,7 @@ pub mod sangha {
         pub reasoning: Option<String>,
         pub timestamp: DateTime<Utc>,
     }
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum VoteType {
         Approve,
@@ -313,7 +324,7 @@ pub mod sangha {
         Abstain,
         NeedsChanges,
     }
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ConsensusResult {
         pub proposal_id: String,
@@ -321,7 +332,7 @@ pub mod sangha {
         pub vote_summary: VoteSummary,
         pub timestamp: DateTime<Utc>,
     }
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum ConsensusOutcome {
         Approved,
@@ -329,7 +340,7 @@ pub mod sangha {
         NeedsMoreDiscussion,
         Modified,
     }
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct VoteSummary {
         pub total_votes: u32,
@@ -338,7 +349,7 @@ pub mod sangha {
         pub abstentions: u32,
         pub needs_changes: u32,
     }
-    
+
     impl SanghaMember {
         pub fn new(name: String) -> Self {
             Self {
@@ -350,7 +361,7 @@ pub mod sangha {
             }
         }
     }
-    
+
     impl Vote {
         pub fn new(voter_id: String, proposal_id: String, vote_type: VoteType) -> Self {
             Self {

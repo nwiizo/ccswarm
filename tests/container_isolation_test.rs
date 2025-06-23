@@ -122,8 +122,8 @@ async fn test_hybrid_isolation_fallback() {
 #[ignore] // Requires Docker
 #[cfg(feature = "container")]
 async fn test_container_file_operations() {
-    use ccswarm::container::{ContainerConfig, ContainerProvider};
     use ccswarm::container::docker::DockerContainerProvider;
+    use ccswarm::container::{ContainerConfig, ContainerProvider};
     use std::fs;
 
     // Create provider

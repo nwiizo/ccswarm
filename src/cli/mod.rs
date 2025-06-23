@@ -1911,23 +1911,27 @@ impl CliRunner {
         // Using stub implementation for now
         use crate::extension_stub::sangha::{Vote, VoteType};
         use std::str::FromStr;
-        
+
         // Stub implementation - just log the action
         info!("🏛️  Sangha action requested (stub implementation)");
-        
+
         match action {
-            SanghaAction::Propose { proposal_type, file } => {
+            SanghaAction::Propose {
+                proposal_type,
+                file,
+            } => {
                 info!("📋 Submitting proposal to Sangha (stub implementation)");
-                
+
                 // Read proposal specification from file
-                let _spec_content = tokio::fs::read_to_string(file).await
+                let _spec_content = tokio::fs::read_to_string(file)
+                    .await
                     .context("Failed to read proposal file")?;
-                
+
                 info!("Proposal type: {}", proposal_type);
-                
+
                 // Stub: Generate a fake proposal ID
                 let proposal_id = uuid::Uuid::new_v4();
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -1940,15 +1944,23 @@ impl CliRunner {
                         }))?
                     );
                 } else {
-                    println!("📋 Submitting {} proposal from: {}", proposal_type, file.display());
+                    println!(
+                        "📋 Submitting {} proposal from: {}",
+                        proposal_type,
+                        file.display()
+                    );
                     println!("🆔 Proposal ID: {}", proposal_id);
                     println!("✅ Proposal submitted successfully");
                 }
             }
-            
-            SanghaAction::Vote { proposal_id, choice, reason } => {
+
+            SanghaAction::Vote {
+                proposal_id,
+                choice,
+                reason,
+            } => {
                 info!("🗳️ Casting vote (stub implementation)");
-                
+
                 // Parse vote choice
                 let vote_type = match choice.to_lowercase().as_str() {
                     "aye" | "yes" | "approve" => VoteType::Approve,
@@ -1956,23 +1968,22 @@ impl CliRunner {
                     "abstain" => VoteType::Abstain,
                     "veto" | "needs_changes" => VoteType::NeedsChanges,
                     _ => {
-                        anyhow::bail!("Invalid vote choice: {}. Use aye, nay, abstain, or veto", choice);
+                        anyhow::bail!(
+                            "Invalid vote choice: {}. Use aye, nay, abstain, or veto",
+                            choice
+                        );
                     }
                 };
-                
+
                 // Parse proposal ID
-                let prop_id = uuid::Uuid::from_str(proposal_id)
-                    .context("Invalid proposal ID format")?;
-                
+                let prop_id =
+                    uuid::Uuid::from_str(proposal_id).context("Invalid proposal ID format")?;
+
                 // Create vote (stub)
-                let _vote = Vote::new(
-                    "cli-user".to_string(),
-                    prop_id.to_string(),
-                    vote_type,
-                );
-                
+                let _vote = Vote::new("cli-user".to_string(), prop_id.to_string(), vote_type);
+
                 info!("Vote created for proposal: {}", proposal_id);
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -1993,10 +2004,10 @@ impl CliRunner {
                     println!("✅ Vote cast successfully");
                 }
             }
-            
+
             SanghaAction::List { all, status } => {
                 info!("📊 Listing Sangha status (stub implementation)");
-                
+
                 // Stub statistics
                 if self.json_output {
                     println!(
@@ -2021,11 +2032,13 @@ impl CliRunner {
                     println!("👥 Members: 1 total, 1 active");
                     println!("📋 Proposals: 0 total, 0 active");
                     println!("🧠 Consensus Algorithm: stub");
-                    
-                    println!("\n💡 No active proposals. Use 'ccswarm sangha propose' to create one.");
+
+                    println!(
+                        "\n💡 No active proposals. Use 'ccswarm sangha propose' to create one."
+                    );
                 }
             }
-            
+
             SanghaAction::Session { id, active } => {
                 if self.json_output {
                     println!(
@@ -2044,8 +2057,11 @@ impl CliRunner {
                     }
                 }
             }
-            
-            SanghaAction::ExtensionReview { proposal_id, technical_check } => {
+
+            SanghaAction::ExtensionReview {
+                proposal_id,
+                technical_check,
+            } => {
                 if self.json_output {
                     println!(
                         "{}",
@@ -2065,25 +2081,32 @@ impl CliRunner {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     async fn handle_extend(&self, action: &ExtendAction) -> Result<()> {
-        use crate::extension_stub::{ExtensionManager, ExtensionType, ExtensionProposal, ExtensionStatus};
         use crate::extension_stub::meta_learning::MetaLearningSystem;
+        use crate::extension_stub::{
+            ExtensionManager, ExtensionProposal, ExtensionStatus, ExtensionType,
+        };
         use chrono::Utc;
-        
+
         // Create extension manager instance
         let extension_manager = ExtensionManager::new(());
         let _meta_learning = MetaLearningSystem::new();
-        
+
         match action {
-            ExtendAction::Propose { agent, extension_type, file } => {
+            ExtendAction::Propose {
+                agent,
+                extension_type,
+                file,
+            } => {
                 // Read extension specification from file
-                let spec_content = tokio::fs::read_to_string(file).await
+                let spec_content = tokio::fs::read_to_string(file)
+                    .await
                     .context("Failed to read extension specification file")?;
-                
+
                 // Parse extension type
                 let ext_type = match extension_type.as_str() {
                     "capability" => ExtensionType::Capability,
@@ -2092,7 +2115,7 @@ impl CliRunner {
                     "collaborative" => ExtensionType::Collaborative,
                     _ => ExtensionType::Capability, // Default
                 };
-                
+
                 // Create extension proposal
                 let proposal = ExtensionProposal {
                     id: uuid::Uuid::new_v4(),
@@ -2114,8 +2137,12 @@ impl CliRunner {
                         phases: vec![
                             crate::extension_stub::ImplementationPhase {
                                 name: "Analysis & Design".to_string(),
-                                description: "Analyze requirements and design the extension".to_string(),
-                                tasks: vec!["Design document".to_string(), "Technical specification".to_string()],
+                                description: "Analyze requirements and design the extension"
+                                    .to_string(),
+                                tasks: vec![
+                                    "Design document".to_string(),
+                                    "Technical specification".to_string(),
+                                ],
                                 duration_estimate: "1 week".to_string(),
                                 validation_method: "Code review".to_string(),
                                 phase_name: "Analysis & Design".to_string(),
@@ -2137,7 +2164,10 @@ impl CliRunner {
                             crate::extension_stub::ImplementationPhase {
                                 name: "Testing & Deployment".to_string(),
                                 description: "Test and deploy the extension".to_string(),
-                                tasks: vec!["Test results".to_string(), "Deployed extension".to_string()],
+                                tasks: vec![
+                                    "Test results".to_string(),
+                                    "Deployed extension".to_string(),
+                                ],
                                 duration_estimate: "1 week".to_string(),
                                 validation_method: "Production testing".to_string(),
                                 phase_name: "Testing & Deployment".to_string(),
@@ -2179,10 +2209,10 @@ impl CliRunner {
                     created_at: Utc::now(),
                     status: ExtensionStatus::Proposed,
                 };
-                
+
                 // Submit proposal to extension manager
                 let proposal_id = extension_manager.propose_extension(proposal).await?;
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -2203,11 +2233,14 @@ impl CliRunner {
                     println!("✅ Extension proposal submitted");
                 }
             }
-            
-            ExtendAction::Status { agent, extension_id } => {
+
+            ExtendAction::Status {
+                agent,
+                extension_id,
+            } => {
                 // Get extension manager statistics
                 let stats = extension_manager.get_stats().await;
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -2238,8 +2271,12 @@ impl CliRunner {
                     println!("   Failed: {}", stats.failed_extensions);
                 }
             }
-            
-            ExtendAction::History { agent, successful, failed } => {
+
+            ExtendAction::History {
+                agent,
+                successful,
+                failed,
+            } => {
                 if self.json_output {
                     println!(
                         "{}",
@@ -2264,8 +2301,12 @@ impl CliRunner {
                     println!("No extensions found");
                 }
             }
-            
-            ExtendAction::Rollback { agent, extension_id, force } => {
+
+            ExtendAction::Rollback {
+                agent,
+                extension_id,
+                force,
+            } => {
                 if self.json_output {
                     println!(
                         "{}",
@@ -2286,8 +2327,11 @@ impl CliRunner {
                     println!("✅ Rollback completed");
                 }
             }
-            
-            ExtendAction::Discover { agent, discovery_type } => {
+
+            ExtendAction::Discover {
+                agent,
+                discovery_type,
+            } => {
                 if self.json_output {
                     println!(
                         "{}",
@@ -2309,10 +2353,14 @@ impl CliRunner {
                     println!("✅ Discovery completed");
                 }
             }
-            
-            ExtendAction::Autonomous { agent, continuous, dry_run } => {
+
+            ExtendAction::Autonomous {
+                agent,
+                continuous,
+                dry_run,
+            } => {
                 // use crate::extension::autonomous_agent_extension::AutonomousAgentExtensionManager;
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -2332,49 +2380,49 @@ impl CliRunner {
                         println!("   Agents: All agents");
                     }
                     if *continuous {
-                        println!("   Mode: Continuous (agents will autonomously propose extensions)");
+                        println!(
+                            "   Mode: Continuous (agents will autonomously propose extensions)"
+                        );
                     }
                     if *dry_run {
                         println!("   🔍 DRY RUN - proposals will not be submitted to Sangha");
                     }
                 }
-                
+
                 // Get agent list
                 let target_agents = if let Some(agent_id) = agent {
                     vec![agent_id.clone()]
                 } else {
                     // Get all agents from config
-                    self.config.agents.iter()
-                        .map(|(name, _)| name.clone())
+                    self.config
+                        .agents.keys().cloned()
                         .collect()
                 };
-                
+
                 // Process each agent
                 for agent_id in target_agents {
                     if !self.json_output {
                         println!("\n🎯 Processing agent: {}", agent_id);
                     }
-                    
+
                     // Create autonomous extension manager for the agent
                     // In real implementation, would create proper provider and sangha client
                     // For now, just log the intent
-                    
+
                     if *dry_run {
                         if !self.json_output {
                             println!("   📋 Would propose extensions based on:");
                             println!("      - Past performance analysis");
-                            println!("      - Identified capability gaps"); 
+                            println!("      - Identified capability gaps");
                             println!("      - Recurring failure patterns");
                             println!("      - Self-reflection insights");
                         }
-                    } else {
-                        if !self.json_output {
-                            println!("   🧠 Analyzing experiences and performance...");
-                            println!("   🔍 Identifying capability gaps...");
-                            println!("   💡 Generating extension proposals...");
-                            println!("   🏛️  Submitting proposals to Sangha for approval...");
-                        }
-                        
+                    } else if !self.json_output {
+                        println!("   🧠 Analyzing experiences and performance...");
+                        println!("   🔍 Identifying capability gaps...");
+                        println!("   💡 Generating extension proposals...");
+                        println!("   🏛️  Submitting proposals to Sangha for approval...");
+
                         // In real implementation:
                         // 1. Create AutonomousAgentExtensionManager
                         // 2. Call propose_extensions()
@@ -2382,12 +2430,12 @@ impl CliRunner {
                         // 4. Report results
                     }
                 }
-                
+
                 if *continuous && !self.json_output {
                     println!("\n♾️  Continuous mode enabled - agents will autonomously propose extensions as needed");
                     println!("   Press Ctrl+C to stop");
                 }
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -2402,23 +2450,27 @@ impl CliRunner {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     async fn handle_search(&self, action: &SearchAction) -> Result<()> {
         use crate::extension_stub::agent_extension::{
-            DocumentationSearchStrategy, GitHubSearchStrategy, StackOverflowSearchStrategy,
-            SearchStrategy, SearchQuery, SearchContext, SearchFilters
+            DocumentationSearchStrategy, GitHubSearchStrategy, SearchContext, SearchFilters,
+            SearchQuery, SearchStrategy, StackOverflowSearchStrategy,
         };
-        
+
         match action {
-            SearchAction::Docs { query, source, limit } => {
+            SearchAction::Docs {
+                query,
+                source,
+                limit,
+            } => {
                 let search_query = SearchQuery {
                     keywords: query.split_whitespace().map(|s| s.to_string()).collect(),
-                    context: Some(SearchContext::CapabilityGap { 
-                        current: vec![], 
-                        desired: query.split_whitespace().map(|s| s.to_string()).collect() 
+                    context: Some(SearchContext::CapabilityGap {
+                        current: vec![],
+                        desired: query.split_whitespace().map(|s| s.to_string()).collect(),
                     }),
                     filters: Some(SearchFilters {
                         min_relevance: 0.5,
@@ -2428,9 +2480,9 @@ impl CliRunner {
                         date_range: None,
                     }),
                 };
-                
+
                 let mut all_results = Vec::new();
-                
+
                 if source == "all" || source == "mdn" {
                     let mdn_strategy = DocumentationSearchStrategy::new();
                     match mdn_strategy.search(&search_query).await {
@@ -2441,7 +2493,7 @@ impl CliRunner {
                         Err(e) => eprintln!("MDN search failed: {}", e),
                     }
                 }
-                
+
                 if source == "all" || source == "github" {
                     let github_strategy = GitHubSearchStrategy::new();
                     match github_strategy.search(&search_query).await {
@@ -2452,7 +2504,7 @@ impl CliRunner {
                         Err(e) => eprintln!("GitHub search failed: {}", e),
                     }
                 }
-                
+
                 if source == "all" || source == "stackoverflow" {
                     let stackoverflow_strategy = StackOverflowSearchStrategy;
                     match stackoverflow_strategy.search(&search_query).await {
@@ -2463,10 +2515,14 @@ impl CliRunner {
                         Err(e) => eprintln!("StackOverflow search failed: {}", e),
                     }
                 }
-                
-                all_results.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap_or(std::cmp::Ordering::Equal));
+
+                all_results.sort_by(|a, b| {
+                    b.relevance_score
+                        .partial_cmp(&a.relevance_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 all_results.truncate(*limit);
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -2488,7 +2544,7 @@ impl CliRunner {
                     println!("   Source: {}", source);
                     println!("   Found {} results", all_results.len());
                     println!();
-                    
+
                     for (i, result) in all_results.iter().enumerate() {
                         println!("{}. {} ({})", i + 1, result.title, result.source);
                         println!("   🔗 {}", result.url);
@@ -2498,15 +2554,15 @@ impl CliRunner {
                     }
                 }
             }
-            
+
             SearchAction::Test { query } => {
                 println!("🧪 Testing search functionality with query: {}", query);
-                
+
                 let search_query = SearchQuery {
                     keywords: query.split_whitespace().map(|s| s.to_string()).collect(),
-                    context: Some(SearchContext::CapabilityGap { 
-                        current: vec![], 
-                        desired: query.split_whitespace().map(|s| s.to_string()).collect() 
+                    context: Some(SearchContext::CapabilityGap {
+                        current: vec![],
+                        desired: query.split_whitespace().map(|s| s.to_string()).collect(),
                     }),
                     filters: Some(SearchFilters {
                         min_relevance: 0.5,
@@ -2516,7 +2572,7 @@ impl CliRunner {
                         date_range: None,
                     }),
                 };
-                
+
                 // Test each search strategy
                 println!("🔍 Testing MDN search...");
                 let mdn_strategy = DocumentationSearchStrategy::new();
@@ -2524,21 +2580,21 @@ impl CliRunner {
                     Ok(results) => println!("✅ MDN: Found {} results", results.len()),
                     Err(e) => println!("❌ MDN: Error - {}", e),
                 }
-                
+
                 println!("🔍 Testing GitHub search...");
                 let github_strategy = GitHubSearchStrategy::new();
                 match github_strategy.search(&search_query).await {
                     Ok(results) => println!("✅ GitHub: Found {} results", results.len()),
                     Err(e) => println!("❌ GitHub: Error - {}", e),
                 }
-                
+
                 println!("🔍 Testing StackOverflow search...");
                 let stackoverflow_strategy = StackOverflowSearchStrategy;
                 match stackoverflow_strategy.search(&search_query).await {
                     Ok(results) => println!("✅ StackOverflow: Found {} results", results.len()),
                     Err(e) => println!("❌ StackOverflow: Error - {}", e),
                 }
-                
+
                 if self.json_output {
                     println!(
                         "{}",
@@ -2553,7 +2609,7 @@ impl CliRunner {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -2583,8 +2639,12 @@ impl CliRunner {
                     println!("\nNo metrics available");
                 }
             }
-            
-            EvolutionAction::Patterns { pattern_type, successful, failed } => {
+
+            EvolutionAction::Patterns {
+                pattern_type,
+                successful,
+                failed,
+            } => {
                 if self.json_output {
                     println!(
                         "{}",
@@ -2609,7 +2669,7 @@ impl CliRunner {
                     println!("No patterns found");
                 }
             }
-            
+
             EvolutionAction::Genealogy { extension, full } => {
                 if self.json_output {
                     println!(
@@ -2630,7 +2690,7 @@ impl CliRunner {
                     println!("No genealogy data available");
                 }
             }
-            
+
             EvolutionAction::Report { format, output } => {
                 if self.json_output {
                     println!(
@@ -2652,7 +2712,7 @@ impl CliRunner {
                 }
             }
         }
-        
+
         Ok(())
     }
 }

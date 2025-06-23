@@ -17,12 +17,10 @@ use tokio::process::Command;
 use uuid::Uuid;
 
 pub use isolation::{IsolationConfig, IsolationMode};
-pub use personality::{
-    AgentPersonality, PersonalityTraits, Skill, WorkingStyle, TaskApproach,
-};
-pub use phronesis::{PhronesisManager, PracticalWisdom, WisdomCategory, LearningEventType};
+pub use personality::{AgentPersonality, PersonalityTraits, Skill, TaskApproach, WorkingStyle};
+pub use phronesis::{LearningEventType, PhronesisManager, PracticalWisdom, WisdomCategory};
 pub use task::{Priority, Task, TaskResult, TaskType};
-pub use whiteboard::{Whiteboard, WhiteboardEntry, EntryType, AnnotationMarker};
+pub use whiteboard::{AnnotationMarker, EntryType, Whiteboard, WhiteboardEntry};
 
 use self::interleaved_thinking::{Decision, InterleavedThinkingEngine};
 use crate::config::ClaudeConfig;
@@ -82,10 +80,10 @@ pub struct ClaudeCodeAgent {
 
     /// Agent's personality formed by skills and experiences
     pub personality: AgentPersonality,
-    
+
     /// Whiteboard for thought visualization
     pub whiteboard: Whiteboard,
-    
+
     /// Practical wisdom (phronesis) manager
     pub phronesis: PhronesisManager,
 }
@@ -154,7 +152,6 @@ impl ClaudeCodeAgent {
 
         Ok(agent)
     }
-
 
     /// Create environment variables for agent identity
     fn create_env_vars(
@@ -390,7 +387,7 @@ impl ClaudeCodeAgent {
             self.identity.agent_id
         );
         */
-        
+
         // Placeholder implementation
         tracing::info!("Container setup skipped (disabled)");
         Ok(())
@@ -398,11 +395,7 @@ impl ClaudeCodeAgent {
 
     /// Install Claude CLI in the container  
     #[allow(dead_code)]
-    async fn install_claude_in_container(
-        &self,
-        _container_id: &str,
-        _provider: &(),
-    ) -> Result<()> {
+    async fn install_claude_in_container(&self, _container_id: &str, _provider: &()) -> Result<()> {
         // Temporarily disabled - container functionality not available
         tracing::info!("Claude CLI installation skipped (disabled)");
         Ok(())
@@ -461,7 +454,7 @@ impl ClaudeCodeAgent {
             }
             TaskEvaluation::Reject { reason } => {
                 tracing::warn!("Task rejected by {}: {}", self.identity.agent_id, reason);
-                
+
                 // Record rejection as a learning event
                 self.phronesis.record_learning_event(
                     LearningEventType::Discovery {
@@ -471,12 +464,15 @@ impl ClaudeCodeAgent {
                     &format!("Task rejected for: {}", task.description),
                     std::collections::HashMap::new(),
                     crate::agent::phronesis::LearningOutcome {
-                        lesson_learned: format!("This type of task should be handled by a different agent: {}", reason),
+                        lesson_learned: format!(
+                            "This type of task should be handled by a different agent: {}",
+                            reason
+                        ),
                         actionable_insight: Some("Delegate to appropriate specialist".to_string()),
                         applicable_situations: vec!["Task delegation".to_string()],
                     },
                 );
-                
+
                 TaskResult {
                     success: false,
                     output: serde_json::json!({}),
@@ -508,15 +504,20 @@ impl ClaudeCodeAgent {
         let mut thinking_engine = InterleavedThinkingEngine::new().with_config(15, 0.6); // Max 15 steps, 0.6 confidence threshold
 
         // Create whiteboard section for this task
-        let task_section_id = self.whiteboard.create_section(&format!("Task: {}", task.description));
-        
+        let task_section_id = self
+            .whiteboard
+            .create_section(&format!("Task: {}", task.description));
+
         // Record initial task analysis on whiteboard
         let initial_note = self.whiteboard.add_note(
-            &format!("タスク開始: {}. タイプ: {:?}, 優先度: {:?}", 
-                task.description, task.task_type, task.priority),
+            &format!(
+                "タスク開始: {}. タイプ: {:?}, 優先度: {:?}",
+                task.description, task.task_type, task.priority
+            ),
             vec!["task_start".to_string()],
         );
-        self.whiteboard.add_to_section(&task_section_id, &initial_note);
+        self.whiteboard
+            .add_to_section(&task_section_id, &initial_note);
 
         // Initial thinking step - analyze the task
         let initial_observation = format!(
@@ -545,7 +546,8 @@ impl ClaudeCodeAgent {
 
         // Start a thought trace on whiteboard
         let thought_trace_id = self.whiteboard.start_thought_trace();
-        self.whiteboard.add_to_section(&task_section_id, &thought_trace_id);
+        self.whiteboard
+            .add_to_section(&task_section_id, &thought_trace_id);
 
         loop {
             execution_count += 1;
@@ -553,7 +555,11 @@ impl ClaudeCodeAgent {
 
             // Record execution attempt on whiteboard
             let exec_note = self.whiteboard.add_note(
-                &format!("実行試行 #{}: 出力長 {} 文字", execution_count, output.len()),
+                &format!(
+                    "実行試行 #{}: 出力長 {} 文字",
+                    execution_count,
+                    output.len()
+                ),
                 vec!["execution".to_string()],
             );
             self.whiteboard.add_to_section(&task_section_id, &exec_note);
@@ -563,12 +569,10 @@ impl ClaudeCodeAgent {
             let thinking_step = thinking_engine
                 .process_observation(&observation, self.identity.specialization.name())
                 .await?;
-            
+
             // Record thinking on whiteboard
-            self.whiteboard.add_thought(
-                &thought_trace_id,
-                &format!("観察: {}", observation),
-            );
+            self.whiteboard
+                .add_thought(&thought_trace_id, &format!("観察: {}", observation));
 
             // Monitor the response for identity
             let identity_status = monitor.monitor_response(&output).await?;
@@ -579,7 +583,8 @@ impl ClaudeCodeAgent {
             match thinking_step.decision {
                 Decision::Continue { reason } => {
                     tracing::debug!("Continuing execution: {}", reason);
-                    self.whiteboard.add_thought(&thought_trace_id, &format!("継続: {}", reason));
+                    self.whiteboard
+                        .add_thought(&thought_trace_id, &format!("継続: {}", reason));
                     final_output = output;
                     if execution_count >= max_executions {
                         break;
@@ -587,18 +592,23 @@ impl ClaudeCodeAgent {
                 }
                 Decision::Refine { refinement, reason } => {
                     tracing::info!("Refining approach: {} - {}", reason, refinement);
-                    self.whiteboard.add_thought(&thought_trace_id, &format!("改善: {} - {}", reason, refinement));
-                    
+                    self.whiteboard.add_thought(
+                        &thought_trace_id,
+                        &format!("改善: {} - {}", reason, refinement),
+                    );
+
                     // Record refinement as hypothesis
                     let hypothesis_id = self.whiteboard.add_hypothesis(&refinement, 0.7);
-                    self.whiteboard.add_to_section(&task_section_id, &hypothesis_id);
-                    
+                    self.whiteboard
+                        .add_to_section(&task_section_id, &hypothesis_id);
+
                     prompt = self.refine_prompt(&prompt, &refinement, &task);
                     final_output = output; // Keep last output
                 }
                 Decision::Complete { summary } => {
                     tracing::info!("Task completed: {}", summary);
-                    self.whiteboard.add_thought(&thought_trace_id, &format!("完了: {}", summary));
+                    self.whiteboard
+                        .add_thought(&thought_trace_id, &format!("完了: {}", summary));
                     self.whiteboard.set_conclusion(&thought_trace_id, &summary);
                     final_output = output;
                     break;
@@ -608,20 +618,33 @@ impl ClaudeCodeAgent {
                     reason,
                 } => {
                     tracing::warn!("Pivoting approach: {} - {}", reason, new_approach);
-                    self.whiteboard.add_thought(&thought_trace_id, &format!("方針転換: {} - {}", reason, new_approach));
-                    self.whiteboard.annotate(&thought_trace_id, "大幅な方針変更", AnnotationMarker::Important);
+                    self.whiteboard.add_thought(
+                        &thought_trace_id,
+                        &format!("方針転換: {} - {}", reason, new_approach),
+                    );
+                    self.whiteboard.annotate(
+                        &thought_trace_id,
+                        "大幅な方針変更",
+                        AnnotationMarker::Important,
+                    );
                     prompt = self.generate_pivot_prompt(&task, &new_approach);
                 }
                 Decision::RequestContext { questions } => {
                     tracing::info!("Additional context needed: {:?}", questions);
-                    self.whiteboard.add_thought(&thought_trace_id, &format!("追加情報必要: {:?}", questions));
+                    self.whiteboard
+                        .add_thought(&thought_trace_id, &format!("追加情報必要: {:?}", questions));
                     // In a real implementation, this would request from orchestrator
                     // For now, we'll add questions to prompt and continue
                     prompt.push_str(&format!("\n\nPlease address: {}", questions.join(", ")));
                 }
                 Decision::Abort { reason } => {
-                    self.whiteboard.add_thought(&thought_trace_id, &format!("中断: {}", reason));
-                    self.whiteboard.annotate(&thought_trace_id, "タスク中断", AnnotationMarker::Important);
+                    self.whiteboard
+                        .add_thought(&thought_trace_id, &format!("中断: {}", reason));
+                    self.whiteboard.annotate(
+                        &thought_trace_id,
+                        "タスク中断",
+                        AnnotationMarker::Important,
+                    );
                     return Err(anyhow::anyhow!("Task aborted: {}", reason));
                 }
             }
@@ -636,7 +659,7 @@ impl ClaudeCodeAgent {
 
         // Update agent's experience based on task completion
         self.update_agent_experience(&task);
-        
+
         // Record success in phronesis system
         let lesson = format!(
             "Task completed in {} steps with {:.1}% confidence",
@@ -697,7 +720,7 @@ impl ClaudeCodeAgent {
             }
             IdentityStatus::DriftDetected(msg) => {
                 tracing::warn!("Identity drift detected: {}", msg);
-                
+
                 // Record drift as learning event
                 self.phronesis.record_learning_event(
                     LearningEventType::Refinement {
@@ -708,11 +731,13 @@ impl ClaudeCodeAgent {
                     std::collections::HashMap::new(),
                     crate::agent::phronesis::LearningOutcome {
                         lesson_learned: "Identity boundaries need reinforcement".to_string(),
-                        actionable_insight: Some("Add stronger identity markers in prompts".to_string()),
+                        actionable_insight: Some(
+                            "Add stronger identity markers in prompts".to_string(),
+                        ),
                         applicable_situations: vec!["Identity maintenance".to_string()],
                     },
                 );
-                
+
                 self.correct_identity_drift(monitor).await
             }
             IdentityStatus::BoundaryViolation(msg) => {
@@ -877,7 +902,6 @@ impl ClaudeCodeAgent {
         self.execute_claude_real_api(prompt).await
     }
 
-
     /// Correct identity drift
     async fn correct_identity_drift(&self, monitor: &mut IdentityMonitor) -> Result<()> {
         let correction_prompt = monitor.generate_correction_prompt(
@@ -955,9 +979,9 @@ impl ClaudeCodeAgent {
             TaskType::Bugfix => 1.2,
             TaskType::Remediation => 1.5,
         };
-        
+
         let adjusted_experience = (experience_points as f32 * experience_multiplier) as u32;
-        
+
         for skill in self.personality.skills.values_mut() {
             skill.add_experience(adjusted_experience);
             tracing::debug!(

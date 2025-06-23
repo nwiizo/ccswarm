@@ -13,6 +13,7 @@ pub struct MetaLearningSystem {
     /// Pattern matcher
     matcher: PatternMatcher,
     /// Evolution tracker
+    #[allow(dead_code)]
     evolution_tracker: EvolutionTracker,
 }
 
@@ -24,6 +25,7 @@ pub struct LearningPatternDB {
     /// Failure patterns to avoid
     failure_patterns: Vec<FailurePattern>,
     /// Meta-patterns (patterns about patterns)
+    #[allow(dead_code)]
     meta_patterns: Vec<MetaPattern>,
 }
 
@@ -66,12 +68,12 @@ pub struct MetaPattern {
 /// Types of patterns
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PatternType {
-    Sequential,      // Step-by-step learning
-    Parallel,        // Multiple simultaneous learnings
-    Iterative,       // Repeated refinement
-    Exploratory,     // Trial and error
-    Analytical,      // Deep analysis first
-    Synthetic,       // Combining existing knowledge
+    Sequential,  // Step-by-step learning
+    Parallel,    // Multiple simultaneous learnings
+    Iterative,   // Repeated refinement
+    Exploratory, // Trial and error
+    Analytical,  // Deep analysis first
+    Synthetic,   // Combining existing knowledge
 }
 
 /// Context in which extension occurs
@@ -122,12 +124,12 @@ pub struct LearningApproach {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LearningStrategy {
-    TopDown,          // Start with theory, then practice
-    BottomUp,         // Start with examples, derive theory
-    MiddleOut,        // Start with core concepts, expand
-    Holistic,         // Consider entire system
-    Incremental,      // Small steps
-    Revolutionary,    // Major leap
+    TopDown,       // Start with theory, then practice
+    BottomUp,      // Start with examples, derive theory
+    MiddleOut,     // Start with core concepts, expand
+    Holistic,      // Consider entire system
+    Incremental,   // Small steps
+    Revolutionary, // Major leap
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,14 +178,14 @@ impl ExperienceAnalyzer {
         let mut combined_insights = Vec::new();
         let mut combined_patterns = Vec::new();
         let mut overall_success_score = 0.0;
-        
+
         for strategy in &self.analysis_strategies {
             let result = strategy.analyze(experience);
             combined_insights.extend(result.key_insights);
             combined_patterns.extend(result.patterns);
             overall_success_score += result.success_score;
         }
-        
+
         AnalysisResult {
             key_insights: combined_insights,
             patterns: combined_patterns,
@@ -299,7 +301,11 @@ impl PatternMatcher {
         matches
     }
 
-    fn calculate_similarity(&self, pattern_context: &ExtensionContext, current_context: &ExtensionContext) -> f64 {
+    fn calculate_similarity(
+        &self,
+        pattern_context: &ExtensionContext,
+        current_context: &ExtensionContext,
+    ) -> f64 {
         let mut score = 0.0;
         let mut factors = 0.0;
 
@@ -360,6 +366,7 @@ pub enum MatchType {
 /// Evolution tracker
 #[derive(Debug)]
 pub struct EvolutionTracker {
+    #[allow(dead_code)]
     history: Arc<RwLock<Vec<EvolutionRecord>>>,
 }
 
@@ -372,6 +379,12 @@ pub struct EvolutionRecord {
     pub capability_after: Vec<String>,
     pub learning_efficiency: f64,
     pub adaptation_speed: f64,
+}
+
+impl Default for MetaLearningSystem {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetaLearningSystem {
@@ -399,13 +412,19 @@ impl MetaLearningSystem {
         // Update patterns based on outcome
         match &experience.outcome {
             ExtensionOutcome::Success { improvements } => {
-                self.record_success_pattern(&experience, &analysis, improvements).await?;
+                self.record_success_pattern(&experience, &analysis, improvements)
+                    .await?;
             }
             ExtensionOutcome::Failure { reasons } => {
-                self.record_failure_pattern(&experience, &analysis, reasons).await?;
+                self.record_failure_pattern(&experience, &analysis, reasons)
+                    .await?;
             }
-            ExtensionOutcome::PartialSuccess { achievements, issues } => {
-                self.record_mixed_pattern(&experience, &analysis, achievements, issues).await?;
+            ExtensionOutcome::PartialSuccess {
+                achievements,
+                issues,
+            } => {
+                self.record_mixed_pattern(&experience, &analysis, achievements, issues)
+                    .await?;
             }
         }
 
@@ -429,7 +448,7 @@ impl MetaLearningSystem {
         context: &ExtensionContext,
     ) -> Result<LearningRecommendations> {
         let patterns = self.patterns.read().await;
-        
+
         // Find matching patterns
         let matches = self.matcher.match_patterns(context, &patterns).await;
 
@@ -446,21 +465,34 @@ impl MetaLearningSystem {
         for match_result in matches {
             match match_result.pattern_type {
                 MatchType::Success => {
-                    recommendations.patterns_to_follow.push(match_result.pattern_id);
+                    recommendations
+                        .patterns_to_follow
+                        .push(match_result.pattern_id);
                     if recommendations.recommended_approach.is_none() {
                         // Use the highest matching success pattern's approach
-                        if let Some(pattern) = patterns.success_patterns.iter()
-                            .find(|p| p.id == match_result.pattern_id) {
+                        if let Some(pattern) = patterns
+                            .success_patterns
+                            .iter()
+                            .find(|p| p.id == match_result.pattern_id)
+                        {
                             recommendations.recommended_approach = Some(pattern.approach.clone());
-                            recommendations.estimated_success_rate = pattern.success_rate * match_result.similarity_score;
+                            recommendations.estimated_success_rate =
+                                pattern.success_rate * match_result.similarity_score;
                         }
                     }
                 }
                 MatchType::Failure => {
-                    recommendations.patterns_to_avoid.push(match_result.pattern_id);
-                    if let Some(pattern) = patterns.failure_patterns.iter()
-                        .find(|p| p.id == match_result.pattern_id) {
-                        recommendations.risk_mitigation.extend(pattern.avoidance_strategies.clone());
+                    recommendations
+                        .patterns_to_avoid
+                        .push(match_result.pattern_id);
+                    if let Some(pattern) = patterns
+                        .failure_patterns
+                        .iter()
+                        .find(|p| p.id == match_result.pattern_id)
+                    {
+                        recommendations
+                            .risk_mitigation
+                            .extend(pattern.avoidance_strategies.clone());
                     }
                 }
                 MatchType::Meta => {
@@ -480,10 +512,10 @@ impl MetaLearningSystem {
     ) -> Result<()> {
         // Record successful pattern
         let _patterns = self.patterns.write().await;
-        
+
         // Check if similar pattern exists
         // If yes, update it; if no, create new
-        
+
         Ok(())
     }
 
@@ -518,7 +550,10 @@ impl MetaLearningSystem {
         Ok(())
     }
 
-    async fn calculate_evolution_metrics(&self, _experience: &ExtensionExperience) -> Result<EvolutionMetrics> {
+    async fn calculate_evolution_metrics(
+        &self,
+        _experience: &ExtensionExperience,
+    ) -> Result<EvolutionMetrics> {
         Ok(EvolutionMetrics {
             learning_velocity: 0.0,
             adaptation_rate: 0.0,
@@ -564,7 +599,7 @@ mod tests {
     #[test]
     fn test_pattern_matcher() {
         let matcher = PatternMatcher::new(0.7);
-        
+
         let pattern_context = ExtensionContext {
             agent_role: AgentRole::Frontend {
                 technologies: vec!["React".to_string()],
@@ -577,7 +612,7 @@ mod tests {
             resource_availability: ResourceAvailability::Sufficient,
             time_pressure: TimePressure::Normal,
         };
-        
+
         let current_context = ExtensionContext {
             agent_role: AgentRole::Frontend {
                 technologies: vec!["React".to_string()],
@@ -590,7 +625,7 @@ mod tests {
             resource_availability: ResourceAvailability::Sufficient,
             time_pressure: TimePressure::Normal,
         };
-        
+
         let similarity = matcher.calculate_similarity(&pattern_context, &current_context);
         assert_eq!(similarity, 1.0);
     }

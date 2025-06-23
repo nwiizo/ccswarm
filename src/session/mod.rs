@@ -15,7 +15,9 @@ use uuid::Uuid;
 use crate::auto_accept::AutoAcceptConfig;
 use crate::identity::AgentRole;
 use crate::tmux::TmuxClient;
-use memory::{SessionMemory, WorkingMemoryType, EpisodeType, EpisodeOutcome, RetrievalResult, MemorySummary};
+use memory::{
+    EpisodeOutcome, EpisodeType, MemorySummary, RetrievalResult, SessionMemory, WorkingMemoryType,
+};
 
 /// Represents the current status of an agent session
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -79,7 +81,7 @@ pub struct AgentSession {
     pub tasks_processed: usize,
     /// Number of tasks currently in queue
     pub tasks_queued: usize,
-    
+
     /// Integrated memory system for this session
     pub memory: SessionMemory,
 }
@@ -100,7 +102,7 @@ impl AgentSession {
         );
 
         let memory = SessionMemory::new(session_id.clone(), agent_id.clone());
-        
+
         Self {
             id: session_id,
             agent_id: agent_id.clone(),
@@ -170,37 +172,44 @@ impl AgentSession {
     pub fn is_auto_accept_ready(&self) -> bool {
         self.auto_accept && self.auto_accept_config.is_some()
     }
-    
+
     /// Add item to working memory
     pub fn add_memory(&mut self, content: String, item_type: WorkingMemoryType, priority: f32) {
-        self.memory.add_to_working_memory(content, item_type, priority);
+        self.memory
+            .add_to_working_memory(content, item_type, priority);
         self.touch();
     }
-    
+
     /// Set current task context
     pub fn set_task_context(&mut self, task_id: String, description: String) {
         self.memory.set_task_context(task_id, description);
         self.touch();
     }
-    
+
     /// Add episode to memory
-    pub fn add_episode(&mut self, event_type: EpisodeType, description: String, 
-                       context: HashMap<String, String>, outcome: EpisodeOutcome) {
-        self.memory.add_episode(event_type, description, context, outcome);
+    pub fn add_episode(
+        &mut self,
+        event_type: EpisodeType,
+        description: String,
+        context: HashMap<String, String>,
+        outcome: EpisodeOutcome,
+    ) {
+        self.memory
+            .add_episode(event_type, description, context, outcome);
         self.touch();
     }
-    
+
     /// Consolidate memories
     pub fn consolidate_memories(&mut self) {
         self.memory.consolidate_memories();
         self.touch();
     }
-    
+
     /// Retrieve relevant memories
     pub fn retrieve_memories(&self, query: &str) -> RetrievalResult {
         self.memory.retrieve_relevant_memories(query)
     }
-    
+
     /// Get memory summary
     pub fn get_memory_summary(&self) -> MemorySummary {
         self.memory.generate_memory_summary()

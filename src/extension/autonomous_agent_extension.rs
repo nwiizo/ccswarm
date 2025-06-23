@@ -1,5 +1,5 @@
 //! Autonomous agent self-extension with Sangha integration
-//! 
+//!
 //! This module implements self-directed capability extension where agents
 //! autonomously identify their needs and consult with the Sangha collective
 //! intelligence for approval and guidance.
@@ -7,12 +7,12 @@
 use super::*;
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 // Remove unused imports - these types don't exist in extension_stub
 
 /// Trait for AI providers used in extensions
@@ -39,10 +39,12 @@ pub struct KnowledgeBase {
     /// Past experiences and their outcomes
     experiences: Vec<Experience>,
     /// Identified patterns in work
+    #[allow(dead_code)]
     patterns: Vec<Pattern>,
     /// Current capabilities
     capabilities: HashMap<String, CapabilityInfo>,
     /// Lessons learned from failures
+    #[allow(dead_code)]
     lessons: Vec<Lesson>,
 }
 
@@ -61,9 +63,17 @@ pub struct Experience {
 /// Task outcome
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskOutcome {
-    Success { metrics: HashMap<String, f64> },
-    PartialSuccess { completed: Vec<String>, failed: Vec<String> },
-    Failure { reason: String, error_details: Option<String> },
+    Success {
+        metrics: HashMap<String, f64>,
+    },
+    PartialSuccess {
+        completed: Vec<String>,
+        failed: Vec<String>,
+    },
+    Failure {
+        reason: String,
+        error_details: Option<String>,
+    },
 }
 
 /// Pattern identified through experience
@@ -115,19 +125,22 @@ impl ExperienceAnalyzer {
         let mut patterns = Vec::new();
         let mut insights = Vec::new();
         let mut recurring_challenges = Vec::new();
-        
+
         // Group experiences by task type
         let mut task_groups: HashMap<String, Vec<&Experience>> = HashMap::new();
         for exp in experiences {
-            task_groups.entry(exp.task_type.clone()).or_default().push(exp);
+            task_groups
+                .entry(exp.task_type.clone())
+                .or_default()
+                .push(exp);
         }
-        
+
         // Analyze each group
         for (task_type, group) in task_groups {
             let success_rate = self.calculate_success_rate(&group);
             let common_failures = self.identify_common_failures(&group);
-            
-            if success_rate < 0.7 && common_failures.len() > 0 {
+
+            if success_rate < 0.7 && !common_failures.is_empty() {
                 recurring_challenges.push(RecurringChallenge {
                     task_type: task_type.clone(),
                     success_rate,
@@ -135,16 +148,16 @@ impl ExperienceAnalyzer {
                     occurrence_count: group.len(),
                 });
             }
-            
+
             // Extract patterns
             if let Some(pattern) = self.extract_pattern(&group) {
                 patterns.push(pattern);
             }
         }
-        
+
         // Generate insights
         insights.extend(self.generate_insights(&patterns, &recurring_challenges));
-        
+
         Ok(AnalysisResult {
             patterns,
             insights,
@@ -152,29 +165,31 @@ impl ExperienceAnalyzer {
             improvement_areas: self.identify_improvement_areas(&recurring_challenges),
         })
     }
-    
+
     fn calculate_success_rate(&self, experiences: &[&Experience]) -> f64 {
-        let successes = experiences.iter()
+        let successes = experiences
+            .iter()
             .filter(|e| matches!(e.outcome, TaskOutcome::Success { .. }))
             .count();
         successes as f64 / experiences.len() as f64
     }
-    
+
     fn identify_common_failures(&self, experiences: &[&Experience]) -> Vec<String> {
         let mut failure_reasons = HashMap::new();
-        
+
         for exp in experiences {
             if let TaskOutcome::Failure { reason, .. } = &exp.outcome {
                 *failure_reasons.entry(reason.clone()).or_insert(0) += 1;
             }
         }
-        
-        failure_reasons.into_iter()
+
+        failure_reasons
+            .into_iter()
             .filter(|(_, count)| *count >= 2)
             .map(|(reason, _)| reason)
             .collect()
     }
-    
+
     fn extract_pattern(&self, experiences: &[&Experience]) -> Option<Pattern> {
         // Simplified pattern extraction
         if experiences.len() >= 3 {
@@ -190,31 +205,38 @@ impl ExperienceAnalyzer {
             None
         }
     }
-    
-    fn generate_insights(&self, patterns: &[Pattern], challenges: &[RecurringChallenge]) -> Vec<String> {
+
+    fn generate_insights(
+        &self,
+        patterns: &[Pattern],
+        challenges: &[RecurringChallenge],
+    ) -> Vec<String> {
         let mut insights = Vec::new();
-        
+
         for pattern in patterns {
             if pattern.success_rate > 0.8 {
                 insights.push(format!(
                     "Strong pattern '{}' with {:.0}% success rate",
-                    pattern.name, pattern.success_rate * 100.0
+                    pattern.name,
+                    pattern.success_rate * 100.0
                 ));
             }
         }
-        
+
         for challenge in challenges {
             insights.push(format!(
                 "Recurring challenge in {} tasks (success rate: {:.0}%)",
-                challenge.task_type, challenge.success_rate * 100.0
+                challenge.task_type,
+                challenge.success_rate * 100.0
             ));
         }
-        
+
         insights
     }
-    
+
     fn identify_improvement_areas(&self, challenges: &[RecurringChallenge]) -> Vec<String> {
-        challenges.iter()
+        challenges
+            .iter()
             .map(|c| format!("Improve {} capabilities", c.task_type))
             .collect()
     }
@@ -251,15 +273,18 @@ impl CapabilityAssessor {
         let mut strengths = Vec::new();
         let mut weaknesses = Vec::new();
         let mut gaps = Vec::new();
-        
+
         // Analyze capability usage and effectiveness
         for (name, info) in capabilities {
             if info.effectiveness_score > 0.8 && info.usage_count > 10 {
                 strengths.push(Strength {
                     capability: name.clone(),
                     proficiency: info.proficiency_level,
-                    evidence: format!("Used {} times with {:.0}% effectiveness", 
-                                    info.usage_count, info.effectiveness_score * 100.0),
+                    evidence: format!(
+                        "Used {} times with {:.0}% effectiveness",
+                        info.usage_count,
+                        info.effectiveness_score * 100.0
+                    ),
                 });
             } else if info.effectiveness_score < 0.5 {
                 weaknesses.push(Weakness {
@@ -269,11 +294,14 @@ impl CapabilityAssessor {
                 });
             }
         }
-        
+
         // Identify gaps from recent failures
         for task in recent_tasks {
             if let TaskOutcome::Failure { reason, .. } = &task.outcome {
-                if reason.contains("lack") || reason.contains("unable") || reason.contains("missing") {
+                if reason.contains("lack")
+                    || reason.contains("unable")
+                    || reason.contains("missing")
+                {
                     gaps.push(CapabilityGap {
                         missing_capability: self.extract_missing_capability(reason),
                         context: task.context.clone(),
@@ -282,7 +310,7 @@ impl CapabilityAssessor {
                 }
             }
         }
-        
+
         Ok(CapabilityAssessment {
             strengths: strengths.clone(),
             weaknesses: weaknesses.clone(),
@@ -290,7 +318,7 @@ impl CapabilityAssessor {
             overall_readiness: self.calculate_readiness(&strengths, &weaknesses),
         })
     }
-    
+
     fn extract_missing_capability(&self, failure_reason: &str) -> String {
         // Simple extraction logic
         if failure_reason.contains("React") {
@@ -303,7 +331,7 @@ impl CapabilityAssessor {
             "Unknown capability".to_string()
         }
     }
-    
+
     fn calculate_readiness(&self, strengths: &[Strength], weaknesses: &[Weakness]) -> f64 {
         let strength_score = strengths.len() as f64 * 0.1;
         let weakness_penalty = weaknesses.len() as f64 * 0.15;
@@ -355,7 +383,7 @@ impl NeedIdentifier {
         assessment: &CapabilityAssessment,
     ) -> Result<Vec<ExtensionNeed>> {
         let mut needs = Vec::new();
-        
+
         // Create needs from capability gaps
         for gap in &assessment.gaps {
             needs.push(ExtensionNeed {
@@ -370,7 +398,7 @@ impl NeedIdentifier {
                 rationale: format!("Gap identified from {}", gap.impact),
             });
         }
-        
+
         // Create needs from recurring challenges
         for challenge in &analysis.recurring_challenges {
             needs.push(ExtensionNeed {
@@ -379,19 +407,20 @@ impl NeedIdentifier {
                 title: format!("Improve {} performance", challenge.task_type),
                 description: format!(
                     "Current success rate is only {:.0}% with {} occurrences",
-                    challenge.success_rate * 100.0, challenge.occurrence_count
+                    challenge.success_rate * 100.0,
+                    challenge.occurrence_count
                 ),
                 priority: self.calculate_challenge_priority(challenge),
                 rationale: format!("Common failures: {:?}", challenge.common_failures),
             });
         }
-        
+
         // Sort by priority
         needs.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap());
-        
+
         Ok(needs)
     }
-    
+
     fn calculate_priority(&self, impact: &str) -> f64 {
         match impact {
             "Task failure" => 0.9,
@@ -400,7 +429,7 @@ impl NeedIdentifier {
             _ => 0.3,
         }
     }
-    
+
     fn calculate_challenge_priority(&self, challenge: &RecurringChallenge) -> f64 {
         let frequency_factor = (challenge.occurrence_count as f64 / 10.0).min(1.0);
         let failure_factor = 1.0 - challenge.success_rate;
@@ -439,8 +468,9 @@ impl StrategicPlanner {
         agent_role: &AgentRole,
     ) -> Result<Vec<StrategicProposal>> {
         let mut proposals = Vec::new();
-        
-        for need in needs.iter().take(3) { // Limit to top 3 needs
+
+        for need in needs.iter().take(3) {
+            // Limit to top 3 needs
             let proposal = StrategicProposal {
                 id: Uuid::new_v4(),
                 need: need.clone(),
@@ -452,10 +482,10 @@ impl StrategicPlanner {
             };
             proposals.push(proposal);
         }
-        
+
         Ok(proposals)
     }
-    
+
     fn determine_approach(&self, need: &ExtensionNeed) -> ExtensionApproach {
         match need.need_type {
             NeedType::CapabilityGap => ExtensionApproach::LearnNewSkill,
@@ -464,7 +494,7 @@ impl StrategicPlanner {
             NeedType::CollaborationEnhancement => ExtensionApproach::DevelopProtocol,
         }
     }
-    
+
     fn create_implementation_strategy(
         &self,
         _need: &ExtensionNeed,
@@ -494,7 +524,7 @@ impl StrategicPlanner {
             ],
         }
     }
-    
+
     fn estimate_benefits(&self, need: &ExtensionNeed) -> Vec<String> {
         vec![
             format!("Improved {} capability", need.title),
@@ -502,7 +532,7 @@ impl StrategicPlanner {
             "Reduced error frequency".to_string(),
         ]
     }
-    
+
     fn estimate_resources(&self, _need: &ExtensionNeed) -> ResourceRequirements {
         ResourceRequirements {
             time_estimate: "1 week".to_string(),
@@ -510,7 +540,7 @@ impl StrategicPlanner {
             external_dependencies: vec![],
         }
     }
-    
+
     fn define_success_metrics(&self, _need: &ExtensionNeed) -> Vec<String> {
         vec![
             "Task success rate > 80%".to_string(),
@@ -670,6 +700,12 @@ pub struct SkillLearned {
     pub proficiency_growth: Vec<(DateTime<Utc>, f64)>,
 }
 
+impl Default for AutonomousReasoner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AutonomousReasoner {
     pub fn new() -> Self {
         Self {
@@ -679,7 +715,7 @@ impl AutonomousReasoner {
             strategic_planner: StrategicPlanner,
         }
     }
-    
+
     /// Perform autonomous reasoning to identify extension opportunities
     pub async fn reason_about_extensions(
         &self,
@@ -687,26 +723,36 @@ impl AutonomousReasoner {
         agent_role: &AgentRole,
     ) -> Result<Vec<StrategicProposal>> {
         // Analyze past experiences
-        let analysis = self.experience_analyzer
+        let analysis = self
+            .experience_analyzer
             .analyze_experiences(&knowledge_base.experiences)
             .await?;
-        
+
         // Assess current capabilities
-        let assessment = self.capability_assessor
+        let assessment = self
+            .capability_assessor
             .assess_capabilities(&knowledge_base.capabilities, &knowledge_base.experiences)
             .await?;
-        
+
         // Identify needs
-        let needs = self.need_identifier
+        let needs = self
+            .need_identifier
             .identify_needs(&analysis, &assessment)
             .await?;
-        
+
         // Create strategic proposals
-        let proposals = self.strategic_planner
+        let proposals = self
+            .strategic_planner
             .create_proposals(&needs, agent_role)
             .await?;
-        
+
         Ok(proposals)
+    }
+}
+
+impl Default for SelfReflectionEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -717,34 +763,36 @@ impl SelfReflectionEngine {
             learning_tracker: Arc::new(RwLock::new(LearningTracker::default())),
         }
     }
-    
+
     /// Reflect on recent performance and learning
     pub async fn reflect(&self) -> Result<ReflectionInsights> {
         let history = self.performance_history.read().await;
         let learning = self.learning_tracker.read().await;
-        
+
         let insights = ReflectionInsights {
             performance_trend: self.analyze_performance_trend(&history.task_outcomes),
             learning_effectiveness: learning.learning_velocity * learning.retention_rate,
             improvement_suggestions: self.generate_improvement_suggestions(&history, &learning),
             confidence_level: self.calculate_confidence(&history, &learning),
         };
-        
+
         Ok(insights)
     }
-    
+
     fn analyze_performance_trend(&self, outcomes: &[TaskOutcome]) -> PerformanceTrend {
         // Simple trend analysis
         if outcomes.is_empty() {
             return PerformanceTrend::Stable;
         }
-        
-        let recent_success_rate = outcomes.iter()
+
+        let recent_success_rate = outcomes
+            .iter()
             .rev()
             .take(10)
             .filter(|o| matches!(o, TaskOutcome::Success { .. }))
-            .count() as f64 / 10.0;
-        
+            .count() as f64
+            / 10.0;
+
         if recent_success_rate > 0.8 {
             PerformanceTrend::Improving
         } else if recent_success_rate < 0.5 {
@@ -753,14 +801,14 @@ impl SelfReflectionEngine {
             PerformanceTrend::Stable
         }
     }
-    
+
     fn generate_improvement_suggestions(
         &self,
         history: &PerformanceHistory,
         learning: &LearningTracker,
     ) -> Vec<String> {
         let mut suggestions = Vec::new();
-        
+
         // Analyze error patterns
         for pattern in &history.error_patterns {
             if pattern.occurrences > 3 {
@@ -770,15 +818,15 @@ impl SelfReflectionEngine {
                 ));
             }
         }
-        
+
         // Check learning velocity
         if learning.learning_velocity < 0.5 {
             suggestions.push("Consider more focused learning strategies".to_string());
         }
-        
+
         suggestions
     }
-    
+
     fn calculate_confidence(
         &self,
         history: &PerformanceHistory,
@@ -824,48 +872,52 @@ impl AutonomousAgentExtensionManager {
             self_reflection: SelfReflectionEngine::new(),
         }
     }
-    
+
     /// Autonomously identify and propose extensions
     pub async fn propose_extensions(&self) -> Result<Vec<ProposalId>> {
         // Get current knowledge base
         let knowledge_base = self.knowledge_base.read().await;
-        
+
         // Perform self-reflection
         let reflection = self.self_reflection.reflect().await?;
         tracing::info!(
             "Self-reflection complete: trend={:?}, confidence={:.2}",
-            reflection.performance_trend, reflection.confidence_level
+            reflection.performance_trend,
+            reflection.confidence_level
         );
-        
+
         // Reason about needed extensions
-        let strategic_proposals = self.autonomous_reasoner
+        let strategic_proposals = self
+            .autonomous_reasoner
             .reason_about_extensions(&knowledge_base, &self.agent_role)
             .await?;
-        
+
         if strategic_proposals.is_empty() {
             tracing::info!("No extension needs identified at this time");
             return Ok(vec![]);
         }
-        
+
         // Convert to extension proposals and submit to Sangha
         let mut proposal_ids = Vec::new();
-        
+
         for strategic_proposal in strategic_proposals {
             // Create formal extension proposal
-            let extension_proposal = self.create_extension_proposal(
-                &strategic_proposal,
-                &reflection
-            ).await?;
-            
+            let extension_proposal = self
+                .create_extension_proposal(&strategic_proposal, &reflection)
+                .await?;
+
             // Submit to Sangha for approval
-            match self.sangha_interface.sangha_client
+            match self
+                .sangha_interface
+                .sangha_client
                 .propose_extension(&extension_proposal)
                 .await
             {
                 Ok(proposal_id) => {
                     tracing::info!(
                         "Extension proposal '{}' submitted to Sangha (ID: {:?})",
-                        extension_proposal.title, proposal_id.0
+                        extension_proposal.title,
+                        proposal_id.0
                     );
                     proposal_ids.push(proposal_id);
                 }
@@ -874,15 +926,18 @@ impl AutonomousAgentExtensionManager {
                 }
             }
         }
-        
+
         Ok(proposal_ids)
     }
-    
+
     /// Check consensus on submitted proposals
     pub async fn check_consensus(&self, proposal_id: &ProposalId) -> Result<ConsensusResult> {
-        self.sangha_interface.sangha_client.get_consensus(proposal_id).await
+        self.sangha_interface
+            .sangha_client
+            .get_consensus(proposal_id)
+            .await
     }
-    
+
     /// Submit evidence for a proposal
     pub async fn submit_evidence(
         &self,
@@ -896,12 +951,13 @@ impl AutonomousAgentExtensionManager {
             description,
             supporting_data: data,
         };
-        
-        self.sangha_interface.sangha_client
+
+        self.sangha_interface
+            .sangha_client
             .submit_evidence(proposal_id, &evidence)
             .await
     }
-    
+
     /// Record a new experience
     pub async fn record_experience(
         &self,
@@ -919,17 +975,17 @@ impl AutonomousAgentExtensionManager {
             outcome: outcome.clone(),
             insights: self.extract_insights(&outcome),
         };
-        
+
         let mut kb = self.knowledge_base.write().await;
         kb.experiences.push(experience);
-        
+
         // Update performance history
         let mut history = self.self_reflection.performance_history.write().await;
         history.task_outcomes.push(outcome);
-        
+
         Ok(())
     }
-    
+
     /// Update capability information
     pub async fn update_capability(
         &self,
@@ -938,28 +994,30 @@ impl AutonomousAgentExtensionManager {
         used: bool,
     ) -> Result<()> {
         let mut kb = self.knowledge_base.write().await;
-        
-        let capability = kb.capabilities.entry(name.clone()).or_insert(CapabilityInfo {
-            name,
-            description: String::new(),
-            proficiency_level: 0.5,
-            usage_count: 0,
-            last_used: Utc::now(),
-            effectiveness_score: effectiveness,
-        });
-        
+
+        let capability = kb
+            .capabilities
+            .entry(name.clone())
+            .or_insert(CapabilityInfo {
+                name,
+                description: String::new(),
+                proficiency_level: 0.5,
+                usage_count: 0,
+                last_used: Utc::now(),
+                effectiveness_score: effectiveness,
+            });
+
         if used {
             capability.usage_count += 1;
             capability.last_used = Utc::now();
         }
-        
+
         // Update effectiveness with exponential moving average
-        capability.effectiveness_score = 
-            capability.effectiveness_score * 0.7 + effectiveness * 0.3;
-        
+        capability.effectiveness_score = capability.effectiveness_score * 0.7 + effectiveness * 0.3;
+
         Ok(())
     }
-    
+
     async fn create_extension_proposal(
         &self,
         strategic: &StrategicProposal,
@@ -979,7 +1037,7 @@ impl AutonomousAgentExtensionManager {
             reflection.performance_trend,
             reflection.confidence_level
         )).await?;
-        
+
         Ok(ExtensionProposal {
             id: strategic.id,
             proposer: self.agent_id.clone(),
@@ -987,7 +1045,7 @@ impl AutonomousAgentExtensionManager {
             title: strategic.need.title.clone(),
             description: enhanced_description,
             current_state: CurrentState {
-                capabilities: vec![],  // Would be filled from knowledge base
+                capabilities: vec![], // Would be filled from knowledge base
                 limitations: reflection.improvement_suggestions.clone(),
                 performance_metrics: HashMap::new(),
             },
@@ -997,7 +1055,10 @@ impl AutonomousAgentExtensionManager {
                 performance_targets: HashMap::new(),
             },
             implementation_plan: ImplementationPlan {
-                phases: strategic.implementation_strategy.phases.iter()
+                phases: strategic
+                    .implementation_strategy
+                    .phases
+                    .iter()
                     .map(|p| ImplementationPhase {
                         name: p.name.clone(),
                         description: format!("Execute {}", p.name),
@@ -1020,7 +1081,9 @@ impl AutonomousAgentExtensionManager {
                     ComplexityLevel::High => 0.9,
                 },
             },
-            success_criteria: strategic.success_metrics.iter()
+            success_criteria: strategic
+                .success_metrics
+                .iter()
                 .map(|m| SuccessCriterion {
                     description: m.clone(),
                     metric: "Success rate".to_string(),
@@ -1032,11 +1095,14 @@ impl AutonomousAgentExtensionManager {
             status: ExtensionStatus::Proposed,
         })
     }
-    
+
     fn extract_insights(&self, outcome: &TaskOutcome) -> Vec<String> {
         match outcome {
             TaskOutcome::Success { metrics } => {
-                vec![format!("Successfully completed with metrics: {:?}", metrics)]
+                vec![format!(
+                    "Successfully completed with metrics: {:?}",
+                    metrics
+                )]
             }
             TaskOutcome::PartialSuccess { completed, failed } => {
                 vec![
@@ -1049,7 +1115,7 @@ impl AutonomousAgentExtensionManager {
             }
         }
     }
-    
+
     fn map_need_to_extension_type(&self, need_type: NeedType) -> ExtensionType {
         match need_type {
             NeedType::CapabilityGap => ExtensionType::Capability,
@@ -1058,7 +1124,6 @@ impl AutonomousAgentExtensionManager {
             NeedType::CollaborationEnhancement => ExtensionType::Collaborative,
         }
     }
-    
 }
 
 /// Extension opportunity identified through autonomous reasoning
@@ -1086,12 +1151,12 @@ pub enum SearchContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_autonomous_reasoning() {
         // Create test knowledge base
         let mut kb = KnowledgeBase::default();
-        
+
         // Add some experiences
         kb.experiences.push(Experience {
             id: Uuid::new_v4(),
@@ -1099,13 +1164,13 @@ mod tests {
             task_type: "frontend_development".to_string(),
             context: "Building React components".to_string(),
             actions_taken: vec!["Created component".to_string()],
-            outcome: TaskOutcome::Failure { 
+            outcome: TaskOutcome::Failure {
                 reason: "Lack of React hooks knowledge".to_string(),
                 error_details: None,
             },
             insights: vec![],
         });
-        
+
         // Test reasoning
         let reasoner = AutonomousReasoner::new();
         let role = AgentRole::Frontend {
@@ -1114,7 +1179,7 @@ mod tests {
             boundaries: vec!["Frontend only".to_string()],
         };
         let proposals = reasoner.reason_about_extensions(&kb, &role).await.unwrap();
-        
+
         assert!(!proposals.is_empty());
         assert!(proposals[0].need.title.contains("React"));
     }

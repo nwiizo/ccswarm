@@ -5,12 +5,11 @@
 //! DISABLED: Container module is temporarily disabled
 
 #[cfg(feature = "container")]
-use ccswarm::container::{
-    ContainerConfig, ContainerManager, ContainerProvider, ContainerStatus,
-    ResourceLimits,
-};
-#[cfg(feature = "container")]
 use ccswarm::container::docker::DockerContainerProvider;
+#[cfg(feature = "container")]
+use ccswarm::container::{
+    ContainerConfig, ContainerManager, ContainerProvider, ContainerStatus, ResourceLimits,
+};
 #[cfg(feature = "container")]
 use std::time::Duration;
 #[cfg(feature = "container")]

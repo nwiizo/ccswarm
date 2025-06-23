@@ -1,5 +1,5 @@
 //! Self-Extension functionality for agents and system
-//! 
+//!
 //! This module implements the ability for agents to extend their own capabilities
 //! and for the system itself to evolve through collective decision-making.
 
@@ -220,9 +220,16 @@ pub struct ExtensionRecord {
 /// Outcome of an extension attempt
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExtensionOutcome {
-    Success { improvements: Vec<String> },
-    Failure { reasons: Vec<String> },
-    PartialSuccess { achievements: Vec<String>, issues: Vec<String> },
+    Success {
+        improvements: Vec<String>,
+    },
+    Failure {
+        reasons: Vec<String>,
+    },
+    PartialSuccess {
+        achievements: Vec<String>,
+        issues: Vec<String>,
+    },
 }
 
 /// Template for common extensions
@@ -237,6 +244,12 @@ pub struct ExtensionTemplate {
     pub success_rate: f64,
 }
 
+impl Default for ExtensionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExtensionManager {
     /// Create a new extension manager
     pub fn new() -> Self {
@@ -246,7 +259,7 @@ impl ExtensionManager {
             // sangha, // Temporarily removed
             templates: Arc::new(RwLock::new(HashMap::new())),
         };
-        
+
         // Initialize with common templates
         tokio::spawn({
             let templates = manager.templates.clone();
@@ -254,14 +267,16 @@ impl ExtensionManager {
                 let _ = Self::initialize_templates(templates).await;
             }
         });
-        
+
         manager
     }
 
     /// Initialize common extension templates
-    async fn initialize_templates(templates: Arc<RwLock<HashMap<String, ExtensionTemplate>>>) -> Result<()> {
+    async fn initialize_templates(
+        templates: Arc<RwLock<HashMap<String, ExtensionTemplate>>>,
+    ) -> Result<()> {
         let mut templates_map = templates.write().await;
-        
+
         // React Server Components template
         templates_map.insert(
             "react-server-components".to_string(),
@@ -279,7 +294,7 @@ impl ExtensionManager {
                 success_rate: 0.85,
             },
         );
-        
+
         // Distributed Processing template
         templates_map.insert(
             "distributed-processing".to_string(),
@@ -293,7 +308,7 @@ impl ExtensionManager {
                 success_rate: 0.75,
             },
         );
-        
+
         Ok(())
     }
 
@@ -301,13 +316,13 @@ impl ExtensionManager {
     pub async fn propose_extension(&self, proposal: ExtensionProposal) -> Result<Uuid> {
         // Validate the proposal
         self.validate_proposal(&proposal)?;
-        
+
         // Create a Sangha proposal
-        let _sangha_proposal = self.create_sangha_proposal(&proposal).await?;
-        
+        self.create_sangha_proposal(&proposal).await?;
+
         // Submit to Sangha for review
         // self.sangha.submit_proposal(sangha_proposal).await?; // Temporarily disabled
-        
+
         // Store the extension
         let extension = Extension {
             id: proposal.id,
@@ -328,10 +343,10 @@ impl ExtensionManager {
                 user_satisfaction: 0.0,
             },
         };
-        
+
         let mut extensions = self.extensions.write().await;
         extensions.insert(extension.id, extension);
-        
+
         Ok(proposal.id)
     }
 
@@ -339,19 +354,22 @@ impl ExtensionManager {
     fn validate_proposal(&self, proposal: &ExtensionProposal) -> Result<()> {
         // Check risk score
         if proposal.risk_assessment.overall_risk_score > 0.8 {
-            anyhow::bail!("Risk score too high: {}", proposal.risk_assessment.overall_risk_score);
+            anyhow::bail!(
+                "Risk score too high: {}",
+                proposal.risk_assessment.overall_risk_score
+            );
         }
-        
+
         // Check implementation plan
         if proposal.implementation_plan.phases.is_empty() {
             anyhow::bail!("Implementation plan must have at least one phase");
         }
-        
+
         // Check success criteria
         if proposal.success_criteria.is_empty() {
             anyhow::bail!("Must define at least one success criterion");
         }
-        
+
         Ok(())
     }
 
@@ -362,7 +380,7 @@ impl ExtensionManager {
         //     ExtensionType::System => ProposalType::SystemExtension,
         //     _ => ProposalType::AgentExtension,
         // };
-        
+
         // let sangha_proposal = crate::extension_stub::sangha::proposal::ProposalBuilder::new(
         //     proposal.title.clone(),
         //     proposal.proposer.clone(),
@@ -371,7 +389,7 @@ impl ExtensionManager {
         // .description(proposal.description.clone())
         // .data(serde_json::to_value(proposal)?)
         // .build();
-        
+
         // Ok(sangha_proposal)
         Ok(())
     }
@@ -379,15 +397,16 @@ impl ExtensionManager {
     /// Start implementing an approved extension
     pub async fn start_implementation(&self, extension_id: Uuid) -> Result<()> {
         let mut extensions = self.extensions.write().await;
-        let extension = extensions.get_mut(&extension_id)
+        let extension = extensions
+            .get_mut(&extension_id)
             .context("Extension not found")?;
-            
+
         if extension.proposal.status != ExtensionStatus::Approved {
             anyhow::bail!("Extension must be approved before implementation");
         }
-        
+
         extension.proposal.status = ExtensionStatus::Implementing;
-        
+
         Ok(())
     }
 
@@ -399,18 +418,22 @@ impl ExtensionManager {
         completed_tasks: Vec<String>,
     ) -> Result<()> {
         let mut extensions = self.extensions.write().await;
-        let extension = extensions.get_mut(&extension_id)
+        let extension = extensions
+            .get_mut(&extension_id)
             .context("Extension not found")?;
-            
+
         extension.implementation_status.phase_progress = phase_progress;
-        extension.implementation_status.completed_tasks.extend(completed_tasks);
-        
+        extension
+            .implementation_status
+            .completed_tasks
+            .extend(completed_tasks);
+
         // Check if phase is complete
         if phase_progress >= 1.0 {
             extension.implementation_status.current_phase += 1;
             extension.implementation_status.phase_progress = 0.0;
         }
-        
+
         Ok(())
     }
 
@@ -421,11 +444,12 @@ impl ExtensionManager {
         test_result: TestResult,
     ) -> Result<()> {
         let mut extensions = self.extensions.write().await;
-        let extension = extensions.get_mut(&extension_id)
+        let extension = extensions
+            .get_mut(&extension_id)
             .context("Extension not found")?;
-            
+
         extension.test_results.push(test_result);
-        
+
         Ok(())
     }
 
@@ -437,31 +461,33 @@ impl ExtensionManager {
         configuration: HashMap<String, String>,
     ) -> Result<()> {
         let mut extensions = self.extensions.write().await;
-        let extension = extensions.get_mut(&extension_id)
+        let extension = extensions
+            .get_mut(&extension_id)
             .context("Extension not found")?;
-            
+
         // Verify all tests passed
         let all_tests_passed = extension.test_results.iter().all(|t| t.passed);
         if !all_tests_passed {
             anyhow::bail!("Cannot deploy extension with failing tests");
         }
-        
+
         extension.deployment_info = Some(DeploymentInfo {
             deployed_at: Utc::now(),
             deployed_by,
             version: "1.0.0".to_string(),
             configuration,
         });
-        
+
         extension.proposal.status = ExtensionStatus::Deployed;
-        
+
         Ok(())
     }
 
     /// Get extension history for an agent
     pub async fn get_agent_history(&self, agent_id: &str) -> Vec<ExtensionRecord> {
         let history = self.history.read().await;
-        history.iter()
+        history
+            .iter()
             .filter(|record| record.agent_id == agent_id)
             .cloned()
             .collect()
@@ -470,10 +496,10 @@ impl ExtensionManager {
     /// Get successful extension patterns
     pub async fn get_successful_patterns(&self) -> Vec<ExtensionPattern> {
         let history = self.history.read().await;
-        
+
         // Analyze history for successful patterns
         let mut patterns = Vec::new();
-        
+
         // Group by extension type and analyze success factors
         // This is a simplified implementation
         for record in history.iter() {
@@ -486,29 +512,38 @@ impl ExtensionManager {
                 });
             }
         }
-        
+
         patterns
     }
-    
+
     /// Get extension manager statistics
     pub async fn get_stats(&self) -> ExtensionStats {
         let extensions = self.extensions.read().await;
         let history = self.history.read().await;
-        
+
         let total_extensions = extensions.len();
-        let active_extensions = extensions.values()
-            .filter(|e| matches!(e.proposal.status, ExtensionStatus::Implementing | ExtensionStatus::Testing))
+        let active_extensions = extensions
+            .values()
+            .filter(|e| {
+                matches!(
+                    e.proposal.status,
+                    ExtensionStatus::Implementing | ExtensionStatus::Testing
+                )
+            })
             .count();
-        let pending_proposals = extensions.values()
+        let pending_proposals = extensions
+            .values()
             .filter(|e| matches!(e.proposal.status, ExtensionStatus::Proposed))
             .count();
-        let successful_extensions = history.iter()
+        let successful_extensions = history
+            .iter()
             .filter(|r| matches!(r.outcome, ExtensionOutcome::Success { .. }))
             .count();
-        let failed_extensions = history.iter()
+        let failed_extensions = history
+            .iter()
             .filter(|r| matches!(r.outcome, ExtensionOutcome::Failure { .. }))
             .count();
-            
+
         ExtensionStats {
             total_extensions,
             active_extensions,
@@ -540,6 +575,7 @@ pub struct ExtensionPattern {
 
 /// Auto-suggestion engine for extensions
 pub struct ExtensionSuggestionEngine {
+    #[allow(dead_code)]
     extension_manager: Arc<ExtensionManager>,
 }
 
@@ -554,27 +590,41 @@ impl ExtensionSuggestionEngine {
         trigger: ExtensionTrigger,
     ) -> Vec<ExtensionSuggestion> {
         match trigger {
-            ExtensionTrigger::RepeatedErrors { error_pattern, frequency } => {
-                self.suggest_for_errors(&error_pattern, frequency).await
-            }
+            ExtensionTrigger::RepeatedErrors {
+                error_pattern,
+                frequency,
+            } => self.suggest_for_errors(&error_pattern, frequency).await,
             ExtensionTrigger::PerformanceBottleneck { component, metric } => {
                 self.suggest_for_performance(&component, metric).await
             }
-            ExtensionTrigger::PeerCapabilityGap { peer_capabilities, own_capabilities } => {
-                self.suggest_for_capability_gap(&peer_capabilities, &own_capabilities).await
+            ExtensionTrigger::PeerCapabilityGap {
+                peer_capabilities,
+                own_capabilities,
+            } => {
+                self.suggest_for_capability_gap(&peer_capabilities, &own_capabilities)
+                    .await
             }
-            ExtensionTrigger::IndustryTrend { trend, relevance_score } => {
-                self.suggest_for_trend(&trend, relevance_score).await
-            }
+            ExtensionTrigger::IndustryTrend {
+                trend,
+                relevance_score,
+            } => self.suggest_for_trend(&trend, relevance_score).await,
         }
     }
 
-    async fn suggest_for_errors(&self, _error_pattern: &str, _frequency: u32) -> Vec<ExtensionSuggestion> {
+    async fn suggest_for_errors(
+        &self,
+        _error_pattern: &str,
+        _frequency: u32,
+    ) -> Vec<ExtensionSuggestion> {
         // Analyze error pattern and suggest relevant extensions
         vec![]
     }
 
-    async fn suggest_for_performance(&self, _component: &str, _metric: f64) -> Vec<ExtensionSuggestion> {
+    async fn suggest_for_performance(
+        &self,
+        _component: &str,
+        _metric: f64,
+    ) -> Vec<ExtensionSuggestion> {
         vec![]
     }
 
@@ -586,7 +636,11 @@ impl ExtensionSuggestionEngine {
         vec![]
     }
 
-    async fn suggest_for_trend(&self, _trend: &str, _relevance_score: f64) -> Vec<ExtensionSuggestion> {
+    async fn suggest_for_trend(
+        &self,
+        _trend: &str,
+        _relevance_score: f64,
+    ) -> Vec<ExtensionSuggestion> {
         vec![]
     }
 }
@@ -594,10 +648,22 @@ impl ExtensionSuggestionEngine {
 /// Triggers for auto-suggesting extensions
 #[derive(Debug, Clone)]
 pub enum ExtensionTrigger {
-    RepeatedErrors { error_pattern: String, frequency: u32 },
-    PerformanceBottleneck { component: String, metric: f64 },
-    PeerCapabilityGap { peer_capabilities: Vec<String>, own_capabilities: Vec<String> },
-    IndustryTrend { trend: String, relevance_score: f64 },
+    RepeatedErrors {
+        error_pattern: String,
+        frequency: u32,
+    },
+    PerformanceBottleneck {
+        component: String,
+        metric: f64,
+    },
+    PeerCapabilityGap {
+        peer_capabilities: Vec<String>,
+        own_capabilities: Vec<String>,
+    },
+    IndustryTrend {
+        trend: String,
+        relevance_score: f64,
+    },
 }
 
 /// Suggested extension

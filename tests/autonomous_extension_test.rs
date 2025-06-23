@@ -1,9 +1,9 @@
+use anyhow::Result;
+use async_trait::async_trait;
 use ccswarm::extension::autonomous_agent_extension::*;
 use ccswarm::extension::ExtensionProposal;
 use ccswarm::identity::AgentRole;
 use std::sync::Arc;
-use async_trait::async_trait;
-use anyhow::Result;
 
 // Mock AI provider for testing
 struct MockExtensionAIProvider;
@@ -23,7 +23,7 @@ impl SanghaClient for MockSanghaClient {
     async fn propose_extension(&self, _proposal: &ExtensionProposal) -> Result<ProposalId> {
         Ok(ProposalId(uuid::Uuid::new_v4()))
     }
-    
+
     async fn get_consensus(&self, _proposal_id: &ProposalId) -> Result<ConsensusResult> {
         Ok(ConsensusResult {
             approved: true,
@@ -32,7 +32,7 @@ impl SanghaClient for MockSanghaClient {
             conditions: vec![],
         })
     }
-    
+
     async fn submit_evidence(&self, _proposal_id: &ProposalId, _evidence: &Evidence) -> Result<()> {
         Ok(())
     }
@@ -42,7 +42,7 @@ impl SanghaClient for MockSanghaClient {
 async fn test_autonomous_extension_manager_creation() {
     let provider = Arc::new(MockExtensionAIProvider);
     let sangha_client = Arc::new(MockSanghaClient);
-    
+
     let manager = AutonomousAgentExtensionManager::new(
         "test-agent".to_string(),
         AgentRole::Frontend {
@@ -53,29 +53,35 @@ async fn test_autonomous_extension_manager_creation() {
         provider,
         sangha_client,
     );
-    
+
     // Record a failure experience
-    manager.record_experience(
-        "frontend_development".to_string(),
-        "Building React components".to_string(),
-        vec!["Attempted to create hooks".to_string()],
-        TaskOutcome::Failure {
-            reason: "Lack of React hooks knowledge".to_string(),
-            error_details: None,
-        },
-    ).await.unwrap();
-    
+    manager
+        .record_experience(
+            "frontend_development".to_string(),
+            "Building React components".to_string(),
+            vec!["Attempted to create hooks".to_string()],
+            TaskOutcome::Failure {
+                reason: "Lack of React hooks knowledge".to_string(),
+                error_details: None,
+            },
+        )
+        .await
+        .unwrap();
+
     // Test autonomous proposal generation
     let proposals = manager.propose_extensions().await.unwrap();
-    
+
     // Should identify the need for React hooks knowledge
-    assert!(!proposals.is_empty(), "Should generate at least one proposal");
+    assert!(
+        !proposals.is_empty(),
+        "Should generate at least one proposal"
+    );
 }
 
 #[tokio::test]
 async fn test_experience_analyzer() {
     let analyzer = ExperienceAnalyzer;
-    
+
     let experiences = vec![
         Experience {
             id: uuid::Uuid::new_v4(),
@@ -101,17 +107,20 @@ async fn test_experience_analyzer() {
             insights: vec![],
         },
     ];
-    
+
     let analysis = analyzer.analyze_experiences(&experiences).await.unwrap();
-    
+
     assert!(!analysis.patterns.is_empty(), "Should identify patterns");
-    assert!(!analysis.recurring_challenges.is_empty(), "Should identify challenges");
+    assert!(
+        !analysis.recurring_challenges.is_empty(),
+        "Should identify challenges"
+    );
 }
 
 #[tokio::test]
 async fn test_capability_assessor() {
     let assessor = CapabilityAssessor;
-    
+
     let mut capabilities = std::collections::HashMap::new();
     capabilities.insert(
         "react_basics".to_string(),
@@ -124,26 +133,33 @@ async fn test_capability_assessor() {
             effectiveness_score: 0.85,
         },
     );
-    
-    let recent_tasks = vec![
-        Experience {
-            id: uuid::Uuid::new_v4(),
-            timestamp: chrono::Utc::now(),
-            task_type: "frontend".to_string(),
-            context: "Advanced React patterns".to_string(),
-            actions_taken: vec![],
-            outcome: TaskOutcome::Failure {
-                reason: "Unable to implement React hooks".to_string(),
-                error_details: None,
-            },
-            insights: vec![],
+
+    let recent_tasks = vec![Experience {
+        id: uuid::Uuid::new_v4(),
+        timestamp: chrono::Utc::now(),
+        task_type: "frontend".to_string(),
+        context: "Advanced React patterns".to_string(),
+        actions_taken: vec![],
+        outcome: TaskOutcome::Failure {
+            reason: "Unable to implement React hooks".to_string(),
+            error_details: None,
         },
-    ];
-    
-    let assessment = assessor.assess_capabilities(&capabilities, &recent_tasks).await.unwrap();
-    
-    assert!(!assessment.strengths.is_empty(), "Should identify strengths");
-    assert!(!assessment.gaps.is_empty(), "Should identify capability gaps");
+        insights: vec![],
+    }];
+
+    let assessment = assessor
+        .assess_capabilities(&capabilities, &recent_tasks)
+        .await
+        .unwrap();
+
+    assert!(
+        !assessment.strengths.is_empty(),
+        "Should identify strengths"
+    );
+    assert!(
+        !assessment.gaps.is_empty(),
+        "Should identify capability gaps"
+    );
 }
 
 #[tokio::test]
@@ -161,30 +177,39 @@ async fn test_autonomous_reasoning_full_flow() {
         provider,
         sangha_client,
     );
-    
+
     // Add experiences showing repeated failures
     for i in 0..5 {
-        manager.record_experience(
-            "testing".to_string(),
-            format!("Writing unit tests #{}", i),
-            vec!["Attempted to write tests".to_string()],
-            TaskOutcome::Failure {
-                reason: "Lack of testing framework knowledge".to_string(),
-                error_details: None,
-            },
-        ).await.unwrap();
+        manager
+            .record_experience(
+                "testing".to_string(),
+                format!("Writing unit tests #{}", i),
+                vec!["Attempted to write tests".to_string()],
+                TaskOutcome::Failure {
+                    reason: "Lack of testing framework knowledge".to_string(),
+                    error_details: None,
+                },
+            )
+            .await
+            .unwrap();
     }
-    
+
     // Add a capability that's underperforming
-    manager.update_capability(
-        "basic_testing".to_string(),
-        0.2,  // effectiveness
-        true, // used
-    ).await.unwrap();
-    
+    manager
+        .update_capability(
+            "basic_testing".to_string(),
+            0.2,  // effectiveness
+            true, // used
+        )
+        .await
+        .unwrap();
+
     // Test autonomous proposal generation
     let proposals = manager.propose_extensions().await.unwrap();
-    
+
     // Should identify the need for testing framework knowledge
-    assert!(!proposals.is_empty(), "Should generate at least one proposal");
+    assert!(
+        !proposals.is_empty(),
+        "Should generate at least one proposal"
+    );
 }

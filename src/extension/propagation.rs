@@ -10,6 +10,7 @@ pub struct PropagationManager {
     /// Propagation rules
     rules: PropagationRules,
     /// Propagation history
+    #[allow(dead_code)]
     history: Arc<RwLock<Vec<PropagationRecord>>>,
     /// Active propagations
     active_propagations: Arc<RwLock<HashMap<Uuid, ActivePropagation>>>,
@@ -176,12 +177,9 @@ impl PropagationManager {
         let propagation_type = self.determine_propagation_type(extension)?;
 
         // Identify target agents
-        let target_agents = self.identify_target_agents(
-            extension,
-            source_agent_id,
-            all_agent_ids,
-            propagation_type,
-        ).await?;
+        let target_agents = self
+            .identify_target_agents(extension, source_agent_id, all_agent_ids, propagation_type)
+            .await?;
 
         if target_agents.is_empty() {
             return Ok(PropagationPlan::NoPropagation {
@@ -193,11 +191,8 @@ impl PropagationManager {
         let compatibility_report = self.check_compatibility(extension, &target_agents).await?;
 
         // Create propagation waves
-        let waves = self.create_propagation_waves(
-            &target_agents,
-            &compatibility_report,
-            propagation_type,
-        )?;
+        let waves =
+            self.create_propagation_waves(&target_agents, &compatibility_report, propagation_type)?;
 
         Ok(PropagationPlan::Propagate {
             extension_id: extension.id,
@@ -247,21 +242,23 @@ impl PropagationManager {
     }
 
     /// Monitor propagation progress
-    pub async fn monitor_propagation(
-        &self,
-        propagation_id: Uuid,
-    ) -> Result<PropagationProgress> {
+    pub async fn monitor_propagation(&self, propagation_id: Uuid) -> Result<PropagationProgress> {
         let active = self.active_propagations.read().await;
-        let propagation = active.get(&propagation_id)
+        let propagation = active
+            .get(&propagation_id)
             .context("Propagation not found")?;
 
         // Get results from agents
-        let results = self.collect_propagation_results(&propagation.wave.agents_in_wave).await?;
+        let results = self
+            .collect_propagation_results(&propagation.wave.agents_in_wave)
+            .await?;
 
-        let successful = results.values()
+        let successful = results
+            .values()
             .filter(|r| matches!(r, PropagationResult::Success { .. }))
             .count();
-        let failed = results.values()
+        let failed = results
+            .values()
             .filter(|r| matches!(r, PropagationResult::Failure { .. }))
             .count();
 
@@ -281,7 +278,8 @@ impl PropagationManager {
     /// Advance to next propagation wave
     pub async fn advance_wave(&self, propagation_id: Uuid) -> Result<()> {
         let mut active = self.active_propagations.write().await;
-        let propagation = active.get_mut(&propagation_id)
+        let propagation = active
+            .get_mut(&propagation_id)
             .context("Propagation not found")?;
 
         propagation.wave.wave_number += 1;
@@ -293,13 +291,15 @@ impl PropagationManager {
     /// Rollback a propagation
     pub async fn rollback_propagation(&self, propagation_id: Uuid) -> Result<()> {
         let mut active = self.active_propagations.write().await;
-        let propagation = active.get_mut(&propagation_id)
+        let propagation = active
+            .get_mut(&propagation_id)
             .context("Propagation not found")?;
 
         propagation.status = PropagationStatus::RolledBack;
 
         // Initiate rollback on affected agents
-        self.initiate_rollback(&propagation.wave.agents_in_wave).await?;
+        self.initiate_rollback(&propagation.wave.agents_in_wave)
+            .await?;
 
         Ok(())
     }
@@ -313,7 +313,7 @@ impl PropagationManager {
 
         // Check adoption count
         // This would check actual adoption metrics
-        
+
         Ok(true)
     }
 
@@ -352,9 +352,7 @@ impl PropagationManager {
                     // TODO: Get agent role from config
                     true
                 }
-                PropagationType::Optional => {
-                    self.agent_would_benefit(agent_id, extension).await
-                }
+                PropagationType::Optional => self.agent_would_benefit(agent_id, extension).await,
                 _ => false,
             };
 
@@ -366,6 +364,7 @@ impl PropagationManager {
         Ok(targets)
     }
 
+    #[allow(dead_code)]
     fn is_recommended_for_role(&self, role: &AgentRole, _extension: &Extension) -> bool {
         if let Some(_recommendations) = self.rules.role_recommendations.get(role) {
             // Check if extension matches any recommendation
@@ -409,7 +408,7 @@ impl PropagationManager {
         let wave_size = match propagation_type {
             PropagationType::Mandatory => target_agents.len(), // All at once
             PropagationType::Emergency => target_agents.len(), // All at once
-            _ => 3, // Gradual rollout
+            _ => 3,                                            // Gradual rollout
         };
 
         let mut waves = Vec::new();
@@ -417,15 +416,17 @@ impl PropagationManager {
 
         let mut wave_number = 1;
         while !remaining_agents.is_empty() {
-            let agents_in_wave: Vec<_> = remaining_agents.drain(..wave_size.min(remaining_agents.len())).collect();
-            
+            let agents_in_wave: Vec<_> = remaining_agents
+                .drain(..wave_size.min(remaining_agents.len()))
+                .collect();
+
             waves.push(PropagationWave {
                 wave_number,
                 agents_in_wave,
                 success_threshold: 0.8,
                 rollback_on_failure: propagation_type != PropagationType::Experimental,
             });
-            
+
             wave_number += 1;
         }
 
@@ -491,7 +492,7 @@ pub enum PropagationPlan {
 pub struct CompatibilityReport {
     pub compatible_agents: Vec<String>,
     pub incompatible_agents: HashMap<String, Vec<String>>, // agent_id -> conflicts
-    pub warnings: HashMap<String, Vec<String>>, // agent_id -> warnings
+    pub warnings: HashMap<String, Vec<String>>,            // agent_id -> warnings
 }
 
 /// Propagation progress

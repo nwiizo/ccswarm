@@ -1,5 +1,5 @@
 //! 実践知（フロネーシス）システム
-//! 
+//!
 //! 「本で読んだ知識と、実際にやってみて得た知識は違う。
 //! 何度も作って、失敗して、コツを掴んで、初めて美味しい料理が作れるようになる」
 //! という概念を実装。
@@ -213,12 +213,7 @@ impl PhronesisManager {
     }
 
     /// 発見を記録
-    pub fn record_discovery(
-        &mut self,
-        finding: &str,
-        significance: &str,
-        lesson: &str,
-    ) -> String {
+    pub fn record_discovery(&mut self, finding: &str, significance: &str, lesson: &str) -> String {
         self.record_learning_event(
             LearningEventType::Discovery {
                 finding: finding.to_string(),
@@ -288,9 +283,9 @@ impl PhronesisManager {
             })
             .filter(|wisdom| {
                 // 条件が満たされているかチェック
-                conditions.iter().any(|cond| {
-                    wisdom.context.conditions.contains(cond)
-                })
+                conditions
+                    .iter()
+                    .any(|cond| wisdom.context.conditions.contains(cond))
             })
             .collect()
     }
@@ -317,11 +312,7 @@ impl PhronesisManager {
         wisdom.last_applied = Some(Utc::now());
 
         // 信頼度を更新（成功率に基づく）
-        let success_count = wisdom
-            .applications
-            .iter()
-            .filter(|app| app.success)
-            .count() as f32;
+        let success_count = wisdom.applications.iter().filter(|app| app.success).count() as f32;
         let total_count = wisdom.applications.len() as f32;
         wisdom.confidence = (success_count / total_count).min(1.0);
 
@@ -361,11 +352,7 @@ impl PhronesisManager {
         pattern.occurrences.push(occurrence);
 
         // 信頼性を更新
-        let match_count = pattern
-            .occurrences
-            .iter()
-            .filter(|occ| occ.matched)
-            .count() as f32;
+        let match_count = pattern.occurrences.iter().filter(|occ| occ.matched).count() as f32;
         let total_count = pattern.occurrences.len() as f32;
         pattern.reliability = if total_count > 0.0 {
             match_count / total_count
@@ -399,7 +386,7 @@ impl PhronesisManager {
             *category_counts
                 .entry(format!("{:?}", wisdom.category))
                 .or_insert(0) += 1;
-            
+
             for app in &wisdom.applications {
                 total_applications += 1;
                 if app.success {
@@ -443,14 +430,14 @@ mod tests {
     #[test]
     fn test_record_success_and_extract_wisdom() {
         let mut manager = PhronesisManager::new("test-agent".to_string());
-        
+
         let event_id = manager.record_success(
             "task-123",
             "早期リターン",
             "複雑な条件分岐を早期リターンで簡潔に",
             "ネストを深くするより、早期リターンで可読性を上げる",
         );
-        
+
         assert!(!event_id.is_empty());
         assert_eq!(manager.learning_events.len(), 1);
         assert_eq!(manager.wisdom_entries.len(), 1);
@@ -459,7 +446,7 @@ mod tests {
     #[test]
     fn test_wisdom_application_and_confidence() {
         let mut manager = PhronesisManager::new("test-agent".to_string());
-        
+
         // 実践知を直接追加
         let wisdom = PracticalWisdom {
             id: "wisdom-1".to_string(),
@@ -475,14 +462,19 @@ mod tests {
             created_at: Utc::now(),
             last_applied: None,
         };
-        
+
         manager.add_wisdom(wisdom);
-        
+
         // 成功と失敗を記録
         manager.apply_wisdom("wisdom-1", "task-1", true, None);
         manager.apply_wisdom("wisdom-1", "task-2", true, None);
-        manager.apply_wisdom("wisdom-1", "task-3", false, Some("特殊ケースでは適用不可".to_string()));
-        
+        manager.apply_wisdom(
+            "wisdom-1",
+            "task-3",
+            false,
+            Some("特殊ケースでは適用不可".to_string()),
+        );
+
         let wisdom = &manager.wisdom_entries["wisdom-1"];
         assert_eq!(wisdom.applications.len(), 3);
         assert!((wisdom.confidence - 0.666).abs() < 0.01); // 2/3 ≈ 0.666
@@ -491,21 +483,21 @@ mod tests {
     #[test]
     fn test_pattern_recognition() {
         let mut manager = PhronesisManager::new("test-agent".to_string());
-        
+
         let pattern_id = manager.recognize_pattern(
             "Friday Afternoon Pattern",
             "金曜午後のタスクは月曜朝の対応を期待される",
         );
-        
+
         // パターンの発生を記録
         let mut context = HashMap::new();
         context.insert("day".to_string(), "Friday".to_string());
         context.insert("time".to_string(), "afternoon".to_string());
-        
+
         manager.record_pattern_occurrence(&pattern_id, context.clone(), true);
         manager.record_pattern_occurrence(&pattern_id, context.clone(), true);
         manager.record_pattern_occurrence(&pattern_id, context, false);
-        
+
         let pattern = &manager.pattern_library[&pattern_id];
         assert_eq!(pattern.occurrences.len(), 3);
         assert!((pattern.reliability - 0.666).abs() < 0.01);

@@ -39,12 +39,12 @@ pub struct Conversation {
 /// Types of conversations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConversationType {
-    TaskCoordination,    // Coordinating task execution
-    ProblemSolving,     // Collaborative problem solving
-    KnowledgeSharing,   // Sharing information/expertise
-    ReviewDiscussion,   // Code/work review
-    Planning,           // Planning future work
-    Casual,             // General communication
+    TaskCoordination, // Coordinating task execution
+    ProblemSolving,   // Collaborative problem solving
+    KnowledgeSharing, // Sharing information/expertise
+    ReviewDiscussion, // Code/work review
+    Planning,         // Planning future work
+    Casual,           // General communication
 }
 
 /// Context for the conversation
@@ -65,7 +65,7 @@ pub struct ConversationState {
     pub turn_order: VecDeque<String>,
     pub current_speaker: Option<String>,
     pub waiting_for_response: Vec<String>,
-    pub consensus_level: f32,        // 0.0-1.0
+    pub consensus_level: f32, // 0.0-1.0
     pub engagement_levels: HashMap<String, f32>,
     pub progress_indicators: HashMap<String, f32>,
 }
@@ -73,14 +73,14 @@ pub struct ConversationState {
 /// Phases of conversation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConversationPhase {
-    Opening,            // Initial greetings/setup
+    Opening,              // Initial greetings/setup
     InformationGathering, // Collecting information
-    Discussion,         // Active discussion
-    ProblemSolving,     // Working through issues
-    DecisionMaking,     // Making decisions
-    Planning,           // Planning next steps
-    Summarizing,        // Wrapping up
-    Closing,            // Final statements
+    Discussion,           // Active discussion
+    ProblemSolving,       // Working through issues
+    DecisionMaking,       // Making decisions
+    Planning,             // Planning next steps
+    Summarizing,          // Wrapping up
+    Closing,              // Final statements
 }
 
 /// Individual dialogue entry
@@ -165,12 +165,12 @@ pub struct AgentDialogueProfile {
 /// Communication style characteristics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunicationStyle {
-    pub formality_level: f32,      // 0.0 = very casual, 1.0 = very formal
-    pub verbosity: f32,            // 0.0 = terse, 1.0 = very detailed
-    pub directness: f32,           // 0.0 = indirect, 1.0 = very direct
-    pub supportiveness: f32,       // 0.0 = neutral, 1.0 = very supportive
-    pub inquisitiveness: f32,      // 0.0 = accepting, 1.0 = questioning
-    pub patience_level: f32,       // 0.0 = impatient, 1.0 = very patient
+    pub formality_level: f32, // 0.0 = very casual, 1.0 = very formal
+    pub verbosity: f32,       // 0.0 = terse, 1.0 = very detailed
+    pub directness: f32,      // 0.0 = indirect, 1.0 = very direct
+    pub supportiveness: f32,  // 0.0 = neutral, 1.0 = very supportive
+    pub inquisitiveness: f32, // 0.0 = accepting, 1.0 = questioning
+    pub patience_level: f32,  // 0.0 = impatient, 1.0 = very patient
 }
 
 /// Patterns in how an agent responds
@@ -187,9 +187,9 @@ pub struct ResponsePatterns {
 /// Preferred message length
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageLength {
-    Brief,      // < 50 words
-    Medium,     // 50-150 words
-    Detailed,   // 150-300 words
+    Brief,         // < 50 words
+    Medium,        // 50-150 words
+    Detailed,      // 150-300 words
     Comprehensive, // > 300 words
 }
 
@@ -302,8 +302,9 @@ impl DialogueCoordinationBus {
         // Store conversation data for notifications
         let participants_clone = conversation.participants.clone();
         let topic_clone = conversation.topic.clone();
-        
-        self.conversations.insert(conversation_id.clone(), conversation);
+
+        self.conversations
+            .insert(conversation_id.clone(), conversation);
 
         // Notify all participants
         for participant in &participants_clone {
@@ -333,14 +334,18 @@ impl DialogueCoordinationBus {
         emotional_tone: EmotionalTone,
         response_expectation: ResponseExpectation,
     ) -> Result<()> {
-        let conversation = self.conversations.get_mut(conversation_id)
+        let conversation = self
+            .conversations
+            .get_mut(conversation_id)
             .ok_or_else(|| anyhow::anyhow!("Conversation not found: {}", conversation_id))?;
 
         let entry = DialogueEntry {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
             speaker_id: speaker_id.clone(),
-            recipients: conversation.participants.iter()
+            recipients: conversation
+                .participants
+                .iter()
                 .filter(|&p| p != &speaker_id)
                 .cloned()
                 .collect(),
@@ -359,24 +364,37 @@ impl DialogueCoordinationBus {
         // Update conversation state - store needed data first
         let speaker_id = entry.speaker_id.clone();
         let message_type = entry.message_type.clone();
-        
+
         // Release the mutable borrow on conversation before calling the method
         conversation.conversation_state.current_speaker = Some(speaker_id.clone());
-        
+
         // Update turn order
-        if let Some(pos) = conversation.conversation_state.turn_order
+        if let Some(pos) = conversation
+            .conversation_state
+            .turn_order
             .iter()
-            .position(|id| id == &speaker_id) 
+            .position(|id| id == &speaker_id)
         {
-            let speaker = conversation.conversation_state.turn_order.remove(pos).unwrap();
-            conversation.conversation_state.turn_order.push_front(speaker);
+            let speaker = conversation
+                .conversation_state
+                .turn_order
+                .remove(pos)
+                .unwrap();
+            conversation
+                .conversation_state
+                .turn_order
+                .push_front(speaker);
         }
 
         // Update conversation phase based on message type
         conversation.conversation_state.phase = match message_type {
             DialogueMessageType::Question => ConversationPhase::InformationGathering,
-            DialogueMessageType::Suggestion | DialogueMessageType::Proposal => ConversationPhase::ProblemSolving,
-            DialogueMessageType::Agreement | DialogueMessageType::Disagreement => ConversationPhase::DecisionMaking,
+            DialogueMessageType::Suggestion | DialogueMessageType::Proposal => {
+                ConversationPhase::ProblemSolving
+            }
+            DialogueMessageType::Agreement | DialogueMessageType::Disagreement => {
+                ConversationPhase::DecisionMaking
+            }
             DialogueMessageType::StatusUpdate => ConversationPhase::Planning,
             DialogueMessageType::Acknowledgment => ConversationPhase::Closing,
             _ => conversation.conversation_state.phase.clone(),
@@ -389,7 +407,9 @@ impl DialogueCoordinationBus {
             _ => 0.05,
         };
 
-        conversation.conversation_state.engagement_levels
+        conversation
+            .conversation_state
+            .engagement_levels
             .entry(speaker_id.to_string())
             .and_modify(|e| *e = (*e + engagement_boost).min(1.0))
             .or_insert(0.5 + engagement_boost);
@@ -416,24 +436,42 @@ impl DialogueCoordinationBus {
 
     /// Update conversation state based on new message
     #[allow(dead_code)]
-    fn update_conversation_state_static(&mut self, conversation: &mut Conversation, speaker_id: &str, message_type: &DialogueMessageType) {
+    fn update_conversation_state_static(
+        &mut self,
+        conversation: &mut Conversation,
+        speaker_id: &str,
+        message_type: &DialogueMessageType,
+    ) {
         // Update current speaker
         conversation.conversation_state.current_speaker = Some(speaker_id.to_string());
 
         // Update turn order
-        if let Some(pos) = conversation.conversation_state.turn_order
+        if let Some(pos) = conversation
+            .conversation_state
+            .turn_order
             .iter()
-            .position(|id| id == speaker_id) 
+            .position(|id| id == speaker_id)
         {
-            let speaker = conversation.conversation_state.turn_order.remove(pos).unwrap();
-            conversation.conversation_state.turn_order.push_front(speaker);
+            let speaker = conversation
+                .conversation_state
+                .turn_order
+                .remove(pos)
+                .unwrap();
+            conversation
+                .conversation_state
+                .turn_order
+                .push_front(speaker);
         }
 
         // Update conversation phase based on message type
         conversation.conversation_state.phase = match message_type {
             DialogueMessageType::Question => ConversationPhase::InformationGathering,
-            DialogueMessageType::Suggestion | DialogueMessageType::Proposal => ConversationPhase::ProblemSolving,
-            DialogueMessageType::Agreement | DialogueMessageType::Disagreement => ConversationPhase::DecisionMaking,
+            DialogueMessageType::Suggestion | DialogueMessageType::Proposal => {
+                ConversationPhase::ProblemSolving
+            }
+            DialogueMessageType::Agreement | DialogueMessageType::Disagreement => {
+                ConversationPhase::DecisionMaking
+            }
             DialogueMessageType::StatusUpdate => ConversationPhase::Planning,
             DialogueMessageType::Acknowledgment => ConversationPhase::Closing,
             _ => conversation.conversation_state.phase.clone(),
@@ -446,7 +484,9 @@ impl DialogueCoordinationBus {
             _ => 0.05,
         };
 
-        conversation.conversation_state.engagement_levels
+        conversation
+            .conversation_state
+            .engagement_levels
             .entry(speaker_id.to_string())
             .and_modify(|e| *e = (*e + engagement_boost).min(1.0))
             .or_insert(0.5 + engagement_boost);
@@ -454,7 +494,9 @@ impl DialogueCoordinationBus {
 
     /// Learn dialogue patterns from conversations
     async fn learn_dialogue_patterns(&mut self, conversation_id: &str) -> Result<()> {
-        let conversation = self.conversations.get(conversation_id)
+        let conversation = self
+            .conversations
+            .get(conversation_id)
             .ok_or_else(|| anyhow::anyhow!("Conversation not found"))?;
 
         // Analyze conversation flow
@@ -469,9 +511,10 @@ impl DialogueCoordinationBus {
             profile_updates.push((entry.speaker_id.clone(), entry.clone()));
         }
         let conversation_topic = conversation.topic.clone();
-        
+
         for (speaker_id, entry) in profile_updates {
-            self.update_agent_profile_with_topic(&speaker_id, &entry, &conversation_topic).await?;
+            self.update_agent_profile_with_topic(&speaker_id, &entry, &conversation_topic)
+                .await?;
         }
 
         Ok(())
@@ -479,11 +522,7 @@ impl DialogueCoordinationBus {
 
     /// Extract dialogue pattern from conversation
     fn extract_dialogue_pattern(&self, conversation: &Conversation) -> DialoguePattern {
-        let recent_messages: Vec<_> = conversation.dialogue_history
-            .iter()
-            .rev()
-            .take(5)
-            .collect();
+        let recent_messages: Vec<_> = conversation.dialogue_history.iter().rev().take(5).collect();
 
         let flow_steps = recent_messages
             .iter()
@@ -509,7 +548,7 @@ impl DialogueCoordinationBus {
             success_rate: 0.8, // Default success rate
             participants_count: conversation.participants.len(),
             typical_duration: Duration::from_secs(
-                (Utc::now() - conversation.started_at).num_seconds() as u64
+                (Utc::now() - conversation.started_at).num_seconds() as u64,
             ),
             effectiveness_metrics: HashMap::new(),
         }
@@ -522,7 +561,8 @@ impl DialogueCoordinationBus {
         entry: &DialogueEntry,
         conversation_topic: &str,
     ) -> Result<()> {
-        let profile = self.agent_profiles
+        let profile = self
+            .agent_profiles
             .entry(agent_id.to_string())
             .or_insert_with(|| AgentDialogueProfile {
                 agent_id: agent_id.to_string(),
@@ -562,28 +602,29 @@ impl DialogueCoordinationBus {
         // Update communication style based on message characteristics
         let message_length = entry.content.len();
         if message_length < 50 {
-            profile.communication_style.verbosity = 
+            profile.communication_style.verbosity =
                 (profile.communication_style.verbosity * 0.9 + 0.2 * 0.1).max(0.0);
         } else if message_length > 200 {
-            profile.communication_style.verbosity = 
+            profile.communication_style.verbosity =
                 (profile.communication_style.verbosity * 0.9 + 0.8 * 0.1).min(1.0);
         }
 
         // Update directness based on message type
         match entry.message_type {
             DialogueMessageType::Request | DialogueMessageType::Suggestion => {
-                profile.communication_style.directness = 
+                profile.communication_style.directness =
                     (profile.communication_style.directness * 0.9 + 0.7 * 0.1).min(1.0);
             }
             DialogueMessageType::Question => {
-                profile.communication_style.inquisitiveness = 
+                profile.communication_style.inquisitiveness =
                     (profile.communication_style.inquisitiveness * 0.9 + 0.8 * 0.1).min(1.0);
             }
             _ => {}
         }
 
         // Update topic expertise
-        profile.topic_expertise
+        profile
+            .topic_expertise
             .entry(conversation_topic.to_string())
             .and_modify(|e| *e = (*e + 0.1).min(1.0))
             .or_insert(0.6);
@@ -596,13 +637,15 @@ impl DialogueCoordinationBus {
     /// Get conversation summary
     pub fn get_conversation_summary(&self, conversation_id: &str) -> Option<ConversationSummary> {
         let conversation = self.conversations.get(conversation_id)?;
-        
+
         Some(ConversationSummary {
             id: conversation.id.clone(),
             topic: conversation.topic.clone(),
             participants: conversation.participants.clone(),
             message_count: conversation.dialogue_history.len(),
-            duration: (Utc::now() - conversation.started_at).to_std().unwrap_or(Duration::ZERO),
+            duration: (Utc::now() - conversation.started_at)
+                .to_std()
+                .unwrap_or(Duration::ZERO),
             current_phase: conversation.conversation_state.phase.clone(),
             consensus_level: conversation.conversation_state.consensus_level,
             last_activity: conversation.last_activity,
@@ -625,18 +668,19 @@ impl DialogueCoordinationBus {
     /// Get agent dialogue insights
     pub fn get_agent_dialogue_insights(&self, agent_id: &str) -> Option<AgentDialogueInsights> {
         let profile = self.agent_profiles.get(agent_id)?;
-        
+
         Some(AgentDialogueInsights {
             agent_id: agent_id.to_string(),
             communication_style: profile.communication_style.clone(),
             total_conversations: profile.conversation_history.total_conversations,
             success_rate: if profile.conversation_history.total_conversations > 0 {
-                profile.conversation_history.successful_collaborations as f32 / 
-                profile.conversation_history.total_conversations as f32
+                profile.conversation_history.successful_collaborations as f32
+                    / profile.conversation_history.total_conversations as f32
             } else {
                 0.0
             },
-            top_expertise_areas: profile.topic_expertise
+            top_expertise_areas: profile
+                .topic_expertise
                 .iter()
                 .map(|(topic, expertise)| (topic.clone(), *expertise))
                 .collect::<Vec<_>>()
@@ -647,7 +691,9 @@ impl DialogueCoordinationBus {
                     acc.truncate(5);
                     acc
                 }),
-            preferred_partners: profile.conversation_history.effective_partnerships
+            preferred_partners: profile
+                .conversation_history
+                .effective_partnerships
                 .iter()
                 .map(|(partner, effectiveness)| (partner.clone(), *effectiveness))
                 .collect(),
@@ -687,7 +733,7 @@ mod tests {
     #[tokio::test]
     async fn test_dialogue_coordination_bus() {
         let mut bus = DialogueCoordinationBus::new().await.unwrap();
-        
+
         let participants = vec!["agent1".to_string(), "agent2".to_string()];
         let context = ConversationContext {
             project_context: Some("Test project".to_string()),
@@ -698,12 +744,15 @@ mod tests {
             related_conversations: Vec::new(),
         };
 
-        let conversation_id = bus.start_conversation(
-            participants,
-            "Test coordination".to_string(),
-            ConversationType::TaskCoordination,
-            context,
-        ).await.unwrap();
+        let conversation_id = bus
+            .start_conversation(
+                participants,
+                "Test coordination".to_string(),
+                ConversationType::TaskCoordination,
+                context,
+            )
+            .await
+            .unwrap();
 
         assert!(!conversation_id.is_empty());
         assert!(bus.conversations.contains_key(&conversation_id));
@@ -716,7 +765,9 @@ mod tests {
             DialogueMessageType::Information,
             EmotionalTone::Positive,
             ResponseExpectation::Acknowledgment,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         let summary = bus.get_conversation_summary(&conversation_id).unwrap();
         assert_eq!(summary.message_count, 1);

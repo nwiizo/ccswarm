@@ -7,8 +7,10 @@ use crate::extension::meta_learning::ComplexityLevel;
 /// System extension manager for ccswarm self-modification
 pub struct SystemExtensionManager {
     /// System configuration
+    #[allow(dead_code)]
     config: SystemConfig,
     /// Code generator
+    #[allow(dead_code)]
     code_generator: CodeGenerator,
     /// Architecture analyzer
     architecture_analyzer: ArchitectureAnalyzer,
@@ -78,6 +80,7 @@ pub struct CodeTemplate {
 
 /// Architecture analyzer
 pub struct ArchitectureAnalyzer {
+    #[allow(dead_code)]
     dependency_graph: DependencyGraph,
 }
 
@@ -112,10 +115,10 @@ pub enum ModuleType {
 /// Criticality level
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Criticality {
-    Critical,    // System won't function without it
-    Important,   // Major functionality depends on it
-    Normal,      // Standard module
-    Optional,    // Can be removed without major impact
+    Critical,  // System won't function without it
+    Important, // Major functionality depends on it
+    Normal,    // Standard module
+    Optional,  // Can be removed without major impact
 }
 
 /// Module metrics
@@ -147,6 +150,7 @@ pub enum DependencyType {
 
 /// Self-modification engine
 pub struct SelfModificationEngine {
+    #[allow(dead_code)]
     modification_history: Arc<RwLock<Vec<ModificationRecord>>>,
     active_modifications: Arc<RwLock<HashMap<Uuid, ActiveModification>>>,
 }
@@ -169,12 +173,30 @@ pub struct ModificationRecord {
 /// Type of modification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ModificationType {
-    AddModule { name: String, module_type: String },
-    ModifyModule { name: String, changes: Vec<String> },
-    AddFeature { feature: String, modules_affected: Vec<String> },
-    Refactor { scope: String, pattern: String },
-    Optimize { target: String, optimization_type: String },
-    AddIntegration { integration_type: String, external_system: String },
+    AddModule {
+        name: String,
+        module_type: String,
+    },
+    ModifyModule {
+        name: String,
+        changes: Vec<String>,
+    },
+    AddFeature {
+        feature: String,
+        modules_affected: Vec<String>,
+    },
+    Refactor {
+        scope: String,
+        pattern: String,
+    },
+    Optimize {
+        target: String,
+        optimization_type: String,
+    },
+    AddIntegration {
+        integration_type: String,
+        external_system: String,
+    },
 }
 
 /// Active modification being performed
@@ -394,7 +416,9 @@ impl SystemExtensionManager {
         let impact = self.analyze_impact(&solution).await?;
 
         // Create implementation strategy
-        let strategy = self.create_implementation_strategy(&solution, &impact).await?;
+        let strategy = self
+            .create_implementation_strategy(&solution, &impact)
+            .await?;
 
         Ok(SystemExtensionProposal {
             id: Uuid::new_v4(),
@@ -568,16 +592,25 @@ impl SystemExtensionManager {
         }
     }
 
-    async fn get_affected_files(&self, _proposal: &SystemExtensionProposal) -> Result<Vec<PathBuf>> {
+    async fn get_affected_files(
+        &self,
+        _proposal: &SystemExtensionProposal,
+    ) -> Result<Vec<PathBuf>> {
         // Get list of affected files
         Ok(vec![])
+    }
+}
+
+impl Default for CodeGenerator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl CodeGenerator {
     pub fn new() -> Self {
         let mut templates = HashMap::new();
-        
+
         // Add default templates
         templates.insert(
             ComponentType::Module,
@@ -598,7 +631,9 @@ impl CodeGenerator {
         component_type: ComponentType,
         spec: &ComponentSpec,
     ) -> Result<GeneratedCode> {
-        let template = self.templates.get(&component_type)
+        let template = self
+            .templates
+            .get(&component_type)
             .context("No template for component type")?;
 
         let code = self.apply_template(template, spec)?;
@@ -616,14 +651,28 @@ impl CodeGenerator {
         Ok(template.template.clone())
     }
 
-    fn generate_tests(&self, _component_type: ComponentType, _spec: &ComponentSpec) -> Result<String> {
+    fn generate_tests(
+        &self,
+        _component_type: ComponentType,
+        _spec: &ComponentSpec,
+    ) -> Result<String> {
         // Generate tests for component
         Ok(String::new())
     }
 
-    fn generate_docs(&self, _component_type: ComponentType, _spec: &ComponentSpec) -> Result<String> {
+    fn generate_docs(
+        &self,
+        _component_type: ComponentType,
+        _spec: &ComponentSpec,
+    ) -> Result<String> {
         // Generate documentation
         Ok(String::new())
+    }
+}
+
+impl Default for ArchitectureAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -678,6 +727,12 @@ impl ArchitectureAnalyzer {
     async fn calculate_coupling(&self) -> Result<HashMap<String, f64>> {
         // Calculate coupling for each module
         Ok(HashMap::new())
+    }
+}
+
+impl Default for SelfModificationEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -776,6 +831,9 @@ mod tests {
             safety_level: SafetyLevel::Normal,
         };
 
-        assert_eq!(config.max_modification_scope, ModificationScope::ModifyNonCore);
+        assert_eq!(
+            config.max_modification_scope,
+            ModificationScope::ModifyNonCore
+        );
     }
 }

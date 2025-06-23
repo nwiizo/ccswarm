@@ -105,10 +105,20 @@ pub enum EpisodeType {
 /// Outcome of an episode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EpisodeOutcome {
-    Success { metrics: HashMap<String, f32> },
-    Failure { reason: String, recovery_actions: Vec<String> },
-    Partial { progress: f32, next_steps: Vec<String> },
-    Cancelled { reason: String },
+    Success {
+        metrics: HashMap<String, f32>,
+    },
+    Failure {
+        reason: String,
+        recovery_actions: Vec<String>,
+    },
+    Partial {
+        progress: f32,
+        next_steps: Vec<String>,
+    },
+    Cancelled {
+        reason: String,
+    },
 }
 
 /// Emotional marker for memory consolidation
@@ -166,11 +176,11 @@ pub struct ConceptRelationship {
 /// Types of concept relationships
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RelationshipType {
-    IsA,          // TypeOf
-    PartOf,       // Component
-    Uses,         // Functional
-    CausedBy,     // Causal
-    SimilarTo,    // Analogical
+    IsA,           // TypeOf
+    PartOf,        // Component
+    Uses,          // Functional
+    CausedBy,      // Causal
+    SimilarTo,     // Analogical
     ConflictsWith, // Contradictory
 }
 
@@ -332,7 +342,12 @@ impl SessionMemory {
     }
 
     /// Add item to working memory
-    pub fn add_to_working_memory(&mut self, content: String, item_type: WorkingMemoryType, priority: f32) {
+    pub fn add_to_working_memory(
+        &mut self,
+        content: String,
+        item_type: WorkingMemoryType,
+        priority: f32,
+    ) {
         let item = WorkingMemoryItem {
             id: uuid::Uuid::new_v4().to_string(),
             content,
@@ -362,8 +377,13 @@ impl SessionMemory {
     }
 
     /// Add episode to episodic memory
-    pub fn add_episode(&mut self, event_type: EpisodeType, description: String, 
-                      context: HashMap<String, String>, outcome: EpisodeOutcome) {
+    pub fn add_episode(
+        &mut self,
+        event_type: EpisodeType,
+        description: String,
+        context: HashMap<String, String>,
+        outcome: EpisodeOutcome,
+    ) {
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
@@ -380,7 +400,12 @@ impl SessionMemory {
     }
 
     /// Add concept to semantic memory
-    pub fn add_concept(&mut self, name: String, definition: String, properties: HashMap<String, String>) {
+    pub fn add_concept(
+        &mut self,
+        name: String,
+        definition: String,
+        properties: HashMap<String, String>,
+    ) {
         let concept = Concept {
             name: name.clone(),
             definition,
@@ -414,7 +439,9 @@ impl SessionMemory {
     /// Consolidate memories (transfer from working to long-term)
     pub fn consolidate_memories(&mut self) {
         // Process working memory items for consolidation
-        let items_to_consolidate: Vec<_> = self.working_memory.current_items
+        let items_to_consolidate: Vec<_> = self
+            .working_memory
+            .current_items
             .iter()
             .filter(|item| self.should_consolidate_item(item))
             .cloned()
@@ -436,7 +463,7 @@ impl SessionMemory {
     fn should_consolidate_item(&self, item: &WorkingMemoryItem) -> bool {
         let age = Utc::now() - item.created_at;
         let significance = item.priority;
-        
+
         // Consolidate if item is old enough and significant
         age.num_minutes() > 30 && significance > 0.7
     }
@@ -474,9 +501,9 @@ impl SessionMemory {
                     event_type: EpisodeType::ErrorRecovery,
                     description: item.content.clone(),
                     context: HashMap::new(),
-                    outcome: EpisodeOutcome::Partial { 
-                        progress: 0.5, 
-                        next_steps: vec!["Learn from error".to_string()] 
+                    outcome: EpisodeOutcome::Partial {
+                        progress: 0.5,
+                        next_steps: vec!["Learn from error".to_string()],
                     },
                     emotional_valence: -0.3, // Negative but learning
                     learning_value: 0.8,     // High learning value
@@ -491,8 +518,8 @@ impl SessionMemory {
                     event_type: EpisodeType::Routine,
                     description: item.content.clone(),
                     context: HashMap::new(),
-                    outcome: EpisodeOutcome::Success { 
-                        metrics: HashMap::new() 
+                    outcome: EpisodeOutcome::Success {
+                        metrics: HashMap::new(),
                     },
                     emotional_valence: 0.1,
                     learning_value: item.priority,
@@ -504,9 +531,10 @@ impl SessionMemory {
 
     /// Update cognitive load based on working memory utilization
     fn update_cognitive_load(&mut self) {
-        let utilization = self.working_memory.current_items.len() as f32 / WORKING_MEMORY_CAPACITY as f32;
+        let utilization =
+            self.working_memory.current_items.len() as f32 / WORKING_MEMORY_CAPACITY as f32;
         self.working_memory.cognitive_load = utilization.min(1.0);
-        
+
         // Update memory stats
         self.memory_stats.working_memory_utilization = utilization;
         self.memory_stats.last_updated = Utc::now();
@@ -525,22 +553,34 @@ impl SessionMemory {
 
         // Search episodic memory
         for episode in &self.episodic_memory.episodes {
-            if episode.description.to_lowercase().contains(&query.to_lowercase()) {
+            if episode
+                .description
+                .to_lowercase()
+                .contains(&query.to_lowercase())
+            {
                 result.relevant_episodes.push(episode.clone());
             }
         }
 
         // Search semantic memory
         for concept in self.semantic_memory.concepts.values() {
-            if concept.name.to_lowercase().contains(&query.to_lowercase()) ||
-               concept.definition.to_lowercase().contains(&query.to_lowercase()) {
+            if concept.name.to_lowercase().contains(&query.to_lowercase())
+                || concept
+                    .definition
+                    .to_lowercase()
+                    .contains(&query.to_lowercase())
+            {
                 result.relevant_concepts.push(concept.clone());
             }
         }
 
         // Search procedural memory
         for procedure in self.procedural_memory.procedures.values() {
-            if procedure.name.to_lowercase().contains(&query.to_lowercase()) {
+            if procedure
+                .name
+                .to_lowercase()
+                .contains(&query.to_lowercase())
+            {
                 result.relevant_procedures.push(procedure.clone());
             }
         }
@@ -557,7 +597,10 @@ impl SessionMemory {
             episodic_memory_size: self.episodic_memory.episodes.len(),
             semantic_concepts: self.semantic_memory.concepts.len(),
             procedural_skills: self.procedural_memory.procedures.len(),
-            recent_episodes: self.episodic_memory.episodes.iter()
+            recent_episodes: self
+                .episodic_memory
+                .episodes
+                .iter()
                 .rev()
                 .take(5)
                 .map(|e| e.description.clone())
@@ -649,20 +692,20 @@ impl EpisodicMemory {
                 self.emotional_markers.remove(&old_episode.id);
             }
         }
-        
+
         // Add emotional marker if significant
         if episode.emotional_valence.abs() > 0.5 {
             self.emotional_markers.insert(
-                episode.id.clone(), 
+                episode.id.clone(),
                 EmotionalMarker {
                     event_id: episode.id.clone(),
                     emotion_type: EmotionType::Satisfaction, // Simplified
                     intensity: episode.emotional_valence.abs(),
                     influence_on_learning: episode.learning_value,
-                }
+                },
             );
         }
-        
+
         self.episodes.push_back(episode);
     }
 }

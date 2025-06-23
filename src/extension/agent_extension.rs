@@ -18,7 +18,9 @@ pub trait ExtensionAIProvider: Send + Sync {
 /// Agent extension manager with search capabilities
 pub struct AgentExtensionManager {
     agent_id: String,
+    #[allow(dead_code)]
     agent_role: AgentRole,
+    #[allow(dead_code)]
     provider: Arc<dyn ExtensionAIProvider>,
     knowledge_base: Arc<RwLock<KnowledgeBase>>,
     search_engine: SearchEngine,
@@ -29,12 +31,15 @@ pub struct AgentExtensionManager {
 #[derive(Debug, Default)]
 pub struct KnowledgeBase {
     /// Discovered capabilities and their sources
+    #[allow(dead_code)]
     capabilities: HashMap<String, CapabilityInfo>,
     /// Learning resources
     resources: Vec<LearningResource>,
     /// Successful patterns
+    #[allow(dead_code)]
     patterns: Vec<Pattern>,
     /// Failed attempts
+    #[allow(dead_code)]
     failures: Vec<FailureRecord>,
 }
 
@@ -118,10 +123,19 @@ pub struct SearchQuery {
 /// Context for the search
 #[derive(Debug, Clone)]
 pub enum SearchContext {
-    CapabilityGap { current: Vec<String>, desired: Vec<String> },
-    ErrorResolution { error_pattern: String },
-    PerformanceOptimization { bottleneck: String },
-    TechnologyTrend { trend: String },
+    CapabilityGap {
+        current: Vec<String>,
+        desired: Vec<String>,
+    },
+    ErrorResolution {
+        error_pattern: String,
+    },
+    PerformanceOptimization {
+        bottleneck: String,
+    },
+    TechnologyTrend {
+        trend: String,
+    },
 }
 
 /// Search filters
@@ -154,7 +168,7 @@ pub struct DocumentationSearchStrategy {
 impl SearchStrategy for DocumentationSearchStrategy {
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>> {
         let mut results = Vec::new();
-        
+
         // Search through documentation sources
         for source in &self.doc_sources {
             match source.as_str() {
@@ -164,15 +178,21 @@ impl SearchStrategy for DocumentationSearchStrategy {
                 _ => continue,
             }
         }
-        
+
         // Sort by relevance
         results.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
-        
+
         Ok(results)
     }
-    
+
     fn name(&self) -> &str {
         "Documentation Search"
+    }
+}
+
+impl Default for DocumentationSearchStrategy {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -182,32 +202,34 @@ impl DocumentationSearchStrategy {
             doc_sources: vec!["mdn".to_string(), "react".to_string(), "rust".to_string()],
         }
     }
-    
+
     async fn search_mdn(&self, query: &SearchQuery) -> Result<Vec<SearchResult>> {
         use reqwest;
         use serde_json::Value;
-        
+
         let search_terms = query.keywords.join(" ");
-        let url = format!("https://developer.mozilla.org/api/v1/search?q={}", 
-                         urlencoding::encode(&search_terms));
-        
+        let url = format!(
+            "https://developer.mozilla.org/api/v1/search?q={}",
+            urlencoding::encode(&search_terms)
+        );
+
         let client = reqwest::Client::new();
         let response = client
             .get(&url)
             .header("User-Agent", "ccswarm/0.3.0")
             .send()
             .await?;
-            
+
         if response.status().is_success() {
             let json: Value = response.json().await?;
             let mut results = Vec::new();
-            
+
             if let Some(documents) = json["documents"].as_array() {
                 for doc in documents.iter().take(5) {
                     if let (Some(title), Some(url), Some(summary)) = (
                         doc["title"].as_str(),
                         doc["mdn_url"].as_str(),
-                        doc["summary"].as_str()
+                        doc["summary"].as_str(),
                     ) {
                         results.push(SearchResult {
                             title: title.to_string(),
@@ -220,18 +242,18 @@ impl DocumentationSearchStrategy {
                     }
                 }
             }
-            
+
             Ok(results)
         } else {
             Ok(vec![])
         }
     }
-    
+
     async fn search_react_docs(&self, _query: &SearchQuery) -> Result<Vec<SearchResult>> {
         // Simulate React docs search
         Ok(vec![])
     }
-    
+
     async fn search_rust_docs(&self, _query: &SearchQuery) -> Result<Vec<SearchResult>> {
         // Simulate Rust docs search
         Ok(vec![])
@@ -240,6 +262,7 @@ impl DocumentationSearchStrategy {
 
 /// GitHub repository search strategy
 pub struct GitHubSearchStrategy {
+    #[allow(dead_code)]
     api_token: Option<String>,
 }
 
@@ -248,21 +271,35 @@ impl SearchStrategy for GitHubSearchStrategy {
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>> {
         // Search GitHub for relevant repositories, issues, and discussions
         let search_terms = query.keywords.join(" ");
-        
+
         // Use GitHub API or gh CLI
         let output = Command::new("gh")
-            .args(&["search", "repos", &search_terms, "--limit", "10", "--json", "name,description,url,stargazersCount"])
+            .args(&[
+                "search",
+                "repos",
+                &search_terms,
+                "--limit",
+                "10",
+                "--json",
+                "name,description,url,stargazersCount",
+            ])
             .output()
             .await?;
-            
+
         // Parse results
         let results = self.parse_github_results(&output.stdout)?;
-        
+
         Ok(results)
     }
-    
+
     fn name(&self) -> &str {
         "GitHub Search"
+    }
+}
+
+impl Default for GitHubSearchStrategy {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -272,24 +309,24 @@ impl GitHubSearchStrategy {
             api_token: std::env::var("GITHUB_TOKEN").ok(),
         }
     }
-    
+
     fn parse_github_results(&self, data: &[u8]) -> Result<Vec<SearchResult>> {
         use serde_json::Value;
-        
+
         let json_str = std::str::from_utf8(data)?;
         if json_str.trim().is_empty() {
             return Ok(vec![]);
         }
-        
+
         let json: Value = serde_json::from_str(json_str)?;
         let mut results = Vec::new();
-        
+
         if let Some(repos) = json.as_array() {
             for repo in repos.iter().take(5) {
                 if let (Some(name), Some(description), Some(url)) = (
                     repo["name"].as_str(),
                     repo["description"].as_str(),
-                    repo["url"].as_str()
+                    repo["url"].as_str(),
                 ) {
                     let stars = repo["stargazersCount"].as_u64().unwrap_or(0);
                     let relevance_score = if stars > 1000 {
@@ -299,10 +336,10 @@ impl GitHubSearchStrategy {
                     } else {
                         0.5
                     };
-                    
+
                     let mut metadata = std::collections::HashMap::new();
                     metadata.insert("stars".to_string(), stars.to_string());
-                    
+
                     results.push(SearchResult {
                         title: name.to_string(),
                         url: Some(url.to_string()),
@@ -314,7 +351,7 @@ impl GitHubSearchStrategy {
                 }
             }
         }
-        
+
         Ok(results)
     }
 }
@@ -327,30 +364,30 @@ impl SearchStrategy for StackOverflowSearchStrategy {
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>> {
         use reqwest;
         use serde_json::Value;
-        
+
         let search_terms = query.keywords.join(" ");
         let url = format!(
             "https://api.stackexchange.com/2.3/search?order=desc&sort=relevance&intitle={}&site=stackoverflow",
             urlencoding::encode(&search_terms)
         );
-        
+
         let client = reqwest::Client::new();
         let response = client
             .get(&url)
             .header("User-Agent", "ccswarm/0.3.0")
             .send()
             .await?;
-            
+
         if response.status().is_success() {
             let json: Value = response.json().await?;
             let mut results = Vec::new();
-            
+
             if let Some(items) = json["items"].as_array() {
                 for item in items.iter().take(5) {
                     if let (Some(title), Some(link), Some(score)) = (
                         item["title"].as_str(),
                         item["link"].as_str(),
-                        item["score"].as_i64()
+                        item["score"].as_i64(),
                     ) {
                         let relevance_score = if score > 10 {
                             0.9
@@ -359,19 +396,21 @@ impl SearchStrategy for StackOverflowSearchStrategy {
                         } else {
                             0.5
                         };
-                        
+
                         let mut metadata = std::collections::HashMap::new();
                         metadata.insert("score".to_string(), score.to_string());
                         if let Some(answer_count) = item["answer_count"].as_i64() {
                             metadata.insert("answer_count".to_string(), answer_count.to_string());
                         }
-                        
+
                         results.push(SearchResult {
                             title: title.to_string(),
                             url: Some(link.to_string()),
-                            summary: format!("Score: {}, Answers: {}", 
-                                           score, 
-                                           item["answer_count"].as_i64().unwrap_or(0)),
+                            summary: format!(
+                                "Score: {}, Answers: {}",
+                                score,
+                                item["answer_count"].as_i64().unwrap_or(0)
+                            ),
                             relevance_score,
                             source: "StackOverflow".to_string(),
                             metadata,
@@ -379,13 +418,13 @@ impl SearchStrategy for StackOverflowSearchStrategy {
                     }
                 }
             }
-            
+
             Ok(results)
         } else {
             Ok(vec![])
         }
     }
-    
+
     fn name(&self) -> &str {
         "Stack Overflow Search"
     }
@@ -404,14 +443,14 @@ impl LearningAssistant {
         context: &SearchContext,
     ) -> Result<LearningAnalysis> {
         let prompt = self.build_analysis_prompt(results, context);
-        
+
         // Use provider to analyze
         let response = self.provider.send_message(&prompt).await?;
-        
+
         // Parse the analysis
         self.parse_analysis(&response)
     }
-    
+
     /// Generate implementation plan from learning
     pub async fn generate_implementation_plan(
         &self,
@@ -425,13 +464,13 @@ impl LearningAssistant {
             Generate a step-by-step implementation plan with phases, tasks, and validation methods.",
             analysis, current_capabilities
         );
-        
+
         let response = self.provider.send_message(&prompt).await?;
-        
+
         // Parse the plan
         self.parse_implementation_plan(&response)
     }
-    
+
     fn build_analysis_prompt(&self, results: &[SearchResult], context: &SearchContext) -> String {
         format!(
             "Analyze the following search results in the context of {:?}:\n\n\
@@ -443,13 +482,17 @@ impl LearningAssistant {
             4. Potential challenges\n\
             5. Success criteria",
             context,
-            results.iter()
-                .map(|r| format!("- {} (relevance: {:.2}): {}", r.title, r.relevance_score, r.summary))
+            results
+                .iter()
+                .map(|r| format!(
+                    "- {} (relevance: {:.2}): {}",
+                    r.title, r.relevance_score, r.summary
+                ))
                 .collect::<Vec<_>>()
                 .join("\n")
         )
     }
-    
+
     fn parse_analysis(&self, _response: &str) -> Result<LearningAnalysis> {
         // Parse the AI response into structured analysis
         Ok(LearningAnalysis {
@@ -460,7 +503,7 @@ impl LearningAssistant {
             success_criteria: vec![],
         })
     }
-    
+
     fn parse_implementation_plan(&self, _response: &str) -> Result<ImplementationPlan> {
         // Parse the AI response into structured plan
         Ok(ImplementationPlan {
@@ -497,11 +540,11 @@ impl AgentExtensionManager {
                 Box::new(StackOverflowSearchStrategy),
             ],
         };
-        
+
         let learning_assistant = LearningAssistant {
             provider: provider.clone(),
         };
-        
+
         Self {
             agent_id,
             agent_role,
@@ -511,26 +554,26 @@ impl AgentExtensionManager {
             learning_assistant,
         }
     }
-    
+
     /// Discover extension opportunities through search
     pub async fn discover_opportunities(&self) -> Result<Vec<ExtensionOpportunity>> {
         let mut opportunities = Vec::new();
-        
+
         // Search for capability gaps
         opportunities.extend(self.search_capability_gaps().await?);
-        
+
         // Search for performance optimizations
         opportunities.extend(self.search_performance_optimizations().await?);
-        
+
         // Search for industry trends
         opportunities.extend(self.search_industry_trends().await?);
-        
+
         // Rank opportunities
         self.rank_opportunities(&mut opportunities);
-        
+
         Ok(opportunities)
     }
-    
+
     /// Research a specific extension opportunity
     pub async fn research_extension(
         &self,
@@ -545,7 +588,7 @@ impl AgentExtensionManager {
                 ..Default::default()
             },
         };
-        
+
         // Search across all strategies
         let mut all_results = Vec::new();
         for strategy in &self.search_engine.search_strategies {
@@ -554,24 +597,27 @@ impl AgentExtensionManager {
                 Err(e) => eprintln!("Search strategy {} failed: {}", strategy.name(), e),
             }
         }
-        
+
         // Analyze results
-        let analysis = self.learning_assistant
+        let analysis = self
+            .learning_assistant
             .analyze_results(&all_results, &query.context)
             .await?;
-        
+
         // Generate implementation plan
         let current_capabilities = self.get_current_capabilities().await?;
-        let implementation_plan = self.learning_assistant
+        let implementation_plan = self
+            .learning_assistant
             .generate_implementation_plan(&analysis, &current_capabilities)
             .await?;
-        
+
         // Store in knowledge base
-        self.store_research(&opportunity, &all_results, &analysis).await?;
-        
+        self.store_research(opportunity, &all_results, &analysis)
+            .await?;
+
         let estimated_effort = self.estimate_effort(&implementation_plan);
         let confidence_score = self.calculate_confidence(&analysis);
-        
+
         Ok(ExtensionResearch {
             opportunity: opportunity.clone(),
             search_results: all_results,
@@ -581,7 +627,7 @@ impl AgentExtensionManager {
             confidence_score,
         })
     }
-    
+
     /// Generate a self-extension proposal
     pub async fn generate_proposal(
         &self,
@@ -592,45 +638,43 @@ impl AgentExtensionManager {
             proposer: self.agent_id.clone(),
             extension_type: research.opportunity.extension_type,
             title: research.opportunity.title.clone(),
-            description: self.generate_description(&research).await?,
+            description: self.generate_description(research).await?,
             current_state: self.assess_current_state().await?,
-            proposed_state: self.define_proposed_state(&research).await?,
+            proposed_state: self.define_proposed_state(research).await?,
             implementation_plan: research.implementation_plan.clone(),
-            risk_assessment: self.assess_risks(&research).await?,
-            success_criteria: self.define_success_criteria(&research).await?,
+            risk_assessment: self.assess_risks(research).await?,
+            success_criteria: self.define_success_criteria(research).await?,
             created_at: Utc::now(),
             status: ExtensionStatus::Proposed,
         };
-        
+
         Ok(proposal)
     }
-    
+
     async fn search_capability_gaps(&self) -> Result<Vec<ExtensionOpportunity>> {
         // Search for capabilities that peers have but this agent doesn't
         Ok(vec![])
     }
-    
+
     async fn search_performance_optimizations(&self) -> Result<Vec<ExtensionOpportunity>> {
         // Search for performance improvement techniques
         Ok(vec![])
     }
-    
+
     async fn search_industry_trends(&self) -> Result<Vec<ExtensionOpportunity>> {
         // Search for relevant industry trends
         Ok(vec![])
     }
-    
-    fn rank_opportunities(&self, opportunities: &mut Vec<ExtensionOpportunity>) {
-        opportunities.sort_by(|a, b| {
-            b.potential_impact.partial_cmp(&a.potential_impact).unwrap()
-        });
+
+    fn rank_opportunities(&self, opportunities: &mut [ExtensionOpportunity]) {
+        opportunities.sort_by(|a, b| b.potential_impact.partial_cmp(&a.potential_impact).unwrap());
     }
-    
+
     async fn get_current_capabilities(&self) -> Result<Vec<String>> {
         // Get agent's current capabilities
         Ok(vec![])
     }
-    
+
     async fn store_research(
         &self,
         _opportunity: &ExtensionOpportunity,
@@ -638,7 +682,7 @@ impl AgentExtensionManager {
         _analysis: &LearningAnalysis,
     ) -> Result<()> {
         let mut kb = self.knowledge_base.write().await;
-        
+
         // Store learning resources
         for result in results {
             if result.relevance_score > 0.7 {
@@ -652,19 +696,19 @@ impl AgentExtensionManager {
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     fn estimate_effort(&self, plan: &ImplementationPlan) -> String {
         plan.timeline.clone()
     }
-    
+
     fn calculate_confidence(&self, _analysis: &LearningAnalysis) -> f64 {
         // Calculate confidence based on analysis quality
         0.8
     }
-    
+
     async fn generate_description(&self, research: &ExtensionResearch) -> Result<String> {
         Ok(format!(
             "{}\n\nBased on research: {} relevant resources found with average relevance score of {:.2}",
@@ -673,7 +717,7 @@ impl AgentExtensionManager {
             research.search_results.iter().map(|r| r.relevance_score).sum::<f64>() / research.search_results.len() as f64
         ))
     }
-    
+
     async fn assess_current_state(&self) -> Result<CurrentState> {
         Ok(CurrentState {
             capabilities: vec![],
@@ -681,7 +725,7 @@ impl AgentExtensionManager {
             performance_metrics: HashMap::new(),
         })
     }
-    
+
     async fn define_proposed_state(&self, _research: &ExtensionResearch) -> Result<ProposedState> {
         Ok(ProposedState {
             new_capabilities: vec![],
@@ -689,7 +733,7 @@ impl AgentExtensionManager {
             performance_targets: HashMap::new(),
         })
     }
-    
+
     async fn assess_risks(&self, _research: &ExtensionResearch) -> Result<RiskAssessment> {
         Ok(RiskAssessment {
             risks: vec![],
@@ -698,16 +742,22 @@ impl AgentExtensionManager {
             overall_risk_score: 0.3,
         })
     }
-    
-    async fn define_success_criteria(&self, research: &ExtensionResearch) -> Result<Vec<SuccessCriterion>> {
-        Ok(research.analysis.success_criteria.iter().map(|c| {
-            SuccessCriterion {
+
+    async fn define_success_criteria(
+        &self,
+        research: &ExtensionResearch,
+    ) -> Result<Vec<SuccessCriterion>> {
+        Ok(research
+            .analysis
+            .success_criteria
+            .iter()
+            .map(|c| SuccessCriterion {
                 description: c.clone(),
                 metric: "TBD".to_string(),
                 target_value: "TBD".to_string(),
                 measurement_method: "TBD".to_string(),
-            }
-        }).collect())
+            })
+            .collect())
     }
 }
 
@@ -741,22 +791,24 @@ mod tests {
     #[tokio::test]
     async fn test_search_engine() {
         let engine = SearchEngine {
-            search_strategies: vec![
-                Box::new(DocumentationSearchStrategy {
-                    doc_sources: vec!["mdn".to_string()],
-                }),
-            ],
+            search_strategies: vec![Box::new(DocumentationSearchStrategy {
+                doc_sources: vec!["mdn".to_string()],
+            })],
         };
-        
+
         let query = SearchQuery {
-            keywords: vec!["react".to_string(), "server".to_string(), "components".to_string()],
+            keywords: vec![
+                "react".to_string(),
+                "server".to_string(),
+                "components".to_string(),
+            ],
             context: SearchContext::CapabilityGap {
                 current: vec!["React".to_string()],
                 desired: vec!["React Server Components".to_string()],
             },
             filters: Default::default(),
         };
-        
+
         // Should not panic
         let _ = engine.search_strategies[0].search(&query).await;
     }
