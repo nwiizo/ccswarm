@@ -56,7 +56,7 @@ async-channel = "2.3"
 dashmap = "6.1"
 
 # TUI
-ratatui = "0.26"
+ratatui = "0.29"
 crossterm = "0.27"
 tokio-util = "0.7"
 
