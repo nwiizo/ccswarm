@@ -20,7 +20,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             Constraint::Min(0),    // Main content
             Constraint::Length(3), // Footer/Status
         ])
-        .split(f.size());
+        .split(f.area());
 
     // Draw header with tabs
     draw_tabs(f, chunks[0], app);
@@ -282,7 +282,7 @@ fn draw_enhanced_provider_stats(f: &mut Frame, area: Rect, app: &App) {
             .title(" 🔌 Provider Distribution ")
             .title_alignment(Alignment::Center),
     )
-    .highlight_style(
+    .row_highlight_style(
         Style::default()
             .bg(Color::DarkGray)
             .add_modifier(Modifier::BOLD),
@@ -383,7 +383,7 @@ fn draw_enhanced_agent_summary(f: &mut Frame, area: Rect, app: &App) {
             .title(" 👥 Agents Overview ")
             .title_alignment(Alignment::Center),
     )
-    .highlight_style(
+    .row_highlight_style(
         Style::default()
             .bg(Color::DarkGray)
             .add_modifier(Modifier::BOLD),
@@ -537,7 +537,7 @@ fn draw_agents(f: &mut Frame, area: Rect, app: &App) {
             .title_alignment(Alignment::Center)
             .style(Style::default().fg(Color::White)),
     )
-    .highlight_style(
+    .row_highlight_style(
         Style::default()
             .bg(Color::Blue)
             .fg(Color::White)
@@ -640,7 +640,7 @@ fn draw_tasks(f: &mut Frame, area: Rect, app: &App) {
             .borders(Borders::ALL)
             .title(" Tasks (t to add new task) "),
     )
-    .highlight_style(selected_style);
+    .row_highlight_style(selected_style);
 
     let mut table_state = ratatui::widgets::TableState::default();
     table_state.select(Some(app.selected_task));
@@ -1388,7 +1388,7 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
 
 /// Draw enhanced input popup with better styling
 fn draw_input_popup(f: &mut Frame, app: &App) {
-    let area = centered_rect(70, 25, f.size());
+    let area = centered_rect(70, 25, f.area());
 
     let (title, _title_icon, border_color) = match app.input_mode {
         InputMode::AddingTask => (" 📋 Add New Task ", "📋", Color::Green),
