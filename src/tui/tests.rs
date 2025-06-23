@@ -243,7 +243,7 @@ mod tests {
         let mut result = String::new();
         for y in 0..buffer.area.height {
             for x in 0..buffer.area.width {
-                let cell = buffer.get(x, y);
+                let cell = &buffer[(x, y)];
                 result.push_str(cell.symbol());
             }
             result.push('\n');
@@ -372,7 +372,7 @@ mod tests {
         terminal
             .draw(|f| {
                 let block = Block::default().title("Test Block").borders(Borders::ALL);
-                f.render_widget(block, f.size());
+                f.render_widget(block, f.area());
             })
             .unwrap();
 
