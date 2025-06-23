@@ -67,7 +67,7 @@ reqwest = { version = "0.11", features = ["json"] }
 async-trait = "0.1"
 
 # Docker integration (optional for container feature)
-bollard = { version = "0.16", optional = true }
+bollard = { version = "0.19", optional = true }
 futures-util = { version = "0.3", optional = true }
 tar = { version = "0.4", optional = true }
 
