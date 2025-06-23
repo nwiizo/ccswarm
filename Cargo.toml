@@ -47,7 +47,7 @@ regex = "1.10"
 nix = { version = "0.29", features = ["process"] }
 
 # Configuration
-config = "0.14"
+config = "0.15"
 
 # Async channels
 async-channel = "2.3"
