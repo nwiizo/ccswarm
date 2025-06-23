@@ -177,11 +177,14 @@ impl PersistentSessionManager {
         for (agent_id, session) in sessions.iter() {
             if let Some(info) = session_info.get(agent_id) {
                 if info.status == PersistentSessionStatus::Idle {
-                    let agent = session.lock().await;
-                    if agent.identity.specialization.name() == role.name() {
-                        // Found a reusable session
-                        return Some(Arc::clone(session));
+                    // Try to lock the agent, but don't block indefinitely
+                    if let Ok(agent) = session.try_lock() {
+                        if agent.identity.specialization.name() == role.name() {
+                            // Found a reusable session
+                            return Some(Arc::clone(session));
+                        }
                     }
+                    // If we can't lock, skip this session for now
                 }
             }
         }
@@ -539,10 +542,21 @@ mod tests {
     use crate::identity::default_frontend_role;
     use tempfile::TempDir;
 
+    /// Create test config with short intervals to speed up tests
+    fn test_config() -> PersistentSessionManagerConfig {
+        PersistentSessionManagerConfig {
+            max_concurrent_sessions: 10,
+            idle_timeout: Duration::from_millis(100), // 100ms for tests
+            cleanup_interval: Duration::from_millis(50), // 50ms for tests
+            max_session_lifetime: Duration::from_secs(10), // 10s for tests
+            enable_session_reuse: false,
+        }
+    }
+
     #[tokio::test]
     async fn test_persistent_session_manager_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let config = PersistentSessionManagerConfig::default();
+        let config = test_config();
         let manager = PersistentSessionManager::new(temp_dir.path().to_path_buf(), config);
 
         assert_eq!(manager.sessions.read().await.len(), 0);
@@ -551,7 +565,7 @@ mod tests {
     #[tokio::test]
     async fn test_persistent_session_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let config = PersistentSessionManagerConfig::default();
+        let config = test_config();
         let manager = PersistentSessionManager::new(temp_dir.path().to_path_buf(), config);
 
         let claude_config = ClaudeConfig::default();
@@ -569,7 +583,7 @@ mod tests {
     #[tokio::test]
     async fn test_session_reuse() {
         let temp_dir = TempDir::new().unwrap();
-        let mut config = PersistentSessionManagerConfig::default();
+        let mut config = test_config();
         config.enable_session_reuse = true;
 
         let manager = PersistentSessionManager::new(temp_dir.path().to_path_buf(), config);
@@ -582,11 +596,12 @@ mod tests {
             .await
             .unwrap();
 
-        // Mark as idle
+        // Mark as idle - extract agent_id first then update
         let agent_id = {
             let agent = session1.lock().await;
             agent.identity.agent_id.clone()
         };
+
         manager
             .update_session_status(&agent_id, PersistentSessionStatus::Idle)
             .await;
@@ -600,17 +615,14 @@ mod tests {
         // Should still have only 1 session (reused)
         assert_eq!(manager.sessions.read().await.len(), 1);
 
-        // Sessions should be the same
-        assert_eq!(
-            session1.lock().await.identity.agent_id,
-            session2.lock().await.identity.agent_id
-        );
+        // Sessions should be the same - check by Arc pointer equality
+        assert!(Arc::ptr_eq(&session1, &session2));
     }
 
     #[tokio::test]
     async fn test_efficiency_stats() {
         let temp_dir = TempDir::new().unwrap();
-        let config = PersistentSessionManagerConfig::default();
+        let config = test_config();
         let manager = PersistentSessionManager::new(temp_dir.path().to_path_buf(), config);
 
         // Initially no sessions

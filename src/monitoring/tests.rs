@@ -343,7 +343,7 @@ mod tests {
 
         // Spawn task to send outputs
         let sender = tokio::spawn(async move {
-            sleep(TokioDuration::from_millis(10)).await;
+            sleep(TokioDuration::from_millis(5)).await;
 
             system_clone
                 .add_output(

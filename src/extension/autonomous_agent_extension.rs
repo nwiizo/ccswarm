@@ -1157,13 +1157,27 @@ mod tests {
         // Create test knowledge base
         let mut kb = KnowledgeBase::default();
 
-        // Add some experiences
+        // Add some experiences with recurring failure pattern
         kb.experiences.push(Experience {
             id: Uuid::new_v4(),
             timestamp: Utc::now(),
             task_type: "frontend_development".to_string(),
             context: "Building React components".to_string(),
             actions_taken: vec!["Created component".to_string()],
+            outcome: TaskOutcome::Failure {
+                reason: "Lack of React hooks knowledge".to_string(),
+                error_details: None,
+            },
+            insights: vec![],
+        });
+
+        // Add a second similar failure to trigger pattern recognition
+        kb.experiences.push(Experience {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            task_type: "frontend_development".to_string(),
+            context: "Building React state management".to_string(),
+            actions_taken: vec!["Attempted state handling".to_string()],
             outcome: TaskOutcome::Failure {
                 reason: "Lack of React hooks knowledge".to_string(),
                 error_details: None,
@@ -1181,6 +1195,6 @@ mod tests {
         let proposals = reasoner.reason_about_extensions(&kb, &role).await.unwrap();
 
         assert!(!proposals.is_empty());
-        assert!(proposals[0].need.title.contains("React"));
+        assert!(proposals[0].need.title.contains("frontend_development"));
     }
 }

@@ -2394,9 +2394,7 @@ impl CliRunner {
                     vec![agent_id.clone()]
                 } else {
                     // Get all agents from config
-                    self.config
-                        .agents.keys().cloned()
-                        .collect()
+                    self.config.agents.keys().cloned().collect()
                 };
 
                 // Process each agent

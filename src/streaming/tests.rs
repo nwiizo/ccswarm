@@ -260,7 +260,7 @@ mod tests {
         manager.start().await.unwrap();
 
         // Give the streaming loop time to start
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(10)).await;
 
         // Add output to monitoring system
         monitoring
@@ -275,7 +275,7 @@ mod tests {
             .unwrap();
 
         // Wait for message with longer timeout
-        let timeout = tokio::time::timeout(Duration::from_secs(1), rx.recv()).await;
+        let timeout = tokio::time::timeout(Duration::from_millis(100), rx.recv()).await;
 
         assert!(timeout.is_ok());
         let entry = timeout.unwrap();
@@ -301,7 +301,7 @@ mod tests {
         manager.start().await.unwrap();
 
         // Give the streaming loop time to start
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(10)).await;
 
         // Add outputs
         monitoring
@@ -327,7 +327,7 @@ mod tests {
             .unwrap();
 
         // Should only receive from agent-123
-        let timeout = tokio::time::timeout(Duration::from_secs(1), rx.recv()).await;
+        let timeout = tokio::time::timeout(Duration::from_millis(100), rx.recv()).await;
 
         assert!(timeout.is_ok());
         let entry = timeout.unwrap();
@@ -361,7 +361,7 @@ mod tests {
         manager.start().await.unwrap();
 
         // Give the streaming loop time to start
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(10)).await;
 
         // Add various outputs
         monitoring
@@ -387,7 +387,7 @@ mod tests {
             .unwrap();
 
         // Should only receive error
-        let timeout = tokio::time::timeout(Duration::from_secs(1), rx.recv()).await;
+        let timeout = tokio::time::timeout(Duration::from_millis(100), rx.recv()).await;
 
         assert!(timeout.is_ok());
         let entry = timeout.unwrap();
@@ -471,7 +471,7 @@ mod tests {
         manager.start().await.unwrap();
 
         // Give the streaming loop time to start
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(10)).await;
 
         // Send a message
         monitoring
@@ -486,9 +486,9 @@ mod tests {
             .unwrap();
 
         // Both should receive it
-        let timeout1 = tokio::time::timeout(Duration::from_secs(1), rx1.recv()).await;
+        let timeout1 = tokio::time::timeout(Duration::from_millis(100), rx1.recv()).await;
 
-        let timeout2 = tokio::time::timeout(Duration::from_secs(1), rx2.recv()).await;
+        let timeout2 = tokio::time::timeout(Duration::from_millis(100), rx2.recv()).await;
 
         assert!(timeout1.is_ok());
         assert!(timeout2.is_ok());
