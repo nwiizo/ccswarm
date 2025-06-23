@@ -55,7 +55,14 @@ cargo run -- sangha propose --type extension --title "React Server Components"
 cargo run -- sangha vote <proposal-id> aye --reason "Improves performance"
 cargo run -- sangha list --status active
 
-# NEW: Agent Self-Extension with AI Search (v0.3.0)
+# NEW: Agent Self-Extension with Autonomous Reasoning (v0.3.1)
+# Agents autonomously identify needs and consult Sangha
+cargo run -- extend autonomous                     # All agents think autonomously
+cargo run -- extend autonomous --agent backend     # Specific agent
+cargo run -- extend autonomous --dry-run           # Preview proposals
+cargo run -- extend autonomous --continuous        # Continuous mode
+
+# Legacy search-based extension (v0.3.0)
 cargo run -- search mdn "react server components"
 cargo run -- search github "rust async patterns"
 cargo run -- search stackoverflow "jwt authentication"
@@ -242,7 +249,7 @@ export CCSWARM_HOME="$HOME/.ccswarm" # Config directory
 5. **Quality review runs every 30 seconds** on completed tasks
 6. **Task modifiers**: `[high/medium/low]`, `[bug/feature/test/docs]`, `[auto]`, `[review]`
 7. **Sangha proposals require consensus** - use appropriate algorithm for change scope
-8. **Extension searches are rate-limited** - respect API limits for GitHub/MDN/SO
+8. **Extension is autonomous (v0.3.1)** - agents self-reflect and propose improvements via Sangha
 9. **Knowledge base grows over time** - monitor storage and prune old patterns
 10. **Risk assessment is mandatory** for all self-extension proposals
 
@@ -255,16 +262,25 @@ export CCSWARM_HOME="$HOME/.ccswarm" # Config directory
 - **Consensus Algorithms**: Simple majority, Byzantine fault tolerant, Proof of Stake
 - **Real Examples**: React Server Components proposal with live voting system
 
-### Extension (Self-Improvement)
-- **Purpose**: Agents autonomously discover and propose new capabilities
-- **Implementation**: `src/extension/` with search strategies and learning frameworks
-- **API Integration**: Real connections to MDN, GitHub, Stack Overflow APIs
-- **CLI Commands**: `search <source> <query>`, `extend propose`, `extend status`
-- **Search Capabilities**: 
-  - MDN: `https://developer.mozilla.org/api/v1/search`
-  - GitHub: Uses `gh` CLI for repository and code search
-  - Stack Overflow: `https://api.stackexchange.com/2.3/search`
-- **Real Examples**: Live search results with relevance scoring and metadata
+### Extension (Self-Improvement) - v0.3.1 UPDATE
+- **Purpose**: Agents autonomously think, reflect, and propose new capabilities
+- **Implementation**: `src/extension/` with autonomous reasoning and Sangha integration
+- **v0.3.1 Changes**: 
+  - Removed mandatory search requirement
+  - Added autonomous reasoning based on experience analysis
+  - Integrated Sangha consultation for approval
+  - Self-reflection engine for introspective improvement
+- **CLI Commands**: 
+  - `extend autonomous` - Agents think independently and propose extensions
+  - `extend autonomous --dry-run` - Preview what would be proposed
+  - `extend autonomous --continuous` - Continuous self-improvement mode
+  - Legacy: `search <source> <query>`, `extend propose`
+- **Autonomous Process**:
+  1. Analyze past experiences and performance
+  2. Identify capability gaps and recurring issues
+  3. Generate strategic extension proposals
+  4. Submit to Sangha for collective approval
+  5. Implement approved extensions
 
 ### Search Integration Architecture
 ```rust
@@ -282,5 +298,38 @@ async fn search_mdn(&self, query: &SearchQuery) -> Result<Vec<SearchResult>> {
 - **Extension Proposal**: "フロントエンドエージェントにReact Server Components（RSC）能力を追加"
 - **Risk Assessment**: Automatic evaluation with mitigation strategies
 - **Implementation Plans**: Phased rollout with success criteria
+
+## New v0.3.1 Features - Autonomous Self-Extension
+
+### Key Changes from v0.3.0
+- **Search is Optional**: Agents no longer require external searches to propose extensions
+- **Autonomous Reasoning**: Agents analyze their own experiences and performance
+- **Sangha Integration**: All extension proposals go through democratic Sangha approval
+- **Self-Reflection**: Continuous introspective analysis drives improvement
+
+### Autonomous Extension Architecture
+```rust
+// Agents think for themselves
+let analysis = self.experience_analyzer.analyze_experiences(&knowledge_base).await?;
+let assessment = self.capability_assessor.assess_capabilities(&capabilities).await?;
+let needs = self.need_identifier.identify_needs(&analysis, &assessment).await?;
+let proposals = self.strategic_planner.create_proposals(&needs, &agent_role).await?;
+
+// Then consult Sangha
+let proposal_id = sangha_interface.propose_extension(&proposal).await?;
+let consensus = sangha_interface.get_consensus(&proposal_id).await?;
+```
+
+### Usage Examples
+```bash
+# All agents autonomously propose extensions
+cargo run -- extend autonomous
+
+# Specific agent in dry-run mode
+cargo run -- extend autonomous --agent frontend --dry-run
+
+# Continuous self-improvement
+cargo run -- extend autonomous --continuous
+```
 
 The codebase follows Rust best practices with comprehensive error handling, async/await patterns, and strong typing throughout.

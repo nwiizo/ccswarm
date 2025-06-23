@@ -566,7 +566,11 @@ mod tests {
         let matcher = PatternMatcher::new(0.7);
         
         let pattern_context = ExtensionContext {
-            agent_role: AgentRole::Frontend,
+            agent_role: AgentRole::Frontend {
+                technologies: vec!["React".to_string()],
+                responsibilities: vec!["UI development".to_string()],
+                boundaries: vec!["Frontend only".to_string()],
+            },
             domain: "web".to_string(),
             complexity_level: ComplexityLevel::Moderate,
             prerequisites_met: true,
@@ -575,7 +579,11 @@ mod tests {
         };
         
         let current_context = ExtensionContext {
-            agent_role: AgentRole::Frontend,
+            agent_role: AgentRole::Frontend {
+                technologies: vec!["React".to_string()],
+                responsibilities: vec!["UI development".to_string()],
+                boundaries: vec!["Frontend only".to_string()],
+            },
             domain: "web".to_string(),
             complexity_level: ComplexityLevel::Moderate,
             prerequisites_met: true,

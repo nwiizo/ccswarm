@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 authors = ["nwiizo"]
 description = "AI-powered multi-agent orchestration system with session management"
@@ -42,6 +42,7 @@ walkdir = "2.5"
 # Regular expressions
 regex = "1.10"
 
+
 # Process management
 nix = { version = "0.29", features = ["process"] }
 
@@ -70,7 +71,7 @@ bollard = { version = "0.16", optional = true }
 futures-util = { version = "0.3", optional = true }
 tar = { version = "0.4", optional = true }
 
-# URL encoding (optional for container feature)
+# URL encoding
 urlencoding = { version = "2.1", optional = true }
 
 # Additional utilities
@@ -108,5 +109,5 @@ name = "llm_quality_judge_demo"
 path = "examples/llm_quality_judge_demo.rs"
 
 [features]
-default = []
+default = ["urlencoding"]
 container = ["bollard", "futures-util", "tar", "urlencoding"]

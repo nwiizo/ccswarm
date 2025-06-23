@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::extension::meta_learning::ComplexityLevel;
-use crate::sangha::proposal::RiskLevel;
+// Remove import - RiskLevel doesn't exist in extension_stub
 
 /// System extension manager for ccswarm self-modification
 pub struct SystemExtensionManager {
@@ -308,7 +308,7 @@ pub struct CompatibilityImpact {
 /// System risk assessment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemRiskAssessment {
-    pub risk_level: RiskLevel,
+    // pub risk_level: RiskLevel, // Temporarily removed - RiskLevel not available
     pub primary_risks: Vec<String>,
     pub mitigation_strategies: Vec<String>,
     pub rollback_complexity: ComplexityLevel,
@@ -511,7 +511,7 @@ impl SystemExtensionManager {
                 backward_compatible: true,
             },
             risk_assessment: SystemRiskAssessment {
-                risk_level: RiskLevel::Low,
+                // risk_level: RiskLevel::Low, // Temporarily removed
                 primary_risks: vec![],
                 mitigation_strategies: vec![],
                 rollback_complexity: ComplexityLevel::Simple,

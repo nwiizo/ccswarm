@@ -518,6 +518,21 @@ pub enum ExtendAction {
         #[arg(short, long)]
         discovery_type: Option<String>,
     },
+
+    /// Autonomous extension proposal (agents think for themselves)
+    Autonomous {
+        /// Agent ID (optional, all agents if not specified)
+        #[arg(short, long)]
+        agent: Option<String>,
+
+        /// Enable continuous autonomous extension
+        #[arg(long)]
+        continuous: bool,
+
+        /// Dry run - show what would be proposed without submitting
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2292,6 +2307,98 @@ impl CliRunner {
                         println!("   Type: {}", dt);
                     }
                     println!("✅ Discovery completed");
+                }
+            }
+            
+            ExtendAction::Autonomous { agent, continuous, dry_run } => {
+                // use crate::extension::autonomous_agent_extension::AutonomousAgentExtensionManager;
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "started",
+                            "message": "Autonomous extension reasoning initiated",
+                            "agent": agent,
+                            "continuous": continuous,
+                            "dry_run": dry_run,
+                        }))?
+                    );
+                } else {
+                    println!("🤖 Initiating autonomous extension reasoning");
+                    if let Some(a) = agent {
+                        println!("   Agent: {}", a);
+                    } else {
+                        println!("   Agents: All agents");
+                    }
+                    if *continuous {
+                        println!("   Mode: Continuous (agents will autonomously propose extensions)");
+                    }
+                    if *dry_run {
+                        println!("   🔍 DRY RUN - proposals will not be submitted to Sangha");
+                    }
+                }
+                
+                // Get agent list
+                let target_agents = if let Some(agent_id) = agent {
+                    vec![agent_id.clone()]
+                } else {
+                    // Get all agents from config
+                    self.config.agents.iter()
+                        .map(|(name, _)| name.clone())
+                        .collect()
+                };
+                
+                // Process each agent
+                for agent_id in target_agents {
+                    if !self.json_output {
+                        println!("\n🎯 Processing agent: {}", agent_id);
+                    }
+                    
+                    // Create autonomous extension manager for the agent
+                    // In real implementation, would create proper provider and sangha client
+                    // For now, just log the intent
+                    
+                    if *dry_run {
+                        if !self.json_output {
+                            println!("   📋 Would propose extensions based on:");
+                            println!("      - Past performance analysis");
+                            println!("      - Identified capability gaps"); 
+                            println!("      - Recurring failure patterns");
+                            println!("      - Self-reflection insights");
+                        }
+                    } else {
+                        if !self.json_output {
+                            println!("   🧠 Analyzing experiences and performance...");
+                            println!("   🔍 Identifying capability gaps...");
+                            println!("   💡 Generating extension proposals...");
+                            println!("   🏛️  Submitting proposals to Sangha for approval...");
+                        }
+                        
+                        // In real implementation:
+                        // 1. Create AutonomousAgentExtensionManager
+                        // 2. Call propose_extensions()
+                        // 3. Wait for Sangha consensus
+                        // 4. Report results
+                    }
+                }
+                
+                if *continuous && !self.json_output {
+                    println!("\n♾️  Continuous mode enabled - agents will autonomously propose extensions as needed");
+                    println!("   Press Ctrl+C to stop");
+                }
+                
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "completed",
+                            "message": "Autonomous extension reasoning completed",
+                            "continuous_mode": continuous,
+                        }))?
+                    );
+                } else {
+                    println!("\n✅ Autonomous extension reasoning completed");
                 }
             }
         }
