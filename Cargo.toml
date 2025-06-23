@@ -76,7 +76,7 @@ urlencoding = { version = "2.1", optional = true }
 
 # Additional utilities
 colored = "3.0"
-rand = "0.8"
+rand = "0.9"
 
 [dev-dependencies]
 # Testing
