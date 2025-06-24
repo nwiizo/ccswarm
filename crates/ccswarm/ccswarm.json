@@ -1,6 +1,6 @@
 {
   "project": {
-    "name": "TestProject",
+    "name": "New ccswarm Project",
     "repository": {
       "url": ".",
       "main_branch": "main"
@@ -30,10 +30,29 @@
     }
   },
   "agents": {
+    "frontend": {
+      "specialization": "react_typescript",
+      "worktree": "agents/frontend-agent",
+      "branch": "feature/frontend-ui",
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerously_skip_permissions": true,
+        "think_mode": "think_hard",
+        "json_output": true,
+        "custom_commands": [
+          "npm test",
+          "npm run lint",
+          "npm run build"
+        ],
+        "mcpServers": {},
+        "use_real_api": false
+      },
+      "claude_md_template": "frontend_specialist"
+    },
     "backend": {
-      "specialization": "backend",
+      "specialization": "node_microservices",
       "worktree": "agents/backend-agent",
-      "branch": "feature/backend",
+      "branch": "feature/backend-api",
       "claude_config": {
         "model": "claude-3.5-sonnet",
         "dangerously_skip_permissions": true,
@@ -67,25 +86,6 @@
         "use_real_api": false
       },
       "claude_md_template": "devops_specialist"
-    },
-    "frontend": {
-      "specialization": "frontend",
-      "worktree": "agents/frontend-agent",
-      "branch": "feature/frontend",
-      "claude_config": {
-        "model": "claude-3.5-sonnet",
-        "dangerously_skip_permissions": true,
-        "think_mode": "think_hard",
-        "json_output": true,
-        "custom_commands": [
-          "npm test",
-          "npm run lint",
-          "npm run build"
-        ],
-        "mcpServers": {},
-        "use_real_api": false
-      },
-      "claude_md_template": "frontend_specialist"
     }
   },
   "coordination": {

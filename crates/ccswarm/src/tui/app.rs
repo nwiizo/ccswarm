@@ -4,6 +4,7 @@ use tokio::time::{Duration, Instant};
 
 use crate::agent::AgentStatus;
 use crate::coordination::{CoordinationBus, StatusTracker, TaskQueue};
+use crate::execution::{ExecutionEngine, TaskStatus};
 
 /// Current UI tab
 #[derive(Debug, Clone, PartialEq)]
@@ -106,6 +107,12 @@ pub struct App {
     pub pending_tasks: usize,
     pub completed_tasks: usize,
 
+    /// Execution engine statistics
+    pub tasks_executed: usize,
+    pub tasks_failed: usize,
+    pub success_rate: f64,
+    pub orchestration_usage: f64,
+
     /// Input state
     pub input_mode: InputMode,
     pub input_buffer: String,
@@ -118,6 +125,9 @@ pub struct App {
     pub coordination_bus: CoordinationBus,
     pub status_tracker: StatusTracker,
     pub task_queue: TaskQueue,
+
+    /// Execution engine for real task data
+    pub execution_engine: Option<ExecutionEngine>,
 
     /// Terminal size
     pub terminal_width: u16,
@@ -159,6 +169,10 @@ impl App {
             active_agents: 0,
             pending_tasks: 0,
             completed_tasks: 0,
+            tasks_executed: 0,
+            tasks_failed: 0,
+            success_rate: 100.0,
+            orchestration_usage: 0.0,
             input_mode: InputMode::Normal,
             input_buffer: String::new(),
             delegation_mode: DelegationMode::Analyze,
@@ -166,10 +180,11 @@ impl App {
             coordination_bus,
             status_tracker,
             task_queue,
+            execution_engine: None, // Will be set by CLI runner
             terminal_width: 80,
             terminal_height: 24,
             last_update: Instant::now(),
-            update_interval: Duration::from_secs(2),
+            update_interval: Duration::from_millis(500), // More frequent updates for real-time feel
         })
     }
 
@@ -401,6 +416,11 @@ impl App {
         Ok(())
     }
 
+    /// Set execution engine for real task data
+    pub fn set_execution_engine(&mut self, engine: ExecutionEngine) {
+        self.execution_engine = Some(engine);
+    }
+
     /// Cancel current action
     pub fn cancel_current_action(&mut self) {
         self.input_mode = InputMode::Normal;
@@ -525,22 +545,53 @@ impl App {
         Ok(())
     }
 
-    /// Load tasks from task queue
+    /// Load tasks from task queue or execution engine
     async fn load_tasks(&mut self) -> Result<()> {
-        let pending_tasks = self.task_queue.get_pending_tasks().await?;
-
         self.tasks.clear();
-        for task in pending_tasks {
-            let task_info = TaskInfo {
-                id: task.id.clone(),
-                description: task.description.clone(),
-                priority: format!("{:?}", task.priority),
-                task_type: format!("{:?}", task.task_type),
-                status: "Pending".to_string(),
-                assigned_agent: None,
-                created_at: Utc::now(), // TODO: Get actual creation time
-            };
-            self.tasks.push(task_info);
+
+        // If execution engine is available, use it for real-time task data
+        if let Some(ref execution_engine) = self.execution_engine {
+            let executor = execution_engine.get_executor();
+            let task_queue = executor.get_task_queue();
+            let all_tasks = task_queue.list_tasks(None, None).await;
+
+            for queued_task in all_tasks {
+                let status_str = match &queued_task.status {
+                    TaskStatus::Pending => "⏳ Pending",
+                    TaskStatus::Assigned { .. } => "📋 Assigned",
+                    TaskStatus::InProgress { .. } => "🏃 In Progress",
+                    TaskStatus::Completed { .. } => "✅ Completed",
+                    TaskStatus::Failed { .. } => "❌ Failed",
+                    TaskStatus::Cancelled { .. } => "🚫 Cancelled",
+                };
+
+                let task_info = TaskInfo {
+                    id: queued_task.task.id.clone(),
+                    description: queued_task.task.description.clone(),
+                    priority: format!("{:?}", queued_task.task.priority),
+                    task_type: format!("{}", queued_task.task.task_type), // Use Display trait
+                    status: status_str.to_string(),
+                    assigned_agent: queued_task.assigned_agent,
+                    created_at: queued_task.created_at,
+                };
+                self.tasks.push(task_info);
+            }
+        } else {
+            // Fall back to original task queue
+            let pending_tasks = self.task_queue.get_pending_tasks().await?;
+
+            for task in pending_tasks {
+                let task_info = TaskInfo {
+                    id: task.id.clone(),
+                    description: task.description.clone(),
+                    priority: format!("{:?}", task.priority),
+                    task_type: format!("{}", task.task_type),
+                    status: "Pending".to_string(),
+                    assigned_agent: None,
+                    created_at: Utc::now(), // TODO: Get actual creation time
+                };
+                self.tasks.push(task_info);
+            }
         }
 
         // Ensure selection is valid
@@ -559,14 +610,44 @@ impl App {
             .iter()
             .filter(|a| matches!(a.status, AgentStatus::Available | AgentStatus::Working))
             .count();
-        self.pending_tasks = self.tasks.len();
-        self.completed_tasks = self.agents.iter().map(|a| a.tasks_completed).sum::<u32>() as usize;
 
-        self.system_status = if self.active_agents > 0 {
-            "Running".to_string()
+        // Update task counts from execution engine if available
+        if let Some(ref execution_engine) = self.execution_engine {
+            let executor = execution_engine.get_executor();
+            let queue_stats = executor.get_task_queue().get_stats().await;
+            let execution_stats = executor.get_stats().await;
+
+            self.pending_tasks = queue_stats.pending_count + queue_stats.active_count;
+            self.completed_tasks = execution_stats.tasks_succeeded;
+            self.tasks_executed = execution_stats.tasks_executed;
+            self.tasks_failed = execution_stats.tasks_failed;
+            self.orchestration_usage = execution_stats.orchestration_usage;
+
+            // Calculate success rate
+            self.success_rate = if execution_stats.tasks_executed > 0 {
+                (execution_stats.tasks_succeeded as f64 / execution_stats.tasks_executed as f64)
+                    * 100.0
+            } else {
+                100.0
+            };
+
+            self.system_status = if self.active_agents > 0 {
+                format!("Running ({:.1}% success)", self.success_rate)
+            } else {
+                "Stopped".to_string()
+            };
         } else {
-            "Stopped".to_string()
-        };
+            // Fall back to original calculation
+            self.pending_tasks = self.tasks.len();
+            self.completed_tasks =
+                self.agents.iter().map(|a| a.tasks_completed).sum::<u32>() as usize;
+
+            self.system_status = if self.active_agents > 0 {
+                "Running".to_string()
+            } else {
+                "Stopped".to_string()
+            };
+        }
 
         Ok(())
     }

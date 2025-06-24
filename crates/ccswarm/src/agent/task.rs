@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 /// Task priority levels
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Priority {
     Low,
     Medium,
@@ -58,6 +58,24 @@ impl FromStr for TaskType {
             "remediation" | "fix" => Ok(TaskType::Remediation),
             "assistance" | "assist" | "help" => Ok(TaskType::Assistance),
             _ => Err(anyhow::anyhow!("Unknown task type: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for TaskType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TaskType::Development => write!(f, "Development"),
+            TaskType::Testing => write!(f, "Testing"),
+            TaskType::Documentation => write!(f, "Documentation"),
+            TaskType::Infrastructure => write!(f, "Infrastructure"),
+            TaskType::Coordination => write!(f, "Coordination"),
+            TaskType::Review => write!(f, "Review"),
+            TaskType::Bugfix => write!(f, "Bugfix"),
+            TaskType::Bug => write!(f, "Bug"),
+            TaskType::Feature => write!(f, "Feature"),
+            TaskType::Remediation => write!(f, "Remediation"),
+            TaskType::Assistance => write!(f, "Assistance"),
         }
     }
 }
@@ -145,7 +163,7 @@ impl Task {
 }
 
 /// Result of task execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaskResult {
     /// Whether the task completed successfully
     pub success: bool,

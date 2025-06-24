@@ -8,7 +8,7 @@ use ccswarm::{
     agent::{
         orchestrator::{AgentOrchestrator, StepType, TaskPlan},
         simple::SimpleClaudeAgent,
-        TaskBuilder, Priority,
+        Priority, TaskBuilder,
     },
     config::ClaudeConfig,
     identity::{default_backend_role, default_frontend_role},
@@ -50,7 +50,10 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn create_agent(role: ccswarm::identity::AgentRole, workspace: &Path) -> Result<SimpleClaudeAgent> {
+async fn create_agent(
+    role: ccswarm::identity::AgentRole,
+    workspace: &Path,
+) -> Result<SimpleClaudeAgent> {
     let config = ClaudeConfig::for_agent(&role.name());
 
     SimpleClaudeAgent::new(role, workspace, config).await
@@ -158,4 +161,3 @@ fn print_plan_summary(plan: &TaskPlan) {
         );
     }
 }
-

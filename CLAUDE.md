@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-ccswarm - AI Multi-Agent Orchestration System that coordinates specialized AI agents (Frontend, Backend, DevOps, QA) using a Master Claude coordinator. Built in Rust for performance with 93% token savings through native ai-session management.
+ccswarm - AI Multi-Agent Orchestration System that coordinates specialized AI agents (Frontend, Backend, DevOps, QA) using a Master Claude coordinator. Built in Rust for performance and reliability with native ai-session management.
 
 ## Workspace Structure
 
@@ -87,9 +87,9 @@ cargo run -p ccswarm -- task "Implement user authentication [high] [feature]"
 cargo run -p ccswarm -- task list --status pending
 cargo run -p ccswarm -- delegate task "Add login API" --agent backend
 
-# Session management (93% token savings!)
+# Session management
 cargo run -p ccswarm -- session list
-cargo run -p ccswarm -- session stats --show-savings
+cargo run -p ccswarm -- session stats
 cargo run -p ccswarm -- session attach <session-id>
 ```
 
@@ -137,7 +137,7 @@ cargo run -p ccswarm -- extend autonomous --continuous
 - Use environment variables for sensitive data
 
 ### Performance Optimizations
-- Reuse sessions whenever possible (93% token reduction)
+- Reuse sessions whenever possible for efficiency
 - Run independent tasks concurrently
 - Use session pooling for similar operations
 - Enable context compression for long-running sessions
