@@ -93,6 +93,14 @@ review trigger
 review task <task-id>
 ```
 
+### Session Commands
+```
+session list              # Show all AI sessions with token savings
+session stats             # Detailed performance and token metrics
+session attach <id>       # Attach to specific session
+session context <id>      # Show AI context for session
+```
+
 ### Other Commands
 ```
 worktree list
@@ -228,6 +236,8 @@ Hold `Shift` while navigating to select multiple items for bulk operations.
 - [`status`](status.md) - Quick status check
 - [`monitor`](logs.md) - Simple output monitoring
 - [`task`](task.md) - Add tasks via CLI
+- [`session`](session.md) - AI-Session management and token savings monitoring
+- [`ai-session`](ai-session.md) - Direct AI-Session commands
 
 ## Notes
 
