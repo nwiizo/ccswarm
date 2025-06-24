@@ -274,7 +274,7 @@ async fn test_comprehensive_feature_validation() -> Result<()> {
 
     // Test adaptation
     personality.adapt_from_task_outcome("complex", true, None);
-    assert!(personality.adaptation_history.len() > 0);
+    assert!(!personality.adaptation_history.is_empty());
 
     // Test 2: Memory System
     println!("  → Testing four-type memory system...");

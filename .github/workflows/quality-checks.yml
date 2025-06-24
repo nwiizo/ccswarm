@@ -1,4 +1,6 @@
 name: Quality Checks (Agent-Managed CI/CD)
+# Note: The "agents" in this CI are metaphorical job names, not actual ccswarm AI agents.
+# They represent specialized CI jobs following ccswarm's multi-agent philosophy.
 
 on:
   push:
