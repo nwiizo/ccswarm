@@ -1,0 +1,25 @@
+{
+  "Coordination": {
+    "from_agent": "agent1",
+    "to_agent": "agent2",
+    "message_type": "InformationRequest",
+    "payload": {
+      "conversation_id": "d008acc5-9730-4278-9e08-8d1bd679e5ab",
+      "dialogue_entry": {
+        "content": "Hello, let's coordinate on this task",
+        "context_references": [],
+        "emotional_tone": "Positive",
+        "id": "965c0091-5e0a-4465-8652-59a997fdfb9e",
+        "message_type": "Information",
+        "recipients": [
+          "agent2"
+        ],
+        "response_expectation": "Acknowledgment",
+        "speaker_id": "agent1",
+        "thread_reference": null,
+        "timestamp": "2025-06-24T08:56:58.881358Z",
+        "urgency_level": "Normal"
+      }
+    }
+  }
+}

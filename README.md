@@ -9,6 +9,63 @@
 
 **ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. Built in Rust for performance and reliability, it features autonomous task prediction, real-time security monitoring, and intelligent delegation.
 
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[Getting Started Guide](docs/GETTING_STARTED.md)** | Complete tutorial for new users with step-by-step instructions |
+| **[Configuration Reference](docs/CONFIGURATION.md)** | Comprehensive guide to all configuration options |
+| **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** | Solutions for common issues and debugging tips |
+| **[Contributing Guide](CONTRIBUTING.md)** | How to contribute to the project |
+| **[Architecture Overview](docs/ARCHITECTURE.md)** | Technical architecture and design decisions |
+| **[Application Specification](docs/APPLICATION_SPEC.md)** | Detailed feature specifications and API reference |
+
+## 🎯 Quick Navigation
+
+- [Installation](#-quick-start) • [Features](#-key-features) • [Architecture](#-architecture) • [Commands](#-core-commands)
+- [Tutorial](#25-learn-with-interactive-tutorial) • [Configuration](#-configuration) • [Auto-Create](#-auto-create-system) • [Monitoring](#-terminal-ui-tui)
+- [Troubleshooting](docs/TROUBLESHOOTING.md) • [Contributing](CONTRIBUTING.md) • [Documentation](docs/)
+
+## 📦 Workspace Structure
+
+ccswarm is organized as a Rust workspace with two main crates:
+
+### Crates Overview
+
+- **`crates/ccswarm`**: The main orchestration system and CLI
+  - Multi-agent orchestration with Master Claude
+  - Provider integrations (Claude Code, Aider, etc.)
+  - Task management and delegation
+  - Sangha collective intelligence
+  - Auto-create application generator
+  - **Integrates with**: ai-session for terminal management
+
+- **`crates/ai-session`**: Advanced AI-optimized terminal session management (standalone crate)
+  - **93% token savings** through intelligent context compression
+  - Native cross-platform PTY implementation (no tmux dependency)
+  - Multi-agent coordination with message bus architecture
+  - Session persistence and crash recovery
+  - MCP (Model Context Protocol) HTTP API server
+  - Semantic output parsing and analysis
+  - **Can be used independently** of ccswarm or integrated with it
+  - **Documentation**: [AI-Session README](crates/ai-session/README.md) | [Architecture](crates/ai-session/docs/ARCHITECTURE.md)
+
+### Directory Structure
+```
+ccswarm/
+├── Cargo.toml              # Workspace definition
+├── crates/
+│   ├── ccswarm/           # Main orchestration crate
+│   │   ├── Cargo.toml
+│   │   ├── src/
+│   │   └── tests/
+│   └── ai-session/        # Terminal session crate
+│       ├── Cargo.toml
+│       ├── src/
+│       └── examples/
+├── docs/                  # Shared documentation
+└── demos/                 # Example applications
+
 ## 🌟 Key Features
 
 ### 🎯 Developer Experience First
@@ -34,12 +91,15 @@
 - **Dependency Security**: Scan npm, cargo, pip, and composer packages
 - **Security Reporting**: Detailed reports with remediation suggestions
 
-### 🖥️ Native Terminal Management
-- **Native Session Management**: ai-session with zero external dependencies (no tmux required)
-- **93% Token Savings**: Intelligent conversation history compression and reuse
-- **Cross-Platform PTY**: Native terminal emulation on Linux, macOS, and Windows
-- **MCP Protocol Support**: Model Context Protocol for seamless AI integration
-- **Multi-Agent Coordination**: Enhanced message bus with native session management
+### 🖥️ AI-Session Integration: Revolutionary Terminal Management
+- **Native Session Management**: Powered by ai-session crate with zero external dependencies (no tmux required)
+- **93% Token Savings**: Intelligent conversation history compression and context reuse
+- **Cross-Platform PTY**: Native terminal emulation on Linux, macOS (Windows support in ai-session)
+- **MCP Protocol Support**: Model Context Protocol HTTP API server for seamless AI integration
+- **Multi-Agent Coordination**: Enhanced message bus architecture with agent-specific sessions
+- **Semantic Output Analysis**: Intelligent parsing of build results, test outputs, and error messages
+- **Session Persistence**: Automatic crash recovery and state restoration
+- **Standalone Capability**: ai-session can be used independently for any AI terminal workflows
 
 ### 🏛️ Collective Intelligence
 - **Sangha System**: Buddhist-inspired democratic decision-making
@@ -59,6 +119,8 @@
 
 ## 🚀 Quick Start
 
+> **New to ccswarm?** Start with our [📖 Getting Started Guide](docs/GETTING_STARTED.md) for a comprehensive walkthrough with examples and best practices!
+
 > **Note**: Don't have Claude Code or API keys? Check out our [Standalone Deployment Guide](STANDALONE_DEPLOYMENT.md) to run ccswarm without any AI dependencies!
 
 ### 1. Installation
@@ -67,11 +129,14 @@
 # Install from crates.io
 cargo install ccswarm
 
-# Or build from source
+# Or build from source (workspace-aware)
 git clone https://github.com/nwiizo/ccswarm.git
 cd ccswarm
 cargo build --release
-cargo install --path .
+cargo install --path crates/ccswarm
+
+# Optional: Install ai-session CLI separately
+cargo install --path crates/ai-session
 ```
 
 ### 2. Initialize Project
@@ -160,22 +225,50 @@ ccswarm v0.3.5 features a comprehensive multi-layer architecture designed for au
 └─────────────────────────────────────────┘
 ```
 
-### Key Benefits
-- **🚀 Zero External Dependencies**: No external session managers required
-- **🔄 Native Session Recovery**: Automatic session restoration on startup
-- **⚡ Performance**: ~70% memory reduction with intelligent context compression
-- **🌐 Cross-Platform**: Works identically on Linux, macOS, Windows
-- **📡 MCP Protocol**: Standardized AI tool integration
+### 🎆 Key Benefits of the Two-Crate Architecture
 
-### Agent Roles
+#### 🚀 For ccswarm Users (Full AI Orchestration)
+- **Zero Setup Complexity**: ai-session integration is automatic and transparent
+- **Intelligent Delegation**: Master Claude uses ai-session's semantic parsing for better decisions
+- **93% Cost Savings**: ai-session's token compression reduces API costs dramatically
+- **Multi-Agent Coordination**: Seamless agent communication through ai-session's message bus
+- **Quality Assurance**: ai-session's output analysis powers the LLM quality judge
+
+#### 🧠 For ai-session Users (Terminal Management)
+- **Universal Compatibility**: Works with any AI application, not just ccswarm
+- **Zero External Dependencies**: No tmux, screen, or other session managers required
+- **Native Performance**: Optimized PTY implementation for each platform
+- **Standalone Operation**: Complete functionality without ccswarm
+- **Easy Integration**: Simple library API for embedding in other projects
+
+#### 🔗 For Both (Integrated Benefits)
+- **Shared Innovation**: Improvements in ai-session automatically benefit ccswarm
+- **Consistent Experience**: Same session management across manual and automated workflows
+- **Flexible Deployment**: Use ai-session for development, ccswarm for production
+- **Learning Path**: Start with ai-session, graduate to full ccswarm orchestration
+
+### Integration Architecture
 ```rust
+// ccswarm uses ai-session for all agent interactions
 pub enum AgentRole {
-    Frontend,  // UI development only
-    Backend,   // API development only
-    DevOps,    // Infrastructure only
-    QA,        // Testing only
-    Master,    // Orchestration (no coding)
+    Frontend,  // UI development (via ai-session)
+    Backend,   // API development (via ai-session)
+    DevOps,    // Infrastructure (via ai-session)
+    QA,        // Testing (via ai-session)
+    Master,    // Orchestration only (coordinates ai-sessions)
 }
+
+// Each agent gets its own ai-session instance
+struct Agent {
+    role: AgentRole,
+    session: ai_session::AISession,  // Managed by ai-session crate
+    config: AgentConfig,
+}
+
+// ai-session can also be used independently:
+use ai_session::{SessionManager, SessionConfig};
+let session = SessionManager::new()
+    .create_session_with_ai_features().await?;
 ```
 
 ## 📋 Core Commands
@@ -376,13 +469,23 @@ my_app/
 └── .gitignore      # Git config
 ```
 
-## 🔧 Session Management
+## 🔧 AI-Session Integration
 
-### Session Features
-- Persistent conversation history
-- Session pooling and reuse
-- Batch task execution
-- Auto-scaling
+### Advanced Session Features (powered by ai-session crate)
+- **93% token reduction** through intelligent context compression
+- **Persistent conversation history** with crash recovery
+- **Session pooling and reuse** for efficient resource utilization
+- **Multi-agent message bus** for coordinated AI workflows
+- **Semantic output parsing** for build results, tests, and logs
+- **MCP protocol HTTP server** for external tool integration
+- **Cross-platform PTY** implementation (Linux, macOS, Windows)
+- **Standalone operation** - ai-session can be used without ccswarm
+
+### AI-Session Crate Benefits
+- **Zero external dependencies** - no tmux server required
+- **Native performance** - optimized PTY implementation per OS
+- **Memory efficient** - ~70% reduction through zstd compression
+- **Developer friendly** - comprehensive API and CLI tools
 
 ### Proactive & Security Commands
 ```bash
@@ -408,9 +511,9 @@ ccswarm deps analyze --show-blockers
 ccswarm deps resolve --auto-order
 ```
 
-### Session Management
+### AI-Session Management
 ```bash
-# List ai-sessions with token savings
+# List ai-sessions with token savings (powered by ai-session crate)
 ccswarm session list
 ccswarm session stats --show-savings
 
@@ -420,13 +523,18 @@ ccswarm session attach <session-id>
 ccswarm session pause <session-id>
 ccswarm session resume <session-id>
 
-# MCP protocol support
+# MCP protocol support (ai-session HTTP API server)
 ccswarm session start-mcp-server --port 3000
 ccswarm session mcp-status
 
-# Session optimization
+# Session optimization (93% token reduction)
 ccswarm session compress --threshold 0.8
 ccswarm session optimize --all
+
+# Direct ai-session CLI usage (independent of ccswarm)
+ai-session create --name dev --ai-context
+ai-session list --detailed
+ai-session exec dev "cargo build" --capture
 ```
 
 ## 🛡️ Safety Features (Enhanced)
@@ -529,27 +637,53 @@ ccswarm session list
 ## 🧪 Testing
 
 ```bash
-# All tests
-cargo test
+# All tests in workspace
+cargo test --workspace
 
-# Specific module
-cargo test session
-cargo test identity
-cargo test quality_review  # New in v0.2.0
+# Tests for specific crate
+cargo test -p ccswarm
+cargo test -p ai-session
+
+# Specific module in ccswarm
+cargo test -p ccswarm session
+cargo test -p ccswarm identity
+cargo test -p ccswarm quality_review  # New in v0.2.0
 
 # Integration tests
-cargo test --test integration_tests
+cargo test -p ccswarm --test integration_tests
 
 # Examples (relocated to demos/)
-cargo run --example todo_app_builder     # See demos/todo-app/
-cargo run --example monitoring_demo      # See demos/multi-agent/
-cargo run --example session_demo         # See demos/session-persistence/
-cargo run --example auto_create_demo     # See demos/auto-create/
+# See the demo applications in demos/ directory:
+# - demos/todo-app/          - Complete TODO application
+# - demos/multi-agent/       - Multi-agent monitoring demo
+# - demos/session-persistence/ - Session recovery demo
+# - demos/auto-create/       - Application generation demo
+
+# Run ai-session library examples
+cargo run -p ai-session --example basic_session
+cargo run -p ai-session --example multi_agent
+cargo run -p ai-session --example mcp_server
+
+# Install ai-session CLI separately
+cargo install --path crates/ai-session
+
+# Use ai-session independently of ccswarm
+ai-session create --name myproject --ai-context
+ai-session exec myproject "npm test" --capture
 ```
 
-## 🚨 Troubleshooting
+## 🚨 Need Help?
 
-### Common Issues
+### 📖 Comprehensive Documentation Available
+
+We've created extensive documentation to help you succeed with ccswarm:
+
+- **🚀 [Getting Started](docs/GETTING_STARTED.md)**: Complete beginner's guide with hands-on tutorials
+- **⚙️ [Configuration](docs/CONFIGURATION.md)**: All configuration options explained with examples  
+- **🔧 [Troubleshooting](docs/TROUBLESHOOTING.md)**: Detailed solutions for common issues
+- **🤝 [Contributing](CONTRIBUTING.md)**: How to contribute to the project
+
+### Quick Troubleshooting
 
 **Session not found**
 ```bash
@@ -571,6 +705,8 @@ ccswarm config show
 ccswarm worktree list
 ccswarm worktree clean
 ```
+
+**For more detailed solutions, see our [Troubleshooting Guide](docs/TROUBLESHOOTING.md)**
 
 ## 🏛️ Collective Intelligence & Self-Extension
 
@@ -661,8 +797,56 @@ Expected Impact: 30% faster page loads, 25% smaller bundles
 
 ## 🛠️ Development
 
+### Working with the Workspace
+
+ccswarm uses a Rust workspace structure for better organization:
+
+```bash
+# Build all crates in the workspace
+cargo build --workspace
+
+# Run tests for all crates
+cargo test --workspace
+
+# Build only ccswarm (main orchestration)
+cargo build -p ccswarm
+
+# Build only ai-session (terminal management)
+cargo build -p ai-session
+
+# Run ccswarm from workspace root
+cargo run -p ccswarm -- init --name "MyProject"
+
+# Run ai-session independently
+cargo run -p ai-session -- create --name dev
+
+# Start ai-session MCP server
+cargo run -p ai-session --bin server -- --port 3000
+
+# Generate documentation for entire workspace
+cargo doc --workspace --no-deps --open
+```
+
+### Development Workflow
+
+```bash
+# 1. Make changes in the appropriate crate
+cd crates/ccswarm  # or crates/ai-session
+
+# 2. Run crate-specific tests
+cargo test
+
+# 3. Run workspace-wide tests
+cd ../..
+cargo test --workspace
+
+# 4. Check formatting and linting
+cargo fmt --all
+cargo clippy --workspace -- -D warnings
+```
+
 ### Adding Custom Providers
-1. Implement `ProviderExecutor` trait
+1. Implement `ProviderExecutor` trait in `crates/ccswarm/src/providers/`
 2. Add to `ProviderType` enum
 3. Update configuration parsing
 4. Add provider-specific configuration options
@@ -702,16 +886,22 @@ For detailed instructions, examples, and Docker configurations, see [STANDALONE_
 ```bash
 # Fork and clone
 git clone https://github.com/yourusername/ccswarm.git
+cd ccswarm
 
-# Run tests
-cargo test
+# Run all tests in workspace
+cargo test --workspace
 
-# Format code
-cargo fmt
-cargo clippy -- -D warnings
+# Format all code
+cargo fmt --all
 
-# Check documentation
-cargo doc --no-deps --open
+# Run clippy on all crates
+cargo clippy --workspace -- -D warnings
+
+# Check documentation for entire workspace
+cargo doc --workspace --no-deps --open
+
+# Build release version
+cargo build --release --workspace
 ```
 
 ## 💡 Enhanced User Experience
@@ -778,20 +968,35 @@ ccswarm v0.3.5 introduces **autonomous orchestration** as the default mode:
 
 ### Contributing
 
+We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for detailed instructions.
+
+**Quick Start for Contributors:**
+
 ```bash
 # Fork and clone
 git clone https://github.com/yourusername/ccswarm.git
+cd ccswarm
 
-# Run tests
-cargo test
+# Run all tests in workspace
+cargo test --workspace
 
-# Format code
-cargo fmt
-cargo clippy -- -D warnings
+# Format all code
+cargo fmt --all
 
-# Check documentation
-cargo doc --no-deps --open
+# Run clippy on all crates
+cargo clippy --workspace -- -D warnings
+
+# Check documentation for entire workspace
+cargo doc --workspace --no-deps --open
+
+# Build release version
+cargo build --release --workspace
 ```
+
+**Documentation Contributions Welcome:** Help us improve our guides by contributing to:
+- [Getting Started Guide](docs/GETTING_STARTED.md) - Add examples and tutorials
+- [Configuration Reference](docs/CONFIGURATION.md) - Expand configuration examples  
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Add solutions for new issues
 
 ## 📄 License
 

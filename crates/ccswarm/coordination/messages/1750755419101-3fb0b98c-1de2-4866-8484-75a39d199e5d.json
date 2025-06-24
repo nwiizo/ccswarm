@@ -1,0 +1,8 @@
+{
+  "StatusUpdate": {
+    "agent_id": "rapid-agent",
+    "status": {
+      "Error": "Test error"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "TaskCompleted": {
+    "agent_id": "disconnect-agent",
+    "task_id": "orphan-task",
+    "result": {
+      "success": false,
+      "output": {
+        "error": "disconnected"
+      },
+      "error": "Agent disconnected",
+      "duration": {
+        "secs": 0,
+        "nanos": 0
+      }
+    }
+  }
+}

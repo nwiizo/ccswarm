@@ -1,0 +1,17 @@
+{
+  "Coordination": {
+    "from_agent": "system",
+    "to_agent": "agent2",
+    "message_type": {
+      "Custom": "conversation_started"
+    },
+    "payload": {
+      "conversation_id": "078365e8-01aa-439f-9316-9f7457be5306",
+      "participants": [
+        "agent1",
+        "agent2"
+      ],
+      "topic": "Test coordination"
+    }
+  }
+}
