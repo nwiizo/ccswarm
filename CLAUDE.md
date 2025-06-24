@@ -1,171 +1,175 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-ccswarm is an AI Multi-Agent Orchestration System. For detailed specifications, see:
-- Application specifications: `docs/APPLICATION_SPEC.md`
-- Architecture details: `docs/ARCHITECTURE.md`
-- Command documentation: `.claude/commands/`
+ccswarm - AI Multi-Agent Orchestration System that coordinates specialized AI agents (Frontend, Backend, DevOps, QA) using a Master Claude coordinator. Built in Rust for performance with 93% token savings through native ai-session management.
 
-## Development Guidelines
+## Workspace Structure
 
-### Code Quality Standards
+This project uses a Cargo workspace with the following structure:
+- `crates/ccswarm/` - Main ccswarm application and orchestration system
+- `crates/ai-session/` - Native AI session management library
+
+## Development Standards
+
+### Code Quality Requirements
+- Run `cargo fmt && cargo clippy -- -D warnings && cargo test` before all commits (from workspace root)
+- Maintain test coverage >85% (check with `cargo tarpaulin`)
+- Document all public APIs with rustdoc comments
+- Cyclomatic complexity must be <10 per function
+
+### Architecture Patterns
+- **Session Management**: Always use ai-session adapter for agent terminals
+- **Agent Boundaries**: Strictly enforce role isolation (Frontend/Backend/DevOps/QA)
+- **Async First**: Use tokio async/await, never block the runtime
+- **Error Handling**: Use Result<T, E> with custom error types, no .unwrap() in production
+
+### Testing Strategy
+- Unit tests colocated with implementation in `#[cfg(test)]` modules
+- Integration tests in `crates/ccswarm/tests/` directory
+- Use `#[tokio::test]` for async tests
+- Mock external dependencies with `mockall` or similar
+- Run workspace-wide tests with `cargo test --workspace`
+
+## Frequently Used Commands
+
+### Workspace Management
 ```bash
-# Always run before commits
-cargo fmt && cargo clippy -- -D warnings && cargo test
+# Build entire workspace
+cargo build --workspace
+
+# Test entire workspace
+cargo test --workspace
+
+# Build specific crate
+cargo build -p ccswarm
+cargo build -p ai-session
+
+# Run ccswarm from workspace root
+cargo run -p ccswarm -- --help
+
+# Format and check entire workspace
+cargo fmt --all
+cargo clippy --workspace -- -D warnings
+
+# Generate documentation for all crates
+cargo doc --workspace --no-deps --open
 ```
 
-### Critical Implementation Rules
-
-1. **Agent Boundaries are Sacred**
-   - Frontend agents ONLY handle UI/React/client-side code
-   - Backend agents ONLY handle APIs/server/database code
-   - DevOps agents ONLY handle infrastructure/Docker/CI/CD
-   - QA agents ONLY handle testing and quality assurance
-   - NEVER allow agents to work outside their role
-
-2. **Session Management is Core**
-   - Always use ai-session for agent terminals (93% token savings)
-   - Native PTY implementation - no tmux dependency
-   - Sessions persist across tasks and crashes
-   - MCP protocol compliance required
-
-3. **Quality Standards**
-   - Test coverage must be >85%
-   - Complexity score must be <10
-   - All public APIs must have documentation
-   - Security vulnerabilities must be fixed immediately
-
-4. **Extension Philosophy**
-   - Agents should self-reflect and propose improvements
-   - All extensions go through Sangha consensus
-   - Risk assessment is mandatory
-   - Knowledge base grows over time
-
-## Project-Specific Patterns
-
-### Error Handling
-```rust
-// Always use custom error types
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum MyError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
-
-// Never use .unwrap() in production code
-```
-
-### Async Patterns
-```rust
-// Always use tokio for async runtime
-#[tokio::main]
-async fn main() -> Result<()> {
-    // ...
-}
-
-// Prefer channels over shared state
-let (tx, rx) = async_channel::unbounded();
-```
-
-### Testing Patterns
-```rust
-// Test modules next to implementation
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[tokio::test]
-    async fn test_feature() {
-        // Test implementation
-    }
-}
-```
-
-## Common Pitfalls to Avoid
-
-1. **Cross-Contamination**: Never let agents access other agents' worktrees
-2. **Token Waste**: Always reuse sessions, never create new ones unnecessarily
-3. **Blocking Operations**: Use async/await, never block the runtime
-4. **Security Risks**: Never log secrets, always validate inputs
-5. **Memory Leaks**: Clean up sessions and channels properly
-
-## Debugging Tips
-
-### Session Issues
+### Crate-Specific Development
 ```bash
-# Check active sessions
-cargo run -- session list
+# Work on ai-session crate
+cd crates/ai-session
+cargo test
+cargo doc --open
 
-# View session efficiency
-cargo run -- session stats --show-savings
+# Work on ccswarm crate
+cd crates/ccswarm
+cargo test
+cargo run -- --help
 
-# Debug session issues
-RUST_LOG=ai_session=debug cargo run
+# Return to workspace root for workspace commands
+cd ../..
+cargo test --workspace
 ```
 
-### Agent Problems
+### Development Workflow
 ```bash
+# Initial setup (from workspace root)
+cargo run -p ccswarm -- init --name "MyProject" --agents frontend,backend
+
+# Start system
+cargo run -p ccswarm -- start
+cargo run -p ccswarm -- tui  # Monitor in terminal UI
+
+# Create and manage tasks
+cargo run -p ccswarm -- task "Implement user authentication [high] [feature]"
+cargo run -p ccswarm -- task list --status pending
+cargo run -p ccswarm -- delegate task "Add login API" --agent backend
+
+# Session management (93% token savings!)
+cargo run -p ccswarm -- session list
+cargo run -p ccswarm -- session stats --show-savings
+cargo run -p ccswarm -- session attach <session-id>
+```
+
+### Debugging Commands
+```bash
+# Logging levels
+RUST_LOG=debug cargo run -p ccswarm -- start
+RUST_LOG=ccswarm::session=trace cargo run -p ccswarm -- start
+RUST_LOG=ai_session=debug cargo run -p ccswarm -- start
+
 # Check agent status
-cargo run -- agent list
+cargo run -p ccswarm -- agent list
+cargo run -p ccswarm -- logs --agent frontend --tail 50
 
-# View agent logs
-cargo run -- logs --agent frontend --tail 50
-
-# Debug identity violations
-RUST_LOG=ccswarm::identity=trace cargo run
+# Quality review
+cargo run -p ccswarm -- review status
+cargo run -p ccswarm -- review history --failed
 ```
 
-### Task Failures
+### Advanced Features
 ```bash
-# View failed tasks
-cargo run -- task list --status failed
+# Auto-create applications
+cargo run -p ccswarm -- auto-create "Create a real-time chat app with React and WebSockets"
 
-# Check quality review failures
-cargo run -- review history --failed
+# Sangha collective intelligence
+cargo run -p ccswarm -- sangha propose --type feature --title "Add GraphQL support"
+cargo run -p ccswarm -- sangha vote <proposal-id> aye --reason "Improves API flexibility"
 
-# Debug task delegation
-RUST_LOG=ccswarm::orchestrator=debug cargo run
+# Autonomous agent extension
+cargo run -p ccswarm -- extend autonomous --continuous
 ```
 
-## Performance Optimization
+## Project-Specific Guidelines
 
-1. **Session Pooling**: Reuse sessions across similar tasks
-2. **Batch Operations**: Group related tasks for efficiency
-3. **Context Compression**: Enable AI features for 93% token savings
-4. **Lazy Loading**: Don't load agent contexts until needed
-5. **Concurrent Execution**: Run independent tasks in parallel
+### Agent Role Enforcement
+- Frontend agents: React, Vue, UI/UX, CSS only
+- Backend agents: APIs, databases, server logic only
+- DevOps agents: Docker, CI/CD, infrastructure only
+- QA agents: Testing and quality assurance only
 
-## Security Considerations
+### Security Requirements
+- Never hardcode API keys or secrets
+- Validate all user inputs
+- Respect protected file patterns (.env, *.key, .git/)
+- Use environment variables for sensitive data
 
-1. **API Keys**: Never commit keys, use environment variables
-2. **File Access**: Respect .gitignore and protected patterns
-3. **Command Injection**: Always sanitize user inputs
-4. **Session Isolation**: Each agent runs in isolated environment
-5. **Audit Trail**: Log all agent actions for accountability
+### Performance Optimizations
+- Reuse sessions whenever possible (93% token reduction)
+- Run independent tasks concurrently
+- Use session pooling for similar operations
+- Enable context compression for long-running sessions
 
-## Quick Reference
+## Import Additional Documentation
+@docs/ARCHITECTURE.md
+@docs/APPLICATION_SPEC.md
+@docs/commands/workspace-commands.md
+@.claude/settings.json
+@.claude/commands/project-rules.md
 
-### Essential Commands
-- `cargo run -- init`: Initialize new project
-- `cargo run -- start`: Start orchestrator
-- `cargo run -- task "description"`: Create task
-- `cargo run -- tui`: Monitor system
-- `cargo run -- stop`: Graceful shutdown
-
-### Important Files
-- `ccswarm.json`: Project configuration
-- `.ccswarm/`: Runtime data and logs
-- `agents/*/CLAUDE.md`: Agent-specific instructions
-- `.claude/commands/`: Command documentation
-
-### Environment Variables
-- `ANTHROPIC_API_KEY`: Required for Claude
-- `RUST_LOG`: Debug logging control
-- `CCSWARM_HOME`: Config directory
-
-Remember: This is a complex distributed system. When in doubt, check the documentation in `docs/` and `.claude/commands/`.
+## Workspace File Structure
+```
+ccswarm/
+├── Cargo.toml                   # Workspace configuration
+├── CLAUDE.md                    # This file
+├── docs/
+│   ├── ARCHITECTURE.md          # System architecture
+│   ├── APPLICATION_SPEC.md      # Application specifications
+│   └── commands/
+│       ├── README.md            # Commands documentation index
+│       └── workspace-commands.md # Workspace development guide
+├── crates/
+│   ├── ccswarm/                 # Main application crate
+│   │   ├── src/                 # Source code
+│   │   ├── tests/               # Integration tests
+│   │   └── Cargo.toml           # Crate configuration
+│   └── ai-session/              # AI session library crate
+│       ├── src/                 # Library source code
+│       └── Cargo.toml           # Crate configuration
+└── .claude/
+    ├── settings.json            # Claude Code settings
+    └── commands/
+        └── project-rules.md     # Development rules
+```

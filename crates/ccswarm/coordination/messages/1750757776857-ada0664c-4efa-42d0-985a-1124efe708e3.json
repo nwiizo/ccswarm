@@ -1,0 +1,17 @@
+{
+  "TaskCompleted": {
+    "agent_id": "backend-agent",
+    "task_id": "remediate-original-task-1-123",
+    "result": {
+      "success": true,
+      "output": {
+        "fixed": true
+      },
+      "error": null,
+      "duration": {
+        "secs": 300,
+        "nanos": 0
+      }
+    }
+  }
+}
