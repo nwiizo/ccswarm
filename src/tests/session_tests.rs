@@ -1,6 +1,6 @@
 use crate::session::{AgentSession, SessionManager, SessionStatus};
 use crate::identity::{default_frontend_role, default_backend_role, default_devops_role, default_qa_role};
-use crate::tmux::{TmuxClient, TmuxError};
+use ai_session::tmux_bridge::{TmuxClient, TmuxError};
 use tempfile::TempDir;
 use std::time::Duration;
 

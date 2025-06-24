@@ -1,6 +1,9 @@
+[workspace]
+members = [".", "ai-session"]
+
 [package]
 name = "ccswarm"
-version = "0.3.1"
+version = "0.3.3"
 edition = "2021"
 authors = ["nwiizo"]
 description = "AI-powered multi-agent orchestration system with session management"
@@ -10,6 +13,22 @@ repository = "https://github.com/nwiizo/ccswarm"
 homepage = "https://github.com/nwiizo/ccswarm"
 keywords = ["ai", "claude", "agents", "orchestration", "automation"]
 categories = ["development-tools", "command-line-utilities"]
+
+[[bin]]
+name = "test_proactive_mode"
+path = "test_proactive_mode.rs"
+
+[[bin]]
+name = "test_proactive_orchestrator"
+path = "test_proactive_orchestrator.rs"
+
+[[bin]]
+name = "test_isolated_proactive"
+path = "test_isolated_proactive.rs"
+
+[[bin]]
+name = "demo_proactive_workflow"
+path = "demo_proactive_workflow.rs"
 
 [dependencies]
 # Async runtime
@@ -63,6 +82,9 @@ tokio-util = "0.7"
 # HTTP client for API providers
 reqwest = { version = "0.12", features = ["json"] }
 
+# Testing utilities
+tempfile = "3.8"
+
 # Async traits
 async-trait = "0.1"
 
@@ -77,6 +99,9 @@ urlencoding = { version = "2.1", optional = true }
 # Additional utilities
 colored = "3.0"
 rand = "0.9"
+
+# AI Session Management (local crate)
+ai-session = { path = "ai-session" }
 
 [dev-dependencies]
 # Testing

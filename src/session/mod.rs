@@ -1,4 +1,6 @@
+pub mod ai_session_adapter;
 pub mod claude_session;
+pub mod context_bridge;
 pub mod coordinator;
 pub mod memory;
 pub mod persistent_session;
@@ -14,7 +16,7 @@ use uuid::Uuid;
 
 use crate::auto_accept::AutoAcceptConfig;
 use crate::identity::AgentRole;
-use crate::tmux::TmuxClient;
+use ai_session::native::NativeSessionManager;
 use memory::{
     EpisodeOutcome, EpisodeType, MemorySummary, RetrievalResult, SessionMemory, WorkingMemoryType,
 };
@@ -216,20 +218,20 @@ impl AgentSession {
     }
 }
 
-/// Manages multiple agent sessions with tmux integration
+/// Manages multiple agent sessions with native session management
 pub struct SessionManager {
     /// Map of session ID to agent session
     sessions: Arc<Mutex<HashMap<String, AgentSession>>>,
-    /// Tmux client for session operations
-    tmux_client: TmuxClient,
+    /// Native session manager for session operations
+    session_manager: NativeSessionManager,
 }
 
 impl SessionManager {
     /// Creates a new session manager
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         Ok(Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            tmux_client: TmuxClient::new()?,
+            session_manager: NativeSessionManager::new(),
         })
     }
 
@@ -244,7 +246,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// The created AgentSession on success
-    pub fn create_session(
+    pub async fn create_session(
         &self,
         agent_id: String,
         agent_role: AgentRole,
@@ -255,16 +257,16 @@ impl SessionManager {
         let session =
             AgentSession::new(agent_id, agent_role, working_directory.clone(), description);
 
-        // Create the tmux session
-        self.tmux_client
-            .create_session(&session.tmux_session, &working_directory)?;
+        // Create the native session
+        let _native_session = self.session_manager
+            .create_session(&session.tmux_session).await?;
 
         // Set up the session environment
-        self.setup_session_environment(&session)?;
+        self.setup_session_environment(&session).await?;
 
         if auto_start {
             // Start the agent in the session
-            self.start_agent_in_session(&session)?;
+            self.start_agent_in_session(&session).await?;
         }
 
         // Store the session
@@ -281,7 +283,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be paused
-    pub fn pause_session(&self, session_id: &str) -> Result<(), anyhow::Error> {
+    pub async fn pause_session(&self, session_id: &str) -> Result<(), anyhow::Error> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -290,8 +292,8 @@ impl SessionManager {
 
         match session.status {
             SessionStatus::Active | SessionStatus::Background => {
-                // Send pause signal to the tmux session
-                self.tmux_client.send_keys(&session.tmux_session, "C-z")?;
+                // For native sessions, we just update the status
+                // The actual pause/resume will be handled by the session itself
                 session.status = SessionStatus::Paused;
                 session.touch();
                 Ok(())
@@ -310,7 +312,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be resumed
-    pub fn resume_session(&self, session_id: &str) -> Result<()> {
+    pub async fn resume_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -319,8 +321,7 @@ impl SessionManager {
 
         match session.status {
             SessionStatus::Paused => {
-                // Send resume signal to the tmux session
-                self.tmux_client.send_command(&session.tmux_session, "fg")?;
+                // For native sessions, we just update the status
                 session.status = if session.background_mode {
                     SessionStatus::Background
                 } else {
@@ -340,7 +341,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be detached
-    pub fn detach_session(&self, session_id: &str) -> Result<()> {
+    pub async fn detach_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -349,8 +350,7 @@ impl SessionManager {
 
         match session.status {
             SessionStatus::Active | SessionStatus::Background => {
-                // Detach the tmux session
-                self.tmux_client.detach_session(&session.tmux_session)?;
+                // For native sessions, detaching just changes status
                 session.status = SessionStatus::Detached;
                 session.touch();
                 Ok(())
@@ -366,7 +366,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be attached
-    pub fn attach_session(&self, session_id: &str) -> Result<()> {
+    pub async fn attach_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -375,8 +375,7 @@ impl SessionManager {
 
         match session.status {
             SessionStatus::Detached => {
-                // Attach to the tmux session
-                self.tmux_client.attach_session(&session.tmux_session)?;
+                // For native sessions, attaching just changes status
                 session.status = if session.background_mode {
                     SessionStatus::Background
                 } else {
@@ -399,15 +398,17 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub fn terminate_session(&self, session_id: &str) -> Result<()> {
+    pub async fn terminate_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
             .get_mut(session_id)
             .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
 
-        // Kill the tmux session
-        self.tmux_client.kill_session(&session.tmux_session)?;
+        // Terminate the native session
+        if self.session_manager.has_session(&session.tmux_session).await {
+            self.session_manager.delete_session(&session.tmux_session).await?;
+        }
         session.status = SessionStatus::Terminated;
         session.touch();
 
@@ -422,7 +423,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub fn set_background_mode(&self, session_id: &str, auto_accept: bool) -> Result<()> {
+    pub async fn set_background_mode(&self, session_id: &str, auto_accept: bool) -> Result<()> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -453,7 +454,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub fn enable_auto_accept(&self, session_id: &str, config: AutoAcceptConfig) -> Result<()> {
+    pub async fn enable_auto_accept(&self, session_id: &str, config: AutoAcceptConfig) -> Result<()> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -472,7 +473,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub fn disable_auto_accept(&self, session_id: &str) -> Result<()> {
+    pub async fn disable_auto_accept(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -492,7 +493,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub fn update_auto_accept_config(
+    pub async fn update_auto_accept_config(
         &self,
         session_id: &str,
         config: AutoAcceptConfig,
@@ -512,7 +513,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// Number of sessions that had auto-accept disabled
-    pub fn emergency_stop_all_auto_accept(&self) -> usize {
+    pub async fn emergency_stop_all_auto_accept(&self) -> usize {
         let mut sessions = self.sessions.lock().unwrap();
         let mut count = 0;
 
@@ -569,7 +570,7 @@ impl SessionManager {
     }
 
     /// Cleans up terminated sessions
-    pub fn cleanup_terminated_sessions(&self) -> Result<usize> {
+    pub async fn cleanup_terminated_sessions(&self) -> Result<usize> {
         let mut sessions = self.sessions.lock().unwrap();
         let terminated: Vec<String> = sessions
             .iter()
@@ -586,39 +587,27 @@ impl SessionManager {
     }
 
     /// Sets up the environment for a new session
-    fn setup_session_environment(&self, session: &AgentSession) -> Result<()> {
-        // Set environment variables
-        self.tmux_client.set_environment(
-            &session.tmux_session,
-            "CCSWARM_SESSION_ID",
-            &session.id,
-        )?;
-        self.tmux_client.set_environment(
-            &session.tmux_session,
-            "CCSWARM_AGENT_ID",
-            &session.agent_id,
-        )?;
-        self.tmux_client.set_environment(
-            &session.tmux_session,
-            "CCSWARM_AGENT_ROLE",
-            session.agent_role.name(),
-        )?;
-
-        // Create status line
-        let status_line = format!(
-            "[{}] Agent: {} | Session: {} | Status: {{}}",
-            session.agent_role.name(),
-            &session.agent_id[..8],
-            &session.id[..8]
-        );
-        self.tmux_client
-            .set_option(&session.tmux_session, "status-right", &status_line)?;
+    async fn setup_session_environment(&self, session: &AgentSession) -> Result<()> {
+        // For native sessions, environment setup would be handled during session creation
+        // We can set environment variables if the native session supports it
+        if let Some(native_session) = self.session_manager.get_session(&session.tmux_session).await {
+            let env_commands = vec![
+                format!("export CCSWARM_SESSION_ID={}", session.id),
+                format!("export CCSWARM_AGENT_ID={}", session.agent_id),
+                format!("export CCSWARM_AGENT_ROLE={}", session.agent_role.name()),
+            ];
+            
+            let session_lock = native_session.lock().await;
+            for cmd in env_commands {
+                session_lock.send_input(&format!("{}\n", cmd)).await?;
+            }
+        }
 
         Ok(())
     }
 
     /// Starts the agent in the session
-    fn start_agent_in_session(&self, session: &AgentSession) -> Result<()> {
+    async fn start_agent_in_session(&self, session: &AgentSession) -> Result<()> {
         // Build the command to start the agent
         let command = format!(
             "ccswarm agent start --id {} --role {} --session {} --working-dir {}",
@@ -628,9 +617,11 @@ impl SessionManager {
             session.working_directory
         );
 
-        // Send the command to the tmux session
-        self.tmux_client
-            .send_command(&session.tmux_session, &command)?;
+        // Send the command to the native session
+        if let Some(native_session) = self.session_manager.get_session(&session.tmux_session).await {
+            let session_lock = native_session.lock().await;
+            session_lock.send_input(&format!("{}\n", command)).await?;
+        }
 
         Ok(())
     }
@@ -638,7 +629,13 @@ impl SessionManager {
 
 impl Default for SessionManager {
     fn default() -> Self {
-        Self::new().expect("Failed to create SessionManager")
+        // Note: This is a blocking call in an async context
+        // Consider using lazy_static or once_cell for production
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                Self::new().await.expect("Failed to create SessionManager")
+            })
+        })
     }
 }
 

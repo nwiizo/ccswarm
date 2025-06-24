@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use std::str::FromStr;
 
 /// Task priority levels
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -8,6 +9,20 @@ pub enum Priority {
     Medium,
     High,
     Critical,
+}
+
+impl FromStr for Priority {
+    type Err = anyhow::Error;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "low" => Ok(Priority::Low),
+            "medium" => Ok(Priority::Medium),
+            "high" => Ok(Priority::High),
+            "critical" => Ok(Priority::Critical),
+            _ => Err(anyhow::anyhow!("Unknown priority: {}", s)),
+        }
+    }
 }
 
 /// Types of tasks
@@ -22,6 +37,25 @@ pub enum TaskType {
     Bugfix,
     Feature,
     Remediation, // Task to fix quality issues
+}
+
+impl FromStr for TaskType {
+    type Err = anyhow::Error;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "development" | "dev" => Ok(TaskType::Development),
+            "testing" | "test" => Ok(TaskType::Testing),
+            "documentation" | "docs" => Ok(TaskType::Documentation),
+            "infrastructure" | "infra" => Ok(TaskType::Infrastructure),
+            "coordination" | "coord" => Ok(TaskType::Coordination),
+            "review" => Ok(TaskType::Review),
+            "bugfix" | "bug" => Ok(TaskType::Bugfix),
+            "feature" | "feat" => Ok(TaskType::Feature),
+            "remediation" | "fix" => Ok(TaskType::Remediation),
+            _ => Err(anyhow::anyhow!("Unknown task type: {}", s)),
+        }
+    }
 }
 
 /// A task to be executed by an agent

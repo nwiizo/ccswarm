@@ -1,0 +1,79 @@
+# ccswarm & ai-session 統合TODO
+
+## 🚨 緊急修正（実装上の問題を解決 - 機能追加より優先）
+[ ] 0.1. ai-sessionのセッション永続化問題を修正
+    - 問題: セッションを作成しても保存されない
+    - 原因: SessionManagerが毎回新しいインスタンスを作成している
+    - 解決案: セッション情報をファイルに保存する機能を実装
+    - 対象ファイル: ai-session/src/bin/ai-session.rs
+
+[ ] 0.2. ai-sessionのPTY実装の動作確認と修正
+    - 問題: セッションでコマンドが実行できない可能性
+    - 確認事項: 
+      - PTYが正しく作成されているか
+      - コマンドが実行できるか
+      - 出力が正しく取得できるか
+    - 対象ファイル: ai-session/src/core/pty.rs, ai-session/src/core/lifecycle.rs
+
+[ ] 0.3. ccswarmとai-sessionの統合動作確認
+    - 問題: tmux_bridgeが正しく動作していない可能性
+    - 確認事項:
+      - ccswarmからai-sessionのセッションが作成できるか
+      - コマンドが実行できるか
+      - 出力が取得できるか
+    - 対象ファイル: ai-session/src/tmux_bridge.rs
+
+## 🔴 高優先度（まずccswarmを動作可能にする）
+[x] 1. ccswarmのコンパイルエラー修正 - tmux_bridge型の不整合を解決
+[x] 2. ccswarmのOutputFormatterトレイト問題を修正
+[x] 3. ccswarmの残りのtmux依存箇所をai-sessionに移行
+
+## 🟡 中優先度（MCP実装）
+[x] 4. MCP仕様の詳細調査 - JSON-RPCプロトコルとツール定義
+[x] 5. MCP JSON-RPCサーバー基盤実装
+[x] 6. MCPツール実装 - execute_command
+[x] 7. MCPツール実装 - ask_human
+[x] 8. MCPツール実装 - get_session_info
+[ ] 9. ai-session用MCPサーバー完成
+[ ] 10. ccswarm用MCPクライアント実装
+
+## 🟢 低優先度（最適化と改善）
+[ ] 11. HTTPからUnix domain socketへの完全移行
+[ ] 12. gRPCまたはCap'n Proto導入検討
+[ ] 13. 外部プロセス依存の削減とRustネイティブ化
+[ ] 14. パフォーマンステストとベンチマーク
+
+## ✅ 最終確認（全機能チェック）
+[ ] 15. 統合テスト - ai-sessionの全機能確認
+    - セッション作成・削除
+    - コマンド実行・出力取得
+    - IPCとHTTP APIの動作
+    - ネイティブPTY管理
+
+[ ] 16. 統合テスト - ccswarmとai-sessionの連携確認
+    - エージェント起動
+    - タスク実行
+    - セッション管理
+    - メッセージバス通信
+
+[ ] 17. 統合テスト - MCP経由での操作確認
+    - MCPサーバー起動
+    - ツール実行
+    - Claude Desktopからの接続
+
+[ ] 18. 統合テスト - claude-chatコマンドの動作確認
+    - サーバー自動起動
+    - 対話モード
+    - セッション永続化
+
+[ ] 19. 統合テスト - マルチエージェント協調動作確認
+    - 複数エージェント起動
+    - タスク分配
+    - エージェント間通信
+    - 統合メッセージバス
+
+---
+作成日: 2025-06-23
+最終更新: 2025-06-23
+
+注意: 実装上の問題（セクション0）を全て解決するまで、新機能の追加は行わない

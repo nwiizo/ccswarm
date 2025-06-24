@@ -179,6 +179,30 @@ pub struct MasterClaudeConfig {
     pub think_mode: ThinkMode,
     pub permission_level: String,
     pub claude_config: ClaudeConfig,
+    
+    /// Enable proactive mode by default
+    #[serde(default = "default_proactive_mode")]
+    pub enable_proactive_mode: bool,
+    
+    /// Proactive analysis frequency (seconds)
+    #[serde(default = "default_proactive_frequency")]
+    pub proactive_frequency: u64,
+    
+    /// High-frequency proactive analysis frequency (seconds)
+    #[serde(default = "default_high_frequency")]
+    pub high_frequency: u64,
+}
+
+fn default_proactive_mode() -> bool {
+    true // デフォルトでプロアクティブモードを有効化
+}
+
+fn default_proactive_frequency() -> u64 {
+    30 // デフォルト30秒
+}
+
+fn default_high_frequency() -> u64 {
+    15 // デフォルト15秒（高頻度モード）
 }
 
 /// Coordination configuration
@@ -273,6 +297,9 @@ mod tests {
                     think_mode: ThinkMode::UltraThink,
                     permission_level: "supervised".to_string(),
                     claude_config: ClaudeConfig::for_master(),
+                    enable_proactive_mode: true,
+                    proactive_frequency: 300,
+                    high_frequency: 60,
                 },
             },
             agents: HashMap::new(),
