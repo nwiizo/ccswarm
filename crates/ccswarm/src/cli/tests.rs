@@ -118,18 +118,25 @@ mod tests {
         .unwrap();
 
         match args.command {
-            Commands::Task {
-                description,
-                priority,
-                task_type,
-                details,
-                duration,
-            } => {
-                assert_eq!(description, "Implement login feature");
-                assert_eq!(priority, "high");
-                assert_eq!(task_type, "feature");
-                assert_eq!(details, Some("Add OAuth support".to_string()));
-                assert_eq!(duration, Some(7200));
+            Commands::Task { action } => {
+                match action {
+                    crate::cli::TaskAction::Add {
+                        description,
+                        priority,
+                        task_type,
+                        details,
+                        duration,
+                        auto_assign,
+                    } => {
+                        assert_eq!(description, "Implement login feature");
+                        assert_eq!(priority, "high");
+                        assert_eq!(task_type, "feature");
+                        assert_eq!(details, Some("Add OAuth support".to_string()));
+                        assert_eq!(duration, Some(7200));
+                        assert!(!auto_assign); // Default should be false
+                    }
+                    _ => panic!("Expected Add task action"),
+                }
             }
             _ => panic!("Expected Task command"),
         }

@@ -105,10 +105,11 @@ fn draw_enhanced_system_stats(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
         ])
         .split(area);
 
@@ -196,99 +197,101 @@ fn draw_enhanced_system_stats(f: &mut Frame, area: Rect, app: &App) {
         )
         .alignment(Alignment::Center);
     f.render_widget(system_status, chunks[3]);
+
+    // Add execution engine success rate gauge
+    let success_percentage = app.success_rate as u16;
+    let success_color = if success_percentage >= 90 {
+        Color::Green
+    } else if success_percentage >= 70 {
+        Color::Yellow
+    } else {
+        Color::Red
+    };
+
+    let success_rate = Gauge::default()
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title(" 📊 Success Rate ")
+                .title_alignment(Alignment::Center),
+        )
+        .gauge_style(
+            Style::default()
+                .fg(success_color)
+                .add_modifier(Modifier::BOLD),
+        )
+        .percent(success_percentage)
+        .label(format!("{:.1}%", app.success_rate));
+    f.render_widget(success_rate, chunks[4]);
 }
 
-/// Draw enhanced provider statistics with better layout
+/// Draw execution engine statistics
 fn draw_enhanced_provider_stats(f: &mut Frame, area: Rect, app: &App) {
-    // Count providers
-    let mut provider_counts = std::collections::HashMap::new();
-    for agent in &app.agents {
-        *provider_counts
-            .entry(agent.provider_type.clone())
-            .or_insert(0) += 1;
-    }
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
 
-    // Create provider stats table
-    let header = Row::new(vec![
-        Cell::from("Provider").style(
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Cell::from("Count").style(
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Cell::from("Percentage").style(
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Cell::from("Status").style(
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ]);
+    // Execution Statistics
+    let exec_stats = [
+        format!("📊 Total Executed: {}", app.tasks_executed),
+        format!("✅ Completed: {}", app.completed_tasks),
+        format!("❌ Failed: {}", app.tasks_failed),
+        format!("🎯 Orchestration: {:.1}%", app.orchestration_usage),
+    ];
 
-    let rows: Vec<Row> = provider_counts
-        .iter()
-        .map(|(provider, count)| {
-            let (icon, color) = match provider.as_str() {
-                "Claude Code" => ("🤖", Color::Blue),
-                "claude_code" => ("🤖", Color::Blue),
-                "Aider" => ("🔧", Color::Green),
-                "OpenAI Codex" => ("🧠", Color::Magenta),
-                "Custom" => ("⚙️", Color::Gray),
-                _ => ("❓", Color::White),
-            };
+    let exec_paragraph = Paragraph::new(exec_stats.join("\n"))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title(" 🚀 Execution Statistics ")
+                .title_alignment(Alignment::Center),
+        )
+        .style(Style::default().fg(Color::White))
+        .wrap(Wrap { trim: true });
 
-            let percentage = (*count as f32 / app.agents.len().max(1) as f32) * 100.0;
-            let status = if *count > 0 {
-                "🟢 Active"
+    f.render_widget(exec_paragraph, chunks[0]);
+
+    // Performance Metrics
+    let perf_stats = [
+        format!("💯 Success Rate: {:.1}%", app.success_rate),
+        format!("⏳ Pending: {}", app.pending_tasks),
+        format!(
+            "🤖 Active Agents: {}/{}",
+            app.active_agents, app.total_agents
+        ),
+        format!(
+            "📈 Engine Status: {}",
+            if app.tasks_executed > 0 {
+                "Active"
             } else {
-                "⚪ Inactive"
-            };
+                "Idle"
+            }
+        ),
+    ];
 
-            Row::new(vec![
-                Cell::from(format!("{} {}", icon, provider))
-                    .style(Style::default().fg(color).add_modifier(Modifier::BOLD)),
-                Cell::from(format!("{}", count)).style(Style::default().fg(Color::Yellow)),
-                Cell::from(format!("{:.1}%", percentage)).style(Style::default().fg(Color::Cyan)),
-                Cell::from(status).style(Style::default().fg(if *count > 0 {
-                    Color::Green
-                } else {
-                    Color::Gray
-                })),
-            ])
-        })
-        .collect();
+    let perf_color = if app.success_rate >= 90.0 {
+        Color::Green
+    } else if app.success_rate >= 70.0 {
+        Color::Yellow
+    } else {
+        Color::Red
+    };
 
-    let provider_table = Table::new(
-        rows,
-        [
-            Constraint::Length(20), // Provider
-            Constraint::Length(8),  // Count
-            Constraint::Length(12), // Percentage
-            Constraint::Length(12), // Status
-        ],
-    )
-    .header(header)
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .title(" 🔌 Provider Distribution ")
-            .title_alignment(Alignment::Center),
-    )
-    .row_highlight_style(
-        Style::default()
-            .bg(Color::DarkGray)
-            .add_modifier(Modifier::BOLD),
-    );
+    let perf_paragraph = Paragraph::new(perf_stats.join("\n"))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title(" 📈 Performance Metrics ")
+                .title_alignment(Alignment::Center),
+        )
+        .style(Style::default().fg(perf_color))
+        .wrap(Wrap { trim: true });
 
-    f.render_widget(provider_table, area);
+    f.render_widget(perf_paragraph, chunks[1]);
 }
 
 /// Draw enhanced agent summary with better visual hierarchy
@@ -588,11 +591,19 @@ fn draw_tasks(f: &mut Frame, area: Rect, app: &App) {
         .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
         .split(area);
 
-    // Task list
-    let header = Row::new(vec!["#", "Description", "Priority", "Type", "Status"])
-        .style(Style::default().fg(Color::Yellow))
-        .height(1)
-        .bottom_margin(1);
+    // Task list with enhanced headers
+    let header = Row::new(vec![
+        "#",
+        "Description",
+        "Priority",
+        "Type",
+        "Status",
+        "Agent",
+        "Created",
+    ])
+    .style(Style::default().fg(Color::Yellow))
+    .height(1)
+    .bottom_margin(1);
 
     let rows: Vec<Row> = app
         .tasks
@@ -606,6 +617,18 @@ fn draw_tasks(f: &mut Frame, area: Rect, app: &App) {
                 _ => Color::White,
             };
 
+            let status_color = if task.status.contains("✅") {
+                Color::Green
+            } else if task.status.contains("❌") {
+                Color::Red
+            } else if task.status.contains("🏃") {
+                Color::Cyan
+            } else if task.status.contains("📋") {
+                Color::Yellow
+            } else {
+                Color::White
+            };
+
             Row::new(vec![
                 Cell::from(format!("{}", i + 1)),
                 Cell::from(task.description.clone()),
@@ -614,7 +637,12 @@ fn draw_tasks(f: &mut Frame, area: Rect, app: &App) {
                     Style::default().fg(priority_color),
                 )),
                 Cell::from(task.task_type.clone()),
-                Cell::from(task.status.clone()),
+                Cell::from(Span::styled(
+                    task.status.clone(),
+                    Style::default().fg(status_color),
+                )),
+                Cell::from(task.assigned_agent.as_deref().unwrap_or("-")),
+                Cell::from(task.created_at.format("%H:%M:%S").to_string()),
             ])
         })
         .collect();
@@ -627,11 +655,13 @@ fn draw_tasks(f: &mut Frame, area: Rect, app: &App) {
     let table = Table::new(
         rows,
         &[
-            Constraint::Length(3),
-            Constraint::Min(30),
-            Constraint::Length(10),
-            Constraint::Length(15),
-            Constraint::Length(10),
+            Constraint::Length(3),  // #
+            Constraint::Min(25),    // Description
+            Constraint::Length(8),  // Priority
+            Constraint::Length(12), // Type
+            Constraint::Length(15), // Status
+            Constraint::Length(12), // Agent
+            Constraint::Length(8),  // Created
         ],
     )
     .header(header)

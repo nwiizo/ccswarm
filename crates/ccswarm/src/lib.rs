@@ -11,6 +11,7 @@ pub mod config;
 // Temporarily disabled due to Docker dependency issues
 // pub mod container;
 pub mod coordination;
+pub mod execution;
 pub mod extension;
 pub mod extension_stub;
 pub mod git;

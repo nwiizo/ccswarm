@@ -164,11 +164,30 @@ pub struct ProjectConfig {
     pub master_claude: MasterClaudeConfig,
 }
 
+impl Default for ProjectConfig {
+    fn default() -> Self {
+        Self {
+            name: "default-project".to_string(),
+            repository: RepositoryConfig::default(),
+            master_claude: MasterClaudeConfig::default(),
+        }
+    }
+}
+
 /// Repository configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepositoryConfig {
     pub url: String,
     pub main_branch: String,
+}
+
+impl Default for RepositoryConfig {
+    fn default() -> Self {
+        Self {
+            url: "https://github.com/example/repo.git".to_string(),
+            main_branch: "main".to_string(),
+        }
+    }
 }
 
 /// Master Claude configuration
@@ -205,6 +224,21 @@ fn default_high_frequency() -> u64 {
     15 // デフォルト15秒（高頻度モード）
 }
 
+impl Default for MasterClaudeConfig {
+    fn default() -> Self {
+        Self {
+            role: "master".to_string(),
+            quality_threshold: 0.85,
+            think_mode: ThinkMode::Think,
+            permission_level: "standard".to_string(),
+            claude_config: ClaudeConfig::default(),
+            enable_proactive_mode: default_proactive_mode(),
+            proactive_frequency: default_proactive_frequency(),
+            high_frequency: default_high_frequency(),
+        }
+    }
+}
+
 /// Coordination configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoordinationConfig {
@@ -214,10 +248,22 @@ pub struct CoordinationConfig {
     pub master_review_trigger: String,
 }
 
+impl Default for CoordinationConfig {
+    fn default() -> Self {
+        Self {
+            communication_method: "json".to_string(),
+            sync_interval: 30,
+            quality_gate_frequency: "on_task_completion".to_string(),
+            master_review_trigger: "auto".to_string(),
+        }
+    }
+}
+
 /// Complete ccswarm configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CcswarmConfig {
     pub project: ProjectConfig,
+    #[serde(default)]
     pub agents: HashMap<String, AgentConfig>,
     pub coordination: CoordinationConfig,
 }

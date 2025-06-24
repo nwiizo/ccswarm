@@ -15,6 +15,7 @@ use ratatui::{
 use std::io;
 use tokio::time::Duration;
 
+use crate::execution::ExecutionEngine;
 use app::App;
 use event::EventHandler;
 
@@ -32,6 +33,35 @@ pub async fn run_tui() -> Result<()> {
 
     // Create app state
     let mut app = App::new().await?;
+    let mut event_handler = EventHandler::new(Duration::from_millis(100));
+
+    // Main event loop
+    let result = run_app(&mut terminal, &mut app, &mut event_handler).await;
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    result
+}
+
+/// Main TUI entry point with execution engine
+pub async fn run_tui_with_engine(execution_engine: ExecutionEngine) -> Result<()> {
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Create app state with execution engine
+    let mut app = App::new().await?;
+    app.set_execution_engine(execution_engine);
     let mut event_handler = EventHandler::new(Duration::from_millis(100));
 
     // Main event loop
