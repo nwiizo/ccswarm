@@ -1,6 +1,6 @@
 [package]
 name = "ai-session"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 authors = ["ccswarm contributors"]
 description = "AI-optimized terminal session management library"

@@ -1,0 +1,143 @@
+{
+  "project": {
+    "name": "Mixed Provider Development Team",
+    "repository": {
+      "url": "https://github.com/company/mixed-provider-project.git",
+      "main_branch": "main"
+    },
+    "master_claude": {
+      "role": "technical_lead",
+      "quality_threshold": 0.90,
+      "think_mode": "ultrathink",
+      "permission_level": "supervised",
+      "provider": {
+        "provider_type": "claude_code",
+        "claude_code": {
+          "model": "claude-3.5-sonnet",
+          "dangerous_skip": false,
+          "think_mode": "ultrathink",
+          "json_output": true,
+          "custom_commands": [
+            "ccswarm status",
+            "ccswarm review",
+            "ccswarm deploy",
+            "ccswarm quality-gate"
+          ],
+          "mcp_servers": {}
+        }
+      }
+    }
+  },
+  "agents": {
+    "frontend": {
+      "specialization": "react_typescript",
+      "worktree": "agents/frontend-agent",
+      "branch": "feature/frontend-ui",
+      "provider": {
+        "provider_type": "claude_code",
+        "claude_code": {
+          "model": "claude-3.5-sonnet",
+          "dangerous_skip": true,
+          "think_mode": "think_hard",
+          "json_output": true,
+          "custom_commands": [
+            "npm test",
+            "npm run lint",
+            "npm run build",
+            "npm run storybook"
+          ],
+          "mcp_servers": {}
+        }
+      },
+      "claude_md_template": "frontend_specialist"
+    },
+    "backend": {
+      "specialization": "python_fastapi",
+      "worktree": "agents/backend-agent",
+      "branch": "feature/backend-api",
+      "provider": {
+        "provider_type": "aider",
+        "aider": {
+          "model": "gpt-4",
+          "openai_api_key": "${OPENAI_API_KEY}",
+          "auto_commit": true,
+          "git": true,
+          "additional_args": [
+            "--architect",
+            "--no-stream"
+          ]
+        }
+      },
+      "claude_md_template": "backend_specialist"
+    },
+    "devops": {
+      "specialization": "aws_terraform",
+      "worktree": "agents/devops-agent",
+      "branch": "feature/infrastructure",
+      "provider": {
+        "provider_type": "custom",
+        "custom": {
+          "command": "terraform-ai",
+          "args": [
+            "--prompt",
+            "{prompt}",
+            "--context",
+            "{context}",
+            "--workspace",
+            "{workspace}"
+          ],
+          "env_vars": {
+            "AWS_REGION": "us-west-2",
+            "TF_VAR_environment": "staging"
+          },
+          "timeout_seconds": 600,
+          "supports_json": true
+        }
+      },
+      "claude_md_template": "devops_specialist"
+    },
+    "ai_researcher": {
+      "specialization": "ai_ml_research",
+      "worktree": "agents/ai-agent",
+      "branch": "feature/ai-research",
+      "provider": {
+        "provider_type": "codex",
+        "codex": {
+          "api_key": "${OPENAI_API_KEY}",
+          "model": "gpt-4",
+          "max_tokens": 4096,
+          "temperature": 0.3,
+          "organization": "${OPENAI_ORG_ID}"
+        }
+      },
+      "claude_md_template": "ai_specialist"
+    },
+    "qa": {
+      "specialization": "testing_automation",
+      "worktree": "agents/qa-agent",
+      "branch": "feature/testing",
+      "provider": {
+        "provider_type": "aider",
+        "aider": {
+          "model": "claude-3.5-sonnet",
+          "anthropic_api_key": "${ANTHROPIC_API_KEY}",
+          "auto_commit": false,
+          "git": true,
+          "additional_args": [
+            "--test",
+            "--no-stream",
+            "--edit-format",
+            "diff"
+          ]
+        }
+      },
+      "claude_md_template": "qa_specialist"
+    }
+  },
+  "coordination": {
+    "communication_method": "json_files",
+    "sync_interval": 30,
+    "quality_gate_frequency": "on_commit",
+    "master_review_trigger": "all_tasks_complete"
+  }
+}

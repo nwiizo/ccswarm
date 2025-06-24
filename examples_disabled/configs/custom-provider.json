@@ -1,0 +1,75 @@
+{
+  "project": {
+    "name": "CustomProviderDemo",
+    "repository": {
+      "url": "./",
+      "main_branch": "main"
+    },
+    "master_claude": {
+      "role": "technical_lead",
+      "quality_threshold": 0.85,
+      "think_mode": "standard",
+      "permission_level": "supervised",
+      "claude_config": {
+        "model": "custom",
+        "dangerous_skip": true
+      }
+    }
+  },
+  "agents": {
+    "frontend": {
+      "specialization": "react_typescript",
+      "worktree": "agents/frontend-agent",
+      "branch": "feature/frontend",
+      "provider": {
+        "type": "custom",
+        "command": "node",
+        "args": ["./scripts/simulate-agent.js", "frontend", "{prompt}"],
+        "env_vars": {
+          "AGENT_ROLE": "frontend",
+          "OUTPUT_FORMAT": "json"
+        },
+        "timeout_seconds": 300,
+        "supports_json": true
+      }
+    },
+    "backend": {
+      "specialization": "node_microservices",
+      "worktree": "agents/backend-agent",
+      "branch": "feature/backend",
+      "provider": {
+        "type": "custom",
+        "command": "python",
+        "args": ["./scripts/simulate-agent.py", "--role", "backend", "--prompt", "{prompt}"],
+        "env_vars": {
+          "AGENT_ROLE": "backend",
+          "SIMULATION_MODE": "true"
+        },
+        "timeout_seconds": 300,
+        "supports_json": false
+      }
+    },
+    "devops": {
+      "specialization": "infrastructure",
+      "worktree": "agents/devops-agent",
+      "branch": "feature/devops",
+      "provider": {
+        "type": "custom",
+        "command": "bash",
+        "args": ["./scripts/simulate-agent.sh", "devops", "{prompt}"],
+        "env_vars": {
+          "AGENT_ROLE": "devops"
+        },
+        "working_directory": "./agents/devops-agent",
+        "timeout_seconds": 180,
+        "supports_json": false
+      }
+    }
+  },
+  "coordination": {
+    "communication_method": "json_files",
+    "sync_interval": 15,
+    "quality_gate_frequency": "on_pr",
+    "master_review_trigger": "milestone_complete"
+  }
+}

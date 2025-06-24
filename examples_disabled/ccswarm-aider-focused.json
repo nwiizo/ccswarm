@@ -1,0 +1,96 @@
+{
+  "project": {
+    "name": "Aider-Powered Development Project",
+    "repository": {
+      "url": "https://github.com/company/aider-project.git",
+      "main_branch": "main"
+    },
+    "master_claude": {
+      "role": "technical_lead",
+      "quality_threshold": 0.85,
+      "think_mode": "ultrathink",
+      "permission_level": "supervised",
+      "provider": {
+        "provider_type": "claude_code",
+        "claude_code": {
+          "model": "claude-3.5-sonnet",
+          "dangerous_skip": false,
+          "think_mode": "ultrathink",
+          "json_output": true,
+          "custom_commands": [
+            "ccswarm status",
+            "ccswarm review",
+            "ccswarm quality-gate"
+          ],
+          "mcp_servers": {}
+        }
+      }
+    }
+  },
+  "agents": {
+    "frontend": {
+      "specialization": "react_typescript",
+      "worktree": "agents/frontend-agent",
+      "branch": "feature/frontend-ui",
+      "provider": {
+        "provider_type": "aider",
+        "aider": {
+          "model": "claude-3.5-sonnet",
+          "anthropic_api_key": "${ANTHROPIC_API_KEY}",
+          "auto_commit": true,
+          "git": true,
+          "additional_args": [
+            "--no-stream",
+            "--edit-format",
+            "diff"
+          ]
+        }
+      },
+      "claude_md_template": "frontend_specialist"
+    },
+    "backend": {
+      "specialization": "node_fastify",
+      "worktree": "agents/backend-agent",
+      "branch": "feature/backend-api",
+      "provider": {
+        "provider_type": "aider",
+        "aider": {
+          "model": "gpt-4",
+          "openai_api_key": "${OPENAI_API_KEY}",
+          "auto_commit": true,
+          "git": true,
+          "additional_args": [
+            "--architect",
+            "--no-stream"
+          ]
+        }
+      },
+      "claude_md_template": "backend_specialist"
+    },
+    "qa": {
+      "specialization": "testing_automation",
+      "worktree": "agents/qa-agent",
+      "branch": "feature/testing",
+      "provider": {
+        "provider_type": "aider",
+        "aider": {
+          "model": "gpt-3.5-turbo",
+          "openai_api_key": "${OPENAI_API_KEY}",
+          "auto_commit": false,
+          "git": true,
+          "additional_args": [
+            "--test",
+            "--no-stream"
+          ]
+        }
+      },
+      "claude_md_template": "qa_specialist"
+    }
+  },
+  "coordination": {
+    "communication_method": "json_files",
+    "sync_interval": 45,
+    "quality_gate_frequency": "on_commit",
+    "master_review_trigger": "all_tasks_complete"
+  }
+}
