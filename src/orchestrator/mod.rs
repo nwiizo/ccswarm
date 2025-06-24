@@ -1,6 +1,10 @@
 pub mod auto_create;
 pub mod llm_quality_judge;
 pub mod master_delegation;
+pub mod proactive_master;
+
+// Re-export commonly used types
+pub use master_delegation::{DelegationDecision, DelegationStrategy, MasterDelegationEngine};
 
 #[cfg(test)]
 mod llm_quality_judge_test;
@@ -20,6 +24,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use self::llm_quality_judge::LLMQualityJudge;
+use self::proactive_master::ProactiveMaster;
 use crate::agent::{AgentStatus, ClaudeCodeAgent, Task, TaskType};
 use crate::config::CcswarmConfig;
 use crate::coordination::{AgentMessage, CoordinationBus};
@@ -30,6 +35,7 @@ use crate::identity::{
 };
 
 /// Master Claude coordinator
+#[derive(Clone)]
 pub struct MasterClaude {
     /// Unique ID for this Master Claude instance
     pub id: String,
@@ -60,6 +66,9 @@ pub struct MasterClaude {
 
     /// LLM-based quality judge
     quality_judge: Arc<RwLock<LLMQualityJudge>>,
+
+    /// Proactive Master Claude intelligence system
+    proactive_master: Arc<RwLock<ProactiveMaster>>,
 
     /// Isolation mode for agents
     isolation_mode: crate::agent::IsolationMode,
@@ -127,6 +136,7 @@ impl MasterClaude {
         }));
 
         let quality_judge = Arc::new(RwLock::new(LLMQualityJudge::new()));
+        let proactive_master = Arc::new(RwLock::new(ProactiveMaster::new().await?));
 
         Ok(Self {
             id,
@@ -139,6 +149,7 @@ impl MasterClaude {
             worktree_manager,
             state,
             quality_judge,
+            proactive_master,
             isolation_mode: crate::agent::IsolationMode::default(),
         })
     }
@@ -266,6 +277,46 @@ impl MasterClaude {
             }
         });
 
+        // Start proactive Master Claude intelligence loop (DEFAULT ENABLED)
+        if self.config.project.master_claude.enable_proactive_mode {
+            let agents_proactive = self.agents.clone();
+            let bus_proactive = self.coordination_bus.clone();
+            let proactive_master = self.proactive_master.clone();
+            let frequency = self.config.project.master_claude.proactive_frequency;
+
+            info!("🧠 Proactive Mode ENABLED by default - Standard analysis every {}s", frequency);
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(frequency)).await;
+
+                    let proactive_guard = proactive_master.read().await;
+                    if let Err(e) = proactive_guard.analyze_and_decide(&agents_proactive, &bus_proactive).await {
+                        error!("Error in proactive analysis: {}", e);
+                    }
+                }
+            });
+
+            // Enable high-frequency proactive mode 
+            let agents_hf = self.agents.clone();
+            let bus_hf = self.coordination_bus.clone();
+            let proactive_master_hf = self.proactive_master.clone();
+            let high_frequency = self.config.project.master_claude.high_frequency;
+
+            info!("⚡ High-frequency proactive analysis active - every {}s", high_frequency);
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(high_frequency)).await;
+                    
+                    let proactive_guard = proactive_master_hf.read().await;
+                    if let Err(e) = proactive_guard.analyze_and_decide(&agents_hf, &bus_hf).await {
+                        error!("Error in high-frequency proactive analysis: {}", e);
+                    }
+                }
+            });
+        } else {
+            info!("Proactive mode is disabled in configuration");
+        }
+
         // Main coordination loop
         self.coordinate_development().await
     }
@@ -346,11 +397,19 @@ impl MasterClaude {
         let task_id = task.id.clone();
         self.coordination_bus
             .send_message(AgentMessage::TaskCompleted {
-                agent_id,
+                agent_id: agent_id.clone(),
                 task_id: task_id.clone(),
                 result: result.clone(),
             })
             .await?;
+
+        // Update proactive master with completion data
+        if result.success {
+            let proactive_master = self.proactive_master.read().await;
+            if let Err(e) = proactive_master.update_context_from_completion(&task, &result).await {
+                warn!("Failed to update proactive master context: {}", e);
+            }
+        }
 
         info!("Task completed: {} - Success: {}", task_id, result.success);
         Ok(())
@@ -756,6 +815,19 @@ impl MasterClaude {
                 info!("Created remediation task {} for agent {} to fix issues in task {} with detailed instructions", 
                      remediation_task.id, agent_id, task_id);
             }
+            AgentMessage::TaskGenerated {
+                task_id,
+                description,
+                reasoning,
+            } => {
+                info!(
+                    "Master Claude generated new task {}: {} (Reasoning: {})",
+                    task_id, description, reasoning
+                );
+                
+                // TODO: Add the generated task to the task queue
+                // This would require access to the task queue, which we'll need to pass through
+            }
             _ => {}
         }
 
@@ -925,6 +997,83 @@ impl MasterClaude {
         })
     }
 
+    /// Set a project objective for proactive goal tracking
+    pub async fn set_objective(&self, title: String, description: String, deadline: Option<DateTime<Utc>>) -> Result<String> {
+        use self::proactive_master::Objective;
+        
+        let objective_id = format!("obj-{}", uuid::Uuid::new_v4());
+        let objective = Objective {
+            id: objective_id.clone(),
+            title,
+            description,
+            deadline,
+            progress: 0.0,
+            key_results: vec![],
+        };
+
+        let proactive_master = self.proactive_master.read().await;
+        proactive_master.set_objective(objective).await?;
+        
+        info!("Set project objective: {}", objective_id);
+        Ok(objective_id)
+    }
+
+    /// Add a milestone for proactive tracking
+    pub async fn add_milestone(&self, name: String, description: String, deadline: Option<DateTime<Utc>>) -> Result<String> {
+        use self::proactive_master::Milestone;
+        
+        let milestone_id = format!("milestone-{}", uuid::Uuid::new_v4());
+        let milestone = Milestone {
+            id: milestone_id.clone(),
+            name,
+            description,
+            deadline,
+            completion_percentage: 0.0,
+            dependencies: vec![],
+            critical_path: false,
+        };
+
+        let proactive_master = self.proactive_master.read().await;
+        proactive_master.add_milestone(milestone).await?;
+        
+        info!("Added milestone: {}", milestone_id);
+        Ok(milestone_id)
+    }
+
+    /// Trigger immediate proactive analysis
+    pub async fn trigger_proactive_analysis(&self) -> Result<Vec<self::proactive_master::ProactiveDecision>> {
+        info!("Triggering immediate proactive analysis");
+        
+        let proactive_master = self.proactive_master.read().await;
+        let decisions = proactive_master.analyze_and_decide(&self.agents, &self.coordination_bus).await?;
+        
+        info!("Proactive analysis generated {} decisions", decisions.len());
+        Ok(decisions)
+    }
+
+    /// Enable proactive mode (more frequent analysis)
+    pub async fn enable_proactive_mode(&self) -> Result<()> {
+        info!("Enabling proactive mode - increasing analysis frequency");
+        
+        // Start additional proactive analysis loop with higher frequency
+        let agents = self.agents.clone();
+        let bus = self.coordination_bus.clone();
+        let proactive_master = self.proactive_master.clone();
+
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await; // Every 15 seconds
+                
+                let proactive_guard = proactive_master.read().await;
+                if let Err(e) = proactive_guard.analyze_and_decide(&agents, &bus).await {
+                    error!("Error in high-frequency proactive analysis: {}", e);
+                }
+            }
+        });
+
+        Ok(())
+    }
+
     /// Shutdown the orchestrator gracefully
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down Master Claude orchestrator");
@@ -1012,6 +1161,9 @@ mod tests {
                     think_mode: crate::config::ThinkMode::UltraThink,
                     permission_level: "supervised".to_string(),
                     claude_config: ClaudeConfig::for_master(),
+                    enable_proactive_mode: true,
+                    proactive_frequency: 300,
+                    high_frequency: 60,
                 },
             },
             agents,

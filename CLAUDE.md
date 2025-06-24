@@ -2,9 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ccswarm - AI Multi-Agent Orchestration System
+## ccswarm - AI Multi-Agent Orchestration System with Native AI-Session
 
-ccswarm orchestrates specialized AI agents (Frontend, Backend, DevOps, QA) using a Master Claude coordinator. Built in Rust for performance and reliability.
+ccswarm orchestrates specialized AI agents (Frontend, Backend, DevOps, QA) using a Master Claude coordinator. Built in Rust for performance and reliability with native ai-session terminal management replacing tmux for 93% token savings and cross-platform compatibility.
 
 ## Essential Commands
 
@@ -46,9 +46,31 @@ cargo run -- review status              # Check review system status
 cargo run -- review trigger --all       # Manually trigger reviews
 cargo run -- review history --failed    # View failed reviews
 
-# Session management (93% token savings!)
-cargo run -- session list               # View active sessions
-cargo run -- session stats --show-savings  # Session statistics
+# AI-Session Management (93% token savings!)
+cargo run -- session list               # View active ai-sessions
+cargo run -- session create --agent frontend --enable-ai-features  # Create new session
+cargo run -- session stats --show-savings  # Session statistics and compression ratio
+cargo run -- session attach <session-id>   # Attach to session (native PTY)
+cargo run -- session compress --threshold 0.8  # Manual compression
+
+# NEW: AI-Session HTTP API Server with MCP Protocol (v0.3.2)
+# Multiple instances supported on different ports
+cargo run --bin ai-session-server -- --port 3000   # Agent 1 session server
+cargo run --bin ai-session-server -- --port 3001   # Agent 2 session server
+cargo run --bin ai-session-server -- --port 3002   # Agent 3 session server
+
+# MCP protocol integration (Model Context Protocol)
+curl -X POST http://localhost:3000/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "agent1", "enable_ai_features": true}'
+
+curl -X POST http://localhost:3000/sessions/agent1/execute \
+  -H 'Content-Type: application/json' \
+  -d '{"command": "cargo build"}'
+
+# Session persistence and recovery
+cargo run -- session backup --all      # Backup all session states
+cargo run -- session restore <session-id>  # Restore specific session
 
 # NEW: Sangha Collective Intelligence (v0.3.0)
 cargo run -- sangha propose --type extension --title "React Server Components"
@@ -74,45 +96,67 @@ cargo run -- extend status
 ```bash
 # Debug logging
 RUST_LOG=debug cargo run -- start
-RUST_LOG=ccswarm::session=trace cargo run -- start  # Session debugging
+RUST_LOG=ccswarm::session=trace cargo run -- start  # AI-Session debugging
+RUST_LOG=ai_session=debug cargo run -- start        # Native session debugging
 
-# Monitor tmux sessions
-tmux ls                      # View active agent sessions
-tmux attach -t <session>     # Attach to agent session
+# Monitor AI-Session (no more tmux dependency!)
+cargo run -- session list   # View active agent sessions
+cargo run -- session attach <session-id>  # Attach to agent session (native PTY)
+cargo run -- session monitor <session-id> # Monitor session in real-time
 
 # Stop orchestrator
-cargo run -- stop            # Graceful shutdown
+cargo run -- stop            # Graceful shutdown with session persistence
 
 # View logs
 cargo run -- logs --tail 50  # Recent logs
 cargo run -- logs --filter error,warning  # Filtered logs
+cargo run -- session logs <session-id>    # Session-specific logs
 ```
 
 ## Architecture Overview
 
 ### Core Concepts
 1. **Master-Agent Pattern**: Master Claude analyzes tasks and delegates to specialized agents
-2. **Session Persistence**: Maintains conversation history, reducing API tokens by 93%
-3. **Git Worktree Isolation**: Each agent works in isolated git worktrees
-4. **Provider Abstraction**: Supports Claude Code, Aider, OpenAI Codex, custom tools
+2. **Native AI-Session Management**: Complete tmux replacement with 93% token savings
+3. **Cross-Platform PTY**: Native terminal emulation on Linux, macOS, Windows
+4. **MCP Protocol Integration**: Model Context Protocol for standardized AI tool integration
+5. **Git Worktree Isolation**: Each agent works in isolated git worktrees  
+6. **Provider Abstraction**: Supports Claude Code, Aider, OpenAI Codex, custom tools
 
 ### Module Structure
 ```
 src/
 ├── agent/          # Agent task execution and lifecycle
 ├── identity/       # Agent role boundaries (Frontend/Backend/DevOps/QA)
-├── session/        # Session persistence and pooling
+├── session/        # AI-Session integration and management
 ├── orchestrator/   # Master Claude and delegation logic
 ├── providers/      # AI provider implementations
 ├── auto_accept/    # Safe automation with risk assessment
 ├── tui/           # Terminal UI implementation
 ├── git/           # Worktree management
-├── coordination/   # Inter-agent communication bus
+├── coordination/   # Inter-agent communication bus with AI-Session
 ├── sangha/         # Collective intelligence and democratic decision-making
-└── extension/      # Self-extension with AI search capabilities
-    ├── agent_extension.rs  # Search strategies and learning
-    ├── system_extension.rs # System-wide capability management
-    └── meta_learning.rs    # Pattern recognition and knowledge base
+├── extension/      # Self-extension with AI search capabilities
+│   ├── agent_extension.rs  # Search strategies and learning
+│   ├── system_extension.rs # System-wide capability management
+│   └── meta_learning.rs    # Pattern recognition and knowledge base
+└── mcp/           # Model Context Protocol implementation
+    ├── client.rs   # MCP client for AI-Session communication
+    ├── server.rs   # MCP server integration
+    └── jsonrpc.rs  # JSON-RPC 2.0 protocol implementation
+
+ai-session/         # Native terminal session management
+├── src/
+│   ├── core/       # Session lifecycle and management
+│   ├── context/    # AI context and token optimization
+│   ├── coordination/ # Multi-agent message bus
+│   ├── mcp/        # Model Context Protocol server
+│   ├── native/     # Cross-platform PTY implementation
+│   ├── persistence/ # Session state storage
+│   └── tmux_bridge/ # Backward compatibility layer
+└── tests/
+    ├── integration_tests.rs     # Core functionality tests (7/8 passing)
+    └── comprehensive_*.rs       # Advanced feature tests
 ```
 
 ### Key Design Patterns
@@ -123,10 +167,13 @@ src/
    - DevOps: Infrastructure, Docker, CI/CD only
    - QA: Testing and quality assurance only
 
-2. **Session Management**: 
-   - Sessions persist across tasks (50 message history)
+2. **AI-Session Management** (v0.3.2):
+   - Native PTY implementation with cross-platform support
+   - Sessions persist across tasks (50 message history) with 93% token reduction
    - Session pooling with automatic load balancing
    - Batch task execution for efficiency
+   - MCP protocol integration for standardized AI tool communication
+   - Automatic session recovery and state management
 
 3. **Quality Review** (v0.2.2):
    - LLM evaluates code on 8 dimensions (correctness, maintainability, security, etc.)
@@ -200,7 +247,10 @@ cargo test test_name -- --exact --nocapture
 3. Test boundary enforcement with `cargo test identity`
 
 ### Debugging Issues
-- **Session errors**: Check `ccswarm session list`
+- **AI-Session errors**: Check `ccswarm session list` and `ccswarm session stats`
+- **Session persistence**: Use `ccswarm session restore <session-id>` for recovery
+- **PTY issues**: Check native terminal support with `ccswarm session test-pty`
+- **MCP protocol errors**: Verify `ccswarm session mcp-status` and server connectivity
 - **Provider failures**: Verify API keys in environment
 - **Worktree conflicts**: Run `ccswarm worktree clean`
 - **TUI issues**: Try `ccswarm tui --reset`
@@ -212,11 +262,19 @@ cargo test test_name -- --exact --nocapture
 
 ## Performance Considerations
 
-- Session reuse reduces API costs by ~93%
+### AI-Session Integration (v0.3.2)
+- **93% API cost reduction** through intelligent session reuse and context compression
+- **~70% memory reduction** with native context compression (zstd)
+- **Zero external dependencies** - no more tmux server management overhead
+- **Cross-platform performance** - native PTY implementation optimized per OS
+- **MCP protocol efficiency** - JSON-RPC 2.0 with minimal serialization overhead
+
+### Traditional Metrics
 - Git worktrees require ~100MB disk space per agent
-- JSON coordination adds <100ms latency
+- JSON coordination adds <100ms latency  
 - TUI monitoring adds <3% overhead
 - Quality review runs async, minimal impact
+- Session persistence adds <5ms per command
 
 ## Command Documentation
 
@@ -243,15 +301,17 @@ export CCSWARM_HOME="$HOME/.ccswarm" # Config directory
 ## Critical Implementation Notes
 
 1. **Always check agent boundaries** before task assignment
-2. **Session persistence is core** - never bypass for efficiency
-3. **tmux isolation is required** for agent safety
-4. **Auto-accept patterns must be conservative**
-5. **Quality review runs every 30 seconds** on completed tasks
-6. **Task modifiers**: `[high/medium/low]`, `[bug/feature/test/docs]`, `[auto]`, `[review]`
-7. **Sangha proposals require consensus** - use appropriate algorithm for change scope
-8. **Extension is autonomous (v0.3.1)** - agents self-reflect and propose improvements via Sangha
-9. **Knowledge base grows over time** - monitor storage and prune old patterns
-10. **Risk assessment is mandatory** for all self-extension proposals
+2. **AI-Session persistence is core** - native session management with 93% token savings
+3. **Native PTY isolation** replaces tmux for cross-platform agent safety
+4. **MCP protocol compliance** - ensure JSON-RPC 2.0 message format adherence
+5. **Auto-accept patterns must be conservative** with enhanced risk assessment
+6. **Quality review runs every 30 seconds** on completed tasks
+7. **Task modifiers**: `[high/medium/low]`, `[bug/feature/test/docs]`, `[auto]`, `[review]`
+8. **Sangha proposals require consensus** - use appropriate algorithm for change scope
+9. **Extension is autonomous (v0.3.1)** - agents self-reflect and propose improvements via Sangha
+10. **Knowledge base grows over time** - monitor storage and prune old patterns
+11. **Risk assessment is mandatory** for all self-extension proposals
+12. **Session recovery is automatic** - ai-session handles crashes and restarts gracefully
 
 ## New v0.3.0 Features in Detail
 

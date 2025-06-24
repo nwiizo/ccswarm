@@ -15,15 +15,19 @@ pub mod extension;
 pub mod extension_stub;
 pub mod git;
 pub mod identity;
+pub mod mcp;
 pub mod monitoring;
 pub mod orchestrator;
 pub mod providers;
 // Temporarily disabled due to compilation issues
 // pub mod sangha;
+pub mod security;
 pub mod session;
 pub mod streaming;
-pub mod tmux;
+// Use ai-session's tmux bridge instead of our own tmux module
+pub use ai_session::tmux_bridge as tmux;
 pub mod tui;
+pub mod utils;
 pub mod workspace;
 
 #[cfg(test)]

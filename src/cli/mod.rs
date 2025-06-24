@@ -7,6 +7,9 @@ use crate::agent::{Priority, Task, TaskType};
 use crate::config::CcswarmConfig;
 use crate::orchestrator::MasterClaude;
 
+mod output;
+use output::{create_formatter, OutputFormatter};
+
 /// ccswarm - Claude Code統括型マルチエージェントシステム
 #[derive(Parser)]
 #[command(name = "ccswarm")]
@@ -617,6 +620,7 @@ pub struct CliRunner {
     config: CcswarmConfig,
     repo_path: PathBuf,
     json_output: bool,
+    formatter: OutputFormatter,
 }
 
 impl CliRunner {
@@ -632,10 +636,13 @@ impl CliRunner {
             create_default_config(&cli.repo)?
         };
 
+        let formatter = create_formatter(cli.json);
+        
         Ok(Self {
             config,
             repo_path: cli.repo.clone(),
             json_output: cli.json,
+            formatter,
         })
     }
 
@@ -739,22 +746,15 @@ impl CliRunner {
         let config_file = self.repo_path.join("ccswarm.json");
         config.to_file(config_file).await?;
 
-        if self.json_output {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "success",
-                    "message": "Project initialized",
-                    "project": name,
-                    "agents": agents,
-                }))?
-            );
-        } else {
-            println!("✅ ccswarm project '{}' initialized", name);
-            if !agents.is_empty() {
-                println!("   Agents: {}", agents.join(", "));
-            }
-        }
+        let data = serde_json::json!({
+            "project": name,
+            "agents": agents,
+        });
+        
+        println!("{}", self.formatter.format_success(
+            &format!("ccswarm project '{}' initialized", name),
+            Some(data)
+        ));
 
         Ok(())
     }
@@ -1353,6 +1353,9 @@ fn create_default_config(repo_path: &Path) -> Result<CcswarmConfig> {
                 think_mode: crate::config::ThinkMode::UltraThink,
                 permission_level: "supervised".to_string(),
                 claude_config: crate::config::ClaudeConfig::for_master(),
+                enable_proactive_mode: true,   // デフォルト有効
+                proactive_frequency: 30,      // 30秒間隔
+                high_frequency: 15,           // 高頻度15秒間隔
             },
         },
         agents,
@@ -1693,44 +1696,269 @@ impl CliRunner {
                 background,
             } => {
                 let workspace_path = workspace.as_deref().unwrap_or("./");
-
-                if self.json_output {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "status": "success",
-                            "message": "Session created",
-                            "agent": agent,
-                            "workspace": workspace_path,
-                            "background": background,
-                        }))?
-                    );
-                } else {
-                    println!("🚀 Creating session for {} agent", agent);
-                    println!("   Workspace: {}", workspace_path);
-                    println!("   Background: {}", background);
-                    println!("   ✅ Session created successfully");
+                let _workspace_pathbuf = std::path::Path::new(workspace_path).to_path_buf();
+                
+                // Determine agent role from agent type
+                let _agent_role = match agent.to_lowercase().as_str() {
+                    "frontend" => crate::identity::default_frontend_role(),
+                    "backend" => crate::identity::default_backend_role(),
+                    "devops" => crate::identity::default_devops_role(),
+                    "qa" => crate::identity::default_qa_role(),
+                    _ => {
+                        if self.json_output {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": "Invalid agent type",
+                                    "agent": agent,
+                                    "valid_types": ["frontend", "backend", "devops", "qa"],
+                                }))?
+                            );
+                        } else {
+                            println!("❌ Invalid agent type: {}", agent);
+                            println!("   Valid types: frontend, backend, devops, qa");
+                        }
+                        return Ok(());
+                    }
+                };
+                
+                // Create session directly using tmux command
+                let session_id = uuid::Uuid::new_v4();
+                let agent_id = format!("{}-{}", agent, &session_id.to_string()[..8]);
+                let tmux_session_name = format!("ccswarm-{}-{}", agent, &session_id.to_string()[..8]);
+                
+                // Create tmux session using command
+                let create_result = tokio::process::Command::new("tmux")
+                    .args(&[
+                        "new-session",
+                        "-d", // detached
+                        "-s", &tmux_session_name,
+                        "-c", workspace_path,
+                    ])
+                    .status()
+                    .await;
+                
+                match create_result {
+                    Ok(status) => {
+                        if status.success() {
+                            // Set some environment variables in the session
+                            let _ = tokio::process::Command::new("tmux")
+                                .args(&[
+                                    "setenv",
+                                    "-t", &tmux_session_name,
+                                    "CCSWARM_AGENT_ID", &agent_id,
+                                ])
+                                .status()
+                                .await;
+                            
+                            let _ = tokio::process::Command::new("tmux")
+                                .args(&[
+                                    "setenv",
+                                    "-t", &tmux_session_name,
+                                    "CCSWARM_AGENT_ROLE", agent,
+                                ])
+                                .status()
+                                .await;
+                            
+                            if self.json_output {
+                                println!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&serde_json::json!({
+                                        "status": "success",
+                                        "message": "Session created",
+                                        "session_id": session_id.to_string(),
+                                        "agent_id": agent_id,
+                                        "agent": agent,
+                                        "workspace": workspace_path,
+                                        "background": background,
+                                        "tmux_session": tmux_session_name,
+                                    }))?
+                                );
+                            } else {
+                                println!("🚀 Creating session for {} agent", agent);
+                                println!("   Session ID: {}", &session_id.to_string()[..8]);
+                                println!("   Agent ID: {}", agent_id);
+                                println!("   Workspace: {}", workspace_path);
+                                println!("   Tmux Session: {}", tmux_session_name);
+                                println!("   Background: {}", background);
+                                println!("   ✅ Session created successfully");
+                                println!();
+                                println!("To attach to this session:");
+                                println!("   tmux attach -t {}", tmux_session_name);
+                            }
+                        } else {
+                            if self.json_output {
+                                println!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&serde_json::json!({
+                                        "status": "error",
+                                        "message": "Failed to create tmux session",
+                                    }))?
+                                );
+                            } else {
+                                println!("❌ Failed to create tmux session");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if self.json_output {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": "Failed to run tmux command",
+                                    "error": e.to_string(),
+                                }))?
+                            );
+                        } else {
+                            println!("❌ Failed to run tmux command: {}", e);
+                            println!("   Make sure tmux is installed");
+                        }
+                    }
                 }
             }
 
             SessionAction::List { all } => {
-                // TODO: Implement session listing
-                if self.json_output {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "status": "success",
-                            "message": "Sessions listed",
-                            "sessions": [],
-                            "show_all": all,
-                        }))?
-                    );
+                // Use tmux command directly to avoid runtime conflicts
+                let output = match tokio::process::Command::new("tmux")
+                    .args(&["list-sessions", "-F", "#{session_name}:#{session_created}:#{session_attached}"])
+                    .output()
+                    .await
+                {
+                    Ok(output) => output,
+                    Err(e) => {
+                        if self.json_output {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": "Failed to run tmux",
+                                    "error": e.to_string(),
+                                }))?
+                            );
+                        } else {
+                            println!("❌ Failed to run tmux: {}", e);
+                            println!("   Make sure tmux is installed");
+                        }
+                        return Ok(());
+                    }
+                };
+                
+                if output.status.success() {
+                    let sessions_str = String::from_utf8_lossy(&output.stdout);
+                    let sessions: Vec<&str> = sessions_str.lines().collect();
+                    
+                    // Filter for ccswarm or ai-session sessions
+                    let ccswarm_sessions: Vec<_> = sessions
+                        .iter()
+                        .filter(|s| {
+                            let parts: Vec<&str> = s.split(':').collect();
+                            if !parts.is_empty() {
+                                let name = parts[0];
+                                name.starts_with("ccswarm-") || name.starts_with("ai-session-")
+                            } else {
+                                false
+                            }
+                        })
+                        .collect();
+                    
+                    if self.json_output {
+                        let session_data: Vec<serde_json::Value> = ccswarm_sessions.iter().map(|s| {
+                            let parts: Vec<&str> = s.split(':').collect();
+                            let name = parts.get(0).unwrap_or(&"");
+                            let created = parts.get(1).unwrap_or(&"");
+                            let attached = parts.get(2).unwrap_or(&"0");
+                            
+                            // Parse agent info from session name
+                            let name_parts: Vec<&str> = name.split('-').collect();
+                            let agent_role = if name_parts.len() >= 2 { name_parts[1] } else { "unknown" };
+                            
+                            serde_json::json!({
+                                "tmux_session": name,
+                                "agent_role": agent_role,
+                                "created_at": created,
+                                "attached": *attached != "0",
+                                "active": true,
+                            })
+                        }).collect();
+                        
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "status": "success",
+                                "message": "Sessions listed",
+                                "sessions": session_data,
+                                "show_all": all,
+                            }))?
+                        );
+                    } else {
+                        println!("📋 Active Sessions");
+                        println!("=================");
+                        
+                        if ccswarm_sessions.is_empty() {
+                            println!("No active sessions found");
+                            if !*all {
+                                println!("(Use --all to show all tmux sessions)");
+                            }
+                        } else {
+                            for session in &ccswarm_sessions {
+                                let parts: Vec<&str> = session.split(':').collect();
+                                let name = parts.get(0).unwrap_or(&"");
+                                let created = parts.get(1).unwrap_or(&"");
+                                let attached = parts.get(2).unwrap_or(&"0");
+                                
+                                // Parse agent info from session name
+                                let name_parts: Vec<&str> = name.split('-').collect();
+                                let agent_role = if name_parts.len() >= 2 { name_parts[1] } else { "unknown" };
+                                
+                                println!("Tmux Session: {}", name);
+                                println!("  Agent Role: {}", agent_role);
+                                println!("  Created: {}", created);
+                                if *attached != "0" {
+                                    println!("  Status: Attached");
+                                } else {
+                                    println!("  Status: Detached");
+                                }
+                                println!();
+                            }
+                        }
+                        
+                        // Also show all tmux sessions if requested
+                        if *all && !sessions.is_empty() {
+                            println!("\nAll Tmux Sessions:");
+                            println!("==================");
+                            for s in &sessions {
+                                let parts: Vec<&str> = s.split(':').collect();
+                                let name = parts.get(0).unwrap_or(&"");
+                                let created = parts.get(1).unwrap_or(&"");
+                                
+                                if !name.starts_with("ccswarm-") && !name.starts_with("ai-session-") {
+                                    println!("  {} (created: {})", name, created);
+                                }
+                            }
+                        }
+                    }
                 } else {
-                    println!("📋 Active Sessions");
-                    println!("=================");
-                    println!("No active sessions found");
-                    if *all {
-                        println!("(Showing all sessions including inactive)");
+                    let error_msg = String::from_utf8_lossy(&output.stderr);
+                    if self.json_output {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "status": "error",
+                                "message": "tmux command failed",
+                                "error": error_msg.trim(),
+                            }))?
+                        );
+                    } else {
+                        if error_msg.contains("no sessions") || error_msg.contains("no server") {
+                            println!("📋 Active Sessions");
+                            println!("=================");
+                            println!("No tmux sessions found");
+                            println!("(Start tmux server with 'tmux new-session -d -s temp && tmux kill-session -t temp')");
+                        } else {
+                            println!("❌ tmux command failed: {}", error_msg.trim());
+                        }
                     }
                 }
             }
@@ -1768,20 +1996,124 @@ impl CliRunner {
             }
 
             SessionAction::Attach { session_id } => {
-                if self.json_output {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "status": "success",
-                            "message": "Attached to session",
-                            "session_id": session_id,
-                        }))?
-                    );
+                // First check if the session exists
+                let list_output = match tokio::process::Command::new("tmux")
+                    .args(&["list-sessions", "-F", "#{session_name}"])
+                    .output()
+                    .await
+                {
+                    Ok(output) => output,
+                    Err(e) => {
+                        if self.json_output {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": "Failed to run tmux",
+                                    "error": e.to_string(),
+                                }))?
+                            );
+                        } else {
+                            println!("❌ Failed to run tmux: {}", e);
+                        }
+                        return Ok(());
+                    }
+                };
+                
+                if list_output.status.success() {
+                    let sessions_str = String::from_utf8_lossy(&list_output.stdout);
+                    let sessions: Vec<&str> = sessions_str.lines().collect();
+                    
+                    // Look for session that matches the ID or contains it as prefix
+                    let matching_session = sessions
+                        .iter()
+                        .find(|s| {
+                            **s == *session_id || 
+                            s.contains(session_id) ||
+                            (session_id.len() >= 8 && s.contains(&session_id[..8]))
+                        });
+                    
+                    if let Some(session_name) = matching_session {
+                        // Attach to the session using tmux directly
+                        let attach_result = tokio::process::Command::new("tmux")
+                            .args(&["attach-session", "-t", session_name])
+                            .status()
+                            .await;
+                        
+                        match attach_result {
+                            Ok(status) => {
+                                if status.success() {
+                                    // This won't be reached if attach is successful,
+                                    // as we'll be in the tmux session
+                                    if self.json_output {
+                                        println!(
+                                            "{}",
+                                            serde_json::to_string_pretty(&serde_json::json!({
+                                                "status": "success",
+                                                "message": "Attached to session",
+                                                "session_id": session_id,
+                                                "tmux_session": session_name,
+                                            }))?
+                                        );
+                                    }
+                                } else {
+                                    if self.json_output {
+                                        println!(
+                                            "{}",
+                                            serde_json::to_string_pretty(&serde_json::json!({
+                                                "status": "error",
+                                                "message": "Failed to attach to session",
+                                                "session_id": session_id,
+                                            }))?
+                                        );
+                                    } else {
+                                        println!("❌ Failed to attach to session");
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                if self.json_output {
+                                    println!(
+                                        "{}",
+                                        serde_json::to_string_pretty(&serde_json::json!({
+                                            "status": "error",
+                                            "message": "Failed to run tmux attach",
+                                            "error": e.to_string(),
+                                        }))?
+                                    );
+                                } else {
+                                    println!("❌ Failed to run tmux attach: {}", e);
+                                }
+                            }
+                        }
+                    } else {
+                        if self.json_output {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": "Session not found",
+                                    "session_id": session_id,
+                                }))?
+                            );
+                        } else {
+                            println!("❌ Session not found: {}", session_id);
+                            println!("   Use 'ccswarm session list' to see available sessions");
+                        }
+                    }
                 } else {
-                    println!("🔗 Attaching to session: {}", session_id);
-                    println!("   ✅ Attached successfully");
-                    println!("   Use Ctrl+B, D to detach");
-                }
+                    if self.json_output {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "status": "error",
+                                "message": "Failed to list tmux sessions",
+                            }))?
+                        );
+                    } else {
+                        println!("❌ Failed to list tmux sessions");
+                    }
+            }
             }
 
             SessionAction::Detach { session_id } => {
@@ -1801,23 +2133,130 @@ impl CliRunner {
             }
 
             SessionAction::Kill { session_id, force } => {
-                if self.json_output {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "status": "success",
-                            "message": "Session killed",
-                            "session_id": session_id,
-                            "force": force,
-                        }))?
-                    );
-                } else {
-                    println!("💀 Killing session: {}", session_id);
-                    if *force {
-                        println!("   ⚠️ Force kill enabled");
+                // First check if the session exists
+                let list_output = match tokio::process::Command::new("tmux")
+                    .args(&["list-sessions", "-F", "#{session_name}"])
+                    .output()
+                    .await
+                {
+                    Ok(output) => output,
+                    Err(e) => {
+                        if self.json_output {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": "Failed to run tmux",
+                                    "error": e.to_string(),
+                                }))?
+                            );
+                        } else {
+                            println!("❌ Failed to run tmux: {}", e);
+                        }
+                        return Ok(());
                     }
-                    println!("   ✅ Session killed successfully");
-                }
+                };
+                
+                if list_output.status.success() {
+                    let sessions_str = String::from_utf8_lossy(&list_output.stdout);
+                    let sessions: Vec<&str> = sessions_str.lines().collect();
+                    
+                    // Look for session that matches the ID or contains it as prefix
+                    let matching_session = sessions
+                        .iter()
+                        .find(|s| {
+                            **s == *session_id || 
+                            s.contains(session_id) ||
+                            (session_id.len() >= 8 && s.contains(&session_id[..8]))
+                        });
+                    
+                    if let Some(session_name) = matching_session {
+                        // Kill the session using tmux directly
+                        let kill_result = tokio::process::Command::new("tmux")
+                            .args(&["kill-session", "-t", session_name])
+                            .status()
+                            .await;
+                        
+                        match kill_result {
+                            Ok(status) => {
+                                if status.success() {
+                                    if self.json_output {
+                                        println!(
+                                            "{}",
+                                            serde_json::to_string_pretty(&serde_json::json!({
+                                                "status": "success",
+                                                "message": "Session killed",
+                                                "session_id": session_id,
+                                                "tmux_session": session_name,
+                                                "force": force,
+                                            }))?
+                                        );
+                                    } else {
+                                        println!("💀 Killing session: {}", session_id);
+                                        println!("   Tmux session: {}", session_name);
+                                        if *force {
+                                            println!("   ⚠️ Force kill enabled");
+                                        }
+                                        println!("   ✅ Session killed successfully");
+                                    }
+                                } else {
+                                    if self.json_output {
+                                        println!(
+                                            "{}",
+                                            serde_json::to_string_pretty(&serde_json::json!({
+                                                "status": "error",
+                                                "message": "Failed to kill session",
+                                                "session_id": session_id,
+                                            }))?
+                                        );
+                                    } else {
+                                        println!("❌ Failed to kill session");
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                if self.json_output {
+                                    println!(
+                                        "{}",
+                                        serde_json::to_string_pretty(&serde_json::json!({
+                                            "status": "error",
+                                            "message": "Failed to run tmux kill-session",
+                                            "error": e.to_string(),
+                                        }))?
+                                    );
+                                } else {
+                                    println!("❌ Failed to run tmux kill-session: {}", e);
+                                }
+                            }
+                        }
+                    } else {
+                        if self.json_output {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": "Session not found",
+                                    "session_id": session_id,
+                                }))?
+                            );
+                        } else {
+                            println!("❌ Session not found: {}", session_id);
+                            println!("   Use 'ccswarm session list' to see available sessions");
+                        }
+                    }
+                } else {
+                    if self.json_output {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "status": "error",
+                                "message": "Failed to list tmux sessions",
+                            }))?
+                        );
+                    } else {
+                        println!("❌ Failed to list tmux sessions");
+                    }
+            }
             }
         }
 

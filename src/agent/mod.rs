@@ -7,6 +7,7 @@ pub mod phronesis;
 pub mod pool;
 pub mod simple;
 pub mod task;
+pub mod task_builder;
 pub mod whiteboard;
 
 use anyhow::{Context, Result};
@@ -20,6 +21,7 @@ pub use isolation::{IsolationConfig, IsolationMode};
 pub use personality::{AgentPersonality, PersonalityTraits, Skill, TaskApproach, WorkingStyle};
 pub use phronesis::{LearningEventType, PhronesisManager, PracticalWisdom, WisdomCategory};
 pub use task::{Priority, Task, TaskResult, TaskType};
+pub use task_builder::TaskBuilder;
 pub use whiteboard::{AnnotationMarker, EntryType, Whiteboard, WhiteboardEntry};
 
 use self::interleaved_thinking::{Decision, InterleavedThinkingEngine};
