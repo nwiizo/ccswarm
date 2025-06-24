@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "ai-session"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "async-trait",
