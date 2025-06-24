@@ -49,6 +49,8 @@ The workspace configuration enables:
 │  - Native PTY implementation                                 │
 │  - Context compression (93% token savings)                   │
 │  - Session persistence and recovery                          │
+│  - Multi-agent coordination bus                              │
+│  📖 See: ../crates/ai-session/docs/ARCHITECTURE.md          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -85,11 +87,14 @@ Specialized AI agents with strict role boundaries.
 ### 3. AI-Session Integration (`crates/ccswarm/src/session/`)
 Revolutionary session management powered by the ai-session crate, replacing tmux entirely.
 
+📖 **For complete AI-Session documentation**: [../crates/ai-session/docs/README.md](../crates/ai-session/docs/README.md)
+
 #### AI-Session Adapter (`ai_session_adapter.rs`)
 - **Bridge Layer**: Connects ccswarm orchestrator with ai-session crate (located in `crates/ai-session/`)
 - **Session Lifecycle**: Creates, manages, and terminates ai-session instances for each agent
 - **Context Compression**: Leverages ai-session's 93% token reduction capabilities
 - **Cross-Platform PTY**: Uses ai-session's native PTY implementation
+- **Integration API**: See [../crates/ai-session/docs/ccswarm-integration-api.md](../crates/ai-session/docs/ccswarm-integration-api.md)
 - **Message Bus Integration**: Coordinates multi-agent communication via ai-session's coordination layer
 
 #### AI-Session Features Used by ccswarm

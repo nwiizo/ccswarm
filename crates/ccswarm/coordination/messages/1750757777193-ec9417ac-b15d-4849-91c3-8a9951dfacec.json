@@ -1,7 +1,0 @@
-{
-  "RequestAssistance": {
-    "agent_id": "frontend-agent",
-    "task_id": "task-2",
-    "reason": "Need backend API specification"
-  }
-}

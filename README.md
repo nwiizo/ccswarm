@@ -271,9 +271,39 @@ let session = SessionManager::new()
     .create_session_with_ai_features().await?;
 ```
 
+## 🤔 When to Use Which Crate?
+
+### 🚀 Use ccswarm when you want:
+- **Full AI orchestration** with Master Claude making intelligent decisions
+- **Multi-agent workflows** with specialized roles (Frontend, Backend, DevOps, QA)
+- **Autonomous task generation** and proactive intelligence
+- **Quality review systems** with automatic remediation
+- **Sangha collective intelligence** for democratic decision-making
+- **Auto-create functionality** to generate complete applications
+- **Enterprise AI development** with comprehensive governance
+
+### 🧠 Use ai-session when you want:
+- **AI-optimized terminal sessions** for any application (not just ccswarm)
+- **93% token savings** through intelligent context compression
+- **Native PTY management** without tmux dependencies
+- **Multi-agent coordination** in your own AI systems
+- **Session persistence** and crash recovery
+- **MCP protocol server** for AI tool integration
+- **Semantic output parsing** for builds, tests, and logs
+- **Building your own AI tools** that need terminal management
+
+### 🔗 Use both when you want:
+- **The complete AI development experience** (recommended)
+- **Gradual adoption**: Start with ai-session, add ccswarm orchestration later
+- **Hybrid workflows**: Manual ai-session for experimentation, ccswarm for production
+- **Team scenarios**: Different team members using different levels of automation
+
+---
+
 ## 📋 Core Commands
 
-> 📖 **Full command documentation available in `.claude/commands/`**
+> 📖 **ccswarm commands**: Full documentation in `.claude/commands/`  
+> 🧠 **ai-session commands**: See [AI-Session CLI Guide](crates/ai-session/docs/CLI_GUIDE.md)
 
 ### Basic Operations
 ```bash

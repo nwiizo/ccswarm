@@ -1,7 +1,0 @@
-{
-  "RequestAssistance": {
-    "agent_id": "error-prone-agent",
-    "task_id": "failed-task",
-    "reason": "Connection timeout during task execution"
-  }
-}

@@ -1,7 +1,0 @@
-{
-  "RequestAssistance": {
-    "agent_id": "backend-agent-1",
-    "task_id": "complex-task-1",
-    "reason": "Need help with database optimization"
-  }
-}

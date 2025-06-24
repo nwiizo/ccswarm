@@ -1,7 +1,0 @@
-{
-  "QualityIssue": {
-    "agent_id": "test-agent",
-    "task_id": "empty-issues-task",
-    "issues": []
-  }
-}

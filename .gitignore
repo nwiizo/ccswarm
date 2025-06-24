@@ -24,6 +24,9 @@ Thumbs.db
 coordination/agent-status/*
 coordination/messages/*
 coordination/task-queue/*
+crates/ccswarm/coordination/agent-status/*
+crates/ccswarm/coordination/messages/*
+crates/ccswarm/coordination/task-queue/*
 
 # Node.js (for examples)
 node_modules/
@@ -75,6 +78,7 @@ demos/*/.pnp.*
 test-project/
 test_todo_project/
 demo-project*/
+crates/ccswarm/test-projects/
 
 # Temporary documentation files
 COMPILATION_FIX_SUMMARY.md

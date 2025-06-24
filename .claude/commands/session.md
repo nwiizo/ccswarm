@@ -120,3 +120,10 @@ $ ccswarm session cleanup
 - `ccswarm agent list` - View agents and their sessions
 - `ccswarm task` - Create tasks for sessions
 - `ccswarm tui` - Monitor sessions in real-time
+- `ai-session` - Direct AI-Session CLI commands ([ai-session.md](ai-session.md))
+
+## Related Documentation
+- **[AI-Session Documentation Hub](../crates/ai-session/docs/README.md)** - Complete AI-Session documentation
+- **[AI-Session CLI Guide](../crates/ai-session/docs/CLI_GUIDE.md)** - Standalone AI-Session commands
+- **[ccswarm Integration API](../crates/ai-session/docs/ccswarm-integration-api.md)** - Technical integration details
+- **[Architecture Overview](../docs/ARCHITECTURE.md)** - How sessions fit in the overall system
