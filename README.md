@@ -27,7 +27,7 @@
 - **Security Reporting**: Detailed reports with remediation suggestions
 
 ### 🖥️ Native Terminal Management
-- **Complete tmux Replacement**: ai-session with zero external dependencies
+- **Native Session Management**: ai-session with zero external dependencies (no tmux required)
 - **93% Token Savings**: Intelligent conversation history compression and reuse
 - **Cross-Platform PTY**: Native terminal emulation on Linux, macOS, and Windows
 - **MCP Protocol Support**: Model Context Protocol for seamless AI integration
@@ -140,7 +140,7 @@ ccswarm v0.3.4 features a comprehensive multi-layer architecture designed for au
 ```
 
 ### Key Benefits
-- **🚀 Zero External Dependencies**: No tmux server management required
+- **🚀 Zero External Dependencies**: No external session managers required
 - **🔄 Native Session Recovery**: Automatic session restoration on startup
 - **⚡ Performance**: ~70% memory reduction with intelligent context compression
 - **🌐 Cross-Platform**: Works identically on Linux, macOS, Windows
@@ -501,8 +501,8 @@ RUST_LOG=debug ccswarm start
 # Session debugging
 RUST_LOG=ccswarm::session=trace ccswarm start
 
-# View tmux sessions
-tmux ls
+# View ai-sessions
+ccswarm session list
 ```
 
 ## 🧪 Testing

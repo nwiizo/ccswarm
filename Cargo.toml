@@ -104,6 +104,11 @@ pretty_assertions = "1.4"
 [profile.release]
 opt-level = 3
 lto = true
+codegen-units = 1
+strip = true
+
+[profile.bench]
+debug = true
 
 # Examples temporarily disabled for CI fix
 # [[example]]

@@ -1882,12 +1882,15 @@ impl CliRunner {
                                 println!("   Session ID: {}", &session_id.to_string()[..8]);
                                 println!("   Agent ID: {}", agent_id);
                                 println!("   Workspace: {}", workspace_path);
-                                println!("   Tmux Session: {}", tmux_session_name);
+                                println!("   AI Session: {}", tmux_session_name);
                                 println!("   Background: {}", background);
                                 println!("   ✅ Session created successfully");
                                 println!();
-                                println!("To attach to this session:");
-                                println!("   tmux attach -t {}", tmux_session_name);
+                                println!("To interact with this session:");
+                                println!(
+                                    "   ccswarm session attach {}",
+                                    &session_id.to_string()[..8]
+                                );
                             }
                         } else {
                             if self.json_output {
@@ -2029,7 +2032,7 @@ impl CliRunner {
                                     "unknown"
                                 };
 
-                                println!("Tmux Session: {}", name);
+                                println!("AI Session: {}", name);
                                 println!("  Agent Role: {}", agent_role);
                                 println!("  Created: {}", created);
                                 if *attached != "0" {
