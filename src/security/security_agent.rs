@@ -5,20 +5,20 @@ use std::collections::HashMap;
 use std::path::Path;
 use tracing::info;
 
-use super::owasp_checker::{OwaspChecker, OwaspCategory};
-use super::vulnerability_scanner::{VulnerabilityScanner, Vulnerability};
+use super::owasp_checker::{OwaspCategory, OwaspChecker};
+use super::vulnerability_scanner::{Vulnerability, VulnerabilityScanner};
 
 /// Security Agent for automated security analysis and vulnerability detection
 pub struct SecurityAgent {
     /// OWASP Top 10 checker
     owasp_checker: OwaspChecker,
-    
+
     /// Dependency vulnerability scanner
     vulnerability_scanner: VulnerabilityScanner,
-    
+
     /// Security check configuration
     config: SecurityConfig,
-    
+
     /// Security scan history
     scan_history: Vec<SecurityScanResult>,
 }
@@ -27,19 +27,19 @@ pub struct SecurityAgent {
 pub struct SecurityConfig {
     /// Minimum severity level to report
     pub min_severity: ViolationSeverity,
-    
+
     /// Whether to fail on any security violations
     pub fail_on_violations: bool,
-    
+
     /// OWASP categories to check
     pub enabled_owasp_categories: Vec<OwaspCategory>,
-    
+
     /// Whether to scan dependencies for vulnerabilities
     pub scan_dependencies: bool,
-    
+
     /// Maximum age of vulnerability database (days)
     pub max_vuln_db_age: u32,
-    
+
     /// Paths to exclude from scanning
     pub excluded_paths: Vec<String>,
 }
@@ -48,19 +48,19 @@ pub struct SecurityConfig {
 pub struct SecurityScanResult {
     /// Scan timestamp
     pub timestamp: DateTime<Utc>,
-    
+
     /// Path scanned
     pub path: String,
-    
+
     /// Security violations found
     pub violations: Vec<SecurityViolation>,
-    
+
     /// Vulnerabilities found
     pub vulnerabilities: Vec<Vulnerability>,
-    
+
     /// Overall security score (0.0 to 1.0)
     pub security_score: f64,
-    
+
     /// Scan duration in milliseconds
     pub duration_ms: u64,
 }
@@ -69,25 +69,25 @@ pub struct SecurityScanResult {
 pub struct SecurityViolation {
     /// Type of security check that failed
     pub check_type: SecurityCheck,
-    
+
     /// Severity of the violation
     pub severity: ViolationSeverity,
-    
+
     /// File where violation was found
     pub file_path: String,
-    
+
     /// Line number (if applicable)
     pub line_number: Option<u32>,
-    
+
     /// Description of the violation
     pub description: String,
-    
+
     /// Suggested fix
     pub suggested_fix: String,
-    
+
     /// CWE (Common Weakness Enumeration) ID if applicable
     pub cwe_id: Option<u32>,
-    
+
     /// OWASP category if applicable
     pub owasp_category: Option<OwaspCategory>,
 }
@@ -96,37 +96,37 @@ pub struct SecurityViolation {
 pub enum SecurityCheck {
     /// SQL injection vulnerability check
     SqlInjection,
-    
+
     /// Cross-Site Scripting (XSS) check
     CrossSiteScripting,
-    
+
     /// Broken authentication check
     BrokenAuthentication,
-    
+
     /// Sensitive data exposure check
     SensitiveDataExposure,
-    
+
     /// XML external entity (XXE) check
     XmlExternalEntity,
-    
+
     /// Broken access control check
     BrokenAccessControl,
-    
+
     /// Security misconfiguration check
     SecurityMisconfiguration,
-    
+
     /// Cross-Site Request Forgery (CSRF) check
     CrossSiteRequestForgery,
-    
+
     /// Using components with known vulnerabilities
     VulnerableComponents,
-    
+
     /// Insufficient logging and monitoring
     InsufficientLogging,
-    
+
     /// Hardcoded secrets check
     HardcodedSecrets,
-    
+
     /// Insecure dependencies
     InsecureDependencies,
 }
@@ -198,7 +198,10 @@ impl SecurityAgent {
 
         // Run OWASP checks
         if !self.config.enabled_owasp_categories.is_empty() {
-            let owasp_violations = self.owasp_checker.check_directory(path, &self.config.enabled_owasp_categories).await?;
+            let owasp_violations = self
+                .owasp_checker
+                .check_directory(path, &self.config.enabled_owasp_categories)
+                .await?;
             violations.extend(owasp_violations);
         }
 
@@ -232,9 +235,9 @@ impl SecurityAgent {
 
         info!(
             "Security scan completed in {}ms. Score: {:.2}, Violations: {}, Vulnerabilities: {}",
-            duration_ms, 
-            security_score, 
-            result.violations.len(), 
+            duration_ms,
+            security_score,
+            result.violations.len(),
             result.vulnerabilities.len()
         );
 
@@ -265,7 +268,11 @@ impl SecurityAgent {
     }
 
     /// Calculate overall security score based on violations and vulnerabilities
-    fn calculate_security_score(&self, violations: &[SecurityViolation], vulnerabilities: &[Vulnerability]) -> f64 {
+    fn calculate_security_score(
+        &self,
+        violations: &[SecurityViolation],
+        vulnerabilities: &[Vulnerability],
+    ) -> f64 {
         if violations.is_empty() && vulnerabilities.is_empty() {
             return 1.0; // Perfect score
         }
@@ -294,18 +301,17 @@ impl SecurityAgent {
         }
 
         // Ensure score is between 0.0 and 1.0
-        (1.0_f64 - penalty).max(0.0_f64).min(1.0_f64)
+        (1.0_f64 - penalty).clamp(0.0_f64, 1.0_f64)
     }
 
     /// Check if a path should be excluded from scanning
     fn should_exclude_path(&self, path: &Path) -> bool {
         let path_str = path.to_string_lossy();
-        
+
         for pattern in &self.config.excluded_paths {
             if pattern.contains('*') {
                 // Simple glob matching
-                if pattern.starts_with("*.") {
-                    let extension = &pattern[2..];
+                if let Some(extension) = pattern.strip_prefix("*.") {
                     if path_str.ends_with(extension) {
                         return true;
                     }
@@ -321,31 +327,34 @@ impl SecurityAgent {
     /// Generate security report
     pub fn generate_security_report(&self) -> SecurityReport {
         let total_scans = self.scan_history.len();
-        
+
         if total_scans == 0 {
             return SecurityReport::default();
         }
 
         let recent_scans = self.scan_history.iter().rev().take(10).collect::<Vec<_>>();
-        
-        let avg_score = recent_scans.iter()
-            .map(|s| s.security_score)
-            .sum::<f64>() / recent_scans.len() as f64;
 
-        let total_violations = recent_scans.iter()
+        let avg_score =
+            recent_scans.iter().map(|s| s.security_score).sum::<f64>() / recent_scans.len() as f64;
+
+        let total_violations = recent_scans
+            .iter()
             .map(|s| s.violations.len())
             .sum::<usize>();
 
-        let total_vulnerabilities = recent_scans.iter()
+        let total_vulnerabilities = recent_scans
+            .iter()
             .map(|s| s.vulnerabilities.len())
             .sum::<usize>();
 
-        let critical_violations = recent_scans.iter()
+        let critical_violations = recent_scans
+            .iter()
             .flat_map(|s| &s.violations)
             .filter(|v| v.severity == ViolationSeverity::Critical)
             .count();
 
-        let high_violations = recent_scans.iter()
+        let high_violations = recent_scans
+            .iter()
             .flat_map(|s| &s.violations)
             .filter(|v| v.severity == ViolationSeverity::High)
             .count();
@@ -438,7 +447,7 @@ mod tests {
     #[tokio::test]
     async fn test_should_exclude_path() {
         let agent = SecurityAgent::new().await.unwrap();
-        
+
         assert!(agent.should_exclude_path(Path::new("node_modules/some/file.js")));
         assert!(agent.should_exclude_path(Path::new("test.spec.ts")));
         assert!(!agent.should_exclude_path(Path::new("src/main.rs")));
@@ -447,25 +456,23 @@ mod tests {
     #[tokio::test]
     async fn test_security_score_calculation() {
         let agent = SecurityAgent::new().await.unwrap();
-        
+
         // Perfect score with no violations
         let score = agent.calculate_security_score(&[], &[]);
         assert_eq!(score, 1.0);
-        
+
         // Score with violations
-        let violations = vec![
-            SecurityViolation {
-                check_type: SecurityCheck::SqlInjection,
-                severity: ViolationSeverity::High,
-                file_path: "test.js".to_string(),
-                line_number: Some(10),
-                description: "SQL injection vulnerability".to_string(),
-                suggested_fix: "Use parameterized queries".to_string(),
-                cwe_id: Some(89),
-                owasp_category: Some(OwaspCategory::InjectionFlaws),
-            }
-        ];
-        
+        let violations = vec![SecurityViolation {
+            check_type: SecurityCheck::SqlInjection,
+            severity: ViolationSeverity::High,
+            file_path: "test.js".to_string(),
+            line_number: Some(10),
+            description: "SQL injection vulnerability".to_string(),
+            suggested_fix: "Use parameterized queries".to_string(),
+            cwe_id: Some(89),
+            owasp_category: Some(OwaspCategory::InjectionFlaws),
+        }];
+
         let score = agent.calculate_security_score(&violations, &[]);
         assert_eq!(score, 0.8); // 1.0 - 0.2 (high violation penalty)
     }
