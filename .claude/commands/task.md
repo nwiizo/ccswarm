@@ -271,5 +271,22 @@ Priority: High
 ## Related Commands
 - `ccswarm delegate` - Manual task delegation
 - `ccswarm agent list` - View available agents
-- `ccswarm session stats` - Task completion metrics
+- `ccswarm session stats` - Task completion metrics and AI-Session token savings
 - `ccswarm tui` - Monitor tasks in real-time
+- `ccswarm session` - Manage AI sessions for task execution
+
+## Task Execution & Sessions
+Tasks are executed within AI-Session contexts that provide:
+- **93% token savings** through intelligent conversation compression
+- **Context persistence** across task executions
+- **Session reuse** for related tasks on the same agent
+- **Automatic recovery** from crashes or restarts
+
+See [session.md](session.md) for detailed session management.
+
+## Related Documentation
+- **[Session Management](session.md)** - How tasks use AI sessions for execution
+- **[AI-Session Documentation](../crates/ai-session/docs/README.md)** - Complete session management guide
+- **[Agent Management](agents.md)** - Understanding specialized agents
+- **[Quality Review](quality.md)** - Automatic code quality checks
+- **[Architecture Overview](../docs/ARCHITECTURE.md)** - How tasks flow through the system

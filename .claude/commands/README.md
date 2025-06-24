@@ -33,7 +33,8 @@
 
 ### 🤖 Agent Management
 - [`agents`](agents.md) - List agents and their configurations
-- [`session`](session.md) - Session management commands
+- [`session`](session.md) - AI session management commands (93% token savings)
+- [`ai-session`](ai-session.md) - Direct AI-Session CLI commands
 - [`worktree`](worktree.md) - Manage Git worktrees
 
 ### 🎨 User Interface

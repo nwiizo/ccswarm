@@ -131,3 +131,21 @@ Note: There are two different `Message` types in ai-session:
 - `CoordinationMessage` - For inter-agent communication in MessageBus
 
 Make sure to use `ContextMessage` when working with SessionContext.
+
+## Related Documentation
+
+### ccswarm Documentation
+- **[ccswarm Documentation Hub](../../../docs/README.md)** - Master documentation index
+- **[ccswarm Architecture](../../../docs/ARCHITECTURE.md)** - Overall system design
+- **[Session Commands](../../../.claude/commands/session.md)** - ccswarm session management
+- **[Task Management](../../../.claude/commands/task.md)** - How tasks use sessions
+
+### AI-Session Documentation
+- **[AI-Session Documentation Hub](README.md)** - Complete AI-Session documentation
+- **[API Guide](API_GUIDE.md)** - Complete API reference
+- **[Architecture](ARCHITECTURE.md)** - AI-Session system design
+- **[CLI Guide](CLI_GUIDE.md)** - Standalone AI-Session commands
+
+### Development Resources
+- **[Project Rules](../../../.claude/commands/project-rules.md)** - Coding standards
+- **[Development Guide](../../../docs/DEVELOPER_GUIDE.md)** - Development workflows
