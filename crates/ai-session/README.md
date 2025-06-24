@@ -237,10 +237,21 @@ The library implements defense-in-depth:
 
 📚 **Comprehensive Documentation Available:**
 
+- **[Documentation Hub](docs/README.md)** - Complete documentation index and navigation
 - **[API Guide](docs/API_GUIDE.md)** - Complete API reference with examples
 - **[CLI Guide](docs/CLI_GUIDE.md)** - Command-line interface documentation  
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and implementation details
+- **[ccswarm Integration](docs/ccswarm-integration-api.md)** - Integration with ccswarm orchestrator
 - **[Examples](examples/)** - Practical usage examples and demos
+
+### 🔗 ccswarm Integration
+AI-Session is the core session management library for [ccswarm](../../README.md), providing:
+- **93% token savings** for AI agent conversations
+- **Multi-agent coordination** via message bus architecture
+- **Session persistence** across ccswarm restarts
+- **Native integration** with ccswarm commands
+
+See the [ccswarm documentation hub](../../docs/README.md) for complete system documentation.
 
 ## Contributing
 
