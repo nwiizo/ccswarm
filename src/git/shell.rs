@@ -26,6 +26,15 @@ impl ShellWorktreeManager {
         Ok(Self { repo_path })
     }
 
+    /// Check if git is available on the system
+    pub fn is_git_available() -> bool {
+        std::process::Command::new("git")
+            .arg("--version")
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
+
     /// リポジトリを初期化（必要に応じて）
     pub async fn init_if_needed(path: &Path) -> Result<()> {
         if !path.join(".git").exists() {

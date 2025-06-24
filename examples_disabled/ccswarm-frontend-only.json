@@ -1,0 +1,74 @@
+{
+  "project": {
+    "name": "Frontend-Only React Application",
+    "repository": {
+      "url": "https://github.com/username/react-app.git",
+      "main_branch": "main"
+    },
+    "master_claude": {
+      "role": "technical_lead",
+      "quality_threshold": 0.88,
+      "think_mode": "think_hard",
+      "permission_level": "supervised",
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerous_skip": false,
+        "json_output": true,
+        "think_mode": "think_hard",
+        "custom_commands": [
+          "ccswarm status",
+          "ccswarm review",
+          "npm run build",
+          "npm run test"
+        ],
+        "mcp_servers": {}
+      }
+    }
+  },
+  "agents": {
+    "frontend": {
+      "specialization": "react_typescript",
+      "worktree": "agents/frontend-agent",
+      "branch": "feature/frontend",
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerous_skip": true,
+        "think_mode": "think_hard",
+        "json_output": true,
+        "custom_commands": [
+          "npm test",
+          "npm run lint",
+          "npm run build",
+          "npm run storybook",
+          "npm run type-check"
+        ],
+        "mcp_servers": {}
+      },
+      "claude_md_template": "frontend_specialist"
+    },
+    "ui-design": {
+      "specialization": "ui_ux_design",
+      "worktree": "agents/ui-design-agent",
+      "branch": "feature/ui-design",
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerous_skip": true,
+        "think_mode": "think",
+        "json_output": true,
+        "custom_commands": [
+          "npm run design-tokens",
+          "npm run style-guide",
+          "npm run accessibility-check"
+        ],
+        "mcp_servers": {}
+      },
+      "claude_md_template": "ui_specialist"
+    }
+  },
+  "coordination": {
+    "communication_method": "json_files",
+    "sync_interval": 30,
+    "quality_gate_frequency": "on_commit",
+    "master_review_trigger": "all_tasks_complete"
+  }
+}

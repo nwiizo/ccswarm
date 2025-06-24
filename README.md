@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.3.4** - Autonomous orchestration with proactive intelligence and security monitoring
+> 🚀 **Version 0.3.5** - Autonomous orchestration with proactive intelligence and security monitoring
 
 [![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
@@ -10,6 +10,14 @@
 **ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. Built in Rust for performance and reliability, it features autonomous task prediction, real-time security monitoring, and intelligent delegation.
 
 ## 🌟 Key Features
+
+### 🎯 Developer Experience First
+- **Interactive Setup Wizard**: Guided configuration for new users
+- **Built-in Tutorial**: Learn by doing with hands-on chapters  
+- **Smart Error Messages**: Helpful suggestions and solutions
+- **Progress Indicators**: Real-time feedback for all operations
+- **Contextual Help**: `ccswarm help <topic>` for detailed guidance
+- **System Doctor**: `ccswarm doctor --fix` diagnoses and fixes issues
 
 ### 🧠 Proactive Master Claude
 - **Autonomous Orchestration**: Intelligent task prediction and generation (enabled by default)
@@ -69,11 +77,24 @@ cargo install --path .
 ### 2. Initialize Project
 
 ```bash
-# Basic initialization
+# Interactive setup wizard (recommended for first-time users)
+ccswarm setup
+
+# Or use quick initialization
 ccswarm init --name "MyProject" --agents frontend,backend,devops
 
 # With specific template
 ccswarm init --name "AiderProject" --template aider-focused
+```
+
+### 2.5. Learn with Interactive Tutorial
+
+```bash
+# Start the interactive tutorial
+ccswarm tutorial
+
+# Jump to specific chapter
+ccswarm tutorial --chapter 3
 ```
 
 ### 3. Start System
@@ -98,7 +119,7 @@ ccswarm auto-create "Create blog with auth" --output ./blog
 
 ## 🏗️ Architecture
 
-ccswarm v0.3.4 features a comprehensive multi-layer architecture designed for autonomous operation:
+ccswarm v0.3.5 features a comprehensive multi-layer architecture designed for autonomous operation:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -693,9 +714,59 @@ cargo clippy -- -D warnings
 cargo doc --no-deps --open
 ```
 
-## 🚀 What's New in v0.3.4
+## 💡 Enhanced User Experience
 
-ccswarm v0.3.4 introduces **autonomous orchestration** as the default mode:
+### Getting Started
+```bash
+# First time? Use the setup wizard
+ccswarm setup
+
+# Need help? Interactive tutorial  
+ccswarm tutorial
+
+# Check system health
+ccswarm doctor
+
+# Get contextual help
+ccswarm help tasks
+ccswarm help --search "delegation"
+```
+
+### Smart Error Messages
+When things go wrong, ccswarm helps you fix them:
+
+```
+❌ Session not found
+   No active session with ID: abc123
+
+   💡 Try this:
+   1. List all sessions: ccswarm session list
+   2. Create a new session: ccswarm session create
+   3. Check if the session was terminated
+
+   Error code: SES001
+```
+
+### Real-time Progress Feedback
+All operations show live progress:
+
+```
+⏳ Creating task: Implement user authentication... (2.3s)
+✅ Task created successfully!
+
+   Task ID: task-a1b2
+   Description: Implement user authentication
+   Priority: 🟡 High
+   Type: Feature
+   
+💡 Quick tips:
+  • View task progress: ccswarm task status task-a1b2
+  • List all tasks: ccswarm task list
+```
+
+## 🚀 What's New in v0.3.5
+
+ccswarm v0.3.5 introduces **autonomous orchestration** as the default mode:
 
 - **🧠 Proactive Master Claude**: Enabled by default with 30s analysis intervals
 - **🔒 Security Agent**: OWASP Top 10 scanning with real-time monitoring  
@@ -734,4 +805,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Experience autonomous AI orchestration with proactive intelligence and security monitoring in ccswarm v0.3.4** 🧠🔒🚀
+**Experience autonomous AI orchestration with proactive intelligence and security monitoring in ccswarm v0.3.5** 🧠🔒🚀

@@ -1,230 +1,275 @@
 # ccswarm task
 
-Add a new task to the ccswarm task queue for agent execution.
-
-## Description
-
-The `task` command adds tasks to the orchestration queue. Tasks are analyzed by Master Claude, delegated to appropriate agents, and executed based on priority and agent availability.
+Create and manage development tasks for AI agents.
 
 ## Usage
-
 ```bash
 ccswarm task <DESCRIPTION> [OPTIONS]
 ```
 
 ## Options
+- `--priority <LEVEL>` - Set priority (low, medium, high, critical)
+- `--type <TYPE>` - Task type (feature, bug, test, docs, refactor)
+- `--agent <NAME>` - Assign to specific agent
+- `--auto` - Enable auto-accept for this task
+- `--depends-on <TASK_ID>` - Set task dependencies
 
-- `--priority <LEVEL>` - Task priority: high, medium, low (default: medium)
-- `--type <TYPE>` - Task type: feature, bug, test, docs, refactor
-- `--agent <NAME>` - Assign to specific agent (bypasses delegation)
-- `--auto-accept` - Enable auto-accept for this task
-- `--no-auto-accept` - Disable auto-accept for this task
-- `--parent <TASK-ID>` - Set parent task for dependencies
-- `--tags <TAGS>` - Comma-separated tags
-- `--estimate <HOURS>` - Time estimate in hours
-- `--due <DATE>` - Due date (ISO format)
-- `--force-review` - Require quality review after completion
-
-## Task Description Format
-
-Tasks can include inline modifiers:
-```
-"Description [priority] [type] [options]"
-```
+## Description
+Creates tasks that are automatically analyzed and delegated to the most appropriate AI agent based on content and expertise.
 
 ## Examples
 
-### Basic task
+### Basic Task Creation
 ```bash
-ccswarm task "Implement user authentication"
+$ ccswarm task "Create a login form with email and password fields"
+
+✅ Task created successfully!
+
+   Task ID: task-a1b2c3
+   Description: Create a login form with email and password fields
+   Priority: 🟢 Medium
+   Type: Feature
+   
+💡 Quick tips:
+  • View task progress: ccswarm task status task-a1b2c3
+  • List all tasks: ccswarm task list
+
+🤖 Analyzing task...
+   → Frontend expertise detected (React, forms, UI)
+   → Delegating to frontend-specialist
+   
+⏳ Frontend agent starting work...
 ```
 
-### High priority bug fix
+### Task with Modifiers
 ```bash
-ccswarm task "Fix login timeout issue" --priority high --type bug
-```
+$ ccswarm task "Fix memory leak in user service [high] [bug]"
 
-### Using inline modifiers
-```bash
-ccswarm task "Add unit tests [high] [test] [auto]"
-```
+✅ Task created successfully!
 
-### Assign to specific agent
-```bash
-ccswarm task "Update API documentation" --agent backend-specialist --type docs
+   Task ID: task-d4e5f6
+   Description: Fix memory leak in user service
+   Priority: 🟡 High
+   Type: Bug
+   
+🤖 Master Claude analysis:
+   → Backend issue detected
+   → Memory profiling required
+   → Assigning to backend-specialist with debugger tools
 ```
-
-### Complex task with all options
-```bash
-ccswarm task "Refactor payment module" \
-  --priority high \
-  --type refactor \
-  --tags "payment,critical" \
-  --estimate 8 \
-  --due "2024-02-01T00:00:00Z" \
-  --force-review
-```
-
-### Subtask with parent
-```bash
-ccswarm task "Write payment tests" --parent task_123 --type test
-```
-
-## Task Modifiers
 
 ### Priority Levels
-- `[high]` or `[urgent]` - Execute first
-- `[medium]` - Normal priority (default)
-- `[low]` - Execute when idle
+```bash
+# Critical - Immediate attention
+$ ccswarm task "Production server down" --priority critical
+
+# High - Next in queue
+$ ccswarm task "Security vulnerability patch" --priority high
+
+# Medium - Normal workflow (default)
+$ ccswarm task "Add user profile page" --priority medium
+
+# Low - When time permits
+$ ccswarm task "Refactor old utils" --priority low
+```
 
 ### Task Types
-- `[feature]` - New functionality
-- `[bug]` - Bug fix
-- `[test]` - Testing tasks
-- `[docs]` - Documentation
-- `[refactor]` - Code improvement
-
-### Execution Options
-- `[auto]` - Enable auto-accept
-- `[review]` - Force quality review
-- `[silent]` - Minimal output
-- `[verbose]` - Detailed output
-
-## Task Lifecycle
-
-1. **Creation** - Task added to queue
-2. **Analysis** - Master Claude analyzes requirements
-3. **Delegation** - Assigned to best-fit agent
-4. **Execution** - Agent works on task
-5. **Review** - Quality check (if enabled)
-6. **Completion** - Task marked complete
-
-## Task Management
-
-### List all tasks
 ```bash
-ccswarm task list
+# Feature - New functionality
+$ ccswarm task "Add dark mode toggle" --type feature
+
+# Bug - Fix issues
+$ ccswarm task "Users can't reset password" --type bug
+
+# Test - Testing tasks
+$ ccswarm task "Write E2E tests for checkout" --type test
+
+# Docs - Documentation
+$ ccswarm task "Document API endpoints" --type docs
+
+# Refactor - Code improvement
+$ ccswarm task "Extract payment logic to service" --type refactor
 ```
 
-### View task details
+### Direct Agent Assignment
 ```bash
-ccswarm task show <task-id>
+$ ccswarm task "Setup CI/CD pipeline" --agent devops
+
+🎯 Direct Assignment
+════════════════════════════════════════════
+
+Task: Setup CI/CD pipeline
+Assigned to: devops-specialist
+Reason: Manual assignment
+
+✅ Task queued for DevOps agent
 ```
 
-### Cancel task
+### Task Dependencies
 ```bash
-ccswarm task cancel <task-id>
+$ ccswarm task "Deploy to production" --depends-on task-a1b2c3,task-d4e5f6
+
+📋 Task Dependencies Set
+════════════════════════════════════════════
+
+Task: Deploy to production
+Depends on:
+  - task-a1b2c3 (Create login form) - In Progress
+  - task-d4e5f6 (Fix memory leak) - Completed ✅
+
+Status: Blocked (waiting for dependencies)
+Will start automatically when ready
 ```
 
-### Update task
+### Batch Task Creation
 ```bash
-ccswarm task update <task-id> --priority high
+$ ccswarm task import tasks.txt
+
+📥 Importing Tasks
+════════════════════════════════════════════
+
+Reading tasks.txt...
+Found 5 tasks:
+
+1. ✅ Create user dashboard
+2. ✅ Add email notifications
+3. ✅ Implement search functionality
+4. ✅ Fix responsive design issues
+5. ✅ Add unit tests for auth module
+
+All tasks created and delegated!
 ```
 
-### Task statistics
+## Task Management Commands
+
+### List Tasks
 ```bash
-ccswarm task stats
+$ ccswarm task list
+
+📋 Active Tasks
+════════════════════════════════════════════
+
+High Priority (2):
+  • task-g7h8i9 - Fix payment processing bug
+    Status: In Progress (backend) ⏳
+    
+  • task-j0k1l2 - Security audit findings
+    Status: Pending
+
+Medium Priority (3):
+  • task-m3n4o5 - User profile page
+    Status: In Progress (frontend) ⏳
+    
+  • task-p6q7r8 - API documentation
+    Status: Completed ✅
+    
+  • task-s9t0u1 - Database optimization
+    Status: Queued
+
+Low Priority (1):
+  • task-v2w3x4 - Code cleanup
+    Status: Pending
 ```
 
-## Batch Operations
-
-### Add multiple tasks from file
+### Task Status
 ```bash
-ccswarm task batch tasks.txt
+$ ccswarm task status task-m3n4o5
+
+📊 Task Details
+════════════════════════════════════════════
+
+ID: task-m3n4o5
+Description: User profile page
+Priority: Medium
+Type: Feature
+Created: 2024-06-24 10:30:00
+Agent: frontend-specialist
+
+Progress Timeline:
+  10:30 - Task created
+  10:31 - Assigned to frontend agent
+  10:32 - Work started
+  10:45 - Created ProfilePage component
+  10:52 - Added form validation
+  11:05 - Styling with Tailwind CSS
+  11:15 - Current: Writing tests
+
+Estimated Completion: ~15 minutes
+
+Files Modified:
+  • src/pages/ProfilePage.tsx (created)
+  • src/components/ProfileForm.tsx (created)
+  • src/routes/index.ts (modified)
+  • tests/profile.test.tsx (created)
 ```
 
-Where `tasks.txt` contains:
-```
-Implement login form [high] [feature]
-Add password reset [medium] [feature]
-Write auth tests [high] [test]
-Update auth docs [low] [docs]
-```
-
-### Export tasks
+### Update Task
 ```bash
-ccswarm task export --format json > tasks.json
+$ ccswarm task update task-v2w3x4 --priority high
+
+📝 Task Updated
+════════════════════════════════════════════
+
+Task: task-v2w3x4
+Changed: Priority low → high
+Status: Re-queued with higher priority
 ```
 
-## Task Dependencies
-
-### Create dependent tasks
+### Cancel Task
 ```bash
-# Parent task
-PARENT_ID=$(ccswarm task "Create user model" --json | jq -r '.id')
+$ ccswarm task cancel task-s9t0u1 --reason "No longer needed"
 
-# Child tasks
-ccswarm task "Add user validation" --parent $PARENT_ID
-ccswarm task "Create user tests" --parent $PARENT_ID
+❌ Task Cancelled
+════════════════════════════════════════════
+
+Task: task-s9t0u1 (Database optimization)
+Reason: No longer needed
+Status: Removed from queue
 ```
 
-### View dependency tree
+## Task Modifiers in Description
+
+You can include modifiers directly in the task description:
+
 ```bash
-ccswarm task tree <task-id>
+# Priority modifiers
+ccswarm task "Fix login bug [high]"
+ccswarm task "Update logo [low]"
+
+# Type modifiers
+ccswarm task "Payment not working [bug]"
+ccswarm task "Add cart functionality [feature]"
+
+# Combined modifiers
+ccswarm task "Site is slow [high] [bug]"
+ccswarm task "Write auth tests [test] [medium]"
+
+# Auto-accept modifier
+ccswarm task "Format code [auto]"
 ```
 
-## Advanced Features
+## Integration Features
 
-### Task Templates
-```bash
-# Save as template
-ccswarm task template save "security-fix" \
-  --priority high \
-  --type bug \
-  --tags "security,critical" \
-  --force-review
-
-# Use template
-ccswarm task "Fix SQL injection in search" --template security-fix
+### Proactive Task Suggestions
+When proactive mode is enabled, Master Claude suggests tasks:
+```
+💡 Suggested Tasks (based on codebase analysis):
+1. Add error handling to payment service
+2. Increase test coverage for auth module (currently 67%)
+3. Update deprecated dependencies
 ```
 
-### Recurring Tasks
-```bash
-ccswarm task "Run security scan" \
-  --recurring daily \
-  --time "02:00"
+### Quality Review Integration
+Failed quality checks automatically create remediation tasks:
 ```
-
-### Conditional Tasks
-```bash
-ccswarm task "Deploy to production" \
-  --condition "all-tests-pass" \
-  --agent devops
-```
-
-## Integration
-
-### Git Integration
-```bash
-# Create task from commit
-ccswarm task from-commit HEAD
-
-# Create tasks from issues
-ccswarm task from-issue --repo owner/repo --issue 123
-```
-
-### CI/CD Integration
-```yaml
-# In GitHub Actions
-- name: Create deployment task
-  run: |
-    ccswarm task "Deploy version ${{ github.sha }}" \
-      --priority high \
-      --type feature \
-      --agent devops
+❌ Quality Check Failed
+Creating remediation task: "Fix ESLint errors in components/"
+Assigned to: frontend-specialist
+Priority: High
 ```
 
 ## Related Commands
-
-- [`delegate`](delegate.md) - Manual task delegation
-- [`status`](status.md) - View task queue status
-- [`tui`](tui.md) - Interactive task management
-- [`review`](review.md) - Quality review tasks
-
-## Notes
-
-- Tasks are persisted across restarts
-- Master Claude analyzes all tasks for optimal delegation
-- Tasks can be re-delegated if initial agent fails
-- Quality review is automatic for critical tasks
-- Task history is maintained for analytics
+- `ccswarm delegate` - Manual task delegation
+- `ccswarm agent list` - View available agents
+- `ccswarm session stats` - Task completion metrics
+- `ccswarm tui` - Monitor tasks in real-time

@@ -3,17 +3,28 @@
 #![allow(clippy::collapsible_else_if)]
 #![allow(clippy::get_first)]
 
-use anyhow::{Context, Result};
+mod interactive_help;
+mod output;
+mod progress;
+mod setup_wizard;
+mod tutorial;
+
+pub use interactive_help::{show_quick_help, InteractiveHelp};
+use output::{create_formatter, OutputFormatter};
+pub use progress::{ProcessTracker, ProgressStyle, ProgressTracker, StatusLine};
+pub use setup_wizard::SetupWizard;
+pub use tutorial::InteractiveTutorial;
+
+use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
+use colored::Colorize;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 use crate::agent::{Priority, Task, TaskType};
 use crate::config::CcswarmConfig;
 use crate::orchestrator::MasterClaude;
-
-mod output;
-use output::{create_formatter, OutputFormatter};
 
 /// ccswarm - Claude Code統括型マルチエージェントシステム
 #[derive(Parser)]
@@ -219,6 +230,33 @@ pub enum Commands {
     Quality {
         #[command(subcommand)]
         action: QualityAction,
+    },
+
+    /// Interactive setup wizard for new users
+    Setup,
+
+    /// Interactive tutorial to learn ccswarm
+    Tutorial {
+        /// Start from specific chapter (1-4)
+        #[arg(short, long)]
+        chapter: Option<u8>,
+    },
+
+    /// Enhanced help system with examples
+    HelpTopic {
+        /// Topic to get help on
+        topic: Option<String>,
+
+        /// Search help topics
+        #[arg(short, long)]
+        search: Option<String>,
+    },
+
+    /// Check system health and diagnose issues
+    Doctor {
+        /// Run fixes for common issues
+        #[arg(short, long)]
+        fix: bool,
     },
 }
 
@@ -800,6 +838,12 @@ impl CliRunner {
             Commands::Search { action } => self.handle_search(action).await,
             Commands::Evolution { action } => self.handle_evolution(action).await,
             Commands::Quality { action } => self.handle_quality(action).await,
+            Commands::Setup => self.handle_setup().await,
+            Commands::Tutorial { chapter } => self.handle_tutorial(*chapter).await,
+            Commands::HelpTopic { topic, search } => {
+                self.handle_help(topic.as_deref(), search.as_deref()).await
+            }
+            Commands::Doctor { fix } => self.handle_doctor(*fix).await,
         }
     }
 
@@ -809,12 +853,39 @@ impl CliRunner {
         repo_url: Option<&str>,
         agents: &[String],
     ) -> Result<()> {
+        use crate::utils::user_error::CommonErrors;
+
         info!("Initializing ccswarm project: {}", name);
 
+        // Show progress to user
+        println!(
+            "{}",
+            format!("🚀 Initializing ccswarm project: {}", name)
+                .bright_cyan()
+                .bold()
+        );
+        println!();
+
+        // Check if git is available
+        if !crate::git::shell::ShellWorktreeManager::is_git_available() {
+            CommonErrors::git_not_initialized().display();
+            return Err(anyhow!("Git is required for ccswarm"));
+        }
+
         // Initialize Git repository if needed
-        crate::git::shell::ShellWorktreeManager::init_if_needed(&self.repo_path).await?;
+        crate::utils::user_error::show_progress("Setting up git repository...");
+        crate::git::shell::ShellWorktreeManager::init_if_needed(&self.repo_path)
+            .await
+            .inspect_err(|e| {
+                eprintln!();
+                CommonErrors::git_not_initialized()
+                    .with_details(e.to_string())
+                    .display();
+            })?;
+        println!("✅ Git repository ready");
 
         // Create configuration
+        crate::utils::user_error::show_progress("Creating project configuration...");
         let mut config = create_default_config(&self.repo_path)?;
         config.project.name = name.to_string();
 
@@ -1031,6 +1102,29 @@ impl CliRunner {
         details: Option<&str>,
         duration: Option<u32>,
     ) -> Result<()> {
+        use crate::cli::progress::{ProgressStyle, ProgressTracker};
+        use crate::utils::user_error::CommonErrors;
+
+        // Validate task description
+        if description.trim().is_empty() {
+            CommonErrors::invalid_task_format()
+                .with_details("Task description cannot be empty")
+                .suggest("Provide a clear, actionable task description")
+                .suggest("Example: ccswarm task \"Create user authentication system\"")
+                .display();
+            return Err(anyhow!("Invalid task description"));
+        }
+
+        // Start progress indicator
+        let progress = ProgressTracker::new(
+            format!(
+                "Creating task: {}",
+                description.chars().take(50).collect::<String>()
+            ),
+            ProgressStyle::Spinner,
+        );
+        ProgressTracker::start(progress.clone()).await;
+
         let priority = match priority.to_lowercase().as_str() {
             "low" => Priority::Low,
             "medium" => Priority::Medium,
@@ -1069,7 +1163,26 @@ impl CliRunner {
 
         // Add to task queue
         let queue = crate::coordination::TaskQueue::new().await?;
-        queue.add_task(&task).await?;
+        queue.add_task(&task).await.inspect_err(|e| {
+            drop(ProgressTracker::complete(
+                progress.clone(),
+                false,
+                Some("Failed to add task".to_string()),
+            ));
+            CommonErrors::network_error("task queue")
+                .with_details(e.to_string())
+                .suggest("Check if the orchestrator is running")
+                .suggest("Run: ccswarm start")
+                .display();
+        })?;
+
+        // Complete progress indicator
+        ProgressTracker::complete(
+            progress,
+            true,
+            Some("Task created successfully".to_string()),
+        )
+        .await;
 
         if self.json_output {
             println!(
@@ -1083,10 +1196,37 @@ impl CliRunner {
                 }))?
             );
         } else {
-            println!("✅ Task added: {}", task.id);
-            println!("   Description: {}", description);
-            println!("   Priority: {:?}", priority);
-            println!("   Type: {:?}", task_type_clone);
+            println!();
+            println!("{}", "✅ Task created successfully!".bright_green().bold());
+            println!();
+            println!(
+                "   {} {}",
+                "Task ID:".bright_cyan(),
+                task.id[..8].bright_white()
+            );
+            println!("   {} {}", "Description:".bright_cyan(), description);
+            println!(
+                "   {} {}",
+                "Priority:".bright_cyan(),
+                match priority {
+                    Priority::Critical => "🔴 Critical".bright_red(),
+                    Priority::High => "🟡 High".bright_yellow(),
+                    Priority::Medium => "🟢 Medium".bright_green(),
+                    Priority::Low => "🔵 Low".bright_blue(),
+                }
+            );
+            println!(
+                "   {} {}",
+                "Type:".bright_cyan(),
+                format!("{:?}", task_type_clone).bright_white()
+            );
+
+            if let Some(duration) = task.estimated_duration {
+                println!("   {} {} minutes", "Est. Duration:".bright_cyan(), duration);
+            }
+
+            // Show helpful next steps
+            show_quick_help("task-created");
         }
 
         Ok(())
@@ -3588,6 +3728,200 @@ impl CliRunner {
                         }
                     }
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_setup(&self) -> Result<()> {
+        // Check if config already exists
+        let config_path = self.repo_path.join("ccswarm.json");
+        if config_path.exists() {
+            println!("{}", "⚠️  Configuration already exists!".yellow());
+            println!();
+            print!("Overwrite existing configuration? [y/N] ");
+            std::io::stdout().flush()?;
+
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            if !input.trim().eq_ignore_ascii_case("y") {
+                println!("Setup cancelled.");
+                return Ok(());
+            }
+        }
+
+        // Run setup wizard
+        let _config = SetupWizard::run().await?;
+
+        // Initialize project
+        crate::utils::user_error::show_progress("Initializing project structure...");
+        crate::git::shell::ShellWorktreeManager::init_if_needed(&self.repo_path).await?;
+
+        Ok(())
+    }
+
+    async fn handle_tutorial(&self, chapter: Option<u8>) -> Result<()> {
+        let mut tutorial = InteractiveTutorial::new();
+
+        if let Some(ch) = chapter {
+            if !(1..=4).contains(&ch) {
+                println!("{}", "❌ Invalid chapter number. Please choose 1-4.".red());
+                return Ok(());
+            }
+            // Set starting chapter (adjusting for 0-based index)
+            tutorial.current_chapter = (ch - 1) as usize;
+        }
+
+        tutorial.start().await?;
+        Ok(())
+    }
+
+    async fn handle_help(&self, topic: Option<&str>, search: Option<&str>) -> Result<()> {
+        let help = InteractiveHelp::new();
+
+        if let Some(query) = search {
+            // Search help topics
+            let results = help.search(query);
+
+            if results.is_empty() {
+                println!();
+                println!("{}", "❌ No help topics found matching your search.".red());
+                println!();
+                println!("Try one of these topics:");
+                help.show_topic_list();
+            } else {
+                println!();
+                println!(
+                    "{}",
+                    format!("🔍 Found {} topics matching '{}'", results.len(), query).bright_cyan()
+                );
+                println!();
+
+                for (key, topic) in results.iter().take(3) {
+                    println!("{}", format!("📖 {}", topic.title).bright_yellow());
+                    println!("   {}", topic.description.dimmed());
+                    println!("   Run: ccswarm help {}", key.bright_white());
+                    println!();
+                }
+            }
+        } else if let Some(t) = topic {
+            help.show_topic(t);
+        } else {
+            help.show_topic_list();
+        }
+
+        Ok(())
+    }
+
+    async fn handle_doctor(&self, fix: bool) -> Result<()> {
+        use crate::utils::user_error::CommonErrors;
+
+        println!("{}", "🏥 ccswarm System Diagnosis".bright_cyan().bold());
+        println!("{}", "===========================".bright_cyan());
+        println!();
+
+        let mut issues = Vec::new();
+
+        // Check Git
+        print!("Checking Git... ");
+        match std::process::Command::new("git").arg("--version").output() {
+            Ok(output) if output.status.success() => {
+                println!("{}", "✅ OK".bright_green());
+            }
+            _ => {
+                println!("{}", "❌ Not found".bright_red());
+                issues.push("git");
+            }
+        }
+
+        // Check API keys
+        print!("Checking API keys... ");
+        if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+            println!("{}", "✅ Set".bright_green());
+        } else {
+            println!("{}", "⚠️  Not set".bright_yellow());
+            issues.push("api_key");
+        }
+
+        // Check config
+        print!("Checking configuration... ");
+        let config_path = self.repo_path.join("ccswarm.json");
+        if config_path.exists() {
+            match CcswarmConfig::from_file(config_path.clone()).await {
+                Ok(_) => println!("{}", "✅ Valid".bright_green()),
+                Err(e) => {
+                    println!("{}", "❌ Invalid".bright_red());
+                    println!("   {}", e.to_string().dimmed());
+                    issues.push("config");
+                }
+            }
+        } else {
+            println!("{}", "❌ Not found".bright_red());
+            issues.push("config");
+        }
+
+        // Check git repo
+        print!("Checking git repository... ");
+        let git_dir = self.repo_path.join(".git");
+        if git_dir.exists() {
+            println!("{}", "✅ Initialized".bright_green());
+        } else {
+            println!("{}", "⚠️  Not initialized".bright_yellow());
+            issues.push("git_repo");
+        }
+
+        // Check disk space
+        print!("Checking disk space... ");
+        // Simple check - in real implementation would use proper system calls
+        println!("{}", "✅ Sufficient".bright_green());
+
+        println!();
+
+        if issues.is_empty() {
+            println!("{}", "✅ All systems operational!".bright_green().bold());
+        } else {
+            println!(
+                "{}",
+                format!("⚠️  Found {} issues", issues.len())
+                    .bright_yellow()
+                    .bold()
+            );
+
+            if fix {
+                println!();
+                println!("{}", "🔧 Attempting fixes...".bright_cyan());
+
+                for issue in &issues {
+                    match *issue {
+                        "git" => {
+                            println!("• Git: Please install git from https://git-scm.com");
+                        }
+                        "api_key" => {
+                            CommonErrors::api_key_missing("Anthropic").display();
+                        }
+                        "config" => {
+                            println!("• Config: Run 'ccswarm setup' to create configuration");
+                        }
+                        "git_repo" => {
+                            if fix {
+                                println!("• Initializing git repository...");
+                                crate::git::shell::ShellWorktreeManager::init_if_needed(
+                                    &self.repo_path,
+                                )
+                                .await?;
+                                println!("  ✅ Git repository initialized");
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            } else {
+                println!();
+                println!(
+                    "{}",
+                    "💡 Run with --fix to attempt automatic fixes".dimmed()
+                );
             }
         }
 

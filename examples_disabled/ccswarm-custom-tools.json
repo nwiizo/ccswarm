@@ -1,0 +1,179 @@
+{
+  "project": {
+    "name": "Custom Tools Integration Project",
+    "repository": {
+      "url": "https://github.com/company/custom-tools-project.git",
+      "main_branch": "main"
+    },
+    "master_claude": {
+      "role": "technical_lead",
+      "quality_threshold": 0.85,
+      "think_mode": "ultrathink",
+      "permission_level": "supervised",
+      "provider": {
+        "provider_type": "claude_code",
+        "claude_code": {
+          "model": "claude-3.5-sonnet",
+          "dangerous_skip": false,
+          "think_mode": "ultrathink",
+          "json_output": true,
+          "custom_commands": [
+            "ccswarm status",
+            "ccswarm review"
+          ],
+          "mcp_servers": {}
+        }
+      }
+    }
+  },
+  "agents": {
+    "rust_developer": {
+      "specialization": "rust_systems",
+      "worktree": "agents/rust-agent",
+      "branch": "feature/rust-backend",
+      "provider": {
+        "provider_type": "custom",
+        "custom": {
+          "command": "rust-assistant",
+          "args": [
+            "--task",
+            "{prompt}",
+            "--project-context",
+            "{context}",
+            "--workspace",
+            "{workspace}",
+            "--agent-id",
+            "{agent_id}"
+          ],
+          "env_vars": {
+            "RUST_LOG": "debug",
+            "CARGO_TARGET_DIR": "target/agent-builds"
+          },
+          "working_directory": "{workspace}",
+          "timeout_seconds": 900,
+          "supports_json": true
+        }
+      },
+      "claude_md_template": "rust_specialist"
+    },
+    "data_scientist": {
+      "specialization": "python_ml",
+      "worktree": "agents/ml-agent",
+      "branch": "feature/ml-pipeline",
+      "provider": {
+        "provider_type": "custom",
+        "custom": {
+          "command": "jupyter-ai",
+          "args": [
+            "--notebook-mode",
+            "--task",
+            "{prompt}",
+            "--context",
+            "{context}",
+            "--output-format",
+            "json"
+          ],
+          "env_vars": {
+            "PYTHONPATH": "/opt/ml/code",
+            "JUPYTER_CONFIG_DIR": "/opt/ml/jupyter",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "timeout_seconds": 1800,
+          "supports_json": true
+        }
+      },
+      "claude_md_template": "data_science_specialist"
+    },
+    "security_auditor": {
+      "specialization": "security_analysis",
+      "worktree": "agents/security-agent",
+      "branch": "feature/security-audit",
+      "provider": {
+        "provider_type": "custom",
+        "custom": {
+          "command": "security-scanner",
+          "args": [
+            "--scan-type",
+            "comprehensive",
+            "--target",
+            "{workspace}",
+            "--task",
+            "{prompt}",
+            "--report-format",
+            "json"
+          ],
+          "env_vars": {
+            "SECURITY_DB_PATH": "/opt/security/databases",
+            "SCAN_DEPTH": "deep"
+          },
+          "timeout_seconds": 1200,
+          "supports_json": true
+        }
+      },
+      "claude_md_template": "security_specialist"
+    },
+    "documentation_writer": {
+      "specialization": "technical_writing",
+      "worktree": "agents/docs-agent",
+      "branch": "feature/documentation",
+      "provider": {
+        "provider_type": "custom",
+        "custom": {
+          "command": "doc-generator",
+          "args": [
+            "--source-path",
+            "{workspace}",
+            "--task",
+            "{prompt}",
+            "--format",
+            "markdown",
+            "--include-examples",
+            "--agent-context",
+            "{context}"
+          ],
+          "env_vars": {
+            "DOC_TEMPLATE_PATH": "/opt/docs/templates",
+            "OUTPUT_FORMAT": "markdown"
+          },
+          "timeout_seconds": 600,
+          "supports_json": false
+        }
+      },
+      "claude_md_template": "documentation_specialist"
+    },
+    "performance_analyst": {
+      "specialization": "performance_optimization",
+      "worktree": "agents/perf-agent",
+      "branch": "feature/performance",
+      "provider": {
+        "provider_type": "custom",
+        "custom": {
+          "command": "perf-analyzer",
+          "args": [
+            "--analyze",
+            "{workspace}",
+            "--task",
+            "{prompt}",
+            "--profile-type",
+            "cpu,memory,io",
+            "--output",
+            "json"
+          ],
+          "env_vars": {
+            "PERF_TOOLS_PATH": "/opt/perf-tools",
+            "BENCHMARK_DATA_DIR": "/var/benchmarks"
+          },
+          "timeout_seconds": 1500,
+          "supports_json": true
+        }
+      },
+      "claude_md_template": "performance_specialist"
+    }
+  },
+  "coordination": {
+    "communication_method": "json_files",
+    "sync_interval": 60,
+    "quality_gate_frequency": "on_commit",
+    "master_review_trigger": "all_tasks_complete"
+  }
+}

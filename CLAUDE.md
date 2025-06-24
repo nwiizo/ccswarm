@@ -396,7 +396,7 @@ cargo run --bin test_isolated_proactive
 cargo run --bin demo_proactive_workflow
 ```
 
-## Performance Metrics (v0.3.4)
+## Performance Metrics (v0.3.5)
 
 ### Proactive Mode Impact
 - **Task Prediction Accuracy**: ~85% for pattern-based predictions
