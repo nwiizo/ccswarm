@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.3.3** - Stable AI-Session Integration! Production-ready tmux replacement with 93% token savings, comprehensive testing, and robust multi-agent coordination!
+> 🚀 **Version 0.3.4** - Proactive Master Claude & Security Agent! Autonomous orchestration with predictive task generation, dependency resolution, and real-time security monitoring!
 
 [![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
@@ -9,19 +9,26 @@
 
 **ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. It features session persistence, intelligent task delegation, auto-create functionality, and real-time monitoring through a Terminal UI.
 
-## 🌟 Key Features (v0.3.3)
+## 🌟 Key Features (v0.3.4)
 
-### New in v0.3.3 - Stable AI-Session Integration
+### New in v0.3.4 - Proactive Master Claude & Security Agent
+- **🧠 Proactive Master Claude**: Autonomous orchestration with intelligent task prediction
+- **📊 Real-time Progress Analysis**: Continuous monitoring with bottleneck detection
+- **🔗 Dependency Resolution**: Automatic task ordering and dependency management
+- **🎯 Goal-Driven Planning**: OKR integration with milestone tracking
+- **🔒 Security Agent**: OWASP Top 10 vulnerability scanning and assessment
+- **⚡ Default Proactive Mode**: Enabled by default with 30s/15s analysis intervals
+- **🛡️ Risk Assessment**: Automated security scoring with CI/CD integration
+- **🔍 Pattern Recognition**: Learn from task completion patterns for better predictions
+- **📈 Velocity Tracking**: Team performance analysis and optimization suggestions
+- **🚨 Real-time Security**: Continuous vulnerability monitoring during development
+
+### Features from v0.3.3 - AI-Session Integration
 - **🖥️ Native Terminal Management**: Complete tmux replacement with ai-session
 - **💾 93% Token Savings**: Intelligent conversation history compression and reuse
 - **🔄 Cross-Platform PTY**: Native terminal emulation on Linux, macOS, and Windows
 - **📡 MCP Protocol Support**: Model Context Protocol for seamless AI integration
 - **🤝 Multi-Agent Coordination**: Enhanced message bus with native session management
-- **⚡ Performance Optimized**: Zero external dependencies, pure Rust implementation
-- **🔄 Session Persistence**: Automatic session recovery and state management
-- **🔧 Backward Compatibility**: Drop-in replacement for existing tmux workflows
-- **✅ Production Ready**: Comprehensive testing with 87.5% test success rate
-- **🛡️ Robust Error Handling**: Graceful failure recovery and session restoration
 
 ### Features from v0.3.1
 - **🤔 Autonomous Self-Extension**: Agents independently analyze experiences and propose improvements
@@ -94,6 +101,41 @@ ccswarm auto-create "Create blog with auth" --output ./blog
 ```
 
 ## 🏗️ Architecture
+
+### Proactive Master Claude Architecture (v0.3.4)
+```
+┌─────────────────────────────────────────┐
+│         Proactive Master Claude         │ ← Autonomous Orchestration
+│     ├─ Intelligent Task Prediction     │   (Enabled by Default)
+│     ├─ Real-time Progress Analysis      │   30s standard / 15s high-freq
+│     ├─ Dependency Resolution Engine     │
+│     ├─ Goal & Milestone Tracking        │
+│     └─ Bottleneck Detection & Resolution│
+├─────────────────────────────────────────┤
+│         Security Agent                  │ ← OWASP Top 10 Scanning
+│     ├─ Vulnerability Detection          │
+│     ├─ Dependency Security Scanning     │
+│     ├─ Real-time Risk Assessment        │
+│     └─ Security Score Calculation       │
+├─────────────────────────────────────────┤
+│        AI-Session Manager               │ ← Native Terminal Management
+│     ├─ Cross-Platform PTY Support      │
+│     ├─ MCP Protocol Integration         │
+│     ├─ Session Persistence (93% saves)  │
+│     ├─ Multi-Agent Message Bus          │
+│     └─ Conversation History (50 msgs)   │
+├─────────────────────────────────────────┤
+│     Git Worktree Manager                │ ← Isolated Development
+├─────────────────────────────────────────┤
+│     Multi-Provider Agent Pool           │
+│     ├─ Claude Code (default)           │
+│     ├─ Aider                           │
+│     ├─ OpenAI Codex                    │
+│     └─ Custom Tools                    │
+├─────────────────────────────────────────┤
+│     Real-time Monitoring (TUI)          │ ← Live Status Updates
+└─────────────────────────────────────────┘
+```
 
 ### AI-Session Native Architecture (v0.3.3)
 ```
@@ -229,7 +271,20 @@ task Create dashboard [medium] [feature]
 {
   "project": {
     "name": "MyProject",
-    "master_claude_instructions": "Orchestrate agents efficiently"
+    "master_claude": {
+      "role": "technical_lead",
+      "quality_threshold": 0.85,
+      "think_mode": "ultra_think",
+      "permission_level": "supervised",
+      "enable_proactive_mode": true,
+      "proactive_frequency": 30,
+      "high_frequency": 15,
+      "claude_config": {
+        "model": "claude-3.5-sonnet",
+        "dangerous_skip": true,
+        "think_mode": "ultra_think"
+      }
+    }
   },
   "agents": [
     {
@@ -333,6 +388,30 @@ my_app/
 - Session pooling and reuse
 - Batch task execution
 - Auto-scaling
+
+### Proactive Mode Commands (v0.3.4)
+```bash
+# Proactive mode is enabled by default in all new projects
+ccswarm start  # Automatically enables proactive analysis
+
+# Manual proactive analysis trigger
+ccswarm proactive analyze --all-agents
+ccswarm proactive analyze --agent frontend
+
+# Security scanning
+ccswarm security scan --directory ./src
+ccswarm security report --show-history
+ccswarm security check --owasp-top-10
+
+# Goal and milestone management
+ccswarm goal set "Build MVP" --deadline 30d
+ccswarm milestone add "Frontend Complete" --deadline 14d
+ccswarm progress show --detailed
+
+# Dependency analysis
+ccswarm deps analyze --show-blockers
+ccswarm deps resolve --auto-order
+```
 
 ### AI-Session Commands (v0.3.3)
 ```bash
@@ -663,18 +742,25 @@ MIT License - see [LICENSE](LICENSE)
 
 ## 📝 Release Notes
 
+### v0.3.4 - Proactive Master Claude & Security Agent
+- **🧠 Proactive Master Claude**: Autonomous orchestration with predictive task generation enabled by default
+- **📊 Intelligent Progress Analysis**: Real-time monitoring with velocity tracking and bottleneck detection
+- **🔗 Dependency Resolution Engine**: Automatic task ordering and dependency graph management
+- **🎯 Goal-Driven Development**: OKR integration with milestone tracking and progress visualization
+- **🔒 Security Agent**: OWASP Top 10 vulnerability scanning with real-time risk assessment
+- **⚡ Default Configuration**: Proactive mode enabled by default (30s standard, 15s high-frequency)
+- **🛡️ Security Scoring**: Automated security assessment with CI/CD integration
+- **🔍 Pattern Learning**: Machine learning from task completion patterns for better predictions
+- **📈 Performance Optimization**: Team velocity analysis with optimization suggestions
+- **🚨 Continuous Security**: Real-time vulnerability monitoring during development
+- **✅ Isolated Testing**: Git worktree conflict resolution with comprehensive test coverage
+
 ### v0.3.3 - Stable AI-Session Integration
 - **✅ Production Stability**: Comprehensive testing and validation for production use
 - **🖥️ Complete TMux Replacement**: Native ai-session terminal management with zero external dependencies
 - **💾 93% Token Savings**: Intelligent conversation history compression and session reuse
 - **🔄 Cross-Platform PTY**: Native terminal emulation on Linux, macOS, and Windows
 - **📡 MCP Protocol**: Model Context Protocol implementation for standardized AI integration
-- **🤝 Enhanced Coordination**: Native multi-agent message bus with session-aware communication
-- **⚡ Performance Boost**: ~70% memory reduction through context compression
-- **🔄 Seamless Migration**: Drop-in replacement for existing tmux workflows
-- **🔧 Session Persistence**: Automatic session recovery and state management
-- **📊 Integration Testing**: Comprehensive test suite with 87.5% pass rate (7/8 tests)
-- **🛡️ Error Resilience**: Robust error handling and graceful degradation
 
 ### v0.3.1 - Autonomous Self-Extension
 - **🤔 Autonomous Reasoning**: Agents analyze their own experiences without mandatory search
@@ -709,4 +795,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Experience production-ready AI-native terminal management with ccswarm v0.3.3** 🚀
+**Experience autonomous AI orchestration with proactive intelligence and security monitoring in ccswarm v0.3.4** 🧠🔒🚀
