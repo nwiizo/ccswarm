@@ -1,57 +1,53 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.3.4** - Proactive Master Claude & Security Agent! Autonomous orchestration with predictive task generation, dependency resolution, and real-time security monitoring!
+> 🚀 **Version 0.3.4** - Autonomous orchestration with proactive intelligence and security monitoring
 
 [![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Downloads](https://img.shields.io/crates/d/ccswarm.svg)](https://crates.io/crates/ccswarm)
 
-**ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. It features session persistence, intelligent task delegation, auto-create functionality, and real-time monitoring through a Terminal UI.
+**ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. Built in Rust for performance and reliability, it features autonomous task prediction, real-time security monitoring, and intelligent delegation.
 
-## 🌟 Key Features (v0.3.4)
+## 🌟 Key Features
 
-### New in v0.3.4 - Proactive Master Claude & Security Agent
-- **🧠 Proactive Master Claude**: Autonomous orchestration with intelligent task prediction
-- **📊 Real-time Progress Analysis**: Continuous monitoring with bottleneck detection
-- **🔗 Dependency Resolution**: Automatic task ordering and dependency management
-- **🎯 Goal-Driven Planning**: OKR integration with milestone tracking
-- **🔒 Security Agent**: OWASP Top 10 vulnerability scanning and assessment
-- **⚡ Default Proactive Mode**: Enabled by default with 30s/15s analysis intervals
-- **🛡️ Risk Assessment**: Automated security scoring with CI/CD integration
-- **🔍 Pattern Recognition**: Learn from task completion patterns for better predictions
-- **📈 Velocity Tracking**: Team performance analysis and optimization suggestions
-- **🚨 Real-time Security**: Continuous vulnerability monitoring during development
+### 🧠 Proactive Master Claude
+- **Autonomous Orchestration**: Intelligent task prediction and generation (enabled by default)
+- **Real-time Progress Analysis**: Continuous monitoring with bottleneck detection
+- **Dependency Resolution**: Automatic task ordering and dependency management
+- **Goal-Driven Planning**: OKR integration with milestone tracking
+- **Pattern Recognition**: Learn from task completion patterns for better predictions
+- **Velocity Tracking**: Team performance analysis and optimization suggestions
 
-### Features from v0.3.3 - AI-Session Integration
-- **🖥️ Native Terminal Management**: Complete tmux replacement with ai-session
-- **💾 93% Token Savings**: Intelligent conversation history compression and reuse
-- **🔄 Cross-Platform PTY**: Native terminal emulation on Linux, macOS, and Windows
-- **📡 MCP Protocol Support**: Model Context Protocol for seamless AI integration
-- **🤝 Multi-Agent Coordination**: Enhanced message bus with native session management
+### 🔒 Security Agent
+- **OWASP Top 10 Scanning**: Comprehensive vulnerability detection
+- **Risk Assessment**: Automated security scoring with CI/CD integration
+- **Real-time Monitoring**: Continuous vulnerability scanning during development
+- **Dependency Security**: Scan npm, cargo, pip, and composer packages
+- **Security Reporting**: Detailed reports with remediation suggestions
 
-### Features from v0.3.1
-- **🤔 Autonomous Self-Extension**: Agents independently analyze experiences and propose improvements
-- **🧠 Self-Reflection Engine**: Continuous introspective analysis drives capability growth
-- **🔄 Experience-Based Learning**: No mandatory search required - agents learn from their work
-- **🏛️ Sangha Integration**: All extensions democratically approved through collective consensus
-- **📈 Continuous Improvement Mode**: Agents can run in autonomous improvement cycles
+### 🖥️ Native Terminal Management
+- **Complete tmux Replacement**: ai-session with zero external dependencies
+- **93% Token Savings**: Intelligent conversation history compression and reuse
+- **Cross-Platform PTY**: Native terminal emulation on Linux, macOS, and Windows
+- **MCP Protocol Support**: Model Context Protocol for seamless AI integration
+- **Multi-Agent Coordination**: Enhanced message bus with native session management
 
-### Features from v0.3.0
-- **🏛️ Sangha Collective Intelligence**: Buddhist-inspired democratic decision-making system
-- **🔍 AI-Powered Search**: Optional search integration with GitHub/MDN/StackOverflow
-- **📊 Smart Proposal System**: Structured proposals with consensus algorithms
-- **🧠 Learning Framework**: Pattern recognition and knowledge base management
-- **🛡️ Safe Implementation**: Risk assessment and rollback mechanisms
+### 🏛️ Collective Intelligence
+- **Sangha System**: Buddhist-inspired democratic decision-making
+- **Autonomous Self-Extension**: Agents independently analyze and propose improvements
+- **Experience-Based Learning**: Continuous introspective analysis drives growth
+- **Smart Proposal System**: Structured proposals with consensus algorithms
+- **Safe Implementation**: Risk assessment and rollback mechanisms
 
-### Core Features
-- **🤖 Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
-- **🎯 Intelligent Delegation**: Master Claude analyzes and assigns tasks optimally
-- **🚀 Auto-Create System**: Generate complete applications from natural language
-- **📊 Enhanced TUI**: Real-time monitoring with improved task management and filtering
-- **🔄 Git Worktree Isolation**: Parallel development without conflicts
-- **✅ Auto-Accept Mode**: Safe automated execution with risk assessment
-- **🔍 LLM Quality Judge**: Advanced code evaluation using Claude with multi-dimensional scoring
+### 🎯 Core Capabilities
+- **Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
+- **Intelligent Delegation**: Master Claude analyzes and assigns tasks optimally
+- **Auto-Create System**: Generate complete applications from natural language
+- **Enhanced TUI**: Real-time monitoring with task management and filtering
+- **Git Worktree Isolation**: Parallel development without conflicts
+- **Auto-Accept Mode**: Safe automated execution with risk assessment
+- **LLM Quality Judge**: Advanced code evaluation with multi-dimensional scoring
 
 ## 🚀 Quick Start
 
@@ -102,7 +98,8 @@ ccswarm auto-create "Create blog with auth" --output ./blog
 
 ## 🏗️ Architecture
 
-### Proactive Master Claude Architecture (v0.3.4)
+ccswarm v0.3.4 features a comprehensive multi-layer architecture designed for autonomous operation:
+
 ```
 ┌─────────────────────────────────────────┐
 │         Proactive Master Claude         │ ← Autonomous Orchestration
@@ -125,32 +122,10 @@ ccswarm auto-create "Create blog with auth" --output ./blog
 │     ├─ Multi-Agent Message Bus          │
 │     └─ Conversation History (50 msgs)   │
 ├─────────────────────────────────────────┤
-│     Git Worktree Manager                │ ← Isolated Development
-├─────────────────────────────────────────┤
-│     Multi-Provider Agent Pool           │
-│     ├─ Claude Code (default)           │
-│     ├─ Aider                           │
-│     ├─ OpenAI Codex                    │
-│     └─ Custom Tools                    │
-├─────────────────────────────────────────┤
-│     Real-time Monitoring (TUI)          │ ← Live Status Updates
-└─────────────────────────────────────────┘
-```
-
-### AI-Session Native Architecture (v0.3.3)
-```
-┌─────────────────────────────────────────┐
-│         Master Claude                   │ ← Orchestration & Delegation
-│     ├─ Task Assignment                  │
-│     ├─ Quality Review (30s interval)    │
-│     └─ Remediation Task Generation      │
-├─────────────────────────────────────────┤
-│        AI-Session Manager               │ ← Native Terminal Management
-│     ├─ Cross-Platform PTY Support      │
-│     ├─ MCP Protocol Integration         │
-│     ├─ Session Persistence (93% saves)  │
-│     ├─ Multi-Agent Message Bus          │
-│     └─ Conversation History (50 msgs)   │
+│     Sangha Collective Intelligence      │ ← Democratic Decision Making
+│     ├─ Proposal System                 │
+│     ├─ Consensus Algorithms             │
+│     └─ Self-Extension Framework         │
 ├─────────────────────────────────────────┤
 │     Git Worktree Manager                │ ← Isolated Development
 ├─────────────────────────────────────────┤
@@ -164,13 +139,12 @@ ccswarm auto-create "Create blog with auth" --output ./blog
 └─────────────────────────────────────────┘
 ```
 
-### AI-Session Integration Benefits
-- **🚀 Zero External Dependencies**: No more tmux server management
+### Key Benefits
+- **🚀 Zero External Dependencies**: No tmux server management required
 - **🔄 Native Session Recovery**: Automatic session restoration on startup
-- **⚡ Performance**: ~70% memory reduction with context compression
+- **⚡ Performance**: ~70% memory reduction with intelligent context compression
 - **🌐 Cross-Platform**: Works identically on Linux, macOS, Windows
 - **📡 MCP Protocol**: Standardized AI tool integration
-- **🔄 Seamless Migration**: Drop-in tmux replacement
 
 ### Agent Roles
 ```rust
@@ -389,7 +363,7 @@ my_app/
 - Batch task execution
 - Auto-scaling
 
-### Proactive Mode Commands (v0.3.4)
+### Proactive & Security Commands
 ```bash
 # Proactive mode is enabled by default in all new projects
 ccswarm start  # Automatically enables proactive analysis
@@ -413,29 +387,23 @@ ccswarm deps analyze --show-blockers
 ccswarm deps resolve --auto-order
 ```
 
-### AI-Session Commands (v0.3.3)
+### Session Management
 ```bash
-# List ai-sessions
+# List ai-sessions with token savings
 ccswarm session list
-
-# Create ai-session with specific config
-ccswarm session create --agent frontend --enable-ai-features
-
-# Get session statistics and token savings
 ccswarm session stats --show-savings
 
-# Attach to session (native PTY)
+# Create and manage sessions
+ccswarm session create --agent frontend --enable-ai-features
 ccswarm session attach <session-id>
-
-# Pause/Resume sessions
 ccswarm session pause <session-id>
 ccswarm session resume <session-id>
 
-# MCP server management
+# MCP protocol support
 ccswarm session start-mcp-server --port 3000
 ccswarm session mcp-status
 
-# Session compression and optimization
+# Session optimization
 ccswarm session compress --threshold 0.8
 ccswarm session optimize --all
 ```
@@ -583,11 +551,11 @@ ccswarm worktree list
 ccswarm worktree clean
 ```
 
-## 🏛️ Sangha & Self-Extension (New in v0.3.0)
+## 🏛️ Collective Intelligence & Self-Extension
 
-### Collective Intelligence with Sangha
+### Sangha Democratic Decision-Making
 
-Implements Buddhist Sangha principles for democratic agent decision-making:
+ccswarm implements Buddhist Sangha principles for democratic agent decision-making:
 
 ```bash
 # Submit proposals for swarm consideration
@@ -604,23 +572,23 @@ ccswarm sangha list --status active
 ccswarm sangha show <proposal-id>
 ```
 
-**Consensus Algorithms Available:**
+**Consensus Algorithms:**
 - **Simple Majority** (51%+): Fast decisions for routine changes
 - **Byzantine Fault Tolerant** (67%+): Critical system changes
 - **Proof of Stake**: Weighted voting based on agent expertise
 
-### Agent Self-Extension (v0.3.1 - Autonomous Mode)
+### Autonomous Self-Extension
 
-Agents now autonomously analyze their experiences and propose improvements:
+Agents autonomously analyze their experiences and propose improvements:
 
 ```bash
-# NEW: Autonomous self-extension - agents think independently
+# Autonomous self-extension - agents think independently
 ccswarm extend autonomous                     # All agents self-reflect
 ccswarm extend autonomous --agent backend     # Specific agent
 ccswarm extend autonomous --dry-run           # Preview proposals
 ccswarm extend autonomous --continuous        # Continuous improvement
 
-# Optional: Search-based extension (v0.3.0 legacy)
+# Optional search-based extension
 ccswarm search mdn "react server components"
 ccswarm search github "rust async patterns" 
 ccswarm extend propose --title "Add RSC Support"
@@ -630,17 +598,12 @@ ccswarm extend status
 ccswarm extend stats
 ```
 
-**Autonomous Process (v0.3.1):**
+**Autonomous Process:**
 1. **Experience Analysis**: Review past task performance
 2. **Capability Assessment**: Identify strengths and gaps
 3. **Strategic Planning**: Generate improvement proposals
 4. **Sangha Consultation**: Submit for democratic approval
 5. **Implementation**: Execute approved extensions
-
-**Optional Search Integration:**
-- **MDN Web Docs**: JavaScript/Web API documentation
-- **GitHub**: Popular repositories and patterns
-- **Stack Overflow**: Community solutions
 
 ### Example: Live Demo Results
 
@@ -730,6 +693,35 @@ cargo clippy -- -D warnings
 cargo doc --no-deps --open
 ```
 
+## 🚀 What's New in v0.3.4
+
+ccswarm v0.3.4 introduces **autonomous orchestration** as the default mode:
+
+- **🧠 Proactive Master Claude**: Enabled by default with 30s analysis intervals
+- **🔒 Security Agent**: OWASP Top 10 scanning with real-time monitoring  
+- **📊 Dependency Resolution**: Automatic task ordering and bottleneck detection
+- **🎯 Goal Tracking**: OKR integration with milestone management
+- **⚡ Native Sessions**: 93% token savings with cross-platform PTY support
+- **🏛️ Collective Intelligence**: Sangha democratic decision-making
+- **🤖 Self-Extension**: Autonomous agent improvement and learning
+
+### Contributing
+
+```bash
+# Fork and clone
+git clone https://github.com/yourusername/ccswarm.git
+
+# Run tests
+cargo test
+
+# Format code
+cargo fmt
+cargo clippy -- -D warnings
+
+# Check documentation
+cargo doc --no-deps --open
+```
+
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE)
@@ -739,59 +731,6 @@ MIT License - see [LICENSE](LICENSE)
 - Anthropic for Claude and Claude Code
 - Rust community for excellent libraries
 - Contributors and early adopters
-
-## 📝 Release Notes
-
-### v0.3.4 - Proactive Master Claude & Security Agent
-- **🧠 Proactive Master Claude**: Autonomous orchestration with predictive task generation enabled by default
-- **📊 Intelligent Progress Analysis**: Real-time monitoring with velocity tracking and bottleneck detection
-- **🔗 Dependency Resolution Engine**: Automatic task ordering and dependency graph management
-- **🎯 Goal-Driven Development**: OKR integration with milestone tracking and progress visualization
-- **🔒 Security Agent**: OWASP Top 10 vulnerability scanning with real-time risk assessment
-- **⚡ Default Configuration**: Proactive mode enabled by default (30s standard, 15s high-frequency)
-- **🛡️ Security Scoring**: Automated security assessment with CI/CD integration
-- **🔍 Pattern Learning**: Machine learning from task completion patterns for better predictions
-- **📈 Performance Optimization**: Team velocity analysis with optimization suggestions
-- **🚨 Continuous Security**: Real-time vulnerability monitoring during development
-- **✅ Isolated Testing**: Git worktree conflict resolution with comprehensive test coverage
-
-### v0.3.3 - Stable AI-Session Integration
-- **✅ Production Stability**: Comprehensive testing and validation for production use
-- **🖥️ Complete TMux Replacement**: Native ai-session terminal management with zero external dependencies
-- **💾 93% Token Savings**: Intelligent conversation history compression and session reuse
-- **🔄 Cross-Platform PTY**: Native terminal emulation on Linux, macOS, and Windows
-- **📡 MCP Protocol**: Model Context Protocol implementation for standardized AI integration
-
-### v0.3.1 - Autonomous Self-Extension
-- **🤔 Autonomous Reasoning**: Agents analyze their own experiences without mandatory search
-- **🧠 Self-Reflection**: Introspective capability assessment and improvement
-- **🔄 Experience-Based Learning**: Learn from past performance and recurring issues
-- **🏛️ Sangha Integration**: All autonomous proposals go through democratic approval
-- **📈 Continuous Mode**: Run agents in perpetual self-improvement cycles
-- **🎯 Strategic Planning**: AI-driven capability gap identification
-
-### v0.3.0 - Sangha & Search Integration  
-- **Sangha Collective Intelligence**: Democratic decision-making system for agent swarms
-- **Search-Based Extension**: Agents can search GitHub, MDN, Stack Overflow
-- **Evolution Tracking**: Monitor and analyze agent evolution over time
-- **Meta-Learning System**: Learn from successes and failures across the swarm
-- **Extension Propagation**: Share successful improvements between agents
-- **Risk Assessment**: Automatic evaluation and mitigation of extension risks
-- **Rollback Capability**: Safe experimentation with automatic rollback on failure
-
-### v0.2.2 - LLM Quality Judge
-- **Multi-Dimensional Evaluation**: 8 aspects of code quality assessment
-- **Intelligent Remediation**: Context-aware fix instructions
-- **Automated Review Cycle**: Periodic quality checks every 30 seconds
-- **Confidence Scoring**: Track evaluation reliability
-
-### Technical Implementation
-- **Autonomous Extension**: Experience analyzer, capability assessor, strategic planner
-- **Sangha Module**: Complete voting system with consensus algorithms
-- **Search Integration**: Optional connections to MDN, GitHub, Stack Exchange
-- **Proposal System**: Structured templates with risk assessment
-- **Learning Framework**: Knowledge base with pattern recognition
-- **Quality Review**: LLM-based multi-dimensional code evaluation
 
 ---
 

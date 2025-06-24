@@ -46,7 +46,7 @@ impl SessionContext {
         let config = SessionConfig::default();
         let mut conversation_history = TokenEfficientHistory::new();
         conversation_history.max_tokens = config.max_tokens;
-        
+
         Self {
             session_id,
             conversation_history,
@@ -62,35 +62,36 @@ impl SessionContext {
     pub fn add_message(&mut self, message: Message) {
         self.conversation_history.add_message_struct(message);
     }
-    
+
     /// Add a message to the conversation history (legacy method)
     pub fn add_message_raw(&mut self, role: MessageRole, content: String) {
         self.conversation_history.add_message(role, content);
     }
-    
+
     /// Get the total number of messages in the conversation history
     pub fn get_message_count(&self) -> usize {
         self.conversation_history.messages.len()
     }
-    
+
     /// Get the total estimated token count
     pub fn get_total_tokens(&self) -> usize {
         self.conversation_history.current_tokens
     }
-    
+
     /// Get the most recent n messages
     pub fn get_recent_messages(&self, n: usize) -> Vec<&Message> {
         let message_count = self.conversation_history.messages.len();
         if n >= message_count {
             self.conversation_history.messages.iter().collect()
         } else {
-            self.conversation_history.messages
+            self.conversation_history
+                .messages
                 .iter()
                 .skip(message_count - n)
                 .collect()
         }
     }
-    
+
     /// Compress the context if needed, returns true if compression occurred
     pub async fn compress_context(&mut self) -> bool {
         // Check if compression is needed
@@ -132,6 +133,12 @@ pub struct TokenEfficientHistory {
     pub current_tokens: usize,
 }
 
+impl Default for TokenEfficientHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TokenEfficientHistory {
     /// Create a new history
     pub fn new() -> Self {
@@ -161,12 +168,12 @@ impl TokenEfficientHistory {
             self.compress_old_messages();
         }
     }
-    
+
     /// Add a message struct directly to the history
     pub fn add_message_struct(&mut self, message: Message) {
         self.current_tokens += message.token_count;
         self.messages.push(message);
-        
+
         // Compress if needed
         if self.current_tokens > self.max_tokens {
             self.compress_old_messages();
@@ -370,15 +377,15 @@ mod tests {
         assert_eq!(summary.session_id, session_id);
         assert_eq!(summary.message_count, 2);
     }
-    
+
     #[test]
     fn test_new_api_methods() {
         let session_id = SessionId::new();
         let mut context = SessionContext::new(session_id.clone());
-        
+
         // Test message count
         assert_eq!(context.get_message_count(), 0);
-        
+
         // Add a message using new API
         let message = Message {
             role: MessageRole::User,
@@ -387,29 +394,29 @@ mod tests {
             token_count: 3,
         };
         context.add_message(message);
-        
+
         // Check message count and tokens
         assert_eq!(context.get_message_count(), 1);
         assert_eq!(context.get_total_tokens(), 3);
-        
+
         // Test get_recent_messages
         let recent = context.get_recent_messages(1);
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].content, "Test message");
-        
+
         // Test config field
         assert_eq!(context.config.max_tokens, 100_000);
     }
-    
+
     #[tokio::test]
     async fn test_compress_context() {
         let session_id = SessionId::new();
         let mut context = SessionContext::new(session_id);
-        
+
         // Set a small token limit for testing
         context.config.max_tokens = 50;
         context.conversation_history.max_tokens = 50;
-        
+
         // Add messages that exceed the limit
         for i in 0..10 {
             let message = Message {
@@ -420,10 +427,10 @@ mod tests {
             };
             context.add_message(message);
         }
-        
+
         // Should have auto-compressed during add
         assert!(context.get_total_tokens() <= 50);
-        
+
         // Manual compression should return false (already compressed)
         let compressed = context.compress_context().await;
         assert!(!compressed);

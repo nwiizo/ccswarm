@@ -20,6 +20,12 @@ pub struct ObservabilityLayer {
     pub anomaly_detector: AnomalyDetector,
 }
 
+impl Default for ObservabilityLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ObservabilityLayer {
     /// Create a new observability layer
     pub fn new() -> Self {
@@ -66,6 +72,12 @@ pub struct SemanticTracer {
     traces: Arc<RwLock<Vec<TraceEvent>>>,
     /// Span stack
     span_stack: Arc<RwLock<Vec<SpanId>>>,
+}
+
+impl Default for SemanticTracer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SemanticTracer {
@@ -131,6 +143,12 @@ impl SemanticTracer {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SpanId(Uuid);
 
+impl Default for SpanId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpanId {
     /// Create a new span ID
     pub fn new() -> Self {
@@ -174,6 +192,12 @@ pub struct DecisionTracker {
     rationales: Arc<RwLock<HashMap<DecisionId, Rationale>>>,
     /// Decision outcomes
     outcomes: Arc<RwLock<HashMap<DecisionId, Outcome>>>,
+}
+
+impl Default for DecisionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DecisionTracker {
@@ -234,6 +258,12 @@ impl DecisionTracker {
 /// Decision ID
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DecisionId(Uuid);
+
+impl Default for DecisionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl DecisionId {
     /// Create a new decision ID

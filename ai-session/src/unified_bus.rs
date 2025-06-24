@@ -2,10 +2,10 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use uuid::Uuid;
-use std::collections::HashMap;
 
 /// Unified message type that encompasses all communication
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,7 +146,7 @@ impl UnifiedBus {
     /// Create new unified bus
     pub fn new(history_limit: usize) -> Self {
         let (broadcast_tx, _) = broadcast::channel(1024);
-        
+
         Self {
             broadcast_tx,
             direct_channels: Arc::new(RwLock::new(HashMap::new())),
@@ -155,12 +155,12 @@ impl UnifiedBus {
             history_limit,
         }
     }
-    
+
     /// Subscribe to all messages
     pub fn subscribe_all(&self) -> broadcast::Receiver<UnifiedMessage> {
         self.broadcast_tx.subscribe()
     }
-    
+
     /// Subscribe to specific topic
     pub async fn subscribe_topic(&self, topic: &str) -> mpsc::Receiver<UnifiedMessage> {
         let (tx, rx) = mpsc::channel(256);
@@ -168,7 +168,7 @@ impl UnifiedBus {
         subscribers.entry(topic.to_string()).or_default().push(tx);
         rx
     }
-    
+
     /// Register direct channel for agent
     pub async fn register_agent(&self, agent_id: &str) -> mpsc::Receiver<UnifiedMessage> {
         let (tx, rx) = mpsc::channel(256);
@@ -176,30 +176,30 @@ impl UnifiedBus {
         channels.insert(agent_id.to_string(), tx);
         rx
     }
-    
+
     /// Unregister agent
     pub async fn unregister_agent(&self, agent_id: &str) {
         let mut channels = self.direct_channels.write().await;
         channels.remove(agent_id);
     }
-    
+
     /// Send message to bus
     pub async fn send(&self, message: UnifiedMessage) -> Result<()> {
         // Add to history
         {
             let mut history = self.message_history.write().await;
             history.push(message.clone());
-            
+
             // Trim history if needed
             if history.len() > self.history_limit {
                 let drain_end = history.len() - self.history_limit;
                 history.drain(0..drain_end);
             }
         }
-        
+
         // Broadcast to all subscribers
         let _ = self.broadcast_tx.send(message.clone());
-        
+
         // Send to topic subscribers
         if let Some(topic) = self.get_message_topic(&message) {
             let subscribers = self.topic_subscribers.read().await;
@@ -209,7 +209,7 @@ impl UnifiedBus {
                 }
             }
         }
-        
+
         // Send direct messages
         if let UnifiedMessage::Direct(ref msg) = message {
             let channels = self.direct_channels.read().await;
@@ -217,10 +217,10 @@ impl UnifiedBus {
                 let _ = tx.send(message).await;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get message topic for routing
     fn get_message_topic(&self, message: &UnifiedMessage) -> Option<String> {
         match message {
@@ -232,7 +232,7 @@ impl UnifiedBus {
             UnifiedMessage::Ipc(_) => Some("ipc".to_string()),
         }
     }
-    
+
     /// Get message history
     pub async fn get_history(&self, limit: Option<usize>) -> Vec<UnifiedMessage> {
         let history = self.message_history.read().await;
@@ -241,7 +241,7 @@ impl UnifiedBus {
             None => history.clone(),
         }
     }
-    
+
     /// Create session message
     pub fn create_session_message(
         session_id: &str,
@@ -256,7 +256,7 @@ impl UnifiedBus {
             timestamp: chrono::Utc::now(),
         })
     }
-    
+
     /// Create coordination message
     pub fn create_coordination_message(
         from_agent: &str,
@@ -273,7 +273,7 @@ impl UnifiedBus {
             timestamp: chrono::Utc::now(),
         })
     }
-    
+
     /// Create task message
     pub fn create_task_message(
         task_id: &str,
@@ -288,7 +288,7 @@ impl UnifiedBus {
             timestamp: chrono::Utc::now(),
         })
     }
-    
+
     /// Create event message
     pub fn create_event_message(
         source: &str,
@@ -303,7 +303,7 @@ impl UnifiedBus {
             timestamp: chrono::Utc::now(),
         })
     }
-    
+
     /// Create direct message
     pub fn create_direct_message(
         from_agent: &str,
@@ -324,20 +324,20 @@ impl UnifiedBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_unified_bus() {
         let bus = UnifiedBus::new(100);
-        
+
         // Subscribe to all messages
         let mut all_rx = bus.subscribe_all();
-        
+
         // Subscribe to session topic
         let mut session_rx = bus.subscribe_topic("session").await;
-        
+
         // Register an agent
         let mut agent_rx = bus.register_agent("agent1").await;
-        
+
         // Send a session message
         let msg = UnifiedBus::create_session_message(
             "session1",
@@ -345,29 +345,25 @@ mod tests {
             serde_json::json!({"status": "ok"}),
         );
         bus.send(msg.clone()).await.unwrap();
-        
+
         // Check all subscriber received it
         let received = all_rx.recv().await.unwrap();
         match received {
             UnifiedMessage::Session(s) => assert_eq!(s.session_id, "session1"),
             _ => panic!("Wrong message type"),
         }
-        
+
         // Check topic subscriber received it
         let received = session_rx.recv().await.unwrap();
         match received {
             UnifiedMessage::Session(s) => assert_eq!(s.session_id, "session1"),
             _ => panic!("Wrong message type"),
         }
-        
+
         // Send direct message
-        let direct_msg = UnifiedBus::create_direct_message(
-            "agent2",
-            "agent1",
-            "Hello agent1",
-        );
+        let direct_msg = UnifiedBus::create_direct_message("agent2", "agent1", "Hello agent1");
         bus.send(direct_msg).await.unwrap();
-        
+
         // Check agent received it
         let received = agent_rx.recv().await.unwrap();
         match received {

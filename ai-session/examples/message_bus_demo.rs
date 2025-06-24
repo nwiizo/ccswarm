@@ -1,8 +1,8 @@
 //! Demonstrates the enhanced MessageBus functionality for ccswarm integration
 
 use ai_session::{
-    AgentId, AgentMessage, MessagePriority, MultiAgentSession, SessionConfig,
-    SessionManager, TaskId,
+    AgentId, AgentMessage, MessagePriority, MultiAgentSession, SessionConfig, SessionManager,
+    TaskId,
 };
 use anyhow::Result;
 use std::sync::Arc;
@@ -49,25 +49,55 @@ async fn main() -> Result<()> {
     // Spawn a monitoring task
     let monitor_handle = tokio::spawn(async move {
         println!("Starting message monitor...\n");
-        
+
         while let Ok(msg) = all_messages.recv() {
             match msg {
-                AgentMessage::Registration { agent_id, capabilities, .. } => {
-                    println!("📝 Registration: Agent {} with capabilities: {:?}", agent_id, capabilities);
+                AgentMessage::Registration {
+                    agent_id,
+                    capabilities,
+                    ..
+                } => {
+                    println!(
+                        "📝 Registration: Agent {} with capabilities: {:?}",
+                        agent_id, capabilities
+                    );
                 }
-                AgentMessage::TaskAssignment { task_id, agent_id, .. } => {
+                AgentMessage::TaskAssignment {
+                    task_id, agent_id, ..
+                } => {
                     println!("📋 Task {} assigned to agent {}", task_id, agent_id);
                 }
-                AgentMessage::TaskProgress { agent_id, progress, message, .. } => {
-                    println!("📊 Progress from {}: {}% - {}", agent_id, (progress * 100.0) as u32, message);
+                AgentMessage::TaskProgress {
+                    agent_id,
+                    progress,
+                    message,
+                    ..
+                } => {
+                    println!(
+                        "📊 Progress from {}: {}% - {}",
+                        agent_id,
+                        (progress * 100.0) as u32,
+                        message
+                    );
                 }
-                AgentMessage::TaskCompleted { agent_id, task_id, .. } => {
+                AgentMessage::TaskCompleted {
+                    agent_id, task_id, ..
+                } => {
                     println!("✅ Task {} completed by agent {}", task_id, agent_id);
                 }
-                AgentMessage::HelpRequest { agent_id, context, priority } => {
-                    println!("🆘 Help request from {} (priority: {:?}): {}", agent_id, priority, context);
+                AgentMessage::HelpRequest {
+                    agent_id,
+                    context,
+                    priority,
+                } => {
+                    println!(
+                        "🆘 Help request from {} (priority: {:?}): {}",
+                        agent_id, priority, context
+                    );
                 }
-                AgentMessage::StatusUpdate { agent_id, status, .. } => {
+                AgentMessage::StatusUpdate {
+                    agent_id, status, ..
+                } => {
                     println!("📍 Status update from {}: {}", agent_id, status);
                 }
                 AgentMessage::Custom { message_type, .. } => {
@@ -86,7 +116,11 @@ async fn main() -> Result<()> {
             &frontend_id,
             AgentMessage::Registration {
                 agent_id: frontend_id.clone(),
-                capabilities: vec!["react".to_string(), "typescript".to_string(), "css".to_string()],
+                capabilities: vec![
+                    "react".to_string(),
+                    "typescript".to_string(),
+                    "css".to_string(),
+                ],
                 metadata: serde_json::json!({
                     "version": "1.0",
                     "experience_level": "senior"
@@ -103,7 +137,11 @@ async fn main() -> Result<()> {
             &backend_id,
             AgentMessage::Registration {
                 agent_id: backend_id.clone(),
-                capabilities: vec!["rust".to_string(), "api".to_string(), "database".to_string()],
+                capabilities: vec![
+                    "rust".to_string(),
+                    "api".to_string(),
+                    "database".to_string(),
+                ],
                 metadata: serde_json::json!({
                     "version": "1.0",
                     "preferred_framework": "actix-web"
@@ -142,7 +180,10 @@ async fn main() -> Result<()> {
                     agent_id: frontend_id.clone(),
                     task_id: task_id.clone(),
                     progress,
-                    message: format!("Building component... {}% complete", (progress * 100.0) as u32),
+                    message: format!(
+                        "Building component... {}% complete",
+                        (progress * 100.0) as u32
+                    ),
                 },
             )
             .await?;
@@ -218,6 +259,6 @@ async fn main() -> Result<()> {
     sleep(Duration::from_millis(500)).await;
 
     println!("\n=== Demo Complete ===");
-    
+
     Ok(())
 }

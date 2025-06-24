@@ -258,8 +258,10 @@ impl SessionManager {
             AgentSession::new(agent_id, agent_role, working_directory.clone(), description);
 
         // Create the native session
-        let _native_session = self.session_manager
-            .create_session(&session.tmux_session).await?;
+        let _native_session = self
+            .session_manager
+            .create_session(&session.tmux_session)
+            .await?;
 
         // Set up the session environment
         self.setup_session_environment(&session).await?;
@@ -399,18 +401,27 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found
     pub async fn terminate_session(&self, session_id: &str) -> Result<()> {
-        let mut sessions = self.sessions.lock().unwrap();
-
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+        let tmux_session = {
+            let sessions = self.sessions.lock().unwrap();
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            session.tmux_session.clone()
+        };
 
         // Terminate the native session
-        if self.session_manager.has_session(&session.tmux_session).await {
-            self.session_manager.delete_session(&session.tmux_session).await?;
+        if self.session_manager.has_session(&tmux_session).await {
+            self.session_manager.delete_session(&tmux_session).await?;
         }
-        session.status = SessionStatus::Terminated;
-        session.touch();
+
+        // Update session status
+        {
+            let mut sessions = self.sessions.lock().unwrap();
+            if let Some(session) = sessions.get_mut(session_id) {
+                session.status = SessionStatus::Terminated;
+                session.touch();
+            }
+        }
 
         Ok(())
     }
@@ -454,7 +465,11 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub async fn enable_auto_accept(&self, session_id: &str, config: AutoAcceptConfig) -> Result<()> {
+    pub async fn enable_auto_accept(
+        &self,
+        session_id: &str,
+        config: AutoAcceptConfig,
+    ) -> Result<()> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -590,13 +605,17 @@ impl SessionManager {
     async fn setup_session_environment(&self, session: &AgentSession) -> Result<()> {
         // For native sessions, environment setup would be handled during session creation
         // We can set environment variables if the native session supports it
-        if let Some(native_session) = self.session_manager.get_session(&session.tmux_session).await {
+        if let Some(native_session) = self
+            .session_manager
+            .get_session(&session.tmux_session)
+            .await
+        {
             let env_commands = vec![
                 format!("export CCSWARM_SESSION_ID={}", session.id),
                 format!("export CCSWARM_AGENT_ID={}", session.agent_id),
                 format!("export CCSWARM_AGENT_ROLE={}", session.agent_role.name()),
             ];
-            
+
             let session_lock = native_session.lock().await;
             for cmd in env_commands {
                 session_lock.send_input(&format!("{}\n", cmd)).await?;
@@ -618,7 +637,11 @@ impl SessionManager {
         );
 
         // Send the command to the native session
-        if let Some(native_session) = self.session_manager.get_session(&session.tmux_session).await {
+        if let Some(native_session) = self
+            .session_manager
+            .get_session(&session.tmux_session)
+            .await
+        {
             let session_lock = native_session.lock().await;
             session_lock.send_input(&format!("{}\n", command)).await?;
         }
@@ -632,9 +655,8 @@ impl Default for SessionManager {
         // Note: This is a blocking call in an async context
         // Consider using lazy_static or once_cell for production
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                Self::new().await.expect("Failed to create SessionManager")
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async { Self::new().await.expect("Failed to create SessionManager") })
         })
     }
 }

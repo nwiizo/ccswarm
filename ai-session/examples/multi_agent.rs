@@ -1,8 +1,6 @@
 //! Multi-agent coordination example - demonstrates AI agent collaboration
 
-use ai_session::coordination::{
-    AgentId, BroadcastMessage, MessageBus, MessagePriority, MessageType,
-};
+use ai_session::coordination::{AgentId, BroadcastMessage, MessageBus, MessagePriority};
 use ai_session::{SessionConfig, SessionManager};
 use anyhow::Result;
 use std::sync::Arc;

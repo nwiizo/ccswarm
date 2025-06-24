@@ -164,10 +164,18 @@ pub enum JsonRpcMessage {
     Notification(JsonRpcNotification),
 }
 
-impl JsonRpcMessage {
-    /// Parse a JSON-RPC message from string
-    pub fn from_str(s: &str) -> Result<Self, serde_json::Error> {
+impl std::str::FromStr for JsonRpcMessage {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_json::from_str(s)
+    }
+}
+
+impl JsonRpcMessage {
+    /// Parse a JSON-RPC message from string (convenience method)
+    pub fn parse(s: &str) -> Result<Self, serde_json::Error> {
+        s.parse()
     }
 
     /// Serialize a JSON-RPC message to string

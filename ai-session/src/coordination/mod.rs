@@ -14,6 +14,12 @@ use crate::core::AISession;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentId(Uuid);
 
+impl Default for AgentId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AgentId {
     /// Create a new agent ID
     pub fn new() -> Self {
@@ -37,6 +43,12 @@ pub struct MultiAgentSession {
     pub task_distributor: Arc<TaskDistributor>,
     /// Resource manager
     pub resource_manager: Arc<ResourceManager>,
+}
+
+impl Default for MultiAgentSession {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MultiAgentSession {
@@ -102,6 +114,12 @@ pub struct MessageBus {
     all_messages_receiver: Receiver<AgentMessage>,
 }
 
+impl Default for MessageBus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageBus {
     /// Create a new message bus
     pub fn new() -> Self {
@@ -121,10 +139,11 @@ impl MessageBus {
     pub fn register_agent(&self, agent_id: AgentId) -> Result<()> {
         let (sender, receiver) = crossbeam_channel::unbounded();
         self.channels.insert(agent_id.clone(), (sender, receiver));
-        
+
         // Also register agent message channel
         let (agent_sender, agent_receiver) = crossbeam_channel::unbounded();
-        self.agent_channels.insert(agent_id, (agent_sender, agent_receiver));
+        self.agent_channels
+            .insert(agent_id, (agent_sender, agent_receiver));
         Ok(())
     }
 
@@ -169,16 +188,18 @@ impl MessageBus {
         } else {
             return Err(anyhow::anyhow!("Agent not found: {}", agent_id));
         }
-        
+
         // Also send to the all messages channel for monitoring
         self.all_messages_sender.send(message)?;
-        
+
         Ok(())
     }
 
     /// Get agent message receiver for a specific agent
     pub fn get_agent_receiver(&self, agent_id: &AgentId) -> Option<Receiver<AgentMessage>> {
-        self.agent_channels.get(agent_id).map(|entry| entry.1.clone())
+        self.agent_channels
+            .get(agent_id)
+            .map(|entry| entry.1.clone())
     }
 }
 
@@ -295,6 +316,12 @@ pub struct TaskDistributor {
     assignments: Arc<DashMap<TaskId, AgentId>>,
 }
 
+impl Default for TaskDistributor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskDistributor {
     /// Create a new task distributor
     pub fn new() -> Self {
@@ -349,6 +376,12 @@ impl TaskDistributor {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TaskId(Uuid);
 
+impl Default for TaskId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskId {
     /// Create a new task ID
     pub fn new() -> Self {
@@ -396,6 +429,12 @@ pub struct ResourceManager {
     rate_limits: Arc<DashMap<String, RateLimit>>,
     /// Shared memory pool
     shared_memory: Arc<DashMap<String, Vec<u8>>>,
+}
+
+impl Default for ResourceManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourceManager {

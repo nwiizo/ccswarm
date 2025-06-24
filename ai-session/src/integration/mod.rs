@@ -15,6 +15,12 @@ pub struct TmuxCompatLayer {
     session_prefix: String,
 }
 
+impl Default for TmuxCompatLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TmuxCompatLayer {
     /// Create new tmux compatibility layer
     pub fn new() -> Self {
@@ -41,11 +47,11 @@ impl TmuxCompatLayer {
         );
 
         let mut cmd = Command::new(&self.tmux_path);
-        cmd.args(&["new-session", "-d", "-s", &tmux_name]);
+        cmd.args(["new-session", "-d", "-s", &tmux_name]);
 
         if let Some(shell) = &config.shell_command {
             cmd.arg("-c")
-                .arg(&config.working_directory.display().to_string());
+                .arg(config.working_directory.display().to_string());
             cmd.arg(shell);
         }
 
@@ -59,7 +65,7 @@ impl TmuxCompatLayer {
     /// List existing tmux sessions
     pub async fn list_tmux_sessions(&self) -> Result<Vec<TmuxSession>> {
         let output = Command::new(&self.tmux_path)
-            .args(&[
+            .args([
                 "list-sessions",
                 "-F",
                 "#{session_name}:#{session_created}:#{session_attached}",
@@ -91,7 +97,7 @@ impl TmuxCompatLayer {
     /// Send command to tmux session
     pub async fn send_command(&self, session_name: &str, command: &str) -> Result<()> {
         Command::new(&self.tmux_path)
-            .args(&["send-keys", "-t", session_name, command, "Enter"])
+            .args(["send-keys", "-t", session_name, command, "Enter"])
             .output()
             .await
             .context("Failed to send command to tmux")?;
@@ -118,7 +124,7 @@ impl TmuxCompatLayer {
     /// Kill tmux session
     pub async fn kill_session(&self, session_name: &str) -> Result<()> {
         Command::new(&self.tmux_path)
-            .args(&["kill-session", "-t", session_name])
+            .args(["kill-session", "-t", session_name])
             .output()
             .await?;
 
@@ -143,6 +149,12 @@ pub struct ScreenCompatLayer {
     screen_path: String,
 }
 
+impl Default for ScreenCompatLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScreenCompatLayer {
     /// Create new screen compatibility layer
     pub fn new() -> Self {
@@ -163,7 +175,7 @@ impl ScreenCompatLayer {
         );
 
         Command::new(&self.screen_path)
-            .args(&["-dmS", &screen_name])
+            .args(["-dmS", &screen_name])
             .output()
             .await?;
 
@@ -175,6 +187,12 @@ impl ScreenCompatLayer {
 pub struct MigrationHelper {
     /// Tmux compatibility layer
     tmux: TmuxCompatLayer,
+}
+
+impl Default for MigrationHelper {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MigrationHelper {
@@ -206,7 +224,7 @@ impl MigrationHelper {
         session_name: &str,
     ) -> Result<HashMap<String, String>> {
         let output = Command::new("tmux")
-            .args(&["show-environment", "-t", session_name])
+            .args(["show-environment", "-t", session_name])
             .output()
             .await?;
 
@@ -225,7 +243,7 @@ impl MigrationHelper {
     /// Get tmux working directory
     async fn get_tmux_working_directory(&self, session_name: &str) -> Result<String> {
         let output = Command::new("tmux")
-            .args(&[
+            .args([
                 "display-message",
                 "-t",
                 session_name,

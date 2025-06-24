@@ -78,11 +78,7 @@ impl JsonRpcError {
 
     /// Create a parse error
     pub fn parse_error() -> Self {
-        Self::new(
-            ErrorCode::ParseError,
-            "Parse error".to_string(),
-            None,
-        )
+        Self::new(ErrorCode::ParseError, "Parse error".to_string(), None)
     }
 
     /// Create an invalid request error
@@ -105,20 +101,12 @@ impl JsonRpcError {
 
     /// Create an invalid params error
     pub fn invalid_params(message: String) -> Self {
-        Self::new(
-            ErrorCode::InvalidParams,
-            message,
-            None,
-        )
+        Self::new(ErrorCode::InvalidParams, message, None)
     }
 
     /// Create an internal error
     pub fn internal_error(message: String) -> Self {
-        Self::new(
-            ErrorCode::InternalError,
-            message,
-            None,
-        )
+        Self::new(ErrorCode::InternalError, message, None)
     }
 }
 
@@ -196,7 +184,7 @@ mod tests {
             "test_method".to_string(),
             Some(json!({"param": "value"})),
         );
-        
+
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains(r#""jsonrpc":"2.0""#));
         assert!(json.contains(r#""id":1"#));
@@ -210,7 +198,7 @@ mod tests {
             RequestId::String("abc".to_string()),
             json!({"result": "success"}),
         );
-        
+
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains(r#""jsonrpc":"2.0""#));
         assert!(json.contains(r#""id":"abc""#));
@@ -224,7 +212,7 @@ mod tests {
             RequestId::Number(2),
             JsonRpcError::method_not_found("unknown_method"),
         );
-        
+
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains(r#""jsonrpc":"2.0""#));
         assert!(json.contains(r#""id":2"#));
@@ -239,7 +227,7 @@ mod tests {
             "status_update".to_string(),
             Some(json!({"status": "ready"})),
         );
-        
+
         let json = serde_json::to_string(&notification).unwrap();
         assert!(json.contains(r#""jsonrpc":"2.0""#));
         assert!(json.contains(r#""method":"status_update""#));

@@ -331,7 +331,7 @@ async fn create_session(
     }
 
     let session = manager.create_session_with_config(config).await?;
-    
+
     // Session is automatically started and persisted by the PersistentSessionManager
 
     println!("Created session: {}", session.id);
@@ -395,7 +395,7 @@ async fn list_sessions(detailed: bool) -> Result<()> {
                         ai_session::core::SessionStatus::Running => "running",
                         ai_session::core::SessionStatus::Paused => "paused",
                         ai_session::core::SessionStatus::Terminated => "terminated",
-                        _ => "unknown"
+                        _ => "unknown",
                     }
                 );
             }
@@ -408,19 +408,24 @@ async fn list_sessions(detailed: bool) -> Result<()> {
 async fn attach_session(session: String) -> Result<()> {
     let manager = get_session_manager().await?;
     let session_id = ai_session::core::SessionId::parse_str(&session)?;
-    
+
     if let Some(session) = manager.get_session(&session_id).await {
         println!("Attaching to session: {}", session_id);
         println!("Session status: {:?}", session.status().await);
-        println!("Working directory: {}", session.config.working_directory.display());
-        
+        println!(
+            "Working directory: {}",
+            session.config.working_directory.display()
+        );
+
         // For now, just demonstrate that we can interact with the session
-        println!("\n(Interactive mode would start here. For now, use 'ai-session exec' to run commands)");
+        println!(
+            "\n(Interactive mode would start here. For now, use 'ai-session exec' to run commands)"
+        );
     } else {
         eprintln!("Session not found: {}", session_id);
         std::process::exit(1);
     }
-    
+
     Ok(())
 }
 
