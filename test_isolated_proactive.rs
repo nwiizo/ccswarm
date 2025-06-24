@@ -1,31 +1,37 @@
 use anyhow::Result;
 use chrono::Utc;
+use std::path::Path;
 use tempfile::TempDir;
 use tokio::fs;
-use std::path::PathBuf;
 
-use ccswarm::config::{CcswarmConfig, ProjectConfig, RepositoryConfig, MasterClaudeConfig, ThinkMode, ClaudeConfig, AgentConfig, CoordinationConfig};
-use ccswarm::orchestrator::{MasterClaude, proactive_master::{ProactiveMaster, Objective, Milestone}};
-use ccswarm::agent::{Task, Priority, TaskType, TaskResult};
+use ccswarm::agent::{Priority, Task, TaskResult, TaskType};
+use ccswarm::config::{
+    AgentConfig, CcswarmConfig, ClaudeConfig, CoordinationConfig, MasterClaudeConfig,
+    ProjectConfig, RepositoryConfig, ThinkMode,
+};
+use ccswarm::orchestrator::{
+    proactive_master::{Milestone, Objective, ProactiveMaster},
+    MasterClaude,
+};
 use ccswarm::security::SecurityAgent;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Setup logging
     tracing_subscriber::fmt::init();
-    
+
     println!("🚀 Testing ccswarm Proactive Mode in Isolated Environment");
     println!("   Git worktreeの競合を回避するため、完全に分離されたテスト環境を使用");
-    
+
     // Test 1: Proactive Master standalone (no git dependency)
     test_proactive_master_standalone().await?;
-    
+
     // Test 2: Security Agent (isolated temp directory)
     test_security_agent_isolated().await?;
-    
+
     // Test 3: Master Claude in isolated git repository
     test_master_claude_isolated().await?;
-    
+
     println!("✅ すべてのテストが分離環境で正常に完了しました！");
     println!("🎯 プロアクティブモードの機能:");
     println!("   ✓ 自動タスク予測と生成");
@@ -33,20 +39,21 @@ async fn main() -> Result<()> {
     println!("   ✓ ボトルネック検出");
     println!("   ✓ セキュリティ脆弱性スキャン");
     println!("   ✓ リアルタイム進捗監視");
-    
+
     Ok(())
 }
 
 async fn test_proactive_master_standalone() -> Result<()> {
     println!("\n🧠 Test 1: Proactive Master Standalone (No Git Dependencies)");
-    
+
     let proactive_master = ProactiveMaster::new().await?;
-    
+
     // Test setting an objective
     let objective = Objective {
         id: uuid::Uuid::new_v4().to_string(),
         title: "Build Modern Web Application".to_string(),
-        description: "Create a full-stack application with React frontend and Node.js backend".to_string(),
+        description: "Create a full-stack application with React frontend and Node.js backend"
+            .to_string(),
         deadline: Some(Utc::now() + chrono::Duration::days(45)),
         progress: 0.0,
         key_results: vec![
@@ -55,10 +62,10 @@ async fn test_proactive_master_standalone() -> Result<()> {
             "User authentication working".to_string(),
         ],
     };
-    
+
     proactive_master.set_objective(objective).await?;
     println!("✅ プロジェクト目標を設定完了");
-    
+
     // Test adding multiple milestones
     let frontend_milestone = Milestone {
         id: uuid::Uuid::new_v4().to_string(),
@@ -69,7 +76,7 @@ async fn test_proactive_master_standalone() -> Result<()> {
         dependencies: vec![],
         critical_path: true,
     };
-    
+
     let backend_milestone = Milestone {
         id: uuid::Uuid::new_v4().to_string(),
         name: "Backend API".to_string(),
@@ -79,18 +86,18 @@ async fn test_proactive_master_standalone() -> Result<()> {
         dependencies: vec![],
         critical_path: true,
     };
-    
+
     proactive_master.add_milestone(frontend_milestone).await?;
     proactive_master.add_milestone(backend_milestone).await?;
     println!("✅ 複数のマイルストーンを追加完了");
-    
+
     // Simulate task completion for context learning
     let completed_tasks = vec![
         ("component-creation", "Create UserCard component", 1200),
         ("api-endpoint", "Implement user registration API", 2400),
         ("database-setup", "Configure PostgreSQL database", 1800),
     ];
-    
+
     for (task_id, description, duration_secs) in completed_tasks {
         let task = Task::new(
             task_id.to_string(),
@@ -98,7 +105,7 @@ async fn test_proactive_master_standalone() -> Result<()> {
             Priority::High,
             TaskType::Development,
         );
-        
+
         let result = TaskResult::success(
             serde_json::json!({
                 "files_modified": 3,
@@ -107,47 +114,52 @@ async fn test_proactive_master_standalone() -> Result<()> {
             }),
             std::time::Duration::from_secs(duration_secs),
         );
-        
-        proactive_master.update_context_from_completion(&task, &result).await?;
+
+        proactive_master
+            .update_context_from_completion(&task, &result)
+            .await?;
     }
-    
+
     println!("✅ タスク完了コンテキストを学習完了 (3件のタスク)");
-    
+
     Ok(())
 }
 
 async fn test_security_agent_isolated() -> Result<()> {
     println!("\n🔒 Test 2: Security Agent in Isolated Directory");
-    
+
     // Create completely isolated temporary directory
     let temp_dir = TempDir::new()?;
     let test_dir = temp_dir.path();
-    
+
     println!("📁 分離テストディレクトリ: {}", test_dir.display());
-    
+
     // Create realistic vulnerable files
-    create_vulnerable_frontend(&test_dir).await?;
-    create_vulnerable_backend(&test_dir).await?;
-    create_vulnerable_config(&test_dir).await?;
-    
+    create_vulnerable_frontend(test_dir).await?;
+    create_vulnerable_backend(test_dir).await?;
+    create_vulnerable_config(test_dir).await?;
+
     // Initialize Security Agent
     let mut security_agent = SecurityAgent::new().await?;
     println!("✅ セキュリティエージェント初期化完了");
-    
+
     // Run comprehensive security scan
     let scan_result = security_agent.scan_directory(test_dir).await?;
-    
+
     println!("📊 包括的セキュリティスキャン結果:");
-    println!("   全体セキュリティスコア: {:.2}/1.00", scan_result.security_score);
+    println!(
+        "   全体セキュリティスコア: {:.2}/1.00",
+        scan_result.security_score
+    );
     println!("   検出された脆弱性: {}", scan_result.violations.len());
     println!("   依存関係の脆弱性: {}", scan_result.vulnerabilities.len());
     println!("   スキャン時間: {}ms", scan_result.duration_ms);
-    
+
     // Categorize vulnerabilities by severity
     let mut critical_count = 0;
     let mut high_count = 0;
     let mut medium_count = 0;
-    
+
     for violation in &scan_result.violations {
         match violation.severity {
             ccswarm::security::ViolationSeverity::Critical => critical_count += 1,
@@ -156,141 +168,186 @@ async fn test_security_agent_isolated() -> Result<()> {
             _ => {}
         }
     }
-    
+
     println!("\n🚨 脆弱性の深刻度別分類:");
     println!("   Critical: {} 件", critical_count);
     println!("   High: {} 件", high_count);
     println!("   Medium: {} 件", medium_count);
-    
+
     // Show specific vulnerabilities found
     if !scan_result.violations.is_empty() {
         println!("\n🔍 検出されたセキュリティ問題 (最初の5件):");
         for (i, violation) in scan_result.violations.iter().take(5).enumerate() {
-            println!("   {}. {} ({:?})", 
-                    i + 1,
-                    violation.description,
-                    violation.severity);
+            println!(
+                "   {}. {} ({:?})",
+                i + 1,
+                violation.description,
+                violation.severity
+            );
             if let Some(line) = violation.line_number {
-                println!("      ファイル: {} (行: {})", 
-                        violation.file_path.split('/').last().unwrap_or("unknown"),
-                        line);
+                println!(
+                    "      ファイル: {} (行: {})",
+                    violation
+                        .file_path
+                        .split('/')
+                        .next_back()
+                        .unwrap_or("unknown"),
+                    line
+                );
             }
             println!("      修正提案: {}", violation.suggested_fix);
         }
     }
-    
+
     // Generate security report
     let report = security_agent.generate_security_report();
     println!("\n📋 セキュリティレポート:");
     println!("   実行スキャン数: {}", report.total_scans);
-    println!("   平均セキュリティスコア: {:.2}", report.average_security_score);
+    println!(
+        "   平均セキュリティスコア: {:.2}",
+        report.average_security_score
+    );
     println!("   Critical脆弱性: {}", report.critical_violations);
     println!("   High脆弱性: {}", report.high_violations);
-    
+
     // Test build failure condition
     let should_fail_build = security_agent.should_fail_build(&scan_result);
     println!("   🚫 CI/CDビルド失敗判定: {}", should_fail_build);
-    
+
     Ok(())
 }
 
 async fn test_master_claude_isolated() -> Result<()> {
     println!("\n🤖 Test 3: Master Claude in Isolated Git Repository");
-    
+
     // Create completely isolated directory for git repository
     let temp_dir = TempDir::new()?;
     let repo_path = temp_dir.path().to_path_buf();
-    
+
     println!("📁 分離Gitリポジトリ: {}", repo_path.display());
-    
+
     // Initialize fresh git repository
     let git_init_result = std::process::Command::new("git")
-        .args(&["init", "--initial-branch=main"])
+        .args(["init", "--initial-branch=main"])
         .current_dir(&repo_path)
         .output()?;
-    
+
     if !git_init_result.status.success() {
         println!("⚠️  Git init failed, continuing without git...");
     } else {
         println!("✅ 新しいGitリポジトリを初期化完了");
-        
+
         // Configure git user for the test
         std::process::Command::new("git")
-            .args(&["config", "user.name", "Test User"])
+            .args(["config", "user.name", "Test User"])
             .current_dir(&repo_path)
             .output()?;
-        
+
         std::process::Command::new("git")
-            .args(&["config", "user.email", "test@example.com"])
+            .args(["config", "user.email", "test@example.com"])
             .current_dir(&repo_path)
             .output()?;
     }
-    
+
     // Create test project structure
     create_test_project_structure(&repo_path).await?;
-    
+
     // Create proactive-enabled configuration
     let config = create_proactive_test_config();
-    
+
     // Initialize Master Claude with proactive mode enabled
     let master_claude = MasterClaude::new(config, repo_path).await?;
     println!("✅ Master Claude (プロアクティブモード有効) 初期化完了");
-    
+
     // Test setting strategic objectives
-    let objective_id = master_claude.set_objective(
-        "Modern E-commerce Platform".to_string(),
-        "Build scalable e-commerce platform with microservices architecture".to_string(),
-        Some(Utc::now() + chrono::Duration::days(90)),
-    ).await?;
+    let objective_id = master_claude
+        .set_objective(
+            "Modern E-commerce Platform".to_string(),
+            "Build scalable e-commerce platform with microservices architecture".to_string(),
+            Some(Utc::now() + chrono::Duration::days(90)),
+        )
+        .await?;
     println!("✅ 戦略的目標設定完了: {}", objective_id);
-    
+
     // Add multiple interconnected milestones
-    let frontend_milestone_id = master_claude.add_milestone(
-        "Frontend Platform".to_string(),
-        "React-based frontend with Next.js and TypeScript".to_string(),
-        Some(Utc::now() + chrono::Duration::days(30)),
-    ).await?;
-    
-    let backend_milestone_id = master_claude.add_milestone(
-        "Backend Microservices".to_string(),
-        "Node.js microservices with Docker and Kubernetes".to_string(),
-        Some(Utc::now() + chrono::Duration::days(45)),
-    ).await?;
-    
-    let deployment_milestone_id = master_claude.add_milestone(
-        "Cloud Deployment".to_string(),
-        "AWS deployment with CI/CD pipeline".to_string(),
-        Some(Utc::now() + chrono::Duration::days(60)),
-    ).await?;
-    
+    let frontend_milestone_id = master_claude
+        .add_milestone(
+            "Frontend Platform".to_string(),
+            "React-based frontend with Next.js and TypeScript".to_string(),
+            Some(Utc::now() + chrono::Duration::days(30)),
+        )
+        .await?;
+
+    let backend_milestone_id = master_claude
+        .add_milestone(
+            "Backend Microservices".to_string(),
+            "Node.js microservices with Docker and Kubernetes".to_string(),
+            Some(Utc::now() + chrono::Duration::days(45)),
+        )
+        .await?;
+
+    let deployment_milestone_id = master_claude
+        .add_milestone(
+            "Cloud Deployment".to_string(),
+            "AWS deployment with CI/CD pipeline".to_string(),
+            Some(Utc::now() + chrono::Duration::days(60)),
+        )
+        .await?;
+
     println!("✅ 相互接続マイルストーン追加完了:");
     println!("   Frontend: {}", frontend_milestone_id);
     println!("   Backend: {}", backend_milestone_id);
     println!("   Deployment: {}", deployment_milestone_id);
-    
+
     // Trigger proactive analysis (core feature test)
     let decisions = master_claude.trigger_proactive_analysis().await?;
-    println!("\n🤖 プロアクティブ分析結果: {} 件の意思決定", decisions.len());
-    
+    println!(
+        "\n🤖 プロアクティブ分析結果: {} 件の意思決定",
+        decisions.len()
+    );
+
     for (i, decision) in decisions.iter().enumerate() {
         println!("   {}. 決定タイプ: {:?}", i + 1, decision.decision_type);
         println!("      理由: {}", decision.reasoning);
         println!("      信頼度: {:.2}", decision.confidence);
         println!("      リスク評価: {:?}", decision.risk_assessment);
         if !decision.suggested_actions.is_empty() {
-            println!("      提案アクション: {}", decision.suggested_actions[0].description);
+            println!(
+                "      提案アクション: {}",
+                decision.suggested_actions[0].description
+            );
         }
     }
-    
+
     // Add realistic development tasks
     let development_tasks = vec![
-        ("user-auth-service", "Implement user authentication microservice", Priority::Critical),
-        ("product-catalog", "Build product catalog with search", Priority::High),
-        ("shopping-cart", "Create shopping cart functionality", Priority::High),
-        ("payment-integration", "Integrate payment gateway", Priority::Medium),
-        ("order-management", "Implement order processing system", Priority::High),
+        (
+            "user-auth-service",
+            "Implement user authentication microservice",
+            Priority::Critical,
+        ),
+        (
+            "product-catalog",
+            "Build product catalog with search",
+            Priority::High,
+        ),
+        (
+            "shopping-cart",
+            "Create shopping cart functionality",
+            Priority::High,
+        ),
+        (
+            "payment-integration",
+            "Integrate payment gateway",
+            Priority::Medium,
+        ),
+        (
+            "order-management",
+            "Implement order processing system",
+            Priority::High,
+        ),
     ];
-    
+
     for (task_id, description, priority) in development_tasks {
         let task = Task::new(
             task_id.to_string(),
@@ -300,9 +357,9 @@ async fn test_master_claude_isolated() -> Result<()> {
         );
         master_claude.add_task(task).await?;
     }
-    
+
     println!("✅ 開発タスクキューに {} 件のタスクを追加完了", 5);
-    
+
     // Generate comprehensive status report
     let status_report = master_claude.generate_status_report().await?;
     println!("\n📊 Master Claude 総合ステータスレポート:");
@@ -310,18 +367,21 @@ async fn test_master_claude_isolated() -> Result<()> {
     println!("   ステータス: {:?}", status_report.status);
     println!("   エージェント総数: {}", status_report.total_agents);
     println!("   アクティブエージェント: {}", status_report.active_agents);
-    println!("   処理済みタスク総数: {}", status_report.total_tasks_processed);
+    println!(
+        "   処理済みタスク総数: {}",
+        status_report.total_tasks_processed
+    );
     println!("   待機中タスク: {}", status_report.pending_tasks);
     println!("   成功タスク: {}", status_report.successful_tasks);
     println!("   失敗タスク: {}", status_report.failed_tasks);
-    
+
     Ok(())
 }
 
 async fn create_vulnerable_frontend(test_dir: &std::path::Path) -> Result<()> {
     let frontend_dir = test_dir.join("frontend");
     fs::create_dir_all(&frontend_dir).await?;
-    
+
     // Create vulnerable React component
     let component_file = frontend_dir.join("UserProfile.js");
     let vulnerable_react = r#"
@@ -365,14 +425,14 @@ export default function UserProfile({ userInput, apiUrl }) {
 }
 "#;
     fs::write(&component_file, vulnerable_react).await?;
-    
+
     Ok(())
 }
 
 async fn create_vulnerable_backend(test_dir: &std::path::Path) -> Result<()> {
     let backend_dir = test_dir.join("backend");
     fs::create_dir_all(&backend_dir).await?;
-    
+
     // Create vulnerable Node.js API
     let api_file = backend_dir.join("api.js");
     let vulnerable_api = r#"
@@ -430,7 +490,7 @@ app.post('/backup', (req, res) => {
 app.listen(3000);
 "#;
     fs::write(&api_file, vulnerable_api).await?;
-    
+
     Ok(())
 }
 
@@ -453,7 +513,7 @@ async fn create_vulnerable_config(test_dir: &std::path::Path) -> Result<()> {
   }
 }"#;
     fs::write(&package_json, package_content).await?;
-    
+
     // Create .env with sensitive data
     let env_file = test_dir.join(".env");
     let env_content = r#"
@@ -475,27 +535,27 @@ JWT_SECRET=mysecret
 DEBUG=true
 "#;
     fs::write(&env_file, env_content).await?;
-    
+
     Ok(())
 }
 
-async fn create_test_project_structure(repo_path: &PathBuf) -> Result<()> {
+async fn create_test_project_structure(repo_path: &Path) -> Result<()> {
     // Create basic project structure
     let dirs = vec!["src", "tests", "docs", "scripts"];
     for dir in dirs {
         fs::create_dir_all(repo_path.join(dir)).await?;
     }
-    
+
     // Create README
     let readme_content = "# E-commerce Platform\n\nModern e-commerce platform built with microservices architecture.\n";
     fs::write(repo_path.join("README.md"), readme_content).await?;
-    
+
     Ok(())
 }
 
 fn create_proactive_test_config() -> CcswarmConfig {
     let mut agents = std::collections::HashMap::new();
-    
+
     // Frontend agent configuration
     agents.insert(
         "frontend".to_string(),
@@ -507,7 +567,7 @@ fn create_proactive_test_config() -> CcswarmConfig {
             claude_md_template: "frontend_specialist".to_string(),
         },
     );
-    
+
     // Backend agent configuration
     agents.insert(
         "backend".to_string(),
@@ -519,7 +579,7 @@ fn create_proactive_test_config() -> CcswarmConfig {
             claude_md_template: "backend_specialist".to_string(),
         },
     );
-    
+
     // DevOps agent configuration
     agents.insert(
         "devops".to_string(),
@@ -531,7 +591,7 @@ fn create_proactive_test_config() -> CcswarmConfig {
             claude_md_template: "devops_specialist".to_string(),
         },
     );
-    
+
     CcswarmConfig {
         project: ProjectConfig {
             name: "E-commerce Platform Test".to_string(),
@@ -547,8 +607,8 @@ fn create_proactive_test_config() -> CcswarmConfig {
                 claude_config: ClaudeConfig::for_master(),
                 // プロアクティブモードがデフォルトで有効
                 enable_proactive_mode: true,
-                proactive_frequency: 30,      // 30秒間隔でプロアクティブ分析
-                high_frequency: 15,           // 高頻度モード15秒間隔
+                proactive_frequency: 30, // 30秒間隔でプロアクティブ分析
+                high_frequency: 15,      // 高頻度モード15秒間隔
             },
         },
         agents,

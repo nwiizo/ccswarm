@@ -12,10 +12,10 @@ use super::jsonrpc::JsonRpcMessage;
 pub trait Transport: Send + Sync {
     /// Send a JSON-RPC message
     async fn send(&mut self, message: JsonRpcMessage) -> Result<()>;
-    
+
     /// Receive a JSON-RPC message
     async fn receive(&mut self) -> Result<Option<JsonRpcMessage>>;
-    
+
     /// Close the transport
     async fn close(&mut self) -> Result<()>;
 }
@@ -50,7 +50,7 @@ impl Transport for StdioTransport {
 
     async fn receive(&mut self) -> Result<Option<JsonRpcMessage>> {
         let mut line = String::new();
-        
+
         tokio::select! {
             _ = self.shutdown_rx.recv() => {
                 return Ok(None);

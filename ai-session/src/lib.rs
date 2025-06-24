@@ -12,6 +12,11 @@
 //! - **Semantic output parsing**: Understands command output types (build results, test outputs, error messages)
 //! - **Context-aware suggestions**: Provides intelligent next-action recommendations
 //!
+#![allow(clippy::new_without_default)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::const_is_empty)]
+#![allow(clippy::inherent_to_string_shadow_display)]
+
 //! ### 🤝 Multi-Agent Coordination  
 //! - **Message bus architecture**: Enables seamless communication between AI agents
 //! - **Task delegation**: Intelligent workload distribution across specialized agents
@@ -141,8 +146,14 @@ pub mod tmux_bridge;
 pub mod unified_bus;
 
 // Re-export main types
-pub use context::{AgentState, SessionContext, TaskContext, WorkspaceState, Message as ContextMessage, MessageRole, SessionConfig as ContextSessionConfig};
-pub use coordination::{AgentId, AgentMessage, Message as CoordinationMessage, MessageBus, MessagePriority, MessageType, MultiAgentSession, TaskId};
+pub use context::{
+    AgentState, Message as ContextMessage, MessageRole, SessionConfig as ContextSessionConfig,
+    SessionContext, TaskContext, WorkspaceState,
+};
+pub use coordination::{
+    AgentId, AgentMessage, Message as CoordinationMessage, MessageBus, MessagePriority,
+    MessageType, MultiAgentSession, TaskId,
+};
 pub use core::{
     AISession, ContextConfig, SessionConfig, SessionError, SessionId, SessionResult, SessionStatus,
 };

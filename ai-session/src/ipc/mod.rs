@@ -154,10 +154,10 @@ async fn process_message(
     match msg.msg_type {
         IpcMessageType::CreateSession => {
             let ai_features = msg.payload["enable_ai_features"].as_bool().unwrap_or(false);
-            
+
             let mut config = crate::core::SessionConfig::default();
             config.enable_ai_features = ai_features;
-            
+
             let session = session_manager.create_session_with_config(config).await?;
 
             Ok(IpcMessage {
@@ -174,12 +174,12 @@ async fn process_message(
         IpcMessageType::ExecuteCommand => {
             let session_id = msg.payload["session"].as_str().unwrap_or("");
             let command = msg.payload["command"].as_str().unwrap_or("");
-            
+
             let session_id = crate::core::SessionId::parse_str(session_id)?;
-            
+
             if let Some(session) = session_manager.get_session(&session_id) {
                 session.send_input(&format!("{}\n", command)).await?;
-                
+
                 Ok(IpcMessage {
                     id: msg.id,
                     msg_type: IpcMessageType::Response,
@@ -203,20 +203,21 @@ async fn process_message(
         IpcMessageType::GetOutput => {
             let session_id = msg.payload["session"].as_str().unwrap_or("");
             let last_n = msg.payload["last_n"].as_u64().unwrap_or(100) as usize;
-            
+
             let session_id = crate::core::SessionId::parse_str(session_id)?;
-            
+
             if let Some(session) = session_manager.get_session(&session_id) {
                 let output = session.read_output().await?;
                 let output_str = String::from_utf8_lossy(&output);
                 let all_lines: Vec<&str> = output_str.lines().collect();
-                let lines: Vec<String> = all_lines.iter()
+                let lines: Vec<String> = all_lines
+                    .iter()
                     .rev()
                     .take(last_n)
                     .rev()
                     .map(|s| s.to_string())
                     .collect();
-                
+
                 Ok(IpcMessage {
                     id: msg.id,
                     msg_type: IpcMessageType::Response,

@@ -35,8 +35,8 @@ pub enum ToolContent {
     #[serde(rename = "text")]
     Text { text: String },
     #[serde(rename = "image")]
-    Image { 
-        data: String,  // base64 encoded
+    Image {
+        data: String, // base64 encoded
         #[serde(rename = "mimeType")]
         mime_type: String,
     },
@@ -72,7 +72,7 @@ impl ToolRegistry {
         let name = tool.name.clone();
         self.tools.insert(name.clone(), tool);
         self.handlers.insert(name, Arc::new(handler));
-        
+
         Ok(())
     }
 
@@ -88,9 +88,11 @@ impl ToolRegistry {
 
     /// Invoke a tool
     pub fn invoke(&self, name: &str, arguments: Value) -> Result<ToolResult> {
-        let handler = self.handlers.get(name)
+        let handler = self
+            .handlers
+            .get(name)
             .ok_or_else(|| anyhow::anyhow!("Tool '{}' not found", name))?;
-        
+
         handler(arguments)
     }
 
@@ -119,57 +121,62 @@ impl ToolRegistry {
             }),
         };
 
-        registry.register(execute_command_tool, move |args| {
-            let session_id_str = args.get("session_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing session_id"))?;
-            
-            let command = args.get("command")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing command"))?;
+        registry
+            .register(execute_command_tool, move |args| {
+                let session_id_str = args
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing session_id"))?;
 
-            // Parse session ID
-            let session_id = crate::core::SessionId::parse_str(session_id_str)
-                .map_err(|e| anyhow::anyhow!("Invalid session_id: {}", e))?;
+                let command = args
+                    .get("command")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing command"))?;
 
-            // Execute command asynchronously
-            let sm = sm_clone.clone();
-            let cmd = command.to_string();
-            
-            // Use blocking runtime for sync context
-            let result = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async move {
-                    // Get the session
-                    let session = sm.get_session(&session_id)
-                        .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+                // Parse session ID
+                let session_id = crate::core::SessionId::parse_str(session_id_str)
+                    .map_err(|e| anyhow::anyhow!("Invalid session_id: {}", e))?;
 
-                    // Check session status
-                    let status = session.status().await;
-                    if status != crate::core::SessionStatus::Running {
-                        return Err(anyhow::anyhow!("Session is not running: {:?}", status));
-                    }
+                // Execute command asynchronously
+                let sm = sm_clone.clone();
+                let cmd = command.to_string();
 
-                    // Send command with newline
-                    session.send_input(&format!("{}\n", cmd)).await?;
+                // Use blocking runtime for sync context
+                let result = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async move {
+                        // Get the session
+                        let session = sm
+                            .get_session(&session_id)
+                            .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
-                    // Wait a bit for command to execute
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        // Check session status
+                        let status = session.status().await;
+                        if status != crate::core::SessionStatus::Running {
+                            return Err(anyhow::anyhow!("Session is not running: {:?}", status));
+                        }
 
-                    // Read output
-                    let output = session.read_output().await?;
-                    let output_str = String::from_utf8_lossy(&output);
+                        // Send command with newline
+                        session.send_input(&format!("{}\n", cmd)).await?;
 
-                    Ok(ToolResult {
-                        content: vec![ToolContent::Text {
-                            text: output_str.to_string(),
-                        }],
-                        is_error: false,
+                        // Wait a bit for command to execute
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+                        // Read output
+                        let output = session.read_output().await?;
+                        let output_str = String::from_utf8_lossy(&output);
+
+                        Ok(ToolResult {
+                            content: vec![ToolContent::Text {
+                                text: output_str.to_string(),
+                            }],
+                            is_error: false,
+                        })
                     })
-                })
-            });
+                });
 
-            result
-        }).unwrap();
+                result
+            })
+            .unwrap();
 
         // Register create_session tool
         let sm_clone = session_manager.clone();
@@ -193,60 +200,66 @@ impl ToolRegistry {
             }),
         };
 
-        registry.register(create_session_tool, move |args| {
-            let name = args.get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing name"))?;
-            
-            let working_dir = args.get("working_directory")
-                .and_then(|v| v.as_str())
-                .unwrap_or(".");
+        registry
+            .register(create_session_tool, move |args| {
+                let name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing name"))?;
 
-            // Create session configuration
-            let mut config = crate::core::SessionConfig::default();
-            config.name = Some(name.to_string());
-            config.working_directory = std::path::PathBuf::from(working_dir);
-            config.enable_ai_features = true;
+                let working_dir = args
+                    .get("working_directory")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(".");
 
-            // Create session asynchronously
-            let sm = sm_clone.clone();
-            
-            let result = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async move {
-                    // Create the session
-                    let session = sm.create_session_with_config(config).await?;
-                    
-                    // Start the session
-                    session.start().await?;
-                    
-                    // Wait for session to be ready
-                    let mut retries = 10;
-                    while retries > 0 {
-                        let status = session.status().await;
-                        if status == crate::core::SessionStatus::Running {
-                            break;
+                // Create session configuration
+                let mut config = crate::core::SessionConfig::default();
+                config.name = Some(name.to_string());
+                config.working_directory = std::path::PathBuf::from(working_dir);
+                config.enable_ai_features = true;
+
+                // Create session asynchronously
+                let sm = sm_clone.clone();
+
+                let result = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async move {
+                        // Create the session
+                        let session = sm.create_session_with_config(config).await?;
+
+                        // Start the session
+                        session.start().await?;
+
+                        // Wait for session to be ready
+                        let mut retries = 10;
+                        while retries > 0 {
+                            let status = session.status().await;
+                            if status == crate::core::SessionStatus::Running {
+                                break;
+                            }
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                            retries -= 1;
                         }
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                        retries -= 1;
-                    }
-                    
-                    let status = session.status().await;
-                    if status != crate::core::SessionStatus::Running {
-                        return Err(anyhow::anyhow!("Failed to start session: {:?}", status));
-                    }
 
-                    Ok(ToolResult {
-                        content: vec![ToolContent::Text {
-                            text: format!("Created and started session '{}' with ID: {}", 
-                                         name, session.id),
-                        }],
-                        is_error: false,
+                        let status = session.status().await;
+                        if status != crate::core::SessionStatus::Running {
+                            return Err(anyhow::anyhow!("Failed to start session: {:?}", status));
+                        }
+
+                        Ok(ToolResult {
+                            content: vec![ToolContent::Text {
+                                text: format!(
+                                    "Created and started session '{}' with ID: {}",
+                                    name, session.id
+                                ),
+                            }],
+                            is_error: false,
+                        })
                     })
-                })
-            });
+                });
 
-            result
-        }).unwrap();
+                result
+            })
+            .unwrap();
 
         // Register get_session_info tool
         let sm_clone = session_manager.clone();
@@ -265,20 +278,22 @@ impl ToolRegistry {
             }),
         };
 
-        registry.register(get_session_info_tool, move |args| {
-            let session_id_str = args.get("session_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing session_id"))?;
+        registry
+            .register(get_session_info_tool, move |args| {
+                let session_id_str = args
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing session_id"))?;
 
-            // Parse session ID
-            let session_id = crate::core::SessionId::parse_str(session_id_str)
-                .map_err(|e| anyhow::anyhow!("Invalid session_id: {}", e))?;
+                // Parse session ID
+                let session_id = crate::core::SessionId::parse_str(session_id_str)
+                    .map_err(|e| anyhow::anyhow!("Invalid session_id: {}", e))?;
 
-            // Get session info asynchronously
-            let sm = sm_clone.clone();
-            
-            let result = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async move {
+                // Get session info asynchronously
+                let sm = sm_clone.clone();
+
+                let result = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async move {
                     // Get the session
                     let session = sm.get_session(&session_id)
                         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
@@ -287,7 +302,6 @@ impl ToolRegistry {
                     let status = session.status().await;
                     let context = session.context.read().await;
                     let metadata = session.metadata.read().await;
-                    
                     let info = json!({
                         "id": session.id.to_string(),
                         "name": session.config.name,
@@ -307,10 +321,11 @@ impl ToolRegistry {
                         is_error: false,
                     })
                 })
-            });
+                });
 
-            result
-        }).unwrap();
+                result
+            })
+            .unwrap();
 
         registry
     }
@@ -329,7 +344,7 @@ mod tests {
     #[test]
     fn test_tool_registry() {
         let mut registry = ToolRegistry::new();
-        
+
         let tool = Tool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
@@ -341,14 +356,16 @@ mod tests {
             }),
         };
 
-        registry.register(tool.clone(), |args| {
-            Ok(ToolResult {
-                content: vec![ToolContent::Text {
-                    text: format!("Received: {:?}", args),
-                }],
-                is_error: false,
+        registry
+            .register(tool.clone(), |args| {
+                Ok(ToolResult {
+                    content: vec![ToolContent::Text {
+                        text: format!("Received: {:?}", args),
+                    }],
+                    is_error: false,
+                })
             })
-        }).unwrap();
+            .unwrap();
 
         // Test tool retrieval
         assert!(registry.get_tool("test_tool").is_some());
@@ -360,7 +377,9 @@ mod tests {
         assert_eq!(tools[0].name, "test_tool");
 
         // Test tool invocation
-        let result = registry.invoke("test_tool", json!({"input": "hello"})).unwrap();
+        let result = registry
+            .invoke("test_tool", json!({"input": "hello"}))
+            .unwrap();
         assert!(!result.is_error);
         assert_eq!(result.content.len(), 1);
     }
@@ -368,19 +387,21 @@ mod tests {
     #[test]
     fn test_duplicate_tool_registration() {
         let mut registry = ToolRegistry::new();
-        
+
         let tool = Tool {
             name: "duplicate".to_string(),
             description: "A tool".to_string(),
             input_schema: json!({}),
         };
 
-        registry.register(tool.clone(), |_| {
-            Ok(ToolResult {
-                content: vec![],
-                is_error: false,
+        registry
+            .register(tool.clone(), |_| {
+                Ok(ToolResult {
+                    content: vec![],
+                    is_error: false,
+                })
             })
-        }).unwrap();
+            .unwrap();
 
         // Second registration should fail
         let result = registry.register(tool, |_| {

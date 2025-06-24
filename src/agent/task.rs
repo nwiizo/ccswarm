@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use std::str::FromStr;
+use std::time::Duration;
 
 /// Task priority levels
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -13,7 +13,7 @@ pub enum Priority {
 
 impl FromStr for Priority {
     type Err = anyhow::Error;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "low" => Ok(Priority::Low),
@@ -41,7 +41,7 @@ pub enum TaskType {
 
 impl FromStr for TaskType {
     type Err = anyhow::Error;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "development" | "dev" => Ok(TaskType::Development),

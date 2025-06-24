@@ -33,7 +33,7 @@ impl McpServer {
         shutdown_tx: mpsc::Sender<()>,
     ) -> Self {
         let tools = Arc::new(ToolRegistry::with_builtin_tools(session_manager.clone()));
-        
+
         Self {
             session_manager,
             transport: Arc::new(Mutex::new(transport)),
@@ -45,7 +45,7 @@ impl McpServer {
     /// Run the MCP server
     pub async fn run(&self) -> Result<()> {
         info!("Starting MCP server");
-        
+
         // Send initialization notification
         self.send_notification("initialized", None).await?;
 
@@ -87,10 +87,9 @@ impl McpServer {
             "initialize" => self.handle_initialize(request.id, request.params).await,
             "tools/list" => self.handle_tools_list(request.id, request.params).await,
             "tools/call" => self.handle_tools_call(request.id, request.params).await,
-            _ => JsonRpcResponse::error(
-                request.id,
-                JsonRpcError::method_not_found(&request.method),
-            ),
+            _ => {
+                JsonRpcResponse::error(request.id, JsonRpcError::method_not_found(&request.method))
+            }
         };
 
         self.send_response(response).await
@@ -111,11 +110,7 @@ impl McpServer {
     }
 
     /// Handle initialize request
-    async fn handle_initialize(
-        &self,
-        id: RequestId,
-        _params: Option<Value>,
-    ) -> JsonRpcResponse {
+    async fn handle_initialize(&self, id: RequestId, _params: Option<Value>) -> JsonRpcResponse {
         let result = json!({
             "protocolVersion": "0.1.0",
             "capabilities": {
@@ -134,18 +129,15 @@ impl McpServer {
     }
 
     /// Handle tools/list request
-    async fn handle_tools_list(
-        &self,
-        id: RequestId,
-        params: Option<Value>,
-    ) -> JsonRpcResponse {
+    async fn handle_tools_list(&self, id: RequestId, params: Option<Value>) -> JsonRpcResponse {
         // Extract cursor for pagination if provided
-        let _cursor = params.as_ref()
+        let _cursor = params
+            .as_ref()
             .and_then(|p| p.get("cursor"))
             .and_then(|c| c.as_str());
 
         let tools: Vec<&Tool> = self.tools.list_tools();
-        
+
         // TODO: Implement pagination
         let result = json!({
             "tools": tools,
@@ -156,11 +148,7 @@ impl McpServer {
     }
 
     /// Handle tools/call request
-    async fn handle_tools_call(
-        &self,
-        id: RequestId,
-        params: Option<Value>,
-    ) -> JsonRpcResponse {
+    async fn handle_tools_call(&self, id: RequestId, params: Option<Value>) -> JsonRpcResponse {
         let params = match params {
             Some(p) => p,
             None => {
@@ -186,10 +174,7 @@ impl McpServer {
 
         match self.tools.invoke(name, arguments.clone()) {
             Ok(result) => JsonRpcResponse::success(id, serde_json::to_value(result).unwrap()),
-            Err(e) => JsonRpcResponse::error(
-                id,
-                JsonRpcError::internal_error(e.to_string()),
-            ),
+            Err(e) => JsonRpcResponse::error(id, JsonRpcError::internal_error(e.to_string())),
         }
     }
 
@@ -203,7 +188,9 @@ impl McpServer {
     async fn send_notification(&self, method: &str, params: Option<Value>) -> Result<()> {
         let notification = JsonRpcNotification::new(method.to_string(), params);
         let mut transport = self.transport.lock().await;
-        transport.send(JsonRpcMessage::Notification(notification)).await
+        transport
+            .send(JsonRpcMessage::Notification(notification))
+            .await
     }
 }
 
@@ -218,7 +205,7 @@ mod tests {
         let session_manager = Arc::new(SessionManager::new());
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         let transport = Box::new(StdioTransport::new(shutdown_rx));
-        
+
         let _server = McpServer::new(session_manager, transport, shutdown_tx);
         // Server created successfully
     }

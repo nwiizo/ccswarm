@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     println!("✓ Session started successfully");
 
     // Test multiple commands to demonstrate external input capability
-    let test_commands = vec![
+    let test_commands = [
         ("pwd", "Check current directory"),
         ("echo 'Testing external command input'", "Test echo command"),
         ("ls -la | head -5", "List files (first 5)"),
@@ -118,7 +118,7 @@ async fn main() -> Result<()> {
     println!("\n🌐 Simulating External API Integration...");
 
     // This demonstrates how external systems could send commands
-    let external_commands = vec![
+    let external_commands = [
         "echo 'Command from external API #1'",
         "echo 'Command from external API #2'",
         "echo 'Integration test complete'",

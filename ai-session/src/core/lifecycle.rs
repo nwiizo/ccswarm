@@ -25,7 +25,7 @@ pub async fn start_session(session: &AISession) -> Result<()> {
         .config
         .shell
         .as_deref()
-        .or_else(|| shell_env.as_deref())
+        .or(shell_env.as_deref())
         .unwrap_or("/bin/bash");
 
     let mut cmd = CommandBuilder::new(shell);

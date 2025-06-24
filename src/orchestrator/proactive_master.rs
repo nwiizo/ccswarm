@@ -649,8 +649,7 @@ impl ProactiveMaster {
                                     decision_type: DecisionType::GenerateTask,
                                     reasoning: format!(
                                         "Pattern match: {:?} completion typically requires {}",
-                                        last_task.task_type,
-                                        task_template.description_template
+                                        last_task.task_type, task_template.description_template
                                     ),
                                     confidence: pattern.probability,
                                     suggested_actions: vec![SuggestedAction {
@@ -830,13 +829,10 @@ impl ProactiveMaster {
         let task_id = format!("auto-{}", Uuid::new_v4());
         let description = template.description_template.clone();
 
-        Ok(Task::new(
-            task_id,
-            description,
-            template.priority,
-            template.task_type,
-        )
-        .with_duration((template.estimated_duration * 60) as u32)) // convert minutes to seconds
+        Ok(
+            Task::new(task_id, description, template.priority, template.task_type)
+                .with_duration((template.estimated_duration * 60) as u32),
+        ) // convert minutes to seconds
     }
 
     /// Unblock a task in the dependency graph

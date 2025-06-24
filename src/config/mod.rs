@@ -179,15 +179,15 @@ pub struct MasterClaudeConfig {
     pub think_mode: ThinkMode,
     pub permission_level: String,
     pub claude_config: ClaudeConfig,
-    
+
     /// Enable proactive mode by default
     #[serde(default = "default_proactive_mode")]
     pub enable_proactive_mode: bool,
-    
+
     /// Proactive analysis frequency (seconds)
     #[serde(default = "default_proactive_frequency")]
     pub proactive_frequency: u64,
-    
+
     /// High-frequency proactive analysis frequency (seconds)
     #[serde(default = "default_high_frequency")]
     pub high_frequency: u64,

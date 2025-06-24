@@ -47,6 +47,12 @@ pub type SessionResult<T> = std::result::Result<T, SessionError>;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SessionId(Uuid);
 
+impl Default for SessionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SessionId {
     /// Create a new unique session ID
     pub fn new() -> Self {
@@ -208,7 +214,11 @@ impl AISession {
     }
 
     /// Create an AI session with a specific ID (for restoration)
-    pub async fn new_with_id(id: SessionId, config: SessionConfig, created_at: DateTime<Utc>) -> Result<Self> {
+    pub async fn new_with_id(
+        id: SessionId,
+        config: SessionConfig,
+        created_at: DateTime<Utc>,
+    ) -> Result<Self> {
         let now = Utc::now();
 
         Ok(Self {
@@ -319,7 +329,7 @@ impl SessionManager {
         if self.sessions.contains_key(&id) {
             return Err(SessionError::AlreadyExists(id).into());
         }
-        
+
         let session = Arc::new(AISession::new_with_id(id.clone(), config, created_at).await?);
         self.sessions.insert(id, session.clone());
         Ok(session)

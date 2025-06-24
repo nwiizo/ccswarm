@@ -43,7 +43,8 @@ pub struct McpClient {
     /// Request ID counter
     request_id: AtomicI64,
     /// Pending requests (waiting for responses)
-    pending_requests: Arc<RwLock<HashMap<RequestId, tokio::sync::oneshot::Sender<JsonRpcResponse>>>>,
+    pending_requests:
+        Arc<RwLock<HashMap<RequestId, tokio::sync::oneshot::Sender<JsonRpcResponse>>>>,
     /// Available tools
     tools: Arc<RwLock<HashMap<String, McpTool>>>,
     /// Client configuration
@@ -81,7 +82,7 @@ impl McpClient {
     pub fn new(transport: Box<dyn Transport>) -> Self {
         Self::with_config(transport, McpClientConfig::default())
     }
-    
+
     /// Create a new MCP client with configuration
     pub fn with_config(transport: Box<dyn Transport>, config: McpClientConfig) -> Self {
         Self {
@@ -93,24 +94,27 @@ impl McpClient {
             shutdown_tx: None,
         }
     }
-    
+
     /// Start the MCP client
     pub async fn start(&mut self) -> Result<()> {
-        info!("Starting MCP client: {}/{}", self.config.client_name, self.config.client_version);
-        
+        info!(
+            "Starting MCP client: {}/{}",
+            self.config.client_name, self.config.client_version
+        );
+
         // Initialize with the server
         self.initialize().await?;
-        
+
         // Discover available tools
         self.discover_tools().await?;
-        
+
         // Start message handling loop
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
         self.shutdown_tx = Some(shutdown_tx);
-        
+
         let transport = self.transport.clone();
         let pending_requests = self.pending_requests.clone();
-        
+
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -119,7 +123,7 @@ impl McpClient {
                         info!("MCP client shutting down");
                         break;
                     }
-                    
+
                     // Handle incoming messages
                     message_result = async {
                         let mut transport = transport.lock().await;
@@ -143,23 +147,23 @@ impl McpClient {
                 }
             }
         });
-        
+
         Ok(())
     }
-    
+
     /// Shutdown the MCP client
     pub async fn shutdown(&mut self) -> Result<()> {
         if let Some(shutdown_tx) = self.shutdown_tx.take() {
             let _ = shutdown_tx.send(()).await;
         }
-        
+
         // Close transport
         let mut transport = self.transport.lock().await;
         transport.close().await?;
-        
+
         Ok(())
     }
-    
+
     /// Initialize the MCP session
     async fn initialize(&self) -> Result<()> {
         let request = JsonRpcRequest::new(
@@ -174,51 +178,47 @@ impl McpClient {
                     "name": self.config.client_name,
                     "version": self.config.client_version
                 }
-            }))
+            })),
         );
-        
+
         let response = self.send_request(request).await?;
-        
+
         if response.error.is_some() {
             return Err(anyhow::anyhow!("Initialize failed: {:?}", response.error));
         }
-        
+
         info!("MCP client initialized successfully");
         Ok(())
     }
-    
+
     /// Discover available tools from the server
     async fn discover_tools(&self) -> Result<()> {
-        let request = JsonRpcRequest::new(
-            self.next_request_id(),
-            "tools/list".to_string(),
-            None
-        );
-        
+        let request = JsonRpcRequest::new(self.next_request_id(), "tools/list".to_string(), None);
+
         let response = self.send_request(request).await?;
-        
+
         if let Some(error) = response.error {
             return Err(anyhow::anyhow!("Tools discovery failed: {:?}", error));
         }
-        
+
         if let Some(result) = response.result {
             if let Some(tools_array) = result.get("tools").and_then(|v| v.as_array()) {
                 let mut tools = self.tools.write().await;
-                
+
                 for tool_value in tools_array {
                     if let Ok(tool) = serde_json::from_value::<McpTool>(tool_value.clone()) {
                         debug!("Discovered tool: {}", tool.name);
                         tools.insert(tool.name.clone(), tool);
                     }
                 }
-                
+
                 info!("Discovered {} tools", tools.len());
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Execute a tool on the server
     pub async fn execute_tool(&self, tool_name: &str, arguments: Value) -> Result<McpToolResult> {
         // Verify tool exists
@@ -228,88 +228,96 @@ impl McpClient {
                 return Err(anyhow::anyhow!("Tool '{}' not found", tool_name));
             }
         }
-        
+
         let request = JsonRpcRequest::new(
             self.next_request_id(),
             "tools/call".to_string(),
             Some(json!({
                 "name": tool_name,
                 "arguments": arguments
-            }))
+            })),
         );
-        
+
         let response = self.send_request(request).await?;
-        
+
         if let Some(error) = response.error {
             return Err(anyhow::anyhow!("Tool execution failed: {:?}", error));
         }
-        
-        let result = response.result
+
+        let result = response
+            .result
             .ok_or_else(|| anyhow::anyhow!("No result from tool execution"))?;
-            
+
         // Parse tool result
-        let content = result.get("content")
+        let content = result
+            .get("content")
             .and_then(|v| v.as_array())
             .unwrap_or(&vec![])
             .iter()
             .filter_map(|v| {
                 if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
-                    Some(McpContent::Text { text: text.to_string() })
+                    Some(McpContent::Text {
+                        text: text.to_string(),
+                    })
                 } else if let (Some(data), Some(mime_type)) = (
                     v.get("data").and_then(|d| d.as_str()),
-                    v.get("mimeType").and_then(|m| m.as_str())
+                    v.get("mimeType").and_then(|m| m.as_str()),
                 ) {
-                    Some(McpContent::Image { 
+                    Some(McpContent::Image {
                         data: data.to_string(),
-                        mime_type: mime_type.to_string()
+                        mime_type: mime_type.to_string(),
                     })
                 } else {
                     None
                 }
             })
             .collect();
-            
-        let is_error = result.get("isError")
+
+        let is_error = result
+            .get("isError")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-            
+
         Ok(McpToolResult { content, is_error })
     }
-    
+
     /// Get list of available tools
     pub async fn list_tools(&self) -> Vec<McpTool> {
         let tools = self.tools.read().await;
         tools.values().cloned().collect()
     }
-    
+
     /// Send a JSON-RPC request and wait for response
     async fn send_request(&self, request: JsonRpcRequest) -> Result<JsonRpcResponse> {
         let (response_tx, response_rx) = tokio::sync::oneshot::channel();
-        
+
         // Store the pending request
         {
             let mut pending = self.pending_requests.write().await;
             pending.insert(request.id.clone(), response_tx);
         }
-        
+
         // Send the request
         {
             let mut transport = self.transport.lock().await;
             transport.send(&JsonRpcMessage::Request(request)).await?;
         }
-        
+
         // Wait for response with timeout
-        let response = timeout(self.config.request_timeout, response_rx).await
+        let response = timeout(self.config.request_timeout, response_rx)
+            .await
             .map_err(|_| anyhow::anyhow!("Request timeout"))?
             .map_err(|_| anyhow::anyhow!("Response channel closed"))?;
-            
+
         Ok(response)
     }
-    
+
     /// Handle incoming messages
     async fn handle_message(
         message: JsonRpcMessage,
-        pending_requests: &Arc<RwLock<HashMap<RequestId, tokio::sync::oneshot::Sender<JsonRpcResponse>>>>
+        pending_requests: &Arc<
+            RwLock<HashMap<RequestId, tokio::sync::oneshot::Sender<JsonRpcResponse>>>,
+        >,
     ) -> Result<()> {
         match message {
             JsonRpcMessage::Response(response) => {
@@ -330,10 +338,10 @@ impl McpClient {
                 // Clients don't typically handle requests
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Generate next request ID
     pub fn next_request_id(&self) -> RequestId {
         RequestId::Number(self.request_id.fetch_add(1, Ordering::SeqCst))
@@ -352,30 +360,34 @@ impl AiSessionClient {
             mcp_client: McpClient::new(transport),
         }
     }
-    
+
     /// Start the client
     pub async fn start(&mut self) -> Result<()> {
         self.mcp_client.start().await
     }
-    
+
     /// Shutdown the client
     pub async fn shutdown(&mut self) -> Result<()> {
         self.mcp_client.shutdown().await
     }
-    
+
     /// Create a new ai-session
-    pub async fn create_session(&self, name: &str, working_directory: Option<&str>) -> Result<String> {
+    pub async fn create_session(
+        &self,
+        name: &str,
+        working_directory: Option<&str>,
+    ) -> Result<String> {
         let mut args = json!({ "name": name });
         if let Some(wd) = working_directory {
             args["working_directory"] = json!(wd);
         }
-        
+
         let result = self.mcp_client.execute_tool("create_session", args).await?;
-        
+
         if result.is_error {
             return Err(anyhow::anyhow!("Failed to create session"));
         }
-        
+
         // Extract session ID from result
         if let Some(McpContent::Text { text }) = result.content.first() {
             // Parse session ID from response text
@@ -388,23 +400,28 @@ impl AiSessionClient {
                 }
             }
         }
-        
-        Err(anyhow::anyhow!("Could not extract session ID from response"))
+
+        Err(anyhow::anyhow!(
+            "Could not extract session ID from response"
+        ))
     }
-    
+
     /// Execute a command in an ai-session
     pub async fn execute_command(&self, session_id: &str, command: &str) -> Result<String> {
         let args = json!({
             "session_id": session_id,
             "command": command
         });
-        
-        let result = self.mcp_client.execute_tool("execute_command", args).await?;
-        
+
+        let result = self
+            .mcp_client
+            .execute_tool("execute_command", args)
+            .await?;
+
         if result.is_error {
             return Err(anyhow::anyhow!("Command execution failed"));
         }
-        
+
         // Extract output from result
         if let Some(McpContent::Text { text }) = result.content.first() {
             Ok(text.clone())
@@ -412,17 +429,20 @@ impl AiSessionClient {
             Ok(String::new())
         }
     }
-    
+
     /// Get information about a session
     pub async fn get_session_info(&self, session_id: &str) -> Result<Value> {
         let args = json!({ "session_id": session_id });
-        
-        let result = self.mcp_client.execute_tool("get_session_info", args).await?;
-        
+
+        let result = self
+            .mcp_client
+            .execute_tool("get_session_info", args)
+            .await?;
+
         if result.is_error {
             return Err(anyhow::anyhow!("Failed to get session info"));
         }
-        
+
         // Parse JSON from result
         if let Some(McpContent::Text { text }) = result.content.first() {
             serde_json::from_str(text)
