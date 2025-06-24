@@ -1,0 +1,45 @@
+{
+  "name": "ccswarm",
+  "version": "0.3.5",
+  "description": "AI Multi-Agent Orchestration System with Native AI-Session",
+  "permissions": {
+    "file_write": true,
+    "file_read": true,
+    "bash": true,
+    "web_fetch": true,
+    "todo_write": true
+  },
+  "build_commands": {
+    "test": "cargo test",
+    "test_lib": "cargo test --lib",
+    "build": "cargo build --release",
+    "check": "cargo fmt && cargo clippy -- -D warnings && cargo test",
+    "format": "cargo fmt",
+    "lint": "cargo clippy -- -D warnings"
+  },
+  "run_commands": {
+    "init": "cargo run -- init --name",
+    "start": "cargo run -- start",
+    "tui": "cargo run -- tui",
+    "task": "cargo run -- task",
+    "session_list": "cargo run -- session list",
+    "auto_create": "cargo run -- auto-create"
+  },
+  "environment": {
+    "required": ["ANTHROPIC_API_KEY"],
+    "optional": ["OPENAI_API_KEY", "RUST_LOG", "CCSWARM_HOME"]
+  },
+  "project_structure": {
+    "source_directory": "src",
+    "test_directory": "tests",
+    "documentation": "docs",
+    "examples": "examples_disabled",
+    "binaries": ["ccswarm", "ai-session-server"]
+  },
+  "development_guidelines": {
+    "test_coverage_threshold": 85,
+    "complexity_threshold": 10,
+    "enforce_documentation": true,
+    "enforce_error_handling": true
+  }
+}
