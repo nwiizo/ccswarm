@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, debug};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::agent::{AgentStatus, ClaudeCodeAgent, Priority, Task, TaskResult, TaskType};
@@ -15,16 +15,16 @@ use crate::coordination::{AgentMessage, CoordinationBus};
 pub struct ProactiveMaster {
     /// Project context and goals
     project_context: Arc<RwLock<ProjectContext>>,
-    
+
     /// Task dependency graph
     dependency_graph: Arc<RwLock<DependencyGraph>>,
-    
+
     /// Progress analyzer
     progress_analyzer: Arc<RwLock<ProgressAnalyzer>>,
-    
+
     /// Task predictor
     task_predictor: Arc<RwLock<TaskPredictor>>,
-    
+
     /// Goal tracker
     goal_tracker: Arc<RwLock<GoalTracker>>,
 }
@@ -176,7 +176,7 @@ pub struct Objective {
     pub title: String,
     pub description: String,
     pub deadline: Option<DateTime<Utc>>,
-    pub progress: f64, // 0.0 to 1.0
+    pub progress: f64,            // 0.0 to 1.0
     pub key_results: Vec<String>, // IDs
 }
 
@@ -255,7 +255,11 @@ impl ProactiveMaster {
     pub async fn new() -> Result<Self> {
         let project_context = Arc::new(RwLock::new(ProjectContext {
             project_type: "web_application".to_string(),
-            tech_stack: vec!["React".to_string(), "Node.js".to_string(), "PostgreSQL".to_string()],
+            tech_stack: vec![
+                "React".to_string(),
+                "Node.js".to_string(),
+                "PostgreSQL".to_string(),
+            ],
             features: vec![],
             current_phase: DevelopmentPhase::Planning,
             milestones: vec![],
@@ -302,64 +306,75 @@ impl ProactiveMaster {
         let mut patterns = HashMap::new();
 
         // Frontend component pattern
-        patterns.insert("frontend_component".to_string(), TaskPattern {
-            pattern_id: "frontend_component".to_string(),
-            trigger_conditions: vec!["component created".to_string()],
-            generated_tasks: vec![
-                TaskTemplate {
-                    description_template: "Write unit tests for {component_name} component".to_string(),
-                    task_type: TaskType::Testing,
-                    priority: Priority::High,
-                    estimated_duration: 30,
-                    required_agent_type: "QA".to_string(),
-                    variables: HashMap::new(),
-                },
-                TaskTemplate {
-                    description_template: "Add {component_name} to component library docs".to_string(),
-                    task_type: TaskType::Documentation,
-                    priority: Priority::Medium,
-                    estimated_duration: 15,
-                    required_agent_type: "Frontend".to_string(),
-                    variables: HashMap::new(),
-                },
-            ],
-            confidence: 0.95,
-            usage_count: 0,
-        });
+        patterns.insert(
+            "frontend_component".to_string(),
+            TaskPattern {
+                pattern_id: "frontend_component".to_string(),
+                trigger_conditions: vec!["component created".to_string()],
+                generated_tasks: vec![
+                    TaskTemplate {
+                        description_template: "Write unit tests for {component_name} component"
+                            .to_string(),
+                        task_type: TaskType::Testing,
+                        priority: Priority::High,
+                        estimated_duration: 30,
+                        required_agent_type: "QA".to_string(),
+                        variables: HashMap::new(),
+                    },
+                    TaskTemplate {
+                        description_template: "Add {component_name} to component library docs"
+                            .to_string(),
+                        task_type: TaskType::Documentation,
+                        priority: Priority::Medium,
+                        estimated_duration: 15,
+                        required_agent_type: "Frontend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                ],
+                confidence: 0.95,
+                usage_count: 0,
+            },
+        );
 
         // API endpoint pattern
-        patterns.insert("api_endpoint".to_string(), TaskPattern {
-            pattern_id: "api_endpoint".to_string(),
-            trigger_conditions: vec!["API endpoint created".to_string()],
-            generated_tasks: vec![
-                TaskTemplate {
-                    description_template: "Write integration tests for {endpoint_name} API".to_string(),
-                    task_type: TaskType::Testing,
-                    priority: Priority::High,
-                    estimated_duration: 45,
-                    required_agent_type: "QA".to_string(),
-                    variables: HashMap::new(),
-                },
-                TaskTemplate {
-                    description_template: "Update API documentation for {endpoint_name}".to_string(),
-                    task_type: TaskType::Documentation,
-                    priority: Priority::Medium,
-                    estimated_duration: 20,
-                    required_agent_type: "Backend".to_string(),
-                    variables: HashMap::new(),
-                },
-                TaskTemplate {
-                    description_template: "Add rate limiting to {endpoint_name} endpoint".to_string(),
-                    task_type: TaskType::Development,
-                    priority: Priority::Medium,
-                    estimated_duration: 25,
-                    required_agent_type: "Backend".to_string(),
-                    variables: HashMap::new(),
-                },
-            ],
-            confidence: 0.9,
-            usage_count: 0,
-        });
+        patterns.insert(
+            "api_endpoint".to_string(),
+            TaskPattern {
+                pattern_id: "api_endpoint".to_string(),
+                trigger_conditions: vec!["API endpoint created".to_string()],
+                generated_tasks: vec![
+                    TaskTemplate {
+                        description_template: "Write integration tests for {endpoint_name} API"
+                            .to_string(),
+                        task_type: TaskType::Testing,
+                        priority: Priority::High,
+                        estimated_duration: 45,
+                        required_agent_type: "QA".to_string(),
+                        variables: HashMap::new(),
+                    },
+                    TaskTemplate {
+                        description_template: "Update API documentation for {endpoint_name}"
+                            .to_string(),
+                        task_type: TaskType::Documentation,
+                        priority: Priority::Medium,
+                        estimated_duration: 20,
+                        required_agent_type: "Backend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                    TaskTemplate {
+                        description_template: "Add rate limiting to {endpoint_name} endpoint"
+                            .to_string(),
+                        task_type: TaskType::Development,
+                        priority: Priority::Medium,
+                        estimated_duration: 25,
+                        required_agent_type: "Backend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                ],
+                confidence: 0.9,
+                usage_count: 0,
+            },
+        );
 
         patterns
     }
@@ -369,30 +384,26 @@ impl ProactiveMaster {
         vec![
             CompletionPattern {
                 completed_task_type: TaskType::Development,
-                follow_up_tasks: vec![
-                    TaskTemplate {
-                        description_template: "Test the implemented functionality".to_string(),
-                        task_type: TaskType::Testing,
-                        priority: Priority::High,
-                        estimated_duration: 30,
-                        required_agent_type: "QA".to_string(),
-                        variables: HashMap::new(),
-                    },
-                ],
+                follow_up_tasks: vec![TaskTemplate {
+                    description_template: "Test the implemented functionality".to_string(),
+                    task_type: TaskType::Testing,
+                    priority: Priority::High,
+                    estimated_duration: 30,
+                    required_agent_type: "QA".to_string(),
+                    variables: HashMap::new(),
+                }],
                 probability: 0.85,
             },
             CompletionPattern {
                 completed_task_type: TaskType::Testing,
-                follow_up_tasks: vec![
-                    TaskTemplate {
-                        description_template: "Update documentation with test results".to_string(),
-                        task_type: TaskType::Documentation,
-                        priority: Priority::Low,
-                        estimated_duration: 15,
-                        required_agent_type: "QA".to_string(),
-                        variables: HashMap::new(),
-                    },
-                ],
+                follow_up_tasks: vec![TaskTemplate {
+                    description_template: "Update documentation with test results".to_string(),
+                    task_type: TaskType::Documentation,
+                    priority: Priority::Low,
+                    estimated_duration: 15,
+                    required_agent_type: "QA".to_string(),
+                    variables: HashMap::new(),
+                }],
                 probability: 0.6,
             },
         ]
@@ -402,62 +413,65 @@ impl ProactiveMaster {
     fn initialize_feature_templates() -> HashMap<String, FeatureTemplate> {
         let mut templates = HashMap::new();
 
-        templates.insert("user_authentication".to_string(), FeatureTemplate {
-            feature_name: "User Authentication".to_string(),
-            required_tasks: vec![
-                TaskTemplate {
-                    description_template: "Create user registration API endpoint".to_string(),
-                    task_type: TaskType::Development,
-                    priority: Priority::High,
-                    estimated_duration: 120,
-                    required_agent_type: "Backend".to_string(),
-                    variables: HashMap::new(),
-                },
-                TaskTemplate {
-                    description_template: "Create user login API endpoint".to_string(),
-                    task_type: TaskType::Development,
-                    priority: Priority::High,
-                    estimated_duration: 90,
-                    required_agent_type: "Backend".to_string(),
-                    variables: HashMap::new(),
-                },
-                TaskTemplate {
-                    description_template: "Create registration form component".to_string(),
-                    task_type: TaskType::Development,
-                    priority: Priority::High,
-                    estimated_duration: 60,
-                    required_agent_type: "Frontend".to_string(),
-                    variables: HashMap::new(),
-                },
-                TaskTemplate {
-                    description_template: "Create login form component".to_string(),
-                    task_type: TaskType::Development,
-                    priority: Priority::High,
-                    estimated_duration: 45,
-                    required_agent_type: "Frontend".to_string(),
-                    variables: HashMap::new(),
-                },
-            ],
-            optional_tasks: vec![
-                TaskTemplate {
-                    description_template: "Add social login integration".to_string(),
-                    task_type: TaskType::Development,
-                    priority: Priority::Medium,
-                    estimated_duration: 180,
-                    required_agent_type: "Backend".to_string(),
-                    variables: HashMap::new(),
-                },
-                TaskTemplate {
-                    description_template: "Add password reset functionality".to_string(),
-                    task_type: TaskType::Development,
-                    priority: Priority::Medium,
-                    estimated_duration: 90,
-                    required_agent_type: "Backend".to_string(),
-                    variables: HashMap::new(),
-                },
-            ],
-            typical_duration: 8, // hours
-        });
+        templates.insert(
+            "user_authentication".to_string(),
+            FeatureTemplate {
+                feature_name: "User Authentication".to_string(),
+                required_tasks: vec![
+                    TaskTemplate {
+                        description_template: "Create user registration API endpoint".to_string(),
+                        task_type: TaskType::Development,
+                        priority: Priority::High,
+                        estimated_duration: 120,
+                        required_agent_type: "Backend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                    TaskTemplate {
+                        description_template: "Create user login API endpoint".to_string(),
+                        task_type: TaskType::Development,
+                        priority: Priority::High,
+                        estimated_duration: 90,
+                        required_agent_type: "Backend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                    TaskTemplate {
+                        description_template: "Create registration form component".to_string(),
+                        task_type: TaskType::Development,
+                        priority: Priority::High,
+                        estimated_duration: 60,
+                        required_agent_type: "Frontend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                    TaskTemplate {
+                        description_template: "Create login form component".to_string(),
+                        task_type: TaskType::Development,
+                        priority: Priority::High,
+                        estimated_duration: 45,
+                        required_agent_type: "Frontend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                ],
+                optional_tasks: vec![
+                    TaskTemplate {
+                        description_template: "Add social login integration".to_string(),
+                        task_type: TaskType::Development,
+                        priority: Priority::Medium,
+                        estimated_duration: 180,
+                        required_agent_type: "Backend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                    TaskTemplate {
+                        description_template: "Add password reset functionality".to_string(),
+                        task_type: TaskType::Development,
+                        priority: Priority::Medium,
+                        estimated_duration: 90,
+                        required_agent_type: "Backend".to_string(),
+                        variables: HashMap::new(),
+                    },
+                ],
+                typical_duration: 8, // hours
+            },
+        );
 
         templates
     }
@@ -469,7 +483,7 @@ impl ProactiveMaster {
         coordination_bus: &CoordinationBus,
     ) -> Result<Vec<ProactiveDecision>> {
         debug!("Starting proactive analysis");
-        
+
         let mut decisions = Vec::new();
 
         // 1. Analyze agent progress
@@ -549,9 +563,12 @@ impl ProactiveMaster {
                             None
                         }
                     })
-                    .sum::<f64>() / recent_tasks.len() as f64;
+                    .sum::<f64>()
+                    / recent_tasks.len() as f64;
 
-                analyzer.efficiency_metrics.insert(agent_id.clone(), avg_completion_time);
+                analyzer
+                    .efficiency_metrics
+                    .insert(agent_id.clone(), avg_completion_time);
             }
         }
 
@@ -571,7 +588,9 @@ impl ProactiveMaster {
                     let unresolved: Vec<_> = prerequisites
                         .iter()
                         .filter(|&prereq_id| {
-                            graph.nodes.get(prereq_id)
+                            graph
+                                .nodes
+                                .get(prereq_id)
                                 .map(|n| n.status != TaskNodeStatus::Completed)
                                 .unwrap_or(true)
                         })
@@ -586,16 +605,15 @@ impl ProactiveMaster {
                                 task_id
                             ),
                             confidence: 0.95,
-                            suggested_actions: vec![
-                                SuggestedAction {
-                                    action_type: "unblock_task".to_string(),
-                                    description: "Move task to ready queue".to_string(),
-                                    parameters: HashMap::from([
-                                        ("task_id".to_string(), task_id.clone()),
-                                    ]),
-                                    expected_impact: "Enable task execution".to_string(),
-                                },
-                            ],
+                            suggested_actions: vec![SuggestedAction {
+                                action_type: "unblock_task".to_string(),
+                                description: "Move task to ready queue".to_string(),
+                                parameters: HashMap::from([(
+                                    "task_id".to_string(),
+                                    task_id.clone(),
+                                )]),
+                                expected_impact: "Enable task execution".to_string(),
+                            }],
                             risk_assessment: RiskLevel::Low,
                         });
                     }
@@ -617,38 +635,40 @@ impl ProactiveMaster {
         // Analyze recent completions
         for entry in agents.iter() {
             let agent = entry.value();
-            
+
             // Check last completed task
             if let Some((last_task, last_result)) = agent.task_history.last() {
                 if last_result.success {
                     // Find matching completion patterns
                     for pattern in &predictor.completion_patterns {
-                        if pattern.completed_task_type == last_task.task_type 
-                            && pattern.probability > 0.7 {
-                            
+                        if pattern.completed_task_type == last_task.task_type
+                            && pattern.probability > 0.7
+                        {
                             for task_template in &pattern.follow_up_tasks {
                                 decisions.push(ProactiveDecision {
                                     decision_type: DecisionType::GenerateTask,
                                     reasoning: format!(
-                                        "Pattern match: {} completion typically requires {}",
-                                        format!("{:?}", last_task.task_type),
+                                        "Pattern match: {:?} completion typically requires {}",
+                                        last_task.task_type,
                                         task_template.description_template
                                     ),
                                     confidence: pattern.probability,
-                                    suggested_actions: vec![
-                                        SuggestedAction {
-                                            action_type: "create_task".to_string(),
-                                            description: format!(
-                                                "Create follow-up task: {}",
-                                                task_template.description_template
+                                    suggested_actions: vec![SuggestedAction {
+                                        action_type: "create_task".to_string(),
+                                        description: format!(
+                                            "Create follow-up task: {}",
+                                            task_template.description_template
+                                        ),
+                                        parameters: HashMap::from([
+                                            (
+                                                "template".to_string(),
+                                                serde_json::to_string(task_template)?,
                                             ),
-                                            parameters: HashMap::from([
-                                                ("template".to_string(), serde_json::to_string(task_template)?),
-                                                ("parent_task".to_string(), last_task.id.clone()),
-                                            ]),
-                                            expected_impact: "Maintain development momentum".to_string(),
-                                        },
-                                    ],
+                                            ("parent_task".to_string(), last_task.id.clone()),
+                                        ]),
+                                        expected_impact: "Maintain development momentum"
+                                            .to_string(),
+                                    }],
                                     risk_assessment: RiskLevel::Low,
                                 });
                             }
@@ -706,7 +726,7 @@ impl ProactiveMaster {
                 if let Some(deadline) = objective.deadline {
                     let time_remaining = deadline - Utc::now();
                     let days_remaining = time_remaining.num_days();
-                    
+
                     if days_remaining <= 7 && objective.progress < 0.8 {
                         decisions.push(ProactiveDecision {
                             decision_type: DecisionType::ChangeStrategy,
@@ -734,11 +754,11 @@ impl ProactiveMaster {
 
         // Check sprint velocity
         if let Some(sprint) = &goals.current_sprint {
-            let sprint_progress = (Utc::now() - sprint.start_date).num_days() as f64 
+            let sprint_progress = (Utc::now() - sprint.start_date).num_days() as f64
                 / (sprint.end_date - sprint.start_date).num_days() as f64;
-            
+
             let velocity_progress = sprint.current_velocity as f64 / sprint.velocity_target as f64;
-            
+
             if sprint_progress > 0.5 && velocity_progress < 0.3 {
                 decisions.push(ProactiveDecision {
                     decision_type: DecisionType::ScaleTeam,
@@ -778,14 +798,16 @@ impl ProactiveMaster {
                     if let Some(template_json) = action.parameters.get("template") {
                         let template: TaskTemplate = serde_json::from_str(template_json)?;
                         let task = self.create_task_from_template(&template).await?;
-                        
+
                         // Send task creation message
-                        coordination_bus.send_message(AgentMessage::TaskGenerated {
-                            task_id: task.id.clone(),
-                            description: task.description.clone(),
-                            reasoning: decision.reasoning.clone(),
-                        }).await?;
-                        
+                        coordination_bus
+                            .send_message(AgentMessage::TaskGenerated {
+                                task_id: task.id.clone(),
+                                description: task.description.clone(),
+                                reasoning: decision.reasoning.clone(),
+                            })
+                            .await?;
+
                         info!("Auto-generated task: {}", task.description);
                     }
                 }
@@ -807,24 +829,25 @@ impl ProactiveMaster {
     async fn create_task_from_template(&self, template: &TaskTemplate) -> Result<Task> {
         let task_id = format!("auto-{}", Uuid::new_v4());
         let description = template.description_template.clone();
-        
+
         Ok(Task::new(
             task_id,
             description,
-            template.priority.clone(),
-            template.task_type.clone(),
-        ).with_duration((template.estimated_duration * 60) as u32)) // convert minutes to seconds
+            template.priority,
+            template.task_type,
+        )
+        .with_duration((template.estimated_duration * 60) as u32)) // convert minutes to seconds
     }
 
     /// Unblock a task in the dependency graph
     async fn unblock_task(&self, task_id: &str) -> Result<()> {
         let mut graph = self.dependency_graph.write().await;
-        
+
         if let Some(node) = graph.nodes.get_mut(task_id) {
             node.status = TaskNodeStatus::NotStarted;
             info!("Unblocked task: {}", task_id);
         }
-        
+
         Ok(())
     }
 
@@ -836,7 +859,7 @@ impl ProactiveMaster {
     ) -> Result<()> {
         if result.success {
             let mut context = self.project_context.write().await;
-            
+
             // Analyze task to understand what was built
             if task.description.to_lowercase().contains("component") {
                 let component_name = self.extract_component_name(&task.description);
@@ -844,7 +867,7 @@ impl ProactiveMaster {
                     context.features.push(component_name);
                 }
             }
-            
+
             // Update dependency graph
             let mut graph = self.dependency_graph.write().await;
             if let Some(node) = graph.nodes.get_mut(&task.id) {
@@ -860,13 +883,13 @@ impl ProactiveMaster {
     fn extract_component_name(&self, description: &str) -> String {
         // Simple heuristic to extract component names
         let words: Vec<&str> = description.split_whitespace().collect();
-        
+
         for (i, word) in words.iter().enumerate() {
             if word.to_lowercase() == "component" && i > 0 {
                 return words[i - 1].to_string();
             }
         }
-        
+
         "Unknown Component".to_string()
     }
 
