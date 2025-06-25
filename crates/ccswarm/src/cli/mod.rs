@@ -359,7 +359,7 @@ pub enum TaskAction {
         auto_assign: bool,
 
         /// Use a template for task creation
-        #[arg(short, long)]
+        #[arg(long)]
         template: Option<String>,
 
         /// Template variable values (key=value)
