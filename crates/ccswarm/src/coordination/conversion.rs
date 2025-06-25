@@ -697,25 +697,23 @@ mod tests {
                 CCSwarmMessage::Coordination { payload, .. },
             ) => {
                 // InterAgentMessage converts to Custom AI message and back to Coordination
-                let data = payload.get("data").unwrap();
-                assert!(data
-                    .get("from_agent")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .contains(&from1));
-                assert!(data
-                    .get("to_agent")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .contains(&to1));
-                assert!(data
-                    .get("message")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .contains(&msg1));
+                // The payload contains the serialized AISessionMessage::Custom
+                let custom = payload.get("Custom").unwrap();
+                let data = custom.get("data").unwrap();
+                let inter_agent_msg = data.get("InterAgentMessage").unwrap();
+
+                assert_eq!(
+                    inter_agent_msg.get("from_agent").unwrap().as_str().unwrap(),
+                    from1
+                );
+                assert_eq!(
+                    inter_agent_msg.get("to_agent").unwrap().as_str().unwrap(),
+                    to1
+                );
+                assert_eq!(
+                    inter_agent_msg.get("message").unwrap().as_str().unwrap(),
+                    msg1
+                );
             }
             _ => panic!("Unexpected message types in round-trip conversion"),
         }

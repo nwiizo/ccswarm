@@ -105,6 +105,7 @@ mod tests {
     fn test_cli_parsing_task_command() {
         let args = parse_args(&[
             "task",
+            "add",
             "Implement login feature",
             "--priority",
             "high",

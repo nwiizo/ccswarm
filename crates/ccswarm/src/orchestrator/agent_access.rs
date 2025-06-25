@@ -37,11 +37,17 @@ impl AgentAttributeAccess for ClaudeCodeAgent {
     }
 
     fn capabilities(&self) -> Vec<String> {
-        vec![self.identity.specialization.name().to_string()]
+        vec![
+            self.identity.specialization.name().to_string(),
+            self.identity.specialization.name().to_lowercase(),
+        ]
     }
 
     fn has_capability(&self, capability: &str) -> bool {
-        self.identity.specialization.name() == capability
+        self.identity
+            .specialization
+            .name()
+            .eq_ignore_ascii_case(capability)
     }
 }
 

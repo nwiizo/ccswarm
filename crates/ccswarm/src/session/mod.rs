@@ -2,17 +2,19 @@ pub mod ai_session_adapter;
 pub mod claude_session;
 pub mod context_bridge;
 pub mod coordinator;
+pub mod error;
 pub mod memory;
 pub mod persistent_session;
 pub mod session_pool;
 pub mod worktree_session;
 
-use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+
+use self::error::{LockResultExt, SessionError, SessionResult};
 
 use crate::auto_accept::AutoAcceptConfig;
 use crate::identity::AgentRole;
@@ -233,7 +235,7 @@ pub struct SessionManager {
 
 impl SessionManager {
     /// Creates a new session manager
-    pub async fn new() -> Result<Self> {
+    pub async fn new() -> SessionResult<Self> {
         Ok(Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             session_manager: NativeSessionManager::new(),
@@ -245,7 +247,7 @@ impl SessionManager {
     /// Creates a new session manager with resource monitoring
     pub async fn with_resource_monitoring(
         resource_limits: crate::resource::ResourceLimits,
-    ) -> Result<Self> {
+    ) -> SessionResult<Self> {
         let resource_monitor = Arc::new(ResourceMonitor::new(resource_limits));
         let resource_integration =
             Arc::new(SessionResourceIntegration::new(resource_monitor.clone()));
@@ -282,7 +284,7 @@ impl SessionManager {
         working_directory: String,
         description: Option<String>,
         auto_start: bool,
-    ) -> Result<AgentSession> {
+    ) -> SessionResult<AgentSession> {
         let session =
             AgentSession::new(agent_id, agent_role, working_directory.clone(), description);
 
@@ -290,7 +292,10 @@ impl SessionManager {
         let _native_session = self
             .session_manager
             .create_session(&session.tmux_session)
-            .await?;
+            .await
+            .map_err(|e| SessionError::CreationFailed {
+                reason: e.to_string(),
+            })?;
 
         // Set up the session environment
         self.setup_session_environment(&session).await?;
@@ -302,7 +307,7 @@ impl SessionManager {
 
         // Store the session
         {
-            let mut sessions = self.sessions.lock().unwrap();
+            let mut sessions = self.sessions.lock().map_lock_error()?;
             sessions.insert(session.id.clone(), session.clone());
         }
 
@@ -326,12 +331,14 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be paused
-    pub async fn pause_session(&self, session_id: &str) -> Result<(), anyhow::Error> {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub async fn pause_session(&self, session_id: &str) -> SessionResult<()> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
 
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            .ok_or_else(|| SessionError::NotFound {
+                id: session_id.to_string(),
+            })?;
 
         match session.status {
             SessionStatus::Active | SessionStatus::Background => {
@@ -341,10 +348,10 @@ impl SessionManager {
                 session.touch();
                 Ok(())
             }
-            _ => Err(anyhow::anyhow!(
-                "Cannot pause session in {} state",
-                session.status
-            )),
+            _ => Err(SessionError::InvalidState {
+                state: format!("{:?}", session.status),
+                operation: "pause".to_string(),
+            }),
         }
     }
 
@@ -355,12 +362,14 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be resumed
-    pub async fn resume_session(&self, session_id: &str) -> Result<()> {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub async fn resume_session(&self, session_id: &str) -> SessionResult<()> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
 
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            .ok_or_else(|| SessionError::NotFound {
+                id: session_id.to_string(),
+            })?;
 
         match session.status {
             SessionStatus::Paused => {
@@ -373,7 +382,10 @@ impl SessionManager {
                 session.touch();
                 Ok(())
             }
-            _ => Err(anyhow!("Cannot resume session in {} state", session.status)),
+            _ => Err(SessionError::InvalidState {
+                state: format!("{:?}", session.status),
+                operation: "resume".to_string(),
+            }),
         }
     }
 
@@ -384,12 +396,14 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be detached
-    pub async fn detach_session(&self, session_id: &str) -> Result<()> {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub async fn detach_session(&self, session_id: &str) -> SessionResult<()> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
 
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            .ok_or_else(|| SessionError::NotFound {
+                id: session_id.to_string(),
+            })?;
 
         match session.status {
             SessionStatus::Active | SessionStatus::Background => {
@@ -398,7 +412,10 @@ impl SessionManager {
                 session.touch();
                 Ok(())
             }
-            _ => Err(anyhow!("Cannot detach session in {} state", session.status)),
+            _ => Err(SessionError::InvalidState {
+                state: format!("{:?}", session.status),
+                operation: "detach".to_string(),
+            }),
         }
     }
 
@@ -409,12 +426,14 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be attached
-    pub async fn attach_session(&self, session_id: &str) -> Result<()> {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub async fn attach_session(&self, session_id: &str) -> SessionResult<()> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
 
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            .ok_or_else(|| SessionError::NotFound {
+                id: session_id.to_string(),
+            })?;
 
         match session.status {
             SessionStatus::Detached => {
@@ -427,10 +446,10 @@ impl SessionManager {
                 session.touch();
                 Ok(())
             }
-            _ => Err(anyhow!(
-                "Cannot attach to session in {} state",
-                session.status
-            )),
+            _ => Err(SessionError::InvalidState {
+                state: format!("{:?}", session.status),
+                operation: "attach".to_string(),
+            }),
         }
     }
 
@@ -441,12 +460,14 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub async fn terminate_session(&self, session_id: &str) -> Result<()> {
+    pub async fn terminate_session(&self, session_id: &str) -> SessionResult<()> {
         let (tmux_session, agent_id) = {
-            let sessions = self.sessions.lock().unwrap();
+            let sessions = self.sessions.lock().map_lock_error()?;
             let session = sessions
                 .get(session_id)
-                .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
             (session.tmux_session.clone(), session.agent_id.clone())
         };
 
@@ -462,12 +483,17 @@ impl SessionManager {
 
         // Terminate the native session
         if self.session_manager.has_session(&tmux_session).await {
-            self.session_manager.delete_session(&tmux_session).await?;
+            self.session_manager
+                .delete_session(&tmux_session)
+                .await
+                .map_err(|e| SessionError::TerminationFailed {
+                    reason: e.to_string(),
+                })?;
         }
 
         // Update session status
         {
-            let mut sessions = self.sessions.lock().unwrap();
+            let mut sessions = self.sessions.lock().map_lock_error()?;
             if let Some(session) = sessions.get_mut(session_id) {
                 session.status = SessionStatus::Terminated;
                 session.touch();
@@ -485,12 +511,18 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub async fn set_background_mode(&self, session_id: &str, auto_accept: bool) -> Result<()> {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub async fn set_background_mode(
+        &self,
+        session_id: &str,
+        auto_accept: bool,
+    ) -> SessionResult<()> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
 
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            .ok_or_else(|| SessionError::NotFound {
+                id: session_id.to_string(),
+            })?;
 
         session.background_mode = true;
         if auto_accept && session.auto_accept_config.is_none() {
@@ -520,12 +552,14 @@ impl SessionManager {
         &self,
         session_id: &str,
         config: AutoAcceptConfig,
-    ) -> Result<()> {
-        let mut sessions = self.sessions.lock().unwrap();
+    ) -> SessionResult<()> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
 
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            .ok_or_else(|| SessionError::NotFound {
+                id: session_id.to_string(),
+            })?;
 
         session.enable_auto_accept(config);
 
@@ -539,12 +573,14 @@ impl SessionManager {
     ///
     /// # Returns
     /// Ok(()) on success, error if session not found
-    pub async fn disable_auto_accept(&self, session_id: &str) -> Result<()> {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub async fn disable_auto_accept(&self, session_id: &str) -> SessionResult<()> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
 
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            .ok_or_else(|| SessionError::NotFound {
+                id: session_id.to_string(),
+            })?;
 
         session.disable_auto_accept();
 
@@ -563,12 +599,14 @@ impl SessionManager {
         &self,
         session_id: &str,
         config: AutoAcceptConfig,
-    ) -> Result<()> {
-        let mut sessions = self.sessions.lock().unwrap();
+    ) -> SessionResult<()> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
 
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+            .ok_or_else(|| SessionError::NotFound {
+                id: session_id.to_string(),
+            })?;
 
         session.update_auto_accept_config(config);
 
@@ -580,64 +618,83 @@ impl SessionManager {
     /// # Returns
     /// Number of sessions that had auto-accept disabled
     pub async fn emergency_stop_all_auto_accept(&self) -> usize {
-        let mut sessions = self.sessions.lock().unwrap();
-        let mut count = 0;
+        if let Ok(mut sessions) = self.sessions.lock() {
+            let mut count = 0;
 
-        for session in sessions.values_mut() {
-            if session.auto_accept {
-                session.disable_auto_accept();
-                count += 1;
+            for session in sessions.values_mut() {
+                if session.auto_accept {
+                    session.disable_auto_accept();
+                    count += 1;
+                }
             }
-        }
 
-        count
+            count
+        } else {
+            // If we can't acquire the lock, return 0
+            0
+        }
     }
 
     /// Gets sessions with auto-accept enabled
     pub fn get_auto_accept_sessions(&self) -> Vec<AgentSession> {
-        let sessions = self.sessions.lock().unwrap();
-        sessions
-            .values()
-            .filter(|s| s.is_auto_accept_ready())
-            .cloned()
-            .collect()
+        if let Ok(sessions) = self.sessions.lock() {
+            sessions
+                .values()
+                .filter(|s| s.is_auto_accept_ready())
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Gets a session by ID
     pub fn get_session(&self, session_id: &str) -> Option<AgentSession> {
-        let sessions = self.sessions.lock().unwrap();
-        sessions.get(session_id).cloned()
+        if let Ok(sessions) = self.sessions.lock() {
+            sessions.get(session_id).cloned()
+        } else {
+            None
+        }
     }
 
     /// Lists all sessions
     pub fn list_sessions(&self) -> Vec<AgentSession> {
-        let sessions = self.sessions.lock().unwrap();
-        sessions.values().cloned().collect()
+        if let Ok(sessions) = self.sessions.lock() {
+            sessions.values().cloned().collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Lists active sessions only
     pub fn list_active_sessions(&self) -> Vec<AgentSession> {
-        let sessions = self.sessions.lock().unwrap();
-        sessions
-            .values()
-            .filter(|s| s.is_runnable())
-            .cloned()
-            .collect()
+        if let Ok(sessions) = self.sessions.lock() {
+            sessions
+                .values()
+                .filter(|s| s.is_runnable())
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Gets sessions by agent role
     pub fn get_sessions_by_role(&self, role: AgentRole) -> Vec<AgentSession> {
-        let sessions = self.sessions.lock().unwrap();
-        sessions
-            .values()
-            .filter(|s| s.agent_role == role)
-            .cloned()
-            .collect()
+        if let Ok(sessions) = self.sessions.lock() {
+            sessions
+                .values()
+                .filter(|s| s.agent_role == role)
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Cleans up terminated sessions
-    pub async fn cleanup_terminated_sessions(&self) -> Result<usize> {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub async fn cleanup_terminated_sessions(&self) -> SessionResult<usize> {
+        let mut sessions = self.sessions.lock().map_lock_error()?;
         let terminated: Vec<String> = sessions
             .iter()
             .filter(|(_, s)| s.status == SessionStatus::Terminated)
@@ -653,12 +710,12 @@ impl SessionManager {
     }
 
     /// Check for idle agents and suspend them if needed
-    pub async fn check_and_suspend_idle_agents(&self) -> Result<Vec<String>> {
+    pub async fn check_and_suspend_idle_agents(&self) -> SessionResult<Vec<String>> {
         let mut suspended_agents = Vec::new();
 
         if let Some(ref integration) = self.resource_integration {
             let agents_to_check: Vec<(String, String)> = {
-                let sessions = self.sessions.lock().unwrap();
+                let sessions = self.sessions.lock().map_lock_error()?;
                 sessions
                     .values()
                     .filter(|s| s.is_runnable())
@@ -685,12 +742,15 @@ impl SessionManager {
         &self,
         session_id: &str,
     ) -> Option<crate::resource::ResourceUsage> {
-        let sessions = self.sessions.lock().unwrap();
-        let session = sessions.get(session_id)?;
+        if let Ok(sessions) = self.sessions.lock() {
+            let session = sessions.get(session_id)?;
 
-        self.resource_monitor
-            .as_ref()
-            .and_then(|monitor| monitor.get_agent_usage(&session.agent_id))
+            self.resource_monitor
+                .as_ref()
+                .and_then(|monitor| monitor.get_agent_usage(&session.agent_id))
+        } else {
+            None
+        }
     }
 
     /// Get resource efficiency statistics
@@ -703,7 +763,7 @@ impl SessionManager {
     }
 
     /// Sets up the environment for a new session
-    async fn setup_session_environment(&self, session: &AgentSession) -> Result<()> {
+    async fn setup_session_environment(&self, session: &AgentSession) -> SessionResult<()> {
         // For native sessions, environment setup would be handled during session creation
         // We can set environment variables if the native session supports it
         if let Some(native_session) = self
@@ -727,7 +787,7 @@ impl SessionManager {
     }
 
     /// Starts the agent in the session
-    async fn start_agent_in_session(&self, session: &AgentSession) -> Result<()> {
+    async fn start_agent_in_session(&self, session: &AgentSession) -> SessionResult<()> {
         // Build the command to start the agent
         let command = format!(
             "ccswarm agent start --id {} --role {} --session {} --working-dir {}",
