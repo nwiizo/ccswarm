@@ -1,9 +1,11 @@
 //! Transport layer for MCP communication
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 use super::jsonrpc::JsonRpcMessage;
 
@@ -78,12 +80,26 @@ impl Transport for StdioTransport {
     }
 }
 
-/// HTTP/SSE transport for remote MCP communication (stub for future implementation)
+type WebSocketPair = (
+    futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        Message,
+    >,
+    futures_util::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
+);
+
+/// HTTP/WebSocket transport for remote MCP communication
 pub struct HttpTransport {
-    #[allow(dead_code)]
     base_url: String,
-    #[allow(dead_code)]
     client: reqwest::Client,
+    websocket: Option<WebSocketPair>,
+    is_connected: bool,
 }
 
 impl HttpTransport {
@@ -92,24 +108,145 @@ impl HttpTransport {
         Self {
             base_url,
             client: reqwest::Client::new(),
+            websocket: None,
+            is_connected: false,
         }
+    }
+
+    /// Connect to the WebSocket endpoint
+    async fn connect(&mut self) -> Result<()> {
+        if self.is_connected {
+            return Ok(());
+        }
+
+        // Convert HTTP URL to WebSocket URL
+        let ws_url = self
+            .base_url
+            .replace("http://", "ws://")
+            .replace("https://", "wss://")
+            + "/mcp";
+
+        let (ws_stream, _) = connect_async(&ws_url)
+            .await
+            .map_err(|e| anyhow!("Failed to connect to WebSocket: {}", e))?;
+
+        let (sink, stream) = ws_stream.split();
+        self.websocket = Some((sink, stream));
+        self.is_connected = true;
+
+        Ok(())
+    }
+
+    /// Send a JSON-RPC message over HTTP POST
+    async fn send_http(&self, message: &JsonRpcMessage) -> Result<JsonRpcMessage> {
+        let response = self
+            .client
+            .post(format!("{}/mcp", self.base_url))
+            .header("Content-Type", "application/json")
+            .json(message)
+            .send()
+            .await
+            .map_err(|e| anyhow!("HTTP request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "HTTP request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let response_json: JsonRpcMessage = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse JSON response: {}", e))?;
+
+        Ok(response_json)
     }
 }
 
 #[async_trait]
 impl Transport for HttpTransport {
-    async fn send(&mut self, _message: JsonRpcMessage) -> Result<()> {
-        // TODO: Implement HTTP/SSE transport
-        unimplemented!("HTTP transport not yet implemented")
+    async fn send(&mut self, message: JsonRpcMessage) -> Result<()> {
+        // Try WebSocket first, fall back to HTTP
+        if let Some((sink, _)) = &mut self.websocket {
+            let json = serde_json::to_string(&message)?;
+            sink.send(Message::Text(json))
+                .await
+                .map_err(|e| anyhow!("WebSocket send failed: {}", e))?;
+            Ok(())
+        } else {
+            // For HTTP, we need to handle request/response pattern
+            // Store the message for later retrieval or handle immediately
+            match &message {
+                JsonRpcMessage::Request { .. } => {
+                    let _response = self.send_http(&message).await?;
+                    // Response will be handled by receive() method
+                    Ok(())
+                }
+                JsonRpcMessage::Notification { .. } => {
+                    // Send notification via HTTP POST without expecting response
+                    let _response = self
+                        .client
+                        .post(format!("{}/mcp/notify", self.base_url))
+                        .header("Content-Type", "application/json")
+                        .json(&message)
+                        .send()
+                        .await
+                        .map_err(|e| anyhow!("HTTP notification failed: {}", e))?;
+                    Ok(())
+                }
+                JsonRpcMessage::Response { .. } => {
+                    // Responses are typically not sent by clients
+                    Err(anyhow!("Cannot send response message via HTTP transport"))
+                }
+            }
+        }
     }
 
     async fn receive(&mut self) -> Result<Option<JsonRpcMessage>> {
-        // TODO: Implement HTTP/SSE transport
-        unimplemented!("HTTP transport not yet implemented")
+        // Ensure connection is established
+        if !self.is_connected {
+            self.connect().await?;
+        }
+
+        if let Some((_, stream)) = &mut self.websocket {
+            match stream.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    let message: JsonRpcMessage = serde_json::from_str(&text)
+                        .map_err(|e| anyhow!("Failed to parse WebSocket message: {}", e))?;
+                    Ok(Some(message))
+                }
+                Some(Ok(Message::Close(_))) => {
+                    self.is_connected = false;
+                    self.websocket = None;
+                    Ok(None)
+                }
+                Some(Ok(_)) => {
+                    // Ignore other message types (binary, ping, pong)
+                    self.receive().await // Recursively wait for next text message
+                }
+                Some(Err(e)) => Err(anyhow!("WebSocket error: {}", e)),
+                None => {
+                    // Stream ended
+                    self.is_connected = false;
+                    self.websocket = None;
+                    Ok(None)
+                }
+            }
+        } else {
+            // For HTTP-only mode, we'd need to implement server-sent events or polling
+            // For now, return None to indicate no messages available
+            Ok(None)
+        }
     }
 
     async fn close(&mut self) -> Result<()> {
-        // TODO: Implement HTTP/SSE transport
+        if let Some((mut sink, _)) = self.websocket.take() {
+            sink.send(Message::Close(None))
+                .await
+                .map_err(|e| anyhow!("Failed to close WebSocket: {}", e))?;
+        }
+        self.is_connected = false;
         Ok(())
     }
 }

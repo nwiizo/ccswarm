@@ -86,6 +86,7 @@ pub mod process;
 pub mod pty;
 
 use crate::context::SessionContext;
+use crate::persistence::CommandRecord;
 
 /// Session error type
 #[derive(Debug, thiserror::Error)]
@@ -261,6 +262,12 @@ pub struct AISession {
     pub last_activity: Arc<RwLock<DateTime<Utc>>>,
     /// Session metadata
     pub metadata: Arc<RwLock<HashMap<String, serde_json::Value>>>,
+    /// Command history tracking
+    pub command_history: Arc<RwLock<Vec<CommandRecord>>>,
+    /// Command count
+    pub command_count: Arc<RwLock<usize>>,
+    /// Total tokens used
+    pub total_tokens: Arc<RwLock<usize>>,
 }
 
 impl AISession {
@@ -279,6 +286,9 @@ impl AISession {
             created_at: now,
             last_activity: Arc::new(RwLock::new(now)),
             metadata: Arc::new(RwLock::new(HashMap::new())),
+            command_history: Arc::new(RwLock::new(Vec::new())),
+            command_count: Arc::new(RwLock::new(0)),
+            total_tokens: Arc::new(RwLock::new(0)),
         })
     }
 
@@ -300,6 +310,9 @@ impl AISession {
             created_at,
             last_activity: Arc::new(RwLock::new(now)),
             metadata: Arc::new(RwLock::new(HashMap::new())),
+            command_history: Arc::new(RwLock::new(Vec::new())),
+            command_count: Arc::new(RwLock::new(0)),
+            total_tokens: Arc::new(RwLock::new(0)),
         })
     }
 
@@ -352,6 +365,70 @@ impl AISession {
     pub async fn get_metadata(&self, key: &str) -> Option<serde_json::Value> {
         self.metadata.read().await.get(key).cloned()
     }
+
+    /// Execute a command and record it in history
+    pub async fn execute_command(&self, command: &str) -> Result<String> {
+        let start_time = Utc::now();
+
+        // Send the command
+        self.send_input(&format!("{}\n", command)).await?;
+
+        // Wait for output
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let output_bytes = self.read_output().await?;
+        let output = String::from_utf8_lossy(&output_bytes).to_string();
+
+        // Record the command in history
+        let end_time = Utc::now();
+        let duration_ms = (end_time - start_time).num_milliseconds() as u64;
+
+        let record = CommandRecord {
+            command: command.to_string(),
+            timestamp: start_time,
+            exit_code: None, // TODO: Extract exit code from output
+            output_preview: if output.len() > 200 {
+                format!("{}...", &output[..200])
+            } else {
+                output.clone()
+            },
+            duration_ms,
+        };
+
+        // Update history and counters
+        self.command_history.write().await.push(record);
+        *self.command_count.write().await += 1;
+
+        Ok(output)
+    }
+
+    /// Add tokens to the session total
+    pub async fn add_tokens(&self, token_count: usize) {
+        *self.total_tokens.write().await += token_count;
+    }
+
+    /// Get command history
+    pub async fn get_command_history(&self) -> Vec<CommandRecord> {
+        self.command_history.read().await.clone()
+    }
+
+    /// Get command count
+    pub async fn get_command_count(&self) -> usize {
+        *self.command_count.read().await
+    }
+
+    /// Get total tokens used
+    pub async fn get_total_tokens(&self) -> usize {
+        *self.total_tokens.read().await
+    }
+
+    /// Clear command history (keep recent N commands)
+    pub async fn trim_command_history(&self, keep_recent: usize) {
+        let mut history = self.command_history.write().await;
+        if history.len() > keep_recent {
+            let start_index = history.len() - keep_recent;
+            history.drain(0..start_index);
+        }
+    }
 }
 
 /// AI-optimized session manager for creating and managing multiple terminal sessions.
@@ -373,7 +450,7 @@ impl AISession {
 ///
 /// ```no_run
 /// use ai_session::{SessionManager, SessionConfig};
-/// 
+///
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {
 ///     let manager = SessionManager::new();
@@ -401,7 +478,7 @@ impl AISession {
 ///
 /// ```no_run
 /// use ai_session::{SessionManager, SessionConfig, ContextConfig};
-/// 
+///
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {
 ///     let manager = SessionManager::new();
@@ -429,7 +506,7 @@ impl AISession {
 /// ```no_run
 /// use ai_session::{SessionManager, SessionConfig, SessionId};
 /// use chrono::Utc;
-/// 
+///
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {
 ///     let manager = SessionManager::new();

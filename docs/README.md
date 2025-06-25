@@ -47,9 +47,10 @@ See [commands/workspace-commands.md](commands/workspace-commands.md) for workspa
 ### 🆕 For New Users
 1. **System Overview**: Read [APPLICATION_SPEC.md](APPLICATION_SPEC.md) for complete feature list
 2. **Installation**: Follow setup in the main [README.md](../README.md)
-3. **First Project**: Use [../.claude/commands/init.md](../.claude/commands/init.md) to create your first project
-4. **Task Management**: Learn [../.claude/commands/task.md](../.claude/commands/task.md) for creating and delegating tasks
-5. **AI Sessions**: Understand [../.claude/commands/session.md](../.claude/commands/session.md) for 93% token savings
+3. **Quick Setup**: Use the new **[quickstart](commands/quickstart.md)** command for one-command project setup!
+4. **First Project**: Alternative: Use [../.claude/commands/init.md](../.claude/commands/init.md) to create your first project
+5. **Task Management**: Learn [../.claude/commands/task.md](../.claude/commands/task.md) for creating and delegating tasks
+6. **AI Sessions**: Understand [../.claude/commands/session.md](../.claude/commands/session.md) for 93% token savings
 
 ### 👨‍💻 For Developers
 1. **System Architecture**: Study [ARCHITECTURE.md](ARCHITECTURE.md) for overall design
@@ -68,6 +69,7 @@ See [commands/workspace-commands.md](commands/workspace-commands.md) for workspa
 ## 📖 Command Documentation
 
 ### 🎯 Essential ccswarm Commands
+- **[quickstart](commands/quickstart.md)** - One-command setup for new projects (NEW!)
 - **[init.md](../.claude/commands/init.md)** - Initialize new projects
 - **[start.md](../.claude/commands/start.md)** - Start the orchestrator
 - **[task.md](../.claude/commands/task.md)** - Create and manage tasks

@@ -3,7 +3,7 @@
 /// This module enables ccswarm to leverage ai-session's token-efficient context
 /// handling while maintaining compatibility with the existing memory system.
 /// Key benefits:
-/// - 93% token reduction through intelligent compression
+/// - Intelligent context compression for efficiency
 /// - Automatic context window management
 /// - Semantic understanding of conversation history
 use anyhow::Result;

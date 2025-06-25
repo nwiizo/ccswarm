@@ -8,16 +8,79 @@ use tracing::{debug, error, info};
 
 use crate::agent::{AgentStatus, TaskResult};
 
+/// Message priority levels
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessagePriority {
+    Low,
+    Normal,
+    High,
+    Critical,
+}
+
+/// Types of coordination messages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CoordinationType {
+    TaskFailure,
+    HelpResponse,
+    ResourceRequest,
+    StatusUpdate,
+    Information,
+    TaskDelegation,
+    InformationRequest,
+    InformationResponse,
+    ReviewRequest,
+    ReviewResponse,
+    SyncRequest,
+    Custom(String),
+}
+
 pub mod ai_message_bus;
+pub mod conversion;
 pub mod dialogue;
+
+// Re-export key conversion utilities
+pub use conversion::{
+    convert_from_ai_session, convert_to_ai_session, AgentMappingRegistry, FromAISessionMessage,
+    IntoAISessionMessage, UnifiedAgentInfo,
+};
 
 /// Messages sent between agents and the orchestrator
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AgentMessage {
+    /// Agent registration
+    Registration {
+        agent_id: String,
+        capabilities: Vec<String>,
+        metadata: serde_json::Value,
+    },
+
+    /// Task assignment to agent
+    TaskAssignment {
+        task_id: String,
+        agent_id: String,
+        task_data: serde_json::Value,
+    },
+
+    /// Task progress update
+    TaskProgress {
+        agent_id: String,
+        task_id: String,
+        progress: f32,
+        message: String,
+    },
+
+    /// Help request from agent
+    HelpRequest {
+        agent_id: String,
+        context: String,
+        priority: MessagePriority,
+    },
+
     /// Status update from an agent
     StatusUpdate {
         agent_id: String,
         status: AgentStatus,
+        metrics: serde_json::Value,
     },
 
     /// Task completed notification
@@ -69,18 +132,12 @@ pub enum AgentMessage {
         description: String,
         reasoning: String,
     },
-}
 
-/// Types of coordination messages
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum CoordinationType {
-    TaskDelegation,
-    InformationRequest,
-    InformationResponse,
-    ReviewRequest,
-    ReviewResponse,
-    SyncRequest,
-    Custom(String),
+    /// Custom message type
+    Custom {
+        message_type: String,
+        data: serde_json::Value,
+    },
 }
 
 /// Coordination bus for inter-agent communication
@@ -209,6 +266,7 @@ impl CoordinationBus {
         // Sort by timestamp if available
         messages.sort_by_key(|m| match m {
             AgentMessage::Heartbeat { timestamp, .. } => *timestamp,
+            AgentMessage::InterAgentMessage { timestamp, .. } => *timestamp,
             _ => Utc::now(),
         });
 

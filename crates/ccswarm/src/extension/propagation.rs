@@ -2,8 +2,10 @@
 
 use super::*;
 // Using string IDs instead of direct agent references
-use chrono::Duration;
+use anyhow::{anyhow, Result};
+use chrono::TimeDelta;
 use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
 
 /// Manages the propagation of extensions across agents
 pub struct PropagationManager {
@@ -14,6 +16,8 @@ pub struct PropagationManager {
     history: Arc<RwLock<Vec<PropagationRecord>>>,
     /// Active propagations
     active_propagations: Arc<RwLock<HashMap<Uuid, ActivePropagation>>>,
+    /// Propagation status tracking
+    propagation_status: Arc<Mutex<HashMap<String, PropagationStatus>>>,
 }
 
 /// Rules governing extension propagation
@@ -104,7 +108,7 @@ pub enum PropagationType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PropagationResult {
     Success {
-        adoption_time: Duration,
+        adoption_time: TimeDelta,
         improvements: Vec<String>,
     },
     Failure {
@@ -148,6 +152,23 @@ pub enum PropagationStatus {
     Completed,
     Failed,
     RolledBack,
+    Propagating { started_at: DateTime<Utc> },
+}
+
+/// Plan for propagating an extension
+#[derive(Debug, Clone)]
+pub enum PropagationPlan {
+    Immediate {
+        target_agents: Vec<String>,
+        propagation_type: PropagationType,
+    },
+    Gradual {
+        waves: Vec<PropagationWave>,
+        total_agents: usize,
+    },
+    NoPropagation {
+        reason: String,
+    },
 }
 
 impl PropagationManager {
@@ -156,6 +177,7 @@ impl PropagationManager {
             rules,
             history: Arc::new(RwLock::new(Vec::new())),
             active_propagations: Arc::new(RwLock::new(HashMap::new())),
+            propagation_status: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -174,347 +196,758 @@ impl PropagationManager {
         }
 
         // Determine propagation type
-        let propagation_type = self.determine_propagation_type(extension)?;
+        let propagation_type = self.determine_propagation_type(extension);
 
-        // Identify target agents
-        let target_agents = self
-            .identify_target_agents(extension, source_agent_id, all_agent_ids, propagation_type)
+        // Filter eligible agents
+        let eligible_agents = self
+            .filter_eligible_agents(extension, source_agent_id, all_agent_ids)
             .await?;
 
-        if target_agents.is_empty() {
+        if eligible_agents.is_empty() {
             return Ok(PropagationPlan::NoPropagation {
-                reason: "No suitable target agents found".to_string(),
+                reason: "No eligible agents for propagation".to_string(),
             });
         }
 
-        // Check compatibility
-        let compatibility_report = self.check_compatibility(extension, &target_agents).await?;
-
-        // Create propagation waves
-        let waves =
-            self.create_propagation_waves(&target_agents, &compatibility_report, propagation_type)?;
-
-        Ok(PropagationPlan::Propagate {
-            extension_id: extension.id,
-            propagation_type,
-            target_agents: target_agents.clone(),
-            waves: waves.clone(),
-            estimated_duration: self.estimate_duration(&waves),
-            risk_assessment: self.assess_propagation_risk(extension, &target_agents),
-        })
-    }
-
-    /// Start propagation of an extension
-    pub async fn start_propagation(
-        &self,
-        plan: PropagationPlan,
-        extension: Extension,
-    ) -> Result<Uuid> {
-        let propagation_id = Uuid::new_v4();
-
-        match plan {
-            PropagationPlan::NoPropagation { reason } => {
-                anyhow::bail!("Cannot start propagation: {}", reason);
-            }
-            PropagationPlan::Propagate {
+        // Create propagation plan based on type
+        match propagation_type {
+            PropagationType::Emergency => Ok(PropagationPlan::Immediate {
+                target_agents: eligible_agents,
                 propagation_type,
-                target_agents,
-                waves,
-                ..
-            } => {
-                let active_propagation = ActivePropagation {
-                    extension,
-                    target_agents: target_agents.clone(),
-                    propagation_type,
-                    wave: waves[0].clone(),
-                    status: PropagationStatus::Planning,
-                };
+            }),
+            PropagationType::Mandatory => {
+                // Gradual rollout for mandatory updates
+                let waves = self.create_propagation_waves(&eligible_agents, 3);
+                Ok(PropagationPlan::Gradual {
+                    waves,
+                    total_agents: eligible_agents.len(),
+                })
+            }
+            _ => {
+                // Optional propagation to interested agents only
+                let interested_agents = self
+                    .filter_interested_agents(&eligible_agents, extension)
+                    .await?;
 
-                let mut active = self.active_propagations.write().await;
-                active.insert(propagation_id, active_propagation);
-
-                // Start first wave
-                self.start_wave(propagation_id, 0).await?;
-
-                Ok(propagation_id)
+                if interested_agents.is_empty() {
+                    Ok(PropagationPlan::NoPropagation {
+                        reason: "No agents interested in this extension".to_string(),
+                    })
+                } else {
+                    Ok(PropagationPlan::Immediate {
+                        target_agents: interested_agents,
+                        propagation_type,
+                    })
+                }
             }
         }
     }
 
-    /// Monitor propagation progress
-    pub async fn monitor_propagation(&self, propagation_id: Uuid) -> Result<PropagationProgress> {
-        let active = self.active_propagations.read().await;
-        let propagation = active
-            .get(&propagation_id)
-            .context("Propagation not found")?;
-
-        // Get results from agents
-        let results = self
-            .collect_propagation_results(&propagation.wave.agents_in_wave)
-            .await?;
-
-        let successful = results
-            .values()
-            .filter(|r| matches!(r, PropagationResult::Success { .. }))
-            .count();
-        let failed = results
-            .values()
-            .filter(|r| matches!(r, PropagationResult::Failure { .. }))
-            .count();
-
-        let success_rate = successful as f64 / propagation.wave.agents_in_wave.len() as f64;
-
-        Ok(PropagationProgress {
-            propagation_id,
-            current_wave: propagation.wave.wave_number,
-            agents_completed: successful + failed,
-            agents_pending: propagation.wave.agents_in_wave.len() - successful - failed,
-            success_rate,
-            status: propagation.status,
-            results,
-        })
-    }
-
-    /// Advance to next propagation wave
-    pub async fn advance_wave(&self, propagation_id: Uuid) -> Result<()> {
-        let mut active = self.active_propagations.write().await;
-        let propagation = active
-            .get_mut(&propagation_id)
-            .context("Propagation not found")?;
-
-        propagation.wave.wave_number += 1;
-        propagation.status = PropagationStatus::InProgress;
-
-        Ok(())
-    }
-
-    /// Rollback a propagation
-    pub async fn rollback_propagation(&self, propagation_id: Uuid) -> Result<()> {
-        let mut active = self.active_propagations.write().await;
-        let propagation = active
-            .get_mut(&propagation_id)
-            .context("Propagation not found")?;
-
-        propagation.status = PropagationStatus::RolledBack;
-
-        // Initiate rollback on affected agents
-        self.initiate_rollback(&propagation.wave.agents_in_wave)
-            .await?;
-
-        Ok(())
-    }
-
+    /// Check if extension meets criteria for propagation
     async fn meets_propagation_criteria(&self, extension: &Extension) -> Result<bool> {
-        // Check success rate
-        let success_rate = extension.metrics.user_satisfaction;
+        // Check success rate from test results
+        let success_count = extension.test_results.iter().filter(|r| r.passed).count();
+        let total_tests = extension.test_results.len();
+
+        if total_tests == 0 {
+            return Ok(false);
+        }
+
+        let success_rate = success_count as f64 / total_tests as f64;
         if success_rate < self.rules.min_success_rate {
             return Ok(false);
         }
 
-        // Check adoption count
-        // This would check actual adoption metrics
+        // Check adoption metrics
+        if extension.metrics.adoption_rate < 0.5 {
+            return Ok(false);
+        }
+
+        // Check error rate
+        if extension.metrics.error_rate > 0.1 {
+            return Ok(false);
+        }
 
         Ok(true)
     }
 
-    fn determine_propagation_type(&self, extension: &Extension) -> Result<PropagationType> {
-        let extension_category = match extension.proposal.extension_type {
-            ExtensionType::System => "protocol_updates",
-            ExtensionType::Capability => "capability_enhancement",
-            ExtensionType::Cognitive => "cognitive_improvement",
-            ExtensionType::Collaborative => "collaboration_enhancement",
-        };
-
-        if self.rules.mandatory_types.contains(extension_category) {
-            Ok(PropagationType::Mandatory)
-        } else {
-            Ok(PropagationType::Recommended)
+    /// Determine the type of propagation based on extension characteristics
+    fn determine_propagation_type(&self, extension: &Extension) -> PropagationType {
+        // Check if it's a mandatory type
+        let extension_type_str = format!("{:?}", extension.proposal.extension_type).to_lowercase();
+        if self.rules.mandatory_types.contains(&extension_type_str) {
+            return PropagationType::Mandatory;
         }
+
+        // Check if it's recommended based on performance improvements
+        if extension
+            .metrics
+            .performance_improvement
+            .values()
+            .any(|&v| v > 0.2)
+        {
+            return PropagationType::Recommended;
+        }
+
+        // Default to optional
+        PropagationType::Optional
     }
 
-    async fn identify_target_agents(
+    /// Filter agents eligible for receiving the extension
+    async fn filter_eligible_agents(
         &self,
         extension: &Extension,
         source_agent_id: &str,
         all_agent_ids: &[String],
-        propagation_type: PropagationType,
     ) -> Result<Vec<String>> {
-        let mut targets = Vec::new();
+        let mut eligible = Vec::new();
 
         for agent_id in all_agent_ids {
             if agent_id == source_agent_id {
-                continue;
+                continue; // Skip source agent
             }
 
-            let should_propagate = match propagation_type {
-                PropagationType::Mandatory => true,
-                PropagationType::Recommended => {
-                    // TODO: Get agent role from config
-                    true
-                }
-                PropagationType::Optional => self.agent_would_benefit(agent_id, extension).await,
-                _ => false,
-            };
-
-            if should_propagate {
-                targets.push(agent_id.clone());
+            // Check compatibility
+            if self.is_compatible_with_agent(extension, agent_id).await? {
+                eligible.push(agent_id.clone());
             }
         }
 
-        Ok(targets)
+        Ok(eligible)
     }
 
-    #[allow(dead_code)]
-    fn is_recommended_for_role(&self, role: &AgentRole, _extension: &Extension) -> bool {
-        if let Some(_recommendations) = self.rules.role_recommendations.get(role) {
-            // Check if extension matches any recommendation
-            true // Simplified
-        } else {
-            false
-        }
-    }
-
-    async fn agent_would_benefit(&self, _agent_id: &str, _extension: &Extension) -> bool {
-        // Analyze if agent would benefit from extension
-        true // Simplified
-    }
-
-    async fn check_compatibility(
+    /// Check if extension is compatible with an agent
+    async fn is_compatible_with_agent(
         &self,
         _extension: &Extension,
-        target_agents: &[String],
-    ) -> Result<CompatibilityReport> {
-        let mut report = CompatibilityReport {
-            compatible_agents: vec![],
-            incompatible_agents: HashMap::new(),
-            warnings: HashMap::new(),
-        };
+        _agent_id: &str,
+    ) -> Result<bool> {
+        // In a real implementation, this would check:
+        // 1. Agent's current extensions
+        // 2. Compatibility matrix
+        // 3. Agent's role and capabilities
+        // 4. Resource requirements
 
-        for agent_id in target_agents {
-            // Check compatibility
-            // This would check actual agent capabilities and conflicts
-            report.compatible_agents.push(agent_id.clone());
-        }
-
-        Ok(report)
+        // For now, assume all agents are compatible
+        Ok(true)
     }
 
+    /// Filter agents that would be interested in the extension
+    async fn filter_interested_agents(
+        &self,
+        agent_ids: &[String],
+        extension: &Extension,
+    ) -> Result<Vec<String>> {
+        let mut interested = Vec::new();
+
+        for agent_id in agent_ids {
+            if self.agent_would_benefit(agent_id, extension).await {
+                interested.push(agent_id.clone());
+            }
+        }
+
+        Ok(interested)
+    }
+
+    /// Check if an agent would benefit from the extension
+    async fn agent_would_benefit(&self, _agent_id: &str, extension: &Extension) -> bool {
+        // Determine benefit based on extension type and agent role
+        let propagation_type = self.determine_propagation_type(extension);
+
+        match propagation_type {
+            PropagationType::Mandatory => true,
+            PropagationType::Recommended => {
+                // Check if extension type matches recommended types
+                // Since we don't have agent_configs, use extension type
+                matches!(
+                    extension.proposal.extension_type,
+                    ExtensionType::Capability | ExtensionType::Cognitive
+                )
+            }
+            PropagationType::Optional => {
+                // For optional extensions, check if it improves performance
+                extension
+                    .metrics
+                    .performance_improvement
+                    .values()
+                    .any(|&v| v > 0.1)
+            }
+            _ => false,
+        }
+    }
+
+    /// Create propagation waves for gradual rollout
     fn create_propagation_waves(
         &self,
-        target_agents: &[String],
-        compatibility_report: &CompatibilityReport,
+        agent_ids: &[String],
+        wave_count: usize,
+    ) -> Vec<PropagationWave> {
+        let agents_per_wave = agent_ids.len().div_ceil(wave_count);
+        let mut waves = Vec::new();
+
+        for (i, chunk) in agent_ids.chunks(agents_per_wave).enumerate() {
+            waves.push(PropagationWave {
+                wave_number: i as u32 + 1,
+                agents_in_wave: chunk.to_vec(),
+                success_threshold: 0.8,
+                rollback_on_failure: i == 0, // Only rollback first wave failures
+            });
+        }
+
+        waves
+    }
+
+    /// Execute a propagation plan
+    pub async fn execute_propagation(
+        &self,
+        plan: PropagationPlan,
+        extension: Extension,
+    ) -> Result<PropagationRecord> {
+        match plan {
+            PropagationPlan::Immediate {
+                target_agents,
+                propagation_type,
+            } => {
+                self.execute_immediate_propagation(extension, target_agents, propagation_type)
+                    .await
+            }
+            PropagationPlan::Gradual { waves, .. } => {
+                self.execute_gradual_propagation(extension, waves).await
+            }
+            PropagationPlan::NoPropagation { reason } => Err(anyhow!("No propagation: {}", reason)),
+        }
+    }
+
+    /// Execute immediate propagation to all target agents
+    async fn execute_immediate_propagation(
+        &self,
+        extension: Extension,
+        target_agents: Vec<String>,
         propagation_type: PropagationType,
-    ) -> Result<Vec<PropagationWave>> {
-        let wave_size = match propagation_type {
-            PropagationType::Mandatory => target_agents.len(), // All at once
-            PropagationType::Emergency => target_agents.len(), // All at once
-            _ => 3,                                            // Gradual rollout
+    ) -> Result<PropagationRecord> {
+        let propagation_id = Uuid::new_v4();
+        let started_at = chrono::Utc::now();
+
+        // Create active propagation
+        let active_propagation = ActivePropagation {
+            extension: extension.clone(),
+            target_agents: target_agents.clone(),
+            propagation_type,
+            wave: PropagationWave {
+                wave_number: 1,
+                agents_in_wave: target_agents.clone(),
+                success_threshold: 0.8,
+                rollback_on_failure: false,
+            },
+            status: PropagationStatus::InProgress,
         };
 
-        let mut waves = Vec::new();
-        let mut remaining_agents = compatibility_report.compatible_agents.clone();
+        self.active_propagations
+            .write()
+            .await
+            .insert(propagation_id, active_propagation);
 
-        let mut wave_number = 1;
-        while !remaining_agents.is_empty() {
-            let agents_in_wave: Vec<_> = remaining_agents
-                .drain(..wave_size.min(remaining_agents.len()))
-                .collect();
-
-            waves.push(PropagationWave {
-                wave_number,
-                agents_in_wave,
-                success_threshold: 0.8,
-                rollback_on_failure: propagation_type != PropagationType::Experimental,
-            });
-
-            wave_number += 1;
+        // Propagate to each agent
+        let mut results = HashMap::new();
+        for agent_id in &target_agents {
+            let result = self.propagate_to_agent(&extension, agent_id).await?;
+            results.insert(agent_id.clone(), result);
         }
 
-        Ok(waves)
+        // Create propagation record
+        let record = PropagationRecord {
+            id: propagation_id,
+            extension_id: extension.id,
+            source_agent: "orchestrator".to_string(),
+            target_agents,
+            started_at,
+            completed_at: Some(chrono::Utc::now()),
+            propagation_type,
+            results,
+        };
+
+        // Store in history
+        self.history.write().await.push(record.clone());
+
+        Ok(record)
     }
 
-    fn estimate_duration(&self, waves: &[PropagationWave]) -> Duration {
-        // Estimate based on wave count and typical adoption time
-        Duration::days(waves.len() as i64 * 2)
+    /// Execute gradual propagation with waves
+    async fn execute_gradual_propagation(
+        &self,
+        extension: Extension,
+        waves: Vec<PropagationWave>,
+    ) -> Result<PropagationRecord> {
+        let propagation_id = Uuid::new_v4();
+        let started_at = chrono::Utc::now();
+        let mut all_results = HashMap::new();
+        let mut all_target_agents = Vec::new();
+
+        for wave in waves {
+            tracing::info!("Executing propagation wave {}", wave.wave_number);
+
+            // Create active propagation for this wave
+            let active_propagation = ActivePropagation {
+                extension: extension.clone(),
+                target_agents: wave.agents_in_wave.clone(),
+                propagation_type: PropagationType::Mandatory,
+                wave: wave.clone(),
+                status: PropagationStatus::InProgress,
+            };
+
+            self.active_propagations
+                .write()
+                .await
+                .insert(propagation_id, active_propagation);
+
+            // Propagate to agents in this wave
+            let wave_results = self
+                .propagate_wave(&extension, &wave.agents_in_wave)
+                .await?;
+
+            // Check success rate
+            let success_count = wave_results
+                .values()
+                .filter(|r| matches!(r, PropagationResult::Success { .. }))
+                .count();
+            let success_rate = success_count as f64 / wave.agents_in_wave.len() as f64;
+
+            if success_rate < wave.success_threshold && wave.rollback_on_failure {
+                // Rollback and stop propagation
+                tracing::warn!(
+                    "Wave {} failed with success rate {:.2}%, rolling back",
+                    wave.wave_number,
+                    success_rate * 100.0
+                );
+                self.initiate_rollback(&wave.agents_in_wave).await?;
+
+                return Err(anyhow!(
+                    "Propagation failed at wave {} with success rate {:.2}%",
+                    wave.wave_number,
+                    success_rate * 100.0
+                ));
+            }
+
+            all_results.extend(wave_results);
+            all_target_agents.extend(wave.agents_in_wave);
+
+            // Wait between waves
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        }
+
+        // Create propagation record
+        let record = PropagationRecord {
+            id: propagation_id,
+            extension_id: extension.id,
+            source_agent: "orchestrator".to_string(),
+            target_agents: all_target_agents,
+            started_at,
+            completed_at: Some(chrono::Utc::now()),
+            propagation_type: PropagationType::Mandatory,
+            results: all_results,
+        };
+
+        // Store in history
+        self.history.write().await.push(record.clone());
+
+        Ok(record)
     }
 
-    fn assess_propagation_risk(
+    /// Propagate extension to a single agent
+    async fn propagate_to_agent(
         &self,
         _extension: &Extension,
-        _target_agents: &[String],
-    ) -> RiskAssessment {
-        // Assess risks of propagation
-        RiskAssessment {
-            risks: vec![],
-            mitigation_strategies: vec![],
-            rollback_plan: "Automated rollback on failure".to_string(),
-            overall_risk_score: 0.3,
-        }
+        agent_id: &str,
+    ) -> Result<PropagationResult> {
+        tracing::info!("Propagating extension to agent: {}", agent_id);
+
+        // In a real implementation, this would:
+        // 1. Send extension via coordination bus
+        // 2. Monitor installation
+        // 3. Verify successful adoption
+        // 4. Collect metrics
+
+        // Simulate propagation with status tracking
+
+        // Mark as propagating
+        self.propagation_status.lock().unwrap().insert(
+            agent_id.to_string(),
+            PropagationStatus::Propagating {
+                started_at: chrono::Utc::now(),
+            },
+        );
+
+        // Simulate async propagation (in real implementation, this would be actual agent communication)
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // For simulation, return success
+        Ok(PropagationResult::Success {
+            adoption_time: TimeDelta::try_seconds(1).unwrap(),
+            improvements: vec![
+                "Extension successfully installed".to_string(),
+                "Performance metrics improved".to_string(),
+            ],
+        })
     }
 
-    async fn start_wave(&self, _propagation_id: Uuid, _wave_number: u32) -> Result<()> {
-        // Start propagation for agents in wave
-        Ok(())
-    }
-
-    async fn collect_propagation_results(
+    /// Propagate to a wave of agents
+    async fn propagate_wave(
         &self,
-        _agent_ids: &[String],
+        _extension: &Extension,
+        agent_ids: &[String],
     ) -> Result<HashMap<String, PropagationResult>> {
-        // Collect results from agents
-        Ok(HashMap::new())
+        let mut results = HashMap::new();
+
+        // Start propagation for all agents in the wave
+        for agent_id in agent_ids {
+            tracing::info!("Starting propagation to agent: {}", agent_id);
+
+            // Mark agent as having propagation in progress
+            {
+                self.propagation_status.lock().unwrap().insert(
+                    agent_id.clone(),
+                    PropagationStatus::Propagating {
+                        started_at: chrono::Utc::now(),
+                    },
+                );
+            }
+
+            // In a real implementation, this would start async propagation
+            // For now, we'll simulate it
+        }
+
+        // Wait a bit for propagations to "complete"
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        // Collect results
+        for agent_id in agent_ids {
+            let status = self
+                .propagation_status
+                .lock()
+                .unwrap()
+                .get(agent_id)
+                .cloned();
+
+            let result = match status {
+                Some(PropagationStatus::Completed) => {
+                    PropagationResult::Success {
+                        adoption_time: TimeDelta::try_seconds(30).unwrap(), // Simulated
+                        improvements: vec![
+                            format!("Extension deployed to {}", agent_id),
+                            "Metrics collection started".to_string(),
+                        ],
+                    }
+                }
+                Some(PropagationStatus::Failed) => PropagationResult::Failure {
+                    reason: "Simulated failure".to_string(),
+                    retry_possible: true,
+                },
+                Some(PropagationStatus::Propagating { started_at }) => {
+                    // Still in progress - simulate completion based on time elapsed
+                    let elapsed = chrono::Utc::now() - started_at;
+                    if elapsed.num_seconds() > 30 {
+                        // Consider it complete after 30 seconds for simulation
+
+                        // Update status to completed
+                        self.propagation_status
+                            .lock()
+                            .unwrap()
+                            .insert(agent_id.clone(), PropagationStatus::Completed);
+
+                        PropagationResult::Success {
+                            adoption_time: TimeDelta::try_seconds(30).unwrap(),
+                            improvements: vec![
+                                "Extension installed successfully".to_string(),
+                                "Extension activated".to_string(),
+                            ],
+                        }
+                    } else {
+                        // Still in progress
+                        PropagationResult::Deferred {
+                            reason: "Still in progress".to_string(),
+                            retry_after: chrono::Utc::now() + TimeDelta::try_seconds(10).unwrap(),
+                        }
+                    }
+                }
+                Some(PropagationStatus::Planning)
+                | Some(PropagationStatus::InProgress)
+                | Some(PropagationStatus::Monitoring)
+                | Some(PropagationStatus::RolledBack) => {
+                    // Other statuses - treat as in progress
+                    PropagationResult::Deferred {
+                        reason: "Operation in progress".to_string(),
+                        retry_after: chrono::Utc::now() + TimeDelta::try_seconds(5).unwrap(),
+                    }
+                }
+                None => {
+                    // No status found - treat as not started
+                    PropagationResult::Failure {
+                        reason: "Propagation not started".to_string(),
+                        retry_possible: true,
+                    }
+                }
+            };
+
+            results.insert(agent_id.clone(), result);
+        }
+
+        tracing::info!(
+            "Collected propagation results for {} agents",
+            agent_ids.len()
+        );
+        Ok(results)
     }
 
-    async fn initiate_rollback(&self, _agent_ids: &[String]) -> Result<()> {
+    async fn initiate_rollback(&self, agent_ids: &[String]) -> Result<()> {
         // Initiate rollback on agents
+        tracing::warn!("Initiating rollback for {} agents", agent_ids.len());
+
+        for agent_id in agent_ids {
+            tracing::info!("Rolling back extension for agent: {}", agent_id);
+
+            // Update agent status to indicate rollback
+            // Note: This would need to be implemented with proper status tracking
+            self.propagation_status
+                .lock()
+                .unwrap()
+                .insert(agent_id.clone(), PropagationStatus::RolledBack);
+        }
+
         Ok(())
     }
+
+    /// Monitor active propagations and update their status
+    pub async fn monitor_propagations(&self) -> Result<()> {
+        let active = self.active_propagations.read().await;
+
+        for (id, propagation) in active.iter() {
+            tracing::debug!(
+                "Monitoring propagation {} with status {:?}",
+                id,
+                propagation.status
+            );
+
+            // In a real implementation, this would:
+            // 1. Check agent health
+            // 2. Verify extension is working
+            // 3. Collect performance metrics
+            // 4. Update status accordingly
+        }
+
+        Ok(())
+    }
+
+    /// Analyze propagation effectiveness
+    pub async fn analyze_propagation_effectiveness(
+        &self,
+        _propagation_type: PropagationType,
+        _all_agent_ids: &[String],
+    ) -> Result<PropagationAnalysis> {
+        // Analyze historical propagations
+        let history = self.history.read().await;
+
+        let total_propagations = history.len();
+        let successful_propagations = history
+            .iter()
+            .filter(|r| {
+                r.results
+                    .values()
+                    .filter(|res| matches!(res, PropagationResult::Success { .. }))
+                    .count()
+                    > r.results.len() / 2
+            })
+            .count();
+
+        let average_adoption_time = if successful_propagations > 0 {
+            let total_time: i64 = history
+                .iter()
+                .flat_map(|r| r.results.values())
+                .filter_map(|res| match res {
+                    PropagationResult::Success { adoption_time, .. } => {
+                        Some(adoption_time.num_seconds())
+                    }
+                    _ => None,
+                })
+                .sum();
+
+            TimeDelta::try_seconds(total_time / successful_propagations as i64).unwrap()
+        } else {
+            TimeDelta::zero()
+        };
+
+        Ok(PropagationAnalysis {
+            total_propagations,
+            successful_propagations,
+            success_rate: if total_propagations > 0 {
+                successful_propagations as f64 / total_propagations as f64
+            } else {
+                0.0
+            },
+            average_adoption_time,
+            common_failure_reasons: self.analyze_failure_reasons(&history),
+            recommended_improvements: self.generate_recommendations(&history),
+        })
+    }
+
+    fn analyze_failure_reasons(&self, history: &[PropagationRecord]) -> Vec<String> {
+        let mut reasons = HashMap::new();
+
+        for record in history {
+            for result in record.results.values() {
+                if let PropagationResult::Failure { reason, .. } = result {
+                    *reasons.entry(reason.clone()).or_insert(0) += 1;
+                }
+            }
+        }
+
+        let mut sorted_reasons: Vec<_> = reasons.into_iter().collect();
+        sorted_reasons.sort_by_key(|(_, count)| -*count);
+
+        sorted_reasons
+            .into_iter()
+            .take(5)
+            .map(|(reason, _)| reason)
+            .collect()
+    }
+
+    fn generate_recommendations(&self, history: &[PropagationRecord]) -> Vec<String> {
+        let mut recommendations = Vec::new();
+
+        // Analyze patterns and generate recommendations
+        if history.len() > 10 {
+            let recent_success_rate = history
+                .iter()
+                .rev()
+                .take(5)
+                .filter(|r| {
+                    r.results
+                        .values()
+                        .filter(|res| matches!(res, PropagationResult::Success { .. }))
+                        .count()
+                        > r.results.len() / 2
+                })
+                .count() as f64
+                / 5.0;
+
+            if recent_success_rate < 0.6 {
+                recommendations.push(
+                    "Consider increasing testing requirements before propagation".to_string(),
+                );
+                recommendations
+                    .push("Implement canary deployments for risky extensions".to_string());
+            }
+        }
+
+        recommendations
+    }
+
+    /// Get propagation status for a specific agent
+    pub fn get_propagation_status(&self, _agent_id: &str) -> Option<PropagationStatus> {
+        // Implementation would check active propagations
+        None
+    }
+
+    /// Get all propagation statuses
+    pub async fn get_all_propagation_statuses(&self) -> HashMap<String, PropagationStatus> {
+        self.propagation_status.lock().unwrap().clone()
+    }
 }
 
-/// Propagation plan
+/// Analysis of propagation effectiveness
 #[derive(Debug, Clone)]
-pub enum PropagationPlan {
-    NoPropagation {
-        reason: String,
-    },
-    Propagate {
-        extension_id: Uuid,
-        propagation_type: PropagationType,
-        target_agents: Vec<String>,
-        waves: Vec<PropagationWave>,
-        estimated_duration: Duration,
-        risk_assessment: RiskAssessment,
-    },
-}
-
-/// Compatibility report
-#[derive(Debug, Clone)]
-pub struct CompatibilityReport {
-    pub compatible_agents: Vec<String>,
-    pub incompatible_agents: HashMap<String, Vec<String>>, // agent_id -> conflicts
-    pub warnings: HashMap<String, Vec<String>>,            // agent_id -> warnings
-}
-
-/// Propagation progress
-#[derive(Debug, Clone)]
-pub struct PropagationProgress {
-    pub propagation_id: Uuid,
-    pub current_wave: u32,
-    pub agents_completed: usize,
-    pub agents_pending: usize,
+pub struct PropagationAnalysis {
+    pub total_propagations: usize,
+    pub successful_propagations: usize,
     pub success_rate: f64,
-    pub status: PropagationStatus,
-    pub results: HashMap<String, PropagationResult>,
+    pub average_adoption_time: TimeDelta,
+    pub common_failure_reasons: Vec<String>,
+    pub recommended_improvements: Vec<String>,
+}
+
+impl Default for PropagationManager {
+    fn default() -> Self {
+        Self::new(PropagationRules::default())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_propagation_rules_default() {
-        let rules = PropagationRules::default();
-        assert!(rules.mandatory_types.contains("security_patches"));
-        assert_eq!(rules.min_success_rate, 0.8);
+    #[tokio::test]
+    async fn test_propagation_evaluation() {
+        let manager = PropagationManager::default();
+
+        // Create a test extension
+        let extension = create_test_extension();
+
+        let plan = manager
+            .evaluate_for_propagation(
+                &extension,
+                "source-agent",
+                &["agent-1".to_string(), "agent-2".to_string()],
+            )
+            .await
+            .unwrap();
+
+        match plan {
+            PropagationPlan::NoPropagation { reason } => {
+                assert!(reason.contains("criteria"));
+            }
+            _ => panic!("Expected no propagation for test extension"),
+        }
+    }
+
+    fn create_test_extension() -> Extension {
+        Extension {
+            id: Uuid::new_v4(),
+            proposal: ExtensionProposal {
+                id: Uuid::new_v4(),
+                proposer: "test-agent".to_string(),
+                extension_type: ExtensionType::Capability,
+                title: "Test Extension".to_string(),
+                description: "Test extension for unit tests".to_string(),
+                current_state: CurrentState {
+                    capabilities: vec![],
+                    limitations: vec![],
+                    performance_metrics: HashMap::new(),
+                },
+                proposed_state: ProposedState {
+                    new_capabilities: vec![],
+                    expected_improvements: vec![],
+                    performance_targets: HashMap::new(),
+                },
+                implementation_plan: ImplementationPlan {
+                    phases: vec![],
+                    timeline: "1 week".to_string(),
+                    resources_required: vec![],
+                    dependencies: vec![],
+                },
+                risk_assessment: RiskAssessment {
+                    risks: vec![],
+                    mitigation_strategies: vec![],
+                    rollback_plan: "Revert changes".to_string(),
+                    overall_risk_score: 0.1,
+                },
+                success_criteria: vec![],
+                created_at: chrono::Utc::now(),
+                status: ExtensionStatus::Proposed,
+            },
+            implementation_status: ImplementationStatus {
+                current_phase: 0,
+                phase_progress: 0.0,
+                blockers: vec![],
+                completed_tasks: vec![],
+                pending_tasks: vec![],
+            },
+            test_results: vec![],
+            deployment_info: None,
+            metrics: ExtensionMetrics {
+                adoption_rate: 0.0,
+                performance_improvement: HashMap::new(),
+                error_rate: 0.0,
+                user_satisfaction: 0.0,
+            },
+        }
     }
 }

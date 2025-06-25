@@ -478,7 +478,7 @@ fn clear_screen() {
 pub fn show_contextual_tip() {
     let tips = [
         "💡 Tip: Use 'ccswarm task list' to see all pending tasks",
-        "💡 Tip: Sessions save 93% on API tokens through smart caching",
+        "💡 Tip: Sessions provide efficient context management through smart caching",
         "💡 Tip: Add [high] to task descriptions for priority handling",
         "💡 Tip: Quality checks run automatically every 30 seconds",
         "💡 Tip: Use 'ccswarm tui' for real-time monitoring",

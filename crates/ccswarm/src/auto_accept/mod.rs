@@ -30,6 +30,15 @@ pub struct AutoAcceptConfig {
 
     /// Emergency stop - if true, all auto-accept is disabled
     pub emergency_stop: bool,
+
+    /// Whether to check that tests pass after execution
+    pub check_tests_pass: bool,
+
+    /// Whether to validate file changes are within scope
+    pub check_file_changes: bool,
+
+    /// Whether to check git status for issues
+    pub check_git_status: bool,
 }
 
 impl Default for AutoAcceptConfig {
@@ -54,6 +63,9 @@ impl Default for AutoAcceptConfig {
             ],
             require_clean_git: true,
             emergency_stop: false,
+            check_tests_pass: true,
+            check_file_changes: true,
+            check_git_status: true,
         }
     }
 }
@@ -341,9 +353,9 @@ impl AutoAcceptEngine {
     }
 
     /// Validate changes after an operation has been executed
-    pub fn validate_changes(
+    pub async fn validate_changes(
         &self,
-        _operation: &Operation,
+        operation: &Operation,
         execution_time: u32,
     ) -> Result<ValidationResult> {
         let mut issues = Vec::new();
@@ -356,10 +368,37 @@ impl AutoAcceptEngine {
             ));
         }
 
-        // TODO: Add more validation logic here
-        // - Check if tests still pass
-        // - Verify no unexpected files were changed
-        // - Check git status if required
+        // Additional validation checks
+
+        // Check if tests still pass
+        if self.config.check_tests_pass {
+            if let Err(test_error) = self.validate_tests().await {
+                issues.push(format!("Tests failed: {}", test_error));
+            }
+        }
+
+        // Verify no unexpected files were changed
+        if self.config.check_file_changes {
+            if let Err(file_error) = self.validate_file_changes(operation).await {
+                issues.push(format!("Unexpected file changes: {}", file_error));
+            }
+        }
+
+        // Check git status if required
+        if self.config.check_git_status {
+            if let Err(git_error) = self.validate_git_status().await {
+                issues.push(format!("Git repository issues: {}", git_error));
+            }
+        }
+
+        // TODO: Validate exit codes once Operation struct has these fields
+        // if operation.expected_exit_code.is_some() && operation.actual_exit_code != operation.expected_exit_code {
+        //     issues.push(format!(
+        //         "Exit code mismatch: expected {:?}, got {:?}",
+        //         operation.expected_exit_code,
+        //         operation.actual_exit_code
+        //     ));
+        // }
 
         if issues.is_empty() {
             Ok(ValidationResult::Valid)
@@ -384,6 +423,109 @@ impl AutoAcceptEngine {
     /// Clear operation history for a session
     pub fn clear_history(&mut self, session_id: &str) {
         self.operation_history.remove(session_id);
+    }
+
+    /// Validate that tests still pass
+    async fn validate_tests(&self) -> Result<(), String> {
+        // Try common test commands
+        let test_commands = ["cargo test", "npm test", "pytest", "go test"];
+
+        for cmd in &test_commands {
+            if let Ok(output) = tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .await
+            {
+                if !output.status.success() {
+                    return Err(format!(
+                        "Test command '{}' failed with exit code: {:?}",
+                        cmd,
+                        output.status.code()
+                    ));
+                }
+                // If one test command succeeds, we're good
+                return Ok(());
+            }
+        }
+
+        // No test command worked
+        Err("No valid test command found or all tests failed".to_string())
+    }
+
+    /// Validate file changes are within expected scope
+    async fn validate_file_changes(&self, operation: &Operation) -> Result<(), String> {
+        // Check if files changed are in allowed patterns
+        for file_path in &operation.affected_files {
+            let path_str = file_path.to_string_lossy();
+
+            // Check against protected patterns
+            let protected_patterns = [
+                ".env",
+                "*.key",
+                ".git/",
+                "/etc/",
+                "~/.ssh/",
+                "credentials",
+                "secrets",
+                "passwords",
+            ];
+
+            for pattern in &protected_patterns {
+                if path_str.contains(pattern) {
+                    return Err(format!("Protected file modified: {}", path_str));
+                }
+            }
+
+            // Check file size limits
+            if let Ok(metadata) = std::fs::metadata(file_path) {
+                if metadata.len() > 10_000_000 {
+                    // 10MB limit
+                    return Err(format!(
+                        "File too large: {} ({} bytes)",
+                        path_str,
+                        metadata.len()
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate git repository status
+    async fn validate_git_status(&self) -> Result<(), String> {
+        // Check git status
+        if let Ok(output) = tokio::process::Command::new("git")
+            .args(&["status", "--porcelain"])
+            .output()
+            .await
+        {
+            let status_output = String::from_utf8_lossy(&output.stdout);
+
+            // Check for unexpected changes
+            for line in status_output.lines() {
+                if line.starts_with("??") {
+                    // Untracked files - could be okay
+                    continue;
+                }
+                if line.starts_with(" D") || line.starts_with("D ") {
+                    return Err(format!("Files deleted: {}", line));
+                }
+                if line.contains(".git/") {
+                    return Err(format!("Git metadata changed: {}", line));
+                }
+            }
+
+            // Check for conflicts
+            if status_output.contains("UU ") || status_output.contains("AA ") {
+                return Err("Git merge conflicts detected".to_string());
+            }
+        } else {
+            return Err("Failed to check git status".to_string());
+        }
+
+        Ok(())
     }
 
     /// Simple pattern matching for file restrictions

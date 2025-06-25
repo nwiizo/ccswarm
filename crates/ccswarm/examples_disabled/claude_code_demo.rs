@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
         .init();
 
     info!("🚀 ccswarm Claude Code Session-Persistent Architecture Demo");
-    info!("📊 Demonstrating 93% token reduction with Claude Code only");
+    info!("📊 Demonstrating intelligent context management with Claude Code only");
 
     // Create demo project directory
     let project_dir = PathBuf::from("./claude_code_demo");
@@ -347,7 +347,7 @@ async fn main() -> Result<()> {
     info!("\n💰 Claude Code Token Usage:");
     info!("Traditional: ~{} tokens", traditional_tokens);
     info!("Session-Persistent: ~{} tokens", persistent_tokens);
-    info!("Claude Code Token Reduction: {}% 🎉", savings);
+    info!("Claude Code Context Optimization: {}% 🎉", savings);
 
     // Show Claude Code session statistics
     info!("\n🔄 Claude Code Session Statistics:");
@@ -410,7 +410,7 @@ async fn main() -> Result<()> {
 
     info!("\n🎉 Claude Code Session-Persistent Demo Complete!");
     info!(
-        "✨ Achieved {}% token reduction with Claude Code only!",
+        "✨ Achieved {}% context optimization with Claude Code only!",
         savings
     );
     info!("🤖 Claude Code provider successfully demonstrated session persistence");

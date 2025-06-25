@@ -345,6 +345,7 @@ mod edge_case_tests {
             let message = AgentMessage::StatusUpdate {
                 agent_id: "rapid-agent".to_string(),
                 status: status.clone(),
+                metrics: serde_json::Value::Object(serde_json::Map::new()),
             };
             master.coordination_bus.send_message(message).await.unwrap();
         }

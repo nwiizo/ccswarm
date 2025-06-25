@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 authors = ["nwiizo"]
 description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
@@ -100,8 +100,11 @@ urlencoding = { version = "2.1", optional = true }
 colored = "3.0"
 rand = "0.9"
 
+# System information for resource monitoring
+sysinfo = "0.33"
+
 # AI Session Management (local crate)
-ai-session = { version = "0.3.4", path = "../ai-session" }
+ai-session = { version = "0.3.4", path = "../ai-session", features = ["mcp"] }
 
 [dev-dependencies]
 # Testing

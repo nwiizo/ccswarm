@@ -101,7 +101,7 @@ pub struct TokenSavingsReport {
     pub estimated_traditional_tokens: usize,
     pub actual_tokens_used: usize,
     pub savings_percentage: f64,
-    pub cost_savings_usd: f64,
+    pub efficiency_score: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,8 +194,8 @@ pub struct SessionCoordinatorConfig {
     /// Enable efficiency optimization
     pub efficiency_optimization: bool,
 
-    /// Token cost per 1000 tokens (for cost calculations)
-    pub token_cost_per_1k: f64,
+    /// Efficiency calculation baseline
+    pub efficiency_baseline: f64,
 
     /// Batch optimization settings
     pub batch_optimization: BatchOptimizationConfig,
@@ -215,7 +215,7 @@ impl Default for SessionCoordinatorConfig {
             coordination_dir: PathBuf::from("coordination"),
             reporting_interval: std::time::Duration::from_secs(60),
             efficiency_optimization: true,
-            token_cost_per_1k: 0.01, // $0.01 per 1000 tokens (example)
+            efficiency_baseline: 1.0, // Baseline efficiency metric
             batch_optimization: BatchOptimizationConfig {
                 enabled: true,
                 max_batch_size: 10,
@@ -489,8 +489,11 @@ impl SessionCoordinator {
                 } else {
                     0.0
                 },
-                cost_savings_usd: (tracker.total_tokens_saved as f64 / 1000.0)
-                    * self.config.token_cost_per_1k,
+                efficiency_score: if tracker.total_tasks > 0 {
+                    tracker.total_tokens_saved as f64 / tracker.total_tasks as f64
+                } else {
+                    0.0
+                },
             },
             performance_metrics: PerformanceReport {
                 total_execution_time: tracker.total_execution_time,
@@ -564,15 +567,18 @@ impl SessionCoordinator {
                     let efficiency_percentage = (tracker.total_tokens_saved as f64
                         / (tracker.total_tasks * 3600) as f64)
                         * 100.0;
-                    let cost_savings =
-                        (tracker.total_tokens_saved as f64 / 1000.0) * config.token_cost_per_1k;
+                    let efficiency_score = if tracker.total_tasks > 0 {
+                        tracker.total_tokens_saved as f64 / tracker.total_tasks as f64
+                    } else {
+                        0.0
+                    };
 
                     tracing::info!(
-                        "Session Efficiency Report - Tasks: {}, Tokens Saved: {}, Efficiency: {:.1}%, Cost Savings: ${:.2}",
+                        "Session Efficiency Report - Tasks: {}, Context Optimized: {}, Efficiency: {:.1}%, Score: {:.2}",
                         tracker.total_tasks,
                         tracker.total_tokens_saved,
                         efficiency_percentage,
-                        cost_savings
+                        efficiency_score
                     );
                 }
             }

@@ -113,6 +113,7 @@ mod tests {
             AgentMessage::StatusUpdate {
                 agent_id: "frontend-agent".to_string(),
                 status: crate::agent::AgentStatus::Available,
+                metrics: serde_json::Value::Object(serde_json::Map::new()),
             },
             AgentMessage::TaskCompleted {
                 agent_id: "backend-agent".to_string(),
@@ -370,6 +371,7 @@ mod tests {
             bus.send_message(AgentMessage::StatusUpdate {
                 agent_id: agent_id.clone(),
                 status: crate::agent::AgentStatus::Working,
+                metrics: serde_json::Value::Object(serde_json::Map::new()),
             })
             .await
             .unwrap();

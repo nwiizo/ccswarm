@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio::fs;
 use uuid::Uuid;
 
 pub mod consensus;
@@ -35,6 +36,10 @@ pub struct Sangha {
     config: SanghaConfig,
     /// Session manager for meetings
     session_manager: session::SessionManager,
+    /// Vote storage (proposal_id -> votes)
+    votes: Arc<RwLock<HashMap<Uuid, Vec<Vote>>>>,
+    /// Storage path for persistence
+    storage_path: std::path::PathBuf,
 }
 
 /// Configuration for the Sangha
@@ -216,6 +221,9 @@ pub enum VoteChoice {
 impl Sangha {
     /// Create a new Sangha instance
     pub fn new(config: SanghaConfig) -> Result<Self> {
+        let storage_path = std::path::PathBuf::from("sangha_storage");
+        std::fs::create_dir_all(&storage_path)?;
+        
         Ok(Self {
             id: Uuid::new_v4(),
             members: Arc::new(RwLock::new(HashMap::new())),
@@ -223,6 +231,8 @@ impl Sangha {
             consensus: Box::new(consensus::SimpleConsensus::new()),
             config,
             session_manager: session::SessionManager::new(),
+            votes: Arc::new(RwLock::new(HashMap::new())),
+            storage_path,
         })
     }
 
@@ -277,8 +287,26 @@ impl Sangha {
             anyhow::bail!("Voting deadline has passed");
         }
         
-        // Store vote (implementation would involve vote storage)
-        // For now, we'll just validate
+        // Store vote 
+        let vote = Vote {
+            voter_id: voter_id.to_string(),
+            proposal_id,
+            choice,
+            reason: reason.map(String::from),
+            cast_at: Utc::now(),
+            weight: self.get_voting_weight(voter_id).await,
+        };
+        
+        // Store vote in memory
+        let mut votes = self.votes.write().await;
+        votes.entry(proposal_id)
+            .or_insert_with(Vec::new)
+            .push(vote.clone());
+        
+        // Persist vote to disk
+        self.persist_vote(&vote).await?;
+        
+        tracing::info!("Vote cast by {} for proposal {}: {:?}", voter_id, proposal_id, choice);
         
         Ok(())
     }
@@ -286,8 +314,10 @@ impl Sangha {
     /// Calculate consensus for a proposal
     pub async fn calculate_consensus(&self, proposal_id: Uuid) -> Result<ConsensusResult> {
         // Get all votes for the proposal
-        // This is a placeholder - actual implementation would retrieve from storage
-        let votes = vec![];
+        let votes = self.votes.read().await
+            .get(&proposal_id)
+            .cloned()
+            .unwrap_or_default();
         
         let result = self.consensus.calculate_consensus(&votes);
         
@@ -302,6 +332,80 @@ impl Sangha {
         }
         
         Ok(result)
+    }
+
+    /// Get voting weight for an agent
+    async fn get_voting_weight(&self, voter_id: &str) -> f64 {
+        // Base weight is 1.0, can be adjusted based on agent reputation, role, etc.
+        let members = self.members.read().await;
+        if let Some(member) = members.get(voter_id) {
+            match member.role {
+                AgentRole::Frontend | AgentRole::Backend | AgentRole::DevOps | AgentRole::QA => 1.0,
+            }
+        } else {
+            0.5 // Non-member has reduced voting weight
+        }
+    }
+
+    /// Persist vote to disk
+    async fn persist_vote(&self, vote: &Vote) -> Result<()> {
+        let vote_file = self.storage_path.join(format!("vote_{}.json", Uuid::new_v4()));
+        let vote_json = serde_json::to_string_pretty(vote)?;
+        fs::write(vote_file, vote_json).await?;
+        Ok(())
+    }
+
+    /// Load all votes from disk
+    pub async fn load_votes(&self) -> Result<()> {
+        let mut votes = self.votes.write().await;
+        
+        let mut entries = fs::read_dir(&self.storage_path).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                if let Some(file_name) = path.file_name().and_then(|s| s.to_str()) {
+                    if file_name.starts_with("vote_") {
+                        if let Ok(content) = fs::read_to_string(&path).await {
+                            if let Ok(vote) = serde_json::from_str::<Vote>(&content) {
+                                votes.entry(vote.proposal_id)
+                                    .or_insert_with(Vec::new)
+                                    .push(vote);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        tracing::info!("Loaded {} proposal vote sets from storage", votes.len());
+        Ok(())
+    }
+
+    /// Get all votes for a proposal
+    pub async fn get_votes(&self, proposal_id: Uuid) -> Vec<Vote> {
+        self.votes.read().await
+            .get(&proposal_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Get vote statistics for a proposal
+    pub async fn get_vote_stats(&self, proposal_id: Uuid) -> VoteStats {
+        let votes = self.get_votes(proposal_id).await;
+        let mut stats = VoteStats::default();
+        
+        for vote in votes {
+            match vote.choice {
+                VoteChoice::Aye => stats.aye += 1,
+                VoteChoice::Nay => stats.nay += 1,
+                VoteChoice::Abstain => stats.abstain += 1,
+                VoteChoice::Veto => stats.veto += 1,
+            }
+            stats.total_weight += vote.weight;
+        }
+        
+        stats.total = stats.aye + stats.nay + stats.abstain + stats.veto;
+        stats
     }
 
     /// Get current Sangha statistics
@@ -319,6 +423,17 @@ impl Sangha {
             consensus_algorithm: self.consensus.name().to_string(),
         }
     }
+}
+
+/// Vote statistics for a proposal
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct VoteStats {
+    pub aye: usize,
+    pub nay: usize,
+    pub abstain: usize,
+    pub veto: usize,
+    pub total: usize,
+    pub total_weight: f64,
 }
 
 /// Statistics about the Sangha

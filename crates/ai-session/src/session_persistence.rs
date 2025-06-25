@@ -214,12 +214,12 @@ impl PersistentSessionManager {
             config: session.config.clone(),
             status: session.status().await,
             context: session.context.read().await.clone(),
-            command_history: vec![], // TODO: Implement command history tracking
+            command_history: session.get_command_history().await,
             metadata: SessionMetadata {
                 created_at: session.created_at,
                 last_accessed: *session.last_activity.read().await,
-                command_count: 0, // TODO: Track command count
-                total_tokens: 0,  // TODO: Track token usage
+                command_count: session.get_command_count().await,
+                total_tokens: session.get_total_tokens().await,
                 custom: session.metadata.read().await.clone(),
             },
         };

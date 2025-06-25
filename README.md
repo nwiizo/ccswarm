@@ -41,7 +41,7 @@ ccswarm is organized as a Rust workspace with two main crates:
   - **Integrates with**: ai-session for terminal management
 
 - **`crates/ai-session`**: Advanced AI-optimized terminal session management (standalone crate)
-  - **93% token savings** through intelligent context compression
+  - **Intelligent context compression** for efficient session management
   - Native cross-platform PTY implementation (no tmux dependency)
   - Multi-agent coordination with message bus architecture
   - Session persistence and crash recovery
@@ -93,7 +93,7 @@ ccswarm/
 
 ### 🖥️ AI-Session Integration: Revolutionary Terminal Management
 - **Native Session Management**: Powered by ai-session crate with zero external dependencies (no tmux required)
-- **93% Token Savings**: Intelligent conversation history compression and context reuse
+- **Intelligent Context Management**: Advanced conversation history compression and session reuse
 - **Cross-Platform PTY**: Native terminal emulation on Linux, macOS (Windows support in ai-session)
 - **MCP Protocol Support**: Model Context Protocol HTTP API server for seamless AI integration
 - **Multi-Agent Coordination**: Enhanced message bus architecture with agent-specific sessions
@@ -204,7 +204,7 @@ ccswarm v0.3.5 features a comprehensive multi-layer architecture designed for au
 │        AI-Session Manager               │ ← Native Terminal Management
 │     ├─ Cross-Platform PTY Support      │
 │     ├─ MCP Protocol Integration         │
-│     ├─ Session Persistence (93% saves)  │
+│     ├─ Session Persistence & Compression │
 │     ├─ Multi-Agent Message Bus          │
 │     └─ Conversation History (50 msgs)   │
 ├─────────────────────────────────────────┤
@@ -230,7 +230,7 @@ ccswarm v0.3.5 features a comprehensive multi-layer architecture designed for au
 #### 🚀 For ccswarm Users (Full AI Orchestration)
 - **Zero Setup Complexity**: ai-session integration is automatic and transparent
 - **Intelligent Delegation**: Master Claude uses ai-session's semantic parsing for better decisions
-- **93% Cost Savings**: ai-session's token compression reduces API costs dramatically
+- **Efficient Session Management**: ai-session's context compression optimizes resource usage
 - **Multi-Agent Coordination**: Seamless agent communication through ai-session's message bus
 - **Quality Assurance**: ai-session's output analysis powers the LLM quality judge
 
@@ -502,7 +502,7 @@ my_app/
 ## 🔧 AI-Session Integration
 
 ### Advanced Session Features (powered by ai-session crate)
-- **93% token reduction** through intelligent context compression
+- **Intelligent context compression** for efficient session management
 - **Persistent conversation history** with crash recovery
 - **Session pooling and reuse** for efficient resource utilization
 - **Multi-agent message bus** for coordinated AI workflows
@@ -557,7 +557,7 @@ ccswarm session resume <session-id>
 ccswarm session start-mcp-server --port 3000
 ccswarm session mcp-status
 
-# Session optimization (93% token reduction)
+# Session optimization and compression
 ccswarm session compress --threshold 0.8
 ccswarm session optimize --all
 
@@ -992,7 +992,7 @@ ccswarm v0.3.5 introduces **autonomous orchestration** as the default mode:
 - **🔒 Security Agent**: OWASP Top 10 scanning with real-time monitoring  
 - **📊 Dependency Resolution**: Automatic task ordering and bottleneck detection
 - **🎯 Goal Tracking**: OKR integration with milestone management
-- **⚡ Native Sessions**: 93% token savings with cross-platform PTY support
+- **⚡ Native Sessions**: Efficient context management with cross-platform PTY support
 - **🏛️ Collective Intelligence**: Sangha democratic decision-making
 - **🤖 Self-Extension**: Autonomous agent improvement and learning
 

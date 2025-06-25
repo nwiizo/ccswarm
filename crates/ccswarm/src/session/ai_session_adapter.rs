@@ -3,7 +3,7 @@
 /// This module provides a compatibility layer that wraps ai-session's advanced
 /// session management features while maintaining the existing ccswarm API surface.
 /// This enables a gradual migration path to leverage:
-/// - 93% token reduction through intelligent context management
+/// - Intelligent context compression and management
 /// - Multi-agent coordination via MessageBus
 /// - Advanced observability and decision tracking
 /// - Security features and capability-based access control
@@ -312,7 +312,7 @@ impl SessionManagerAdapter {
             total_tasks += session.tasks_processed;
         }
 
-        // Estimate token savings based on ai-session's 93% reduction claim
+        // Estimate session efficiency gains from context compression
         if total_tasks > 0 {
             // Assume average task uses 5000 tokens without optimization
             let tokens_without_optimization = total_tasks * 5000;

@@ -127,6 +127,7 @@ mod tests {
                         details,
                         duration,
                         auto_assign,
+                        ..
                     } => {
                         assert_eq!(description, "Implement login feature");
                         assert_eq!(priority, "high");
@@ -408,6 +409,7 @@ mod tests {
             repo: temp_dir.path().to_path_buf(),
             verbose: false,
             json: false,
+            fix: false,
             command: Commands::Status {
                 detailed: false,
                 agent: None,
@@ -429,6 +431,7 @@ mod tests {
             repo: temp_dir.path().to_path_buf(),
             verbose: false,
             json: false,
+            fix: false,
             command: Commands::Status {
                 detailed: false,
                 agent: None,

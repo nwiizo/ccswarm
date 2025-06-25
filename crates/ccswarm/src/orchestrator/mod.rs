@@ -1,3 +1,4 @@
+pub mod agent_access;
 pub mod auto_create;
 pub mod llm_quality_judge;
 pub mod master_delegation;
@@ -24,7 +25,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use self::llm_quality_judge::LLMQualityJudge;
@@ -670,7 +671,11 @@ impl MasterClaude {
         judge: &Arc<RwLock<LLMQualityJudge>>,
     ) -> Result<()> {
         match message {
-            AgentMessage::StatusUpdate { agent_id, status } => {
+            AgentMessage::StatusUpdate {
+                agent_id,
+                status,
+                metrics: _,
+            } => {
                 if let Some(mut agent) = agents.get_mut(&agent_id) {
                     agent.status = status;
                     agent.last_activity = Utc::now();
@@ -989,6 +994,57 @@ impl MasterClaude {
                     let mut s = state.write().await;
                     s.pending_tasks.push(generated_task);
                 }
+            }
+            // Handle new message types
+            AgentMessage::Registration {
+                agent_id,
+                capabilities,
+                metadata,
+            } => {
+                info!(
+                    "Agent {} registered with capabilities: {:?}",
+                    agent_id, capabilities
+                );
+                debug!("Agent metadata: {:?}", metadata);
+            }
+            AgentMessage::TaskAssignment {
+                task_id,
+                agent_id,
+                task_data,
+            } => {
+                info!("Task {} assigned to agent {}", task_id, agent_id);
+                debug!("Task data: {:?}", task_data);
+            }
+            AgentMessage::TaskProgress {
+                agent_id,
+                task_id,
+                progress,
+                message,
+            } => {
+                info!(
+                    "Agent {} progress on task {}: {}% - {}",
+                    agent_id,
+                    task_id,
+                    (progress * 100.0) as u32,
+                    message
+                );
+            }
+            AgentMessage::HelpRequest {
+                agent_id,
+                context,
+                priority,
+            } => {
+                info!(
+                    "Help request from agent {} with priority {:?}: {}",
+                    agent_id, priority, context
+                );
+                // Could trigger assistance from other agents or Master Claude
+            }
+            AgentMessage::Custom { message_type, data } => {
+                debug!(
+                    "Custom message type '{}' received: {:?}",
+                    message_type, data
+                );
             }
             _ => {}
         }

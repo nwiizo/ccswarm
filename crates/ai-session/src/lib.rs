@@ -115,7 +115,7 @@
 //! ## Performance Characteristics
 //!
 //! - **Memory Efficient**: Context compression reduces memory usage by ~70%
-//! - **Token Optimized**: Intelligent history management saves ~93% of API tokens
+//! - **Context Optimized**: Intelligent history management for efficient session handling
 //! - **Low Latency**: Message passing adds <100ms coordination overhead
 //! - **Scalable**: Supports 100+ concurrent agent sessions
 //!

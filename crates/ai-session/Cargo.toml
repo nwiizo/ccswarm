@@ -1,6 +1,6 @@
 [package]
 name = "ai-session"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 authors = ["ccswarm contributors"]
 description = "AI-optimized terminal session management library"
@@ -60,6 +60,10 @@ once_cell = "1.19"
 # HTTP client for remote commands
 reqwest = { version = "0.12", features = ["json"], optional = true }
 
+# WebSocket support for MCP transport
+tokio-tungstenite = { version = "0.24", optional = true }
+futures-util = { version = "0.3", optional = true }
+
 # HTTP server support
 axum = { version = "0.7", features = ["json"], optional = true }
 tower = { version = "0.4", optional = true }
@@ -83,6 +87,7 @@ tempfile = "3.10"
 default = ["cli"]
 cli = ["clap", "crossterm", "reqwest", "dirs"]
 server = ["axum", "tower", "tower-http", "clap"]
+mcp = ["reqwest", "tokio-tungstenite", "futures-util"]
 testing = ["mockall"]
 
 [[bin]]
