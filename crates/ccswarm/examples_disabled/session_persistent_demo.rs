@@ -1,7 +1,7 @@
 /// Session-Persistent Architecture Demonstration
 ///
 /// This example demonstrates the Session-Persistent Agent Architecture
-/// that achieves 93% token reduction through:
+/// that achieves intelligent context management through:
 /// - tmux-based session management with pause/resume/detach
 /// - Auto-accept mode with safety-first validation
 /// - Real-time monitoring and output streaming
@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
         .init();
 
     info!("🚀 ccswarm Session-Persistent Architecture Demonstration");
-    info!("📊 Demonstrating 93% token reduction through intelligent session management");
+    info!("📊 Demonstrating intelligent context management through session optimization");
 
     // Create demo project directory
     let project_dir = PathBuf::from("./session_persistent_demo");
@@ -202,7 +202,7 @@ async fn main() -> Result<()> {
     }
 
     // Demonstrate session persistence
-    info!("\n🔄 Demonstrating Session Persistence (93% token reduction)...");
+    info!("\n🔄 Demonstrating Session Persistence with context optimization...");
 
     // Simulate session pause and resume
     if let Some((name, session)) = sessions.get(0) {
@@ -333,7 +333,7 @@ async fn main() -> Result<()> {
         "Session-Persistent Architecture: ~{} tokens",
         persistent_tokens
     );
-    info!("Token Reduction: {}% 🎉", savings);
+    info!("Context Optimization: {}% 🎉", savings);
 
     // Show session statistics
     info!("\n🔄 Session Management Statistics:");
@@ -388,7 +388,7 @@ async fn main() -> Result<()> {
 
     info!("\n🎉 Session-Persistent Architecture demonstration complete!");
     info!(
-        "✨ Achieved {}% token reduction through intelligent session management!",
+        "✨ Achieved {}% context optimization through intelligent session management!",
         savings
     );
 

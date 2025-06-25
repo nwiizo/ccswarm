@@ -13,9 +13,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 
-use ai_session::coordination::{AgentId, AgentMessage, MessageBus};
+use ai_session::coordination::{AgentId, AgentMessage as AISessionMessage, MessageBus};
 
 use crate::agent::{Task, TaskResult};
+use crate::coordination::conversion::{AgentMappingRegistry, UnifiedAgentInfo};
+use crate::coordination::{AgentMessage as CCSwarmAgentMessage, CoordinationType};
 use crate::identity::AgentRole;
 use crate::orchestrator::{DelegationDecision, MasterClaude};
 
@@ -24,7 +26,7 @@ use crate::orchestrator::{DelegationDecision, MasterClaude};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CCSwarmMessage {
     /// Agent message from ai-session
-    Base(AgentMessage),
+    Base(CCSwarmAgentMessage),
     /// Ccswarm-specific delegation message
     Delegation {
         task_id: String,
@@ -62,8 +64,8 @@ pub struct AICoordinationBridge {
     /// Reference to Master Claude for delegation decisions
     master_handler: Arc<RwLock<MasterClaude>>,
 
-    /// Mapping from ccswarm agent IDs to ai-session AgentIds
-    agent_map: Arc<RwLock<HashMap<String, AgentId>>>,
+    /// Agent mapping registry for ID conversions
+    agent_registry: Arc<AgentMappingRegistry>,
 
     /// Active task tracking
     active_tasks: Arc<RwLock<HashMap<String, TrackedTask>>>,
@@ -100,7 +102,7 @@ impl AICoordinationBridge {
         Self {
             message_bus,
             master_handler,
-            agent_map: Arc::new(RwLock::new(HashMap::new())),
+            agent_registry: Arc::new(AgentMappingRegistry::new()),
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
             shutdown_tx: None,
         }
@@ -116,7 +118,7 @@ impl AICoordinationBridge {
 
         // Clone references for the async task
         let master_handler = Arc::clone(&self.master_handler);
-        let agent_map = Arc::clone(&self.agent_map);
+        let agent_registry = Arc::clone(&self.agent_registry);
         let active_tasks = Arc::clone(&self.active_tasks);
         let message_bus = Arc::clone(&self.message_bus);
 
@@ -134,7 +136,7 @@ impl AICoordinationBridge {
                             if let Err(e) = Self::handle_agent_message(
                                 message,
                                 &master_handler,
-                                &agent_map,
+                                &agent_registry,
                                 &active_tasks,
                                 &message_bus,
                             ).await {
@@ -161,21 +163,27 @@ impl AICoordinationBridge {
     ) -> Result<AgentId> {
         let ai_agent_id = AgentId::new();
 
-        // Store mapping
-        {
-            let mut agent_map = self.agent_map.write().await;
-            agent_map.insert(ccswarm_agent_id.clone(), ai_agent_id.clone());
-        }
-
-        // Send registration message
-        let registration = AgentMessage::Registration {
-            agent_id: ai_agent_id.clone(),
+        // Create unified agent info
+        let agent_info = UnifiedAgentInfo {
+            ccswarm_id: ccswarm_agent_id.clone(),
+            ai_session_id: ai_agent_id.clone(),
+            role: agent_role.clone(),
             capabilities: vec![agent_role.name().to_string()],
             metadata: serde_json::json!({
                 "ccswarm_agent_id": ccswarm_agent_id,
                 "role": agent_role.name(),
                 "registered_at": Utc::now().to_rfc3339(),
             }),
+        };
+
+        // Register in the mapping registry
+        self.agent_registry.register(agent_info.clone()).await;
+
+        // Send registration message
+        let registration = AISessionMessage::Registration {
+            agent_id: ai_agent_id.clone(),
+            capabilities: agent_info.capabilities,
+            metadata: agent_info.metadata,
         };
 
         // Use a dummy agent ID to send registration for monitoring
@@ -202,12 +210,11 @@ impl AICoordinationBridge {
         agent_id: &str,
         decision: DelegationDecision,
     ) -> Result<()> {
-        let agent_map = self.agent_map.read().await;
-        let ai_agent_id = agent_map
-            .get(agent_id)
-            .ok_or_else(|| anyhow::anyhow!("Agent {} not registered", agent_id))?
-            .clone();
-        drop(agent_map);
+        let ai_agent_id = self
+            .agent_registry
+            .get_ai_session_id(agent_id)
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Agent {} not registered", agent_id))?;
 
         // Track the task
         let tracked_task = TrackedTask {
@@ -225,7 +232,7 @@ impl AICoordinationBridge {
         }
 
         // Send task assignment message
-        let assignment = AgentMessage::TaskAssignment {
+        let assignment = AISessionMessage::TaskAssignment {
             task_id: ai_session::coordination::TaskId::new(),
             agent_id: ai_agent_id.clone(),
             task_data: serde_json::json!({
@@ -254,14 +261,14 @@ impl AICoordinationBridge {
 
     /// Handle incoming agent messages
     async fn handle_agent_message(
-        msg: AgentMessage,
+        msg: AISessionMessage,
         master_handler: &Arc<RwLock<MasterClaude>>,
-        agent_map: &Arc<RwLock<HashMap<String, AgentId>>>,
+        agent_registry: &Arc<AgentMappingRegistry>,
         active_tasks: &Arc<RwLock<HashMap<String, TrackedTask>>>,
         message_bus: &Arc<MessageBus>,
     ) -> Result<()> {
         match msg {
-            AgentMessage::TaskCompleted {
+            AISessionMessage::TaskCompleted {
                 agent_id,
                 task_id,
                 result,
@@ -276,7 +283,7 @@ impl AICoordinationBridge {
                 .await?;
             }
 
-            AgentMessage::TaskProgress {
+            AISessionMessage::TaskProgress {
                 agent_id,
                 task_id,
                 progress,
@@ -292,7 +299,7 @@ impl AICoordinationBridge {
                 .await?;
             }
 
-            AgentMessage::HelpRequest {
+            AISessionMessage::HelpRequest {
                 agent_id,
                 context,
                 priority,
@@ -308,13 +315,13 @@ impl AICoordinationBridge {
                     serde_json::Value::String(context),
                     priority_f32,
                     master_handler,
-                    agent_map,
+                    agent_registry,
                     message_bus,
                 )
                 .await?;
             }
 
-            AgentMessage::StatusUpdate {
+            AISessionMessage::StatusUpdate {
                 agent_id,
                 status,
                 metrics,
@@ -395,7 +402,7 @@ impl AICoordinationBridge {
         context: serde_json::Value,
         priority: f32,
         master_handler: &Arc<RwLock<MasterClaude>>,
-        agent_map: &Arc<RwLock<HashMap<String, AgentId>>>,
+        agent_registry: &Arc<AgentMappingRegistry>,
         message_bus: &Arc<MessageBus>,
     ) -> Result<()> {
         tracing::info!(
@@ -405,12 +412,7 @@ impl AICoordinationBridge {
         );
 
         // Find the ccswarm agent ID
-        let agent_map_guard = agent_map.read().await;
-        let ccswarm_agent_id = agent_map_guard
-            .iter()
-            .find(|(_, ai_id)| **ai_id == agent_id)
-            .map(|(cc_id, _)| cc_id.clone());
-        drop(agent_map_guard);
+        let ccswarm_agent_id = agent_registry.get_ccswarm_id(&agent_id).await;
 
         if let Some(ccswarm_id) = ccswarm_agent_id {
             // Let Master Claude handle the help request
@@ -418,7 +420,7 @@ impl AICoordinationBridge {
             let response = master.handle_help_request(&ccswarm_id, context).await?;
 
             // Send response back via message bus
-            let help_response = AgentMessage::Custom {
+            let help_response = AISessionMessage::Custom {
                 message_type: "help_response".to_string(),
                 data: response,
             };
@@ -478,14 +480,15 @@ impl AICoordinationBridge {
     }
 
     /// Send a message to a specific agent
-    pub async fn send_to_agent(&self, agent_id: &str, message: AgentMessage) -> Result<()> {
-        let agent_map = self.agent_map.read().await;
-        let ai_agent_id = agent_map
-            .get(agent_id)
+    pub async fn send_to_agent(&self, agent_id: &str, message: AISessionMessage) -> Result<()> {
+        let ai_agent_id = self
+            .agent_registry
+            .get_ai_session_id(agent_id)
+            .await
             .ok_or_else(|| anyhow::anyhow!("Agent {} not registered", agent_id))?;
 
         self.message_bus
-            .publish_to_agent(ai_agent_id, message)
+            .publish_to_agent(&ai_agent_id, message)
             .await?;
         Ok(())
     }
@@ -554,8 +557,41 @@ trait MasterClaudeCoordination {
 #[async_trait::async_trait]
 impl MasterClaudeCoordination for MasterClaude {
     async fn handle_task_completion(&self, task_id: &str, result: TaskResult) -> Result<()> {
-        // TODO: Implement actual task completion handling
         tracing::info!("Task {} completed with result: {:?}", task_id, result);
+
+        // Update orchestrator state
+        let mut state = self.state.write().await;
+        state.total_tasks_processed += 1;
+
+        if result.success {
+            state.successful_tasks += 1;
+            tracing::info!("Task {} completed successfully", task_id);
+        } else {
+            state.failed_tasks += 1;
+            let error_msg = result.error.as_deref().unwrap_or("Unknown error");
+            tracing::error!("Task {} failed: {}", task_id, error_msg);
+
+            // Notify coordination bus about failure
+            if let Err(e) = self
+                .coordination_bus
+                .send_message(CCSwarmAgentMessage::Coordination {
+                    from_agent: "master-claude".to_string(),
+                    to_agent: "all".to_string(),
+                    message_type: CoordinationType::TaskFailure,
+                    payload: serde_json::json!({
+                        "task_id": task_id,
+                        "error": error_msg
+                    }),
+                })
+                .await
+            {
+                tracing::error!("Failed to broadcast task failure: {}", e);
+            }
+        }
+
+        // Remove task from pending list
+        state.pending_tasks.retain(|task| task.id != task_id);
+
         Ok(())
     }
 
@@ -564,12 +600,100 @@ impl MasterClaudeCoordination for MasterClaude {
         agent_id: &str,
         context: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        // TODO: Implement actual help request handling
         tracing::info!("Help request from agent {}: {:?}", agent_id, context);
-        Ok(serde_json::json!({
-            "response": "Help acknowledged",
-            "suggestions": ["Continue with current approach", "Check documentation"],
-        }))
+
+        // Extract context information
+        let current_task = context.get("current_task").and_then(|v| v.as_str());
+        let error_message = context.get("error").and_then(|v| v.as_str());
+        let _stuck_reason = context.get("stuck_reason").and_then(|v| v.as_str());
+
+        // Generate intelligent suggestions based on agent role and context
+        let suggestions = if let Some(agent) = self.agents.get(agent_id) {
+            use crate::orchestrator::agent_access::AgentAttributeAccess;
+            let specialization = agent.specialization();
+            match specialization {
+                "Frontend" => vec![
+                    "Check browser console for errors",
+                    "Verify component imports and exports",
+                    "Test with different browsers/versions",
+                    "Review CSS/styling conflicts",
+                ],
+                "Backend" => vec![
+                    "Check server logs for errors",
+                    "Verify database connections",
+                    "Test API endpoints independently",
+                    "Review authentication/authorization",
+                ],
+                "DevOps" => vec![
+                    "Check container/deployment logs",
+                    "Verify environment variables",
+                    "Test infrastructure connectivity",
+                    "Review CI/CD pipeline status",
+                ],
+                "QA" => vec![
+                    "Review test coverage reports",
+                    "Check for flaky tests",
+                    "Verify test data setup",
+                    "Review testing environment config",
+                ],
+                _ => vec![
+                    "Break down the problem into smaller steps",
+                    "Check documentation and examples",
+                    "Review recent changes that might be related",
+                    "Ask for clarification on requirements",
+                ],
+            }
+        } else {
+            vec![
+                "Agent not found - check agent registration",
+                "Verify agent configuration",
+            ]
+        };
+
+        // Add context-specific suggestions
+        let mut contextual_suggestions = suggestions;
+        if let Some(error) = error_message {
+            if error.contains("compilation") || error.contains("build") {
+                contextual_suggestions.push("Check for syntax errors and missing dependencies");
+            } else if error.contains("network") || error.contains("connection") {
+                contextual_suggestions
+                    .push("Verify network connectivity and endpoint availability");
+            } else if error.contains("permission") || error.contains("access") {
+                contextual_suggestions.push("Check file permissions and access rights");
+            }
+        }
+
+        // Send help response through coordination bus
+        let help_response = serde_json::json!({
+            "response": "Help request processed",
+            "suggestions": contextual_suggestions,
+            "next_steps": [
+                "Try the suggested approaches",
+                "Report back with results",
+                "Request specific guidance if still stuck"
+            ],
+            "context": {
+                "agent_id": agent_id,
+                "timestamp": chrono::Utc::now(),
+                "task": current_task
+            }
+        });
+
+        // Broadcast help response to coordination bus for other agents to learn from
+        if let Err(e) = self
+            .coordination_bus
+            .send_message(CCSwarmAgentMessage::Coordination {
+                from_agent: "master-claude".to_string(),
+                to_agent: agent_id.to_string(),
+                message_type: CoordinationType::HelpResponse,
+                payload: help_response.clone(),
+            })
+            .await
+        {
+            tracing::error!("Failed to broadcast help response: {}", e);
+        }
+
+        Ok(help_response)
     }
 }
 

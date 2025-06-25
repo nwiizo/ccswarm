@@ -6,7 +6,7 @@
 //!
 //! # Key Features
 //!
-//! - **Token-Efficient History**: Automatic compression to reduce API costs by ~93%
+//! - **Efficient History Management**: Automatic compression for optimized context handling
 //! - **Task Context**: Structured task and goal tracking for AI agents
 //! - **Agent State**: Persistent agent memory and decision tracking
 //! - **Workspace State**: File system and project state awareness
@@ -34,7 +34,7 @@
 //! context.add_message(user_message);
 //!
 //! let assistant_message = Message {
-//!     role: MessageRole::Assistant, 
+//!     role: MessageRole::Assistant,
 //!     content: "I'll help you create a REST API. Let's start with the basic structure...".to_string(),
 //!     timestamp: Utc::now(),
 //!     token_count: 18,

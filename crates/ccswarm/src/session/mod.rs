@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::auto_accept::AutoAcceptConfig;
 use crate::identity::AgentRole;
+use crate::resource::{ResourceMonitor, SessionResourceIntegration};
 use ai_session::native::NativeSessionManager;
 use memory::{
     EpisodeOutcome, EpisodeType, MemorySummary, RetrievalResult, SessionMemory, WorkingMemoryType,
@@ -224,6 +225,10 @@ pub struct SessionManager {
     sessions: Arc<Mutex<HashMap<String, AgentSession>>>,
     /// Native session manager for session operations
     session_manager: NativeSessionManager,
+    /// Resource monitor for tracking agent resources
+    resource_monitor: Option<Arc<ResourceMonitor>>,
+    /// Resource integration handler
+    resource_integration: Option<Arc<SessionResourceIntegration>>,
 }
 
 impl SessionManager {
@@ -232,6 +237,30 @@ impl SessionManager {
         Ok(Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             session_manager: NativeSessionManager::new(),
+            resource_monitor: None,
+            resource_integration: None,
+        })
+    }
+
+    /// Creates a new session manager with resource monitoring
+    pub async fn with_resource_monitoring(
+        resource_limits: crate::resource::ResourceLimits,
+    ) -> Result<Self> {
+        let resource_monitor = Arc::new(ResourceMonitor::new(resource_limits));
+        let resource_integration =
+            Arc::new(SessionResourceIntegration::new(resource_monitor.clone()));
+
+        // Start the monitoring loop
+        let monitor_clone = resource_monitor.clone();
+        tokio::spawn(async move {
+            monitor_clone.start_monitoring_loop().await;
+        });
+
+        Ok(Self {
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            session_manager: NativeSessionManager::new(),
+            resource_monitor: Some(resource_monitor),
+            resource_integration: Some(resource_integration),
         })
     }
 
@@ -272,8 +301,20 @@ impl SessionManager {
         }
 
         // Store the session
-        let mut sessions = self.sessions.lock().unwrap();
-        sessions.insert(session.id.clone(), session.clone());
+        {
+            let mut sessions = self.sessions.lock().unwrap();
+            sessions.insert(session.id.clone(), session.clone());
+        }
+
+        // Start resource monitoring if enabled
+        if let Some(ref integration) = self.resource_integration {
+            if let Err(e) = integration
+                .on_session_created(&session.id, &session.agent_id, None)
+                .await
+            {
+                tracing::warn!("Failed to start resource monitoring: {}", e);
+            }
+        }
 
         Ok(session)
     }
@@ -401,13 +442,23 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found
     pub async fn terminate_session(&self, session_id: &str) -> Result<()> {
-        let tmux_session = {
+        let (tmux_session, agent_id) = {
             let sessions = self.sessions.lock().unwrap();
             let session = sessions
                 .get(session_id)
                 .ok_or_else(|| anyhow!("Session {} not found", session_id))?;
-            session.tmux_session.clone()
+            (session.tmux_session.clone(), session.agent_id.clone())
         };
+
+        // Stop resource monitoring if enabled
+        if let Some(ref integration) = self.resource_integration {
+            if let Err(e) = integration
+                .on_session_terminated(session_id, &agent_id)
+                .await
+            {
+                tracing::warn!("Failed to stop resource monitoring: {}", e);
+            }
+        }
 
         // Terminate the native session
         if self.session_manager.has_session(&tmux_session).await {
@@ -601,6 +652,56 @@ impl SessionManager {
         Ok(count)
     }
 
+    /// Check for idle agents and suspend them if needed
+    pub async fn check_and_suspend_idle_agents(&self) -> Result<Vec<String>> {
+        let mut suspended_agents = Vec::new();
+
+        if let Some(ref integration) = self.resource_integration {
+            let agents_to_check: Vec<(String, String)> = {
+                let sessions = self.sessions.lock().unwrap();
+                sessions
+                    .values()
+                    .filter(|s| s.is_runnable())
+                    .map(|s| (s.id.clone(), s.agent_id.clone()))
+                    .collect()
+            };
+
+            for (session_id, agent_id) in agents_to_check {
+                if integration.check_agent_suspension(&agent_id).await {
+                    if let Err(e) = self.pause_session(&session_id).await {
+                        tracing::warn!("Failed to suspend idle agent {}: {}", agent_id, e);
+                    } else {
+                        suspended_agents.push(agent_id);
+                    }
+                }
+            }
+        }
+
+        Ok(suspended_agents)
+    }
+
+    /// Get resource usage for a session
+    pub fn get_session_resource_usage(
+        &self,
+        session_id: &str,
+    ) -> Option<crate::resource::ResourceUsage> {
+        let sessions = self.sessions.lock().unwrap();
+        let session = sessions.get(session_id)?;
+
+        self.resource_monitor
+            .as_ref()
+            .and_then(|monitor| monitor.get_agent_usage(&session.agent_id))
+    }
+
+    /// Get resource efficiency statistics
+    pub fn get_resource_efficiency_stats(
+        &self,
+    ) -> Option<crate::resource::ResourceEfficiencyStats> {
+        self.resource_monitor
+            .as_ref()
+            .map(|monitor| monitor.get_efficiency_stats())
+    }
+
     /// Sets up the environment for a new session
     async fn setup_session_environment(&self, session: &AgentSession) -> Result<()> {
         // For native sessions, environment setup would be handled during session creation
@@ -655,8 +756,12 @@ impl Default for SessionManager {
         // Note: This is a blocking call in an async context
         // Consider using lazy_static or once_cell for production
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(async { Self::new().await.expect("Failed to create SessionManager") })
+            tokio::runtime::Handle::current().block_on(async {
+                // Create with default resource monitoring enabled
+                Self::with_resource_monitoring(crate::resource::ResourceLimits::default())
+                    .await
+                    .expect("Failed to create SessionManager")
+            })
         })
     }
 }

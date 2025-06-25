@@ -2,7 +2,7 @@
 ///
 /// This module implements the Session-Persistent Agent Architecture to address
 /// the token consumption issues in multi-task workflows. Key improvements:
-/// - 93% token reduction through session reuse
+/// - Efficient context management through session reuse
 /// - One-time identity establishment per agent lifecycle
 /// - Conversation history preservation for context continuity
 /// - Batch task processing to amortize overhead

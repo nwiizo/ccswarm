@@ -161,13 +161,13 @@ impl InteractiveHelp {
                     Example {
                         command: "ccswarm session stats --show-savings".to_string(),
                         description: "View token savings statistics".to_string(),
-                        output: Some("💰 Token Savings: 93%\n📊 Total saved: 45,000 tokens".to_string()),
+                        output: Some("📊 Session Efficiency: Optimized\n🔧 Context Compression: Active".to_string()),
                     },
                 ],
                 related: vec!["agents".to_string()],
                 tips: vec![
                     "Sessions persist context across tasks".to_string(),
-                    "AI-session provides 93% token savings".to_string(),
+                    "AI-session provides intelligent context management".to_string(),
                     "Sessions auto-recover after crashes".to_string(),
                 ],
             },
@@ -228,7 +228,7 @@ impl InteractiveHelp {
                         output: None,
                     },
                 ],
-                related: vec!["getting-started".to_string()],
+                related: vec!["getting-started".to_string(), "errors".to_string()],
                 tips: vec![
                     "Check logs in ~/.ccswarm/logs/".to_string(),
                     "Use --verbose flag for detailed output".to_string(),
@@ -236,9 +236,54 @@ impl InteractiveHelp {
                 ],
             },
         );
+
+        // Error Codes and Recovery
+        self.topics.insert(
+            "errors".to_string(),
+            HelpTopic {
+                title: "Error Codes and Recovery".to_string(),
+                description: "Understand and fix ccswarm errors with visual diagrams".to_string(),
+                examples: vec![
+                    Example {
+                        command: "ccswarm help errors".to_string(),
+                        description: "List all error codes".to_string(),
+                        output: Some("📚 Error Reference\n\nEnvironment:\n  ENV001 - API Key Missing\n\nSession Management:\n  SES001 - Session Not Found".to_string()),
+                    },
+                    Example {
+                        command: "ccswarm doctor --error ENV001".to_string(),
+                        description: "Diagnose specific error".to_string(),
+                        output: Some("🔍 Error Code: ENV001\n📋 Configure API key for AI provider\n\nRecovery steps:\n1. Set environment variable\n2. Add to .env file".to_string()),
+                    },
+                    Example {
+                        command: "ccswarm doctor --error SES001 --fix".to_string(),
+                        description: "Auto-fix session error".to_string(),
+                        output: Some("🔧 Auto-fix available!\nApplying fix...\n✅ Session created successfully".to_string()),
+                    },
+                    Example {
+                        command: "ccswarm start --fix".to_string(),
+                        description: "Run command with auto-fix enabled".to_string(),
+                        output: None,
+                    },
+                ],
+                related: vec!["troubleshooting".to_string()],
+                tips: vec![
+                    "Most errors show visual diagrams to explain the problem".to_string(),
+                    "Use --fix flag to attempt automatic recovery".to_string(),
+                    "Error codes help support diagnose issues quickly".to_string(),
+                    "Run 'ccswarm doctor --check-api' to test connectivity".to_string(),
+                ],
+            },
+        );
     }
 
     pub fn show_topic(&self, topic: &str) {
+        // Special handling for errors topic
+        if topic == "errors" {
+            use crate::cli::error_help::ErrorHelp;
+            ErrorHelp::show_all_errors();
+            return;
+        }
+
         if let Some(help_topic) = self.topics.get(topic) {
             self.display_topic(help_topic);
         } else {
@@ -261,6 +306,7 @@ impl InteractiveHelp {
             ("sessions", "Manage AI-powered terminal sessions"),
             ("quality", "Code quality and automated reviews"),
             ("troubleshooting", "Fix common problems"),
+            ("errors", "Error codes and recovery procedures"),
         ];
 
         for (key, desc) in topics {
@@ -386,7 +432,7 @@ pub fn show_quick_help(context: &str) {
         ],
         "session-created" => vec![
             "Attach to session: ccswarm session attach <id>",
-            "Sessions save 93% on API tokens",
+            "Sessions provide efficient context management",
             "Sessions persist across ccswarm restarts",
         ],
         "agent-busy" => vec![

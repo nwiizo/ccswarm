@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2025-06-25
+
+### Added
+- **Enhanced Error Visualization**: Rich error diagrams and visual representations for better debugging
+- **Resource Monitoring System**: Real-time CPU, memory, and system resource tracking with limits
+- **Template Management System**: Project and agent template storage with metadata and versioning
+- **Message Conversion Framework**: Unified message conversion between ccswarm and ai-session formats
+- **Quickstart Command**: Simplified onboarding with interactive project initialization
+- **Error Recovery Database**: Intelligent error pattern recognition and solution suggestions
+- **Enhanced CLI Help System**: Context-aware help with error resolution guides
+
+### Changed
+- **Improved Code Quality**: Fixed all clippy warnings and formatting issues
+- **Better Error Handling**: Comprehensive error context and recovery suggestions
+- **Enhanced Documentation**: Updated ai-session integration docs and command references
+- **Refined Message Bus**: Improved coordination between ccswarm and ai-session messages
+- **Optimized Performance**: Reduced complexity in resource monitoring and template storage
+
+### Fixed
+- **Collapsible If Statements**: Simplified nested conditionals for better readability
+- **Unused Code Removal**: Cleaned up dead code and unused variables
+- **Async/Await Issues**: Fixed MutexGuard held across await points
+- **Type Complexity**: Simplified complex WebSocket type definitions
+- **Memory Efficiency**: Optimized string operations and iterator usage
+
+### Technical Improvements
+- **Code Organization**: Better separation of concerns with dedicated error, resource, and template modules
+- **Test Coverage**: Added comprehensive tests for new features
+- **CI/CD Compatibility**: All warnings resolved for clean builds
+- **Cross-Module Integration**: Seamless message conversion between ai-session and ccswarm
+
 ## [0.3.3] - 2025-06-24
 
 ### Added

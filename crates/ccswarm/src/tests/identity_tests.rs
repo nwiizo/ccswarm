@@ -12,13 +12,13 @@ mod tests {
     use uuid::Uuid;
 
     fn create_test_identity(role: AgentRole) -> AgentIdentity {
-        let agent_id = format!("{}-agent-test", role.name().to_lowercase());
+        let agent_id = format!("{}-agent-test", role.as_str().to_lowercase());
         let session_id = Uuid::new_v4().to_string();
 
         let mut env_vars = HashMap::new();
         env_vars.insert("CCSWARM_AGENT_ID".to_string(), agent_id.clone());
         env_vars.insert("CCSWARM_SESSION_ID".to_string(), session_id.clone());
-        env_vars.insert("CCSWARM_ROLE".to_string(), role.name().to_string());
+        env_vars.insert("CCSWARM_ROLE".to_string(), role.as_str().to_string());
 
         AgentIdentity {
             agent_id,

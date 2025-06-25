@@ -74,6 +74,12 @@ impl AgentRole {
         }
     }
 
+    /// Get the string representation of the role
+    /// This is an alias for the `name()` method following Rust conventions
+    pub fn as_str(&self) -> &str {
+        self.name()
+    }
+
     /// Get the technologies associated with this role
     pub fn technologies(&self) -> Vec<String> {
         match self {
@@ -426,6 +432,29 @@ mod tests {
 
         let backend = default_backend_role();
         assert_eq!(backend.name(), "Backend");
+    }
+
+    #[test]
+    fn test_agent_role_as_str() {
+        let frontend = default_frontend_role();
+        assert_eq!(frontend.as_str(), "Frontend");
+        assert_eq!(frontend.as_str(), frontend.name());
+
+        let backend = default_backend_role();
+        assert_eq!(backend.as_str(), "Backend");
+        assert_eq!(backend.as_str(), backend.name());
+
+        let devops = default_devops_role();
+        assert_eq!(devops.as_str(), "DevOps");
+
+        let qa = default_qa_role();
+        assert_eq!(qa.as_str(), "QA");
+
+        let master = AgentRole::Master {
+            oversight_roles: vec!["Frontend".to_string(), "Backend".to_string()],
+            quality_standards: QualityStandards::default(),
+        };
+        assert_eq!(master.as_str(), "Master");
     }
 
     #[test]

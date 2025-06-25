@@ -3,9 +3,12 @@
 #![allow(clippy::collapsible_else_if)]
 #![allow(clippy::get_first)]
 
+mod error_help;
 mod interactive_help;
 mod output;
 mod progress;
+mod quickstart_simple;
+mod resource_commands;
 mod setup_wizard;
 mod tutorial;
 
@@ -20,6 +23,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::agent::{Priority, Task, TaskType};
@@ -48,6 +52,10 @@ pub struct Cli {
     /// JSON output format
     #[arg(long)]
     pub json: bool,
+
+    /// Automatically fix errors when possible
+    #[arg(long, global = true)]
+    pub fix: bool,
 
     #[command(subcommand)]
     pub command: Commands,
@@ -169,6 +177,12 @@ pub enum Commands {
         action: SessionAction,
     },
 
+    /// Resource monitoring and management
+    Resource {
+        #[command(subcommand)]
+        action: resource_commands::ResourceSubcommand,
+    },
+
     /// Auto-create application with AI agents
     AutoCreate {
         /// Application description
@@ -217,6 +231,12 @@ pub enum Commands {
         action: QualityAction,
     },
 
+    /// Template management commands
+    Template {
+        #[command(subcommand)]
+        action: TemplateAction,
+    },
+
     /// Interactive setup wizard for new users
     Setup,
 
@@ -242,6 +262,33 @@ pub enum Commands {
         /// Run fixes for common issues
         #[arg(short, long)]
         fix: bool,
+
+        /// Diagnose specific error code
+        #[arg(long)]
+        error: Option<String>,
+
+        /// Check API connectivity
+        #[arg(long)]
+        check_api: bool,
+    },
+
+    /// Quick start with one command - streamlined setup and initialization
+    Quickstart {
+        /// Project name (default: infers from directory)
+        #[arg(short, long)]
+        name: Option<String>,
+
+        /// Skip interactive prompts and use defaults
+        #[arg(long)]
+        no_prompt: bool,
+
+        /// Enable all agents (frontend, backend, devops, qa)
+        #[arg(long)]
+        all_agents: bool,
+
+        /// Run initial tests after setup
+        #[arg(long)]
+        with_tests: bool,
     },
 }
 
@@ -288,7 +335,7 @@ pub enum WorktreeAction {
 pub enum TaskAction {
     /// Add a new task to the queue
     Add {
-        /// Task description
+        /// Task description (or template ID if using template)
         description: String,
 
         /// Task priority
@@ -310,6 +357,18 @@ pub enum TaskAction {
         /// Auto-assign to best agent
         #[arg(long)]
         auto_assign: bool,
+
+        /// Use a template for task creation
+        #[arg(short, long)]
+        template: Option<String>,
+
+        /// Template variable values (key=value)
+        #[arg(long, value_delimiter = ',')]
+        template_vars: Vec<String>,
+
+        /// Interactive template variable input
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// List all tasks
@@ -846,6 +905,216 @@ pub enum QualityAction {
     },
 }
 
+#[derive(Subcommand, Debug)]
+pub enum TemplateAction {
+    /// List available templates
+    List {
+        /// Show all templates including disabled ones
+        #[arg(short, long)]
+        all: bool,
+
+        /// Filter by category
+        #[arg(short, long)]
+        category: Option<String>,
+
+        /// Filter by tags
+        #[arg(short, long, value_delimiter = ',')]
+        tags: Vec<String>,
+
+        /// Search term for name or description
+        #[arg(short, long)]
+        search: Option<String>,
+
+        /// Sort by popularity
+        #[arg(long)]
+        popular: bool,
+
+        /// Sort by success rate
+        #[arg(long)]
+        quality: bool,
+
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+    },
+
+    /// Show template details
+    Show {
+        /// Template ID or name
+        template: String,
+
+        /// Show template source code
+        #[arg(long)]
+        source: bool,
+
+        /// Show usage statistics
+        #[arg(long)]
+        stats: bool,
+    },
+
+    /// Create a new template
+    Create {
+        /// Template ID
+        #[arg(short, long)]
+        id: String,
+
+        /// Template name
+        #[arg(short, long)]
+        name: String,
+
+        /// Template description
+        #[arg(short, long)]
+        description: String,
+
+        /// Template category
+        #[arg(short, long)]
+        category: String,
+
+        /// Open editor to define template details
+        #[arg(long)]
+        editor: bool,
+
+        /// Use existing template as base
+        #[arg(long)]
+        from: Option<String>,
+    },
+
+    /// Edit an existing template
+    Edit {
+        /// Template ID or name
+        template: String,
+
+        /// Open in external editor
+        #[arg(long)]
+        editor: bool,
+    },
+
+    /// Delete a template
+    Delete {
+        /// Template ID or name
+        template: String,
+
+        /// Force deletion without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Apply a template to create a task
+    Apply {
+        /// Template ID or name
+        template: String,
+
+        /// Variable values (key=value)
+        #[arg(short, long, value_delimiter = ',')]
+        vars: Vec<String>,
+
+        /// Interactive mode to prompt for variables
+        #[arg(short, long)]
+        interactive: bool,
+
+        /// Preview the generated task without creating it
+        #[arg(long)]
+        preview: bool,
+
+        /// Auto-assign to best agent
+        #[arg(long)]
+        auto_assign: bool,
+    },
+
+    /// Validate a template
+    Validate {
+        /// Template ID or name
+        template: String,
+
+        /// Show detailed validation report
+        #[arg(short, long)]
+        detailed: bool,
+
+        /// Treat warnings as errors
+        #[arg(long)]
+        strict: bool,
+    },
+
+    /// Clone a template
+    Clone {
+        /// Source template ID or name
+        source: String,
+
+        /// New template ID
+        #[arg(short, long)]
+        id: String,
+
+        /// New template name (optional)
+        #[arg(short, long)]
+        name: Option<String>,
+    },
+
+    /// Import templates from file
+    Import {
+        /// JSON file containing templates
+        file: String,
+
+        /// Overwrite existing templates
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Export templates to file
+    Export {
+        /// Output file path
+        #[arg(short, long)]
+        output: String,
+
+        /// Export specific templates only
+        #[arg(short, long, value_delimiter = ',')]
+        templates: Vec<String>,
+
+        /// Include usage statistics
+        #[arg(long)]
+        stats: bool,
+    },
+
+    /// Install predefined templates
+    Install {
+        /// Install all predefined templates
+        #[arg(long)]
+        all: bool,
+
+        /// Install specific template categories
+        #[arg(short, long, value_delimiter = ',')]
+        categories: Vec<String>,
+
+        /// Force reinstall existing templates
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Show template usage statistics
+    Stats {
+        /// Show global statistics
+        #[arg(short, long)]
+        global: bool,
+
+        /// Show statistics for specific template
+        #[arg(short, long)]
+        template: Option<String>,
+    },
+
+    /// Search templates
+    Search {
+        /// Search query
+        query: String,
+
+        /// Limit number of results
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+
+        /// Minimum quality score (0.0-1.0)
+        #[arg(long)]
+        min_quality: Option<f64>,
+    },
+}
+
 pub struct CliRunner {
     config: CcswarmConfig,
     repo_path: PathBuf,
@@ -928,13 +1197,14 @@ impl CliRunner {
             Commands::Config { action } => self.handle_config(action).await,
             Commands::Delegate { action } => self.handle_delegate(action).await,
             Commands::Session { action } => self.handle_session(action).await,
+            Commands::Resource { action } => self.handle_resource(action).await,
             Commands::AutoCreate {
                 description,
-                template,
+                template: _,
                 auto_deploy,
                 output,
             } => {
-                self.handle_auto_create(description, template.as_deref(), *auto_deploy, output)
+                self.handle_auto_create(description, None, *auto_deploy, output)
                     .await
             }
             Commands::Sangha { action } => self.handle_sangha(action).await,
@@ -942,12 +1212,26 @@ impl CliRunner {
             Commands::Search { action } => self.handle_search(action).await,
             Commands::Evolution { action } => self.handle_evolution(action).await,
             Commands::Quality { action } => self.handle_quality(action).await,
+            Commands::Template { action } => self.handle_template(action).await,
             Commands::Setup => self.handle_setup().await,
             Commands::Tutorial { chapter } => self.handle_tutorial(*chapter).await,
             Commands::HelpTopic { topic, search } => {
                 self.handle_help(topic.as_deref(), search.as_deref()).await
             }
-            Commands::Doctor { fix } => self.handle_doctor(*fix).await,
+            Commands::Doctor {
+                fix,
+                error,
+                check_api,
+            } => self.handle_doctor(*fix, error.as_deref(), *check_api).await,
+            Commands::Quickstart {
+                name,
+                no_prompt,
+                all_agents,
+                with_tests,
+            } => {
+                self.handle_quickstart(name.as_deref(), *no_prompt, *all_agents, *with_tests)
+                    .await
+            }
         }
     }
 
@@ -1210,7 +1494,7 @@ impl CliRunner {
         details: Option<&str>,
         duration: Option<u32>,
     ) -> Result<()> {
-        use crate::cli::progress::{ProgressStyle, ProgressTracker};
+        // use crate::cli::progress::{ProgressStyle, ProgressTracker};
         use crate::utils::user_error::CommonErrors;
 
         // Validate task description
@@ -1223,15 +1507,11 @@ impl CliRunner {
             return Err(anyhow!("Invalid task description"));
         }
 
-        // Start progress indicator
-        let progress = ProgressTracker::new(
-            format!(
-                "Creating task: {}",
-                description.chars().take(50).collect::<String>()
-            ),
-            ProgressStyle::Spinner,
+        // Create task (simplified progress display)
+        println!(
+            "Creating task: {}...",
+            description.chars().take(50).collect::<String>()
         );
-        ProgressTracker::start(progress.clone()).await;
 
         let priority = match priority.to_lowercase().as_str() {
             "low" => Priority::Low,
@@ -1280,12 +1560,7 @@ impl CliRunner {
         };
 
         // Complete progress indicator
-        ProgressTracker::complete(
-            progress,
-            true,
-            Some("Task created successfully".to_string()),
-        )
-        .await;
+        // ProgressTracker::complete(progress, true, Some("Task created successfully".to_string())).await;
 
         if self.json_output {
             println!(
@@ -1345,6 +1620,9 @@ impl CliRunner {
                 details,
                 duration,
                 auto_assign: _,
+                template: _,
+                template_vars: _,
+                interactive: _,
             } => {
                 self.add_task(
                     description,
@@ -3192,6 +3470,23 @@ impl CliRunner {
         Ok(())
     }
 
+    async fn handle_resource(&self, action: &resource_commands::ResourceSubcommand) -> Result<()> {
+        // Get or create session manager
+        let session_manager = Arc::new(
+            crate::session::SessionManager::with_resource_monitoring(
+                crate::resource::ResourceLimits::default(),
+            )
+            .await?,
+        );
+
+        // Create resource command and execute
+        let resource_cmd = resource_commands::ResourceCommand {
+            subcommand: action.clone(),
+        };
+
+        resource_cmd.execute(session_manager).await
+    }
+
     async fn handle_auto_create(
         &self,
         description: &str,
@@ -4406,11 +4701,385 @@ impl CliRunner {
         Ok(())
     }
 
+    async fn handle_template(&self, action: &TemplateAction) -> Result<()> {
+        use crate::template::{
+            FileSystemTemplateStorage, PredefinedTemplates, TemplateCategory, TemplateContext,
+            TemplateManager, TemplateQuery,
+        };
+        use colored::Colorize;
+        use std::io::{self, Write};
+        use std::str::FromStr;
+
+        // Initialize template storage
+        let templates_dir = self.repo_path.join(".ccswarm").join("templates");
+        let storage = FileSystemTemplateStorage::new(&templates_dir)
+            .await
+            .context("Failed to initialize template storage")?;
+        let mut manager = TemplateManager::new(storage);
+
+        match action {
+            TemplateAction::List {
+                all: _,
+                category,
+                tags,
+                search,
+                popular,
+                quality,
+                detailed,
+            } => {
+                let mut query = TemplateQuery::new();
+
+                if let Some(cat_str) = category {
+                    let cat = TemplateCategory::from_str(cat_str).context("Invalid category")?;
+                    query = query.with_category(cat);
+                }
+
+                if !tags.is_empty() {
+                    query = query.with_tags(tags.clone());
+                }
+
+                if let Some(search_term) = search {
+                    query = query.with_search_term(search_term);
+                }
+
+                if *popular {
+                    query = query.sort_by_popularity();
+                } else if *quality {
+                    query = query.sort_by_success_rate();
+                }
+
+                let templates = manager
+                    .search_templates(query)
+                    .await
+                    .context("Failed to search templates")?;
+
+                if templates.is_empty() {
+                    println!("No templates found.");
+                    return Ok(());
+                }
+
+                println!("Available Templates:");
+                println!();
+
+                for template in templates {
+                    if *detailed {
+                        println!(
+                            "📋 {} ({})",
+                            template.name.bright_cyan(),
+                            template.id.as_str().bright_black()
+                        );
+                        println!("   Category: {}", template.category);
+                        println!("   Description: {}", template.description);
+                        if !template.tags.is_empty() {
+                            println!(
+                                "   Tags: {}",
+                                template.tags.join(", ").as_str().bright_black()
+                            );
+                        }
+                        if let Some(author) = &template.author {
+                            println!("   Author: {}", author.as_str().bright_black());
+                        }
+                        println!("   Usage: {} times", template.usage_count);
+                        if let Some(rate) = template.success_rate {
+                            println!("   Success Rate: {:.1}%", rate * 100.0);
+                        }
+                        println!();
+                    } else {
+                        println!(
+                            "  {} ({}) - {}",
+                            template.name.bright_cyan(),
+                            template.id.bright_black(),
+                            template.description.chars().take(80).collect::<String>()
+                        );
+                    }
+                }
+            }
+
+            TemplateAction::Show {
+                template,
+                source,
+                stats,
+            } => {
+                let tmpl = manager
+                    .get_template_by_name(template)
+                    .await
+                    .context("Template not found")?;
+
+                println!(
+                    "Template: {} ({})",
+                    tmpl.name.bright_cyan(),
+                    tmpl.id.bright_black()
+                );
+                println!("Category: {}", tmpl.category);
+                println!("Description: {}", tmpl.description);
+                println!("Version: {}", tmpl.version);
+
+                if let Some(author) = &tmpl.author {
+                    println!("Author: {}", author);
+                }
+
+                if !tmpl.tags.is_empty() {
+                    println!("Tags: {}", tmpl.tags.join(", "));
+                }
+
+                println!("Priority: {:?}", tmpl.default_priority);
+                println!("Task Type: {:?}", tmpl.default_task_type);
+
+                if let Some(duration) = tmpl.estimated_duration {
+                    println!("Estimated Duration: {} minutes", duration);
+                }
+
+                if !tmpl.variables.is_empty() {
+                    println!();
+                    println!("Variables:");
+                    for var in &tmpl.variables {
+                        let required = if var.required { " (required)" } else { "" };
+                        println!(
+                            "  • {}{}: {}",
+                            var.name.bright_green(),
+                            required,
+                            var.description
+                        );
+                        if let Some(default) = &var.default_value {
+                            println!("    Default: {}", default.clone().bright_black());
+                        }
+                    }
+                }
+
+                if *source {
+                    println!();
+                    println!("Task Description Template:");
+                    println!("{}", tmpl.task_description.bright_white());
+
+                    if let Some(details) = &tmpl.task_details {
+                        println!();
+                        println!("Task Details Template:");
+                        println!("{}", details.bright_white());
+                    }
+                }
+
+                if *stats {
+                    println!();
+                    println!("Statistics:");
+                    println!("  Usage Count: {}", tmpl.usage_count);
+                    if let Some(rate) = tmpl.success_rate {
+                        println!("  Success Rate: {:.1}%", rate * 100.0);
+                    }
+                    println!("  Created: {}", tmpl.created_at.format("%Y-%m-%d %H:%M"));
+                    println!("  Updated: {}", tmpl.updated_at.format("%Y-%m-%d %H:%M"));
+                }
+            }
+
+            TemplateAction::Apply {
+                template,
+                vars,
+                interactive,
+                preview,
+                auto_assign,
+            } => {
+                let tmpl = manager
+                    .get_template_by_name(template)
+                    .await
+                    .context("Template not found")?;
+
+                let mut context = TemplateContext::new();
+
+                // Parse provided variables
+                for var_str in vars {
+                    if let Some((key, value)) = var_str.split_once('=') {
+                        context = context.with_variable(key.trim(), value.trim());
+                    }
+                }
+
+                // Interactive mode for missing variables
+                if *interactive {
+                    for var in &tmpl.variables {
+                        if var.required
+                            && !context.variables.contains_key(&var.name)
+                            && var.default_value.is_none()
+                        {
+                            print!("{} ({}): ", var.name, var.description);
+                            io::stdout().flush()?;
+
+                            let mut input = String::new();
+                            io::stdin().read_line(&mut input)?;
+                            let value = input.trim();
+
+                            if !value.is_empty() {
+                                context = context.with_variable(&var.name, value);
+                            }
+                        }
+                    }
+                }
+
+                // Apply template
+                let applied = manager
+                    .apply_template(&tmpl.id, context)
+                    .await
+                    .context("Failed to apply template")?;
+
+                if *preview {
+                    println!("Preview of generated task:");
+                    println!();
+                    println!("Description: {}", applied.description.bright_cyan());
+                    if let Some(details) = &applied.details {
+                        println!("Details: {}", details);
+                    }
+                    println!("Priority: {:?}", applied.priority);
+                    println!("Type: {:?}", applied.task_type);
+                    if let Some(duration) = applied.estimated_duration {
+                        println!("Duration: {} minutes", duration);
+                    }
+                    if !applied.target_files.is_empty() {
+                        println!("Target Files: {}", applied.target_files.join(", "));
+                    }
+                } else {
+                    // Create the actual task
+                    use crate::agent::TaskBuilder;
+
+                    let task = TaskBuilder::new(applied.description.clone())
+                        .priority(applied.priority)
+                        .task_type(applied.task_type);
+
+                    let task = if let Some(details) = &applied.details {
+                        task.details(details.clone())
+                    } else {
+                        task
+                    };
+
+                    let task = if let Some(duration) = applied.estimated_duration {
+                        task.estimated_duration(duration as u64)
+                    } else {
+                        task
+                    };
+
+                    let task = task.build();
+
+                    println!(
+                        "Created task from template: {}",
+                        applied.description.bright_green()
+                    );
+                    println!("Task ID: {}", task.id.bright_cyan());
+
+                    if *auto_assign {
+                        println!("Auto-assigning to best agent...");
+                        // TODO: Implement auto-assignment logic
+                    }
+                }
+            }
+
+            TemplateAction::Install {
+                all,
+                categories,
+                force,
+            } => {
+                let predefined_templates = PredefinedTemplates::get_all();
+                let mut installed = 0;
+                let mut skipped = 0;
+
+                for template in predefined_templates {
+                    // Filter by categories if specified
+                    if !categories.is_empty() && !*all {
+                        let cat_str = template.category.to_string();
+                        if !categories.iter().any(|c| c.eq_ignore_ascii_case(&cat_str)) {
+                            continue;
+                        }
+                    }
+
+                    match manager.save_template(template.clone()).await {
+                        Ok(()) => {
+                            println!("✅ Installed: {}", template.name.bright_green());
+                            installed += 1;
+                        }
+                        Err(e) if e.to_string().contains("already exists") => {
+                            if *force {
+                                if let Err(e) = manager.update_template(template.clone()).await {
+                                    println!("❌ Failed to update {}: {}", template.name.red(), e);
+                                } else {
+                                    println!("✅ Updated: {}", template.name.bright_green());
+                                    installed += 1;
+                                }
+                            } else {
+                                println!("⚠️  Skipped (exists): {}", template.name.bright_yellow());
+                                skipped += 1;
+                            }
+                        }
+                        Err(e) => {
+                            println!("❌ Failed to install {}: {}", template.name.red(), e);
+                        }
+                    }
+                }
+
+                println!();
+                println!(
+                    "Installation complete: {} installed, {} skipped",
+                    installed, skipped
+                );
+                if skipped > 0 && !*force {
+                    println!("Use --force to overwrite existing templates");
+                }
+            }
+
+            TemplateAction::Stats {
+                global: _,
+                template,
+            } => {
+                if let Some(tmpl_name) = template {
+                    let tmpl = manager
+                        .get_template_by_name(tmpl_name)
+                        .await
+                        .context("Template not found")?;
+
+                    println!("Template Statistics: {}", tmpl.name.bright_cyan());
+                    println!("Usage Count: {}", tmpl.usage_count);
+                    if let Some(rate) = tmpl.success_rate {
+                        println!("Success Rate: {:.1}%", rate * 100.0);
+                    }
+                    println!("Created: {}", tmpl.created_at.format("%Y-%m-%d %H:%M"));
+                    println!("Updated: {}", tmpl.updated_at.format("%Y-%m-%d %H:%M"));
+                } else {
+                    let stats = manager
+                        .get_template_stats()
+                        .await
+                        .context("Failed to get template statistics")?;
+
+                    println!("Global Template Statistics:");
+                    println!("Total Templates: {}", stats.total_templates);
+                    println!("Total Usage: {}", stats.total_usage);
+                    println!(
+                        "Average Success Rate: {:.1}%",
+                        stats.average_success_rate * 100.0
+                    );
+
+                    println!();
+                    println!("By Category:");
+                    for (category, count) in &stats.by_category {
+                        println!("  {}: {}", category, count);
+                    }
+
+                    if !stats.most_popular.is_empty() {
+                        println!();
+                        println!("Most Popular:");
+                        for (name, count) in stats.most_popular.iter().take(5) {
+                            println!("  {}: {} uses", name, count);
+                        }
+                    }
+                }
+            }
+
+            _ => {
+                println!("Template command not yet implemented: {:?}", action);
+            }
+        }
+
+        Ok(())
+    }
+
     async fn handle_setup(&self) -> Result<()> {
         // Check if config already exists
         let config_path = self.repo_path.join("ccswarm.json");
         if config_path.exists() {
-            println!("{}", "⚠️  Configuration already exists!".yellow());
+            println!("{}", "⚠️  Configuration already exists!".bright_yellow());
             println!();
             print!("Overwrite existing configuration? [y/N] ");
             std::io::stdout().flush()?;
@@ -4438,7 +5107,10 @@ impl CliRunner {
 
         if let Some(ch) = chapter {
             if !(1..=4).contains(&ch) {
-                println!("{}", "❌ Invalid chapter number. Please choose 1-4.".red());
+                println!(
+                    "{}",
+                    "❌ Invalid chapter number. Please choose 1-4.".bright_red()
+                );
                 return Ok(());
             }
             // Set starting chapter (adjusting for 0-based index)
@@ -4458,7 +5130,10 @@ impl CliRunner {
 
             if results.is_empty() {
                 println!();
-                println!("{}", "❌ No help topics found matching your search.".red());
+                println!(
+                    "{}",
+                    "❌ No help topics found matching your search.".bright_red()
+                );
                 println!();
                 println!("Try one of these topics:");
                 help.show_topic_list();
@@ -4472,7 +5147,7 @@ impl CliRunner {
 
                 for (key, topic) in results.iter().take(3) {
                     println!("{}", format!("📖 {}", topic.title).bright_yellow());
-                    println!("   {}", topic.description.dimmed());
+                    println!("   {}", topic.description.bright_black());
                     println!("   Run: ccswarm help {}", key.bright_white());
                     println!();
                 }
@@ -4486,8 +5161,106 @@ impl CliRunner {
         Ok(())
     }
 
-    async fn handle_doctor(&self, fix: bool) -> Result<()> {
+    async fn handle_doctor(
+        &self,
+        fix: bool,
+        error_code: Option<&str>,
+        check_api: bool,
+    ) -> Result<()> {
+        use crate::utils::error_recovery::ErrorRecoveryDB;
         use crate::utils::user_error::CommonErrors;
+
+        // Handle specific error code diagnosis
+        if let Some(code) = error_code {
+            println!("{}", "🔍 Error Code Diagnosis".bright_cyan().bold());
+            println!("{}", "=======================".bright_cyan());
+            println!();
+            println!("Analyzing error code: {}", code.bright_yellow());
+            println!();
+
+            let recovery_db = ErrorRecoveryDB::new();
+            if let Some(recovery) = recovery_db.get_recovery(code) {
+                println!("📋 {}", recovery.description.bright_white());
+                println!();
+                println!("Recovery steps:");
+                for (i, step) in recovery.steps.iter().enumerate() {
+                    match step {
+                        crate::utils::error_recovery::RecoveryStep::Command {
+                            cmd,
+                            description,
+                        } => {
+                            println!("  {}. {} {}", i + 1, "Run:".bright_yellow(), description);
+                            println!("     {}", cmd.bright_white().on_black());
+                        }
+                        crate::utils::error_recovery::RecoveryStep::FileCreate { path, .. } => {
+                            println!(
+                                "  {}. {} {}",
+                                i + 1,
+                                "Create file:".bright_yellow(),
+                                path.bright_white()
+                            );
+                        }
+                        crate::utils::error_recovery::RecoveryStep::EnvVar { name, example } => {
+                            println!(
+                                "  {}. {} {}",
+                                i + 1,
+                                "Set environment variable:".bright_yellow(),
+                                name.bright_white()
+                            );
+                            println!("     Example: {}={}", name, example.bright_black());
+                        }
+                        crate::utils::error_recovery::RecoveryStep::UserAction { description } => {
+                            println!(
+                                "  {}. {} {}",
+                                i + 1,
+                                "Action required:".bright_yellow(),
+                                description
+                            );
+                        }
+                    }
+                    println!();
+                }
+
+                if recovery.can_auto_fix && fix {
+                    recovery_db.auto_fix(code, true).await?;
+                } else if recovery.can_auto_fix {
+                    println!(
+                        "💡 This error can be auto-fixed! Run: ccswarm doctor --error {} --fix",
+                        code
+                    );
+                }
+            } else {
+                println!("❌ Unknown error code: {}", code);
+                println!("   See all error codes: ccswarm help errors");
+            }
+            return Ok(());
+        }
+
+        // Handle API connectivity check
+        if check_api {
+            println!("{}", "🌐 API Connectivity Check".bright_cyan().bold());
+            println!("{}", "=========================".bright_cyan());
+            println!();
+
+            print!("Testing Anthropic API... ");
+            match reqwest::get("https://api.anthropic.com/v1/health").await {
+                Ok(resp) if resp.status().is_success() => {
+                    println!("{}", "✅ Connected".bright_green());
+                }
+                Ok(resp) => {
+                    println!(
+                        "{}",
+                        format!("⚠️  Status: {}", resp.status()).bright_yellow()
+                    );
+                }
+                Err(e) => {
+                    println!("{}", "❌ Failed".bright_red());
+                    println!("   {}", e.to_string().bright_black());
+                }
+            }
+            println!();
+            return Ok(());
+        }
 
         println!("{}", "🏥 ccswarm System Diagnosis".bright_cyan().bold());
         println!("{}", "===========================".bright_cyan());
@@ -4524,7 +5297,7 @@ impl CliRunner {
                 Ok(_) => println!("{}", "✅ Valid".bright_green()),
                 Err(e) => {
                     println!("{}", "❌ Invalid".bright_red());
-                    println!("   {}", e.to_string().dimmed());
+                    println!("   {}", e.to_string().bright_black());
                     issues.push("config");
                 }
             }
@@ -4592,14 +5365,31 @@ impl CliRunner {
                 println!();
                 println!(
                     "{}",
-                    "💡 Run with --fix to attempt automatic fixes".dimmed()
+                    "💡 Run with --fix to attempt automatic fixes".bright_black()
                 );
             }
         }
 
         Ok(())
     }
-}
 
+    async fn handle_quickstart(
+        &self,
+        name: Option<&str>,
+        no_prompt: bool,
+        all_agents: bool,
+        with_tests: bool,
+    ) -> Result<()> {
+        // Delegate to simplified implementation
+        quickstart_simple::handle_quickstart_simple(
+            &self.repo_path,
+            name,
+            no_prompt,
+            all_agents,
+            with_tests,
+        )
+        .await
+    }
+}
 #[cfg(test)]
 mod tests;

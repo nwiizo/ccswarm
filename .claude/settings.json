@@ -1,6 +1,6 @@
 {
   "name": "ccswarm",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "AI Multi-Agent Orchestration System with Native AI-Session",
   "permissions": {
     "file_write": true,
