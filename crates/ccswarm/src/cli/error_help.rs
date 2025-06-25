@@ -204,7 +204,6 @@ impl ErrorHelp {
         println!("{}:", "To auto-fix errors".dimmed());
         println!("  ccswarm doctor --error <CODE> --fix");
     }
-
 }
 
 /// Error information structure
