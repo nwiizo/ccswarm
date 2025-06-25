@@ -637,6 +637,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Requires tmux to be installed and can hang in CI"]
     async fn test_session_lifecycle() -> Result<()> {
         let client = TmuxClient::new().await?;
 
@@ -671,6 +672,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "Requires tmux to be installed and can hang in CI"]
     async fn test_window_management() -> Result<()> {
         let client = TmuxClient::new().await?;
 
@@ -700,6 +702,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "Requires tmux to be installed and can hang in CI"]
     async fn test_pane_management() -> Result<()> {
         let client = TmuxClient::new().await?;
 
@@ -726,6 +729,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "Requires tmux to be installed"]
     async fn test_invalid_session_name() {
         let client = TmuxClient::new().await.unwrap();
 
@@ -736,6 +740,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "Requires tmux to be installed"]
     async fn test_session_prefix() -> Result<()> {
         let config = TmuxConfig {
             session_prefix: "ccswarm-".to_string(),
