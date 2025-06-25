@@ -334,8 +334,7 @@ AI-orchestrated {} project
 - All features documented
 - No critical security issues
 "#,
-            project_name,
-            project_name
+            project_name, project_name
         );
         tokio::fs::write(&claude_md_path, claude_content).await?;
     }
