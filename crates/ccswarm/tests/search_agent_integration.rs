@@ -16,7 +16,6 @@ use tokio::sync::RwLock;
 use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
-
 /// Helper to create a test search agent
 async fn create_test_search_agent(
     agent_id: &str,
@@ -108,7 +107,7 @@ async fn test_search_request_response_flow() -> Result<()> {
 #[tokio::test]
 async fn test_search_agent_registration() -> Result<()> {
     let coordination_bus = Arc::new(CoordinationBus::new().await?);
-    
+
     // Create search agent
     let mut search_agent = create_test_search_agent("search-3", coordination_bus.clone()).await;
     search_agent.status = AgentStatus::Available;
@@ -128,7 +127,11 @@ async fn test_search_agent_registration() -> Result<()> {
     // Verify registration was sent
     if let Some(msg) = coordination_bus.try_receive_message() {
         match msg {
-            AgentMessage::Registration { agent_id, capabilities, .. } => {
+            AgentMessage::Registration {
+                agent_id,
+                capabilities,
+                ..
+            } => {
                 assert_eq!(agent_id, "search-3");
                 assert!(capabilities.contains(&"web_search".to_string()));
                 assert!(capabilities.contains(&"filtered_search".to_string()));
@@ -207,7 +210,7 @@ async fn test_concurrent_search_requests() -> Result<()> {
     for i in 0..5 {
         let bus = coordination_bus.clone();
         let agent_id = format!("agent-{}", i);
-        
+
         let handle = tokio::spawn(async move {
             let request = SearchRequest {
                 requesting_agent: agent_id.clone(),
@@ -473,9 +476,21 @@ async fn test_multi_agent_search_workflow() -> Result<()> {
 
     // Simulate a workflow where multiple agents request searches
     let workflow = vec![
-        ("frontend-agent", "React 18 new features", "Updating UI components"),
-        ("backend-agent", "PostgreSQL indexing strategies", "Optimizing database"),
-        ("devops-agent", "Kubernetes autoscaling", "Configuring cluster"),
+        (
+            "frontend-agent",
+            "React 18 new features",
+            "Updating UI components",
+        ),
+        (
+            "backend-agent",
+            "PostgreSQL indexing strategies",
+            "Optimizing database",
+        ),
+        (
+            "devops-agent",
+            "Kubernetes autoscaling",
+            "Configuring cluster",
+        ),
     ];
 
     for (agent_id, query, context) in workflow {

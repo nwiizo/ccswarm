@@ -51,11 +51,7 @@ impl VotingManager {
     }
 
     /// Cast a vote on a proposal
-    pub async fn cast_vote(
-        &self,
-        vote: Vote,
-        voter: &SanghaMember,
-    ) -> Result<()> {
+    pub async fn cast_vote(&self, vote: Vote, voter: &SanghaMember) -> Result<()> {
         // Validate voter eligibility
         if voter.reputation < self.rules.minimum_reputation {
             anyhow::bail!(
@@ -91,7 +87,8 @@ impl VotingManager {
 
         // Record the vote
         proposal_voters.insert(vote.voter_id.clone());
-        votes.entry(vote.proposal_id)
+        votes
+            .entry(vote.proposal_id)
             .or_insert_with(Vec::new)
             .push(vote);
 
@@ -107,7 +104,7 @@ impl VotingManager {
     /// Get voting statistics for a proposal
     pub async fn get_voting_stats(&self, proposal_id: Uuid) -> VotingStats {
         let votes = self.get_votes(proposal_id).await;
-        
+
         let mut stats = VotingStats {
             total_votes: votes.len(),
             aye_votes: 0,
@@ -156,15 +153,16 @@ impl VotingManager {
     ) -> bool {
         let voter_records = self.voter_records.lock().await;
         let voters = voter_records.get(&proposal_id);
-        
+
         let vote_count = voters.map(|v| v.len()).unwrap_or(0);
-        
+
         if self.rules.abstentions_count_for_quorum {
             vote_count >= quorum_threshold
         } else {
             // Need to check actual votes
             let votes = self.get_votes(proposal_id).await;
-            let decisive_votes = votes.iter()
+            let decisive_votes = votes
+                .iter()
                 .filter(|v| !matches!(v.choice, VoteChoice::Abstain))
                 .count();
             decisive_votes >= quorum_threshold
@@ -174,9 +172,9 @@ impl VotingManager {
     /// Get a summary of all votes with reasons
     pub async fn get_vote_summary(&self, proposal_id: Uuid) -> VoteSummary {
         let votes = self.get_votes(proposal_id).await;
-        
+
         let mut reasons_by_choice: HashMap<VoteChoice, Vec<String>> = HashMap::new();
-        
+
         for vote in &votes {
             if let Some(reason) = &vote.reason {
                 reasons_by_choice
@@ -185,35 +183,31 @@ impl VotingManager {
                     .push(reason.clone());
             }
         }
-        
+
         VoteSummary {
             proposal_id,
             total_votes: votes.len(),
-            votes_by_choice: votes.iter()
-                .map(|v| (v.choice, v.clone()))
-                .fold(HashMap::new(), |mut acc, (choice, vote)| {
+            votes_by_choice: votes.iter().map(|v| (v.choice, v.clone())).fold(
+                HashMap::new(),
+                |mut acc, (choice, vote)| {
                     acc.entry(choice).or_insert_with(Vec::new).push(vote);
                     acc
-                }),
+                },
+            ),
             reasons_by_choice,
             voting_complete: false, // Would need proposal status to determine
         }
     }
 
     /// Delegate voting power (proxy voting)
-    pub async fn delegate_vote(
-        &self,
-        _from: &str,
-        _to: &str,
-        _proposal_id: Uuid,
-    ) -> Result<()> {
+    pub async fn delegate_vote(&self, _from: &str, _to: &str, _proposal_id: Uuid) -> Result<()> {
         if !self.rules.allow_proxy {
             anyhow::bail!("Proxy voting is not allowed");
         }
-        
+
         // Implementation would involve tracking delegations
         // and applying them when calculating results
-        
+
         Ok(())
     }
 }
@@ -267,7 +261,7 @@ impl VotingManager {
         voter: &SanghaMember,
     ) -> Result<Vec<Result<()>>> {
         let mut results = Vec::new();
-        
+
         for entry in ballot.votes {
             let vote = Vote {
                 voter_id: ballot.voter_id.clone(),
@@ -277,10 +271,10 @@ impl VotingManager {
                 cast_at: ballot.submitted_at,
                 weight: voter.voting_power,
             };
-            
+
             results.push(self.cast_vote(vote, voter).await);
         }
-        
+
         Ok(results)
     }
 }
@@ -305,10 +299,9 @@ impl VotingPowerCalculator {
     pub fn calculate(&self, member: &SanghaMember) -> f64 {
         let tenure_days = (Utc::now() - member.joined_at).num_days() as f64;
         let tenure_bonus = (tenure_days / 30.0) * self.tenure_multiplier; // Bonus per month
-        
-        self.base_power 
-            + (member.reputation * self.reputation_multiplier)
-            + tenure_bonus.min(1.0) // Cap tenure bonus at 1.0
+
+        self.base_power + (member.reputation * self.reputation_multiplier) + tenure_bonus.min(1.0)
+        // Cap tenure bonus at 1.0
     }
 }
 
@@ -320,7 +313,7 @@ mod tests {
     async fn test_voting_manager() {
         let rules = VotingRules::default();
         let manager = VotingManager::new(rules);
-        
+
         let member = SanghaMember {
             agent_id: "test-agent".to_string(),
             role: AgentRole::Backend {
@@ -333,7 +326,7 @@ mod tests {
             is_active: true,
             reputation: 1.0,
         };
-        
+
         let vote = Vote {
             voter_id: member.agent_id.clone(),
             proposal_id: Uuid::new_v4(),
@@ -342,9 +335,9 @@ mod tests {
             cast_at: Utc::now(),
             weight: member.voting_power,
         };
-        
+
         manager.cast_vote(vote.clone(), &member).await.unwrap();
-        
+
         let votes = manager.get_votes(vote.proposal_id).await;
         assert_eq!(votes.len(), 1);
         assert_eq!(votes[0].choice, VoteChoice::Aye);
@@ -354,7 +347,7 @@ mod tests {
     async fn test_voting_stats() {
         let rules = VotingRules::default();
         let manager = VotingManager::new(rules);
-        
+
         let proposal_id = Uuid::new_v4();
         let votes = vec![
             (VoteChoice::Aye, 1.0),
@@ -362,7 +355,7 @@ mod tests {
             (VoteChoice::Nay, 1.0),
             (VoteChoice::Abstain, 0.5),
         ];
-        
+
         for (i, (choice, weight)) in votes.iter().enumerate() {
             let member = SanghaMember {
                 agent_id: format!("agent-{}", i),
@@ -376,7 +369,7 @@ mod tests {
                 is_active: true,
                 reputation: 1.0,
             };
-            
+
             let vote = Vote {
                 voter_id: member.agent_id.clone(),
                 proposal_id,
@@ -385,10 +378,10 @@ mod tests {
                 cast_at: Utc::now(),
                 weight: *weight,
             };
-            
+
             manager.cast_vote(vote, &member).await.unwrap();
         }
-        
+
         let stats = manager.get_voting_stats(proposal_id).await;
         assert_eq!(stats.total_votes, 4);
         assert_eq!(stats.aye_votes, 2);

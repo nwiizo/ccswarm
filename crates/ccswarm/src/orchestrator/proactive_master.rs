@@ -8,8 +8,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::agent::{AgentStatus, ClaudeCodeAgent, Priority, Task, TaskResult, TaskType};
 use crate::agent::search_agent::{SearchRequest, SearchResponse};
+use crate::agent::{AgentStatus, ClaudeCodeAgent, Priority, Task, TaskResult, TaskType};
 use crate::coordination::{AgentMessage, CoordinationBus, CoordinationType};
 
 /// Proactive Master Claude intelligence system
@@ -824,7 +824,8 @@ impl ProactiveMaster {
                 "request_search" => {
                     if let Some(query) = action.parameters.get("query") {
                         if let Some(context) = action.parameters.get("context") {
-                            self.request_search(query, context, coordination_bus).await?;
+                            self.request_search(query, context, coordination_bus)
+                                .await?;
                         }
                     }
                 }
@@ -942,17 +943,17 @@ impl ProactiveMaster {
         // Check recent agent activities and errors
         for entry in agents.iter() {
             let agent = entry.value();
-            
+
             // Check if agent is stuck and might need information
             if matches!(agent.status, AgentStatus::Working) {
                 let time_since_activity = Utc::now() - agent.last_activity;
-                
+
                 // If stuck for more than 10 minutes, suggest search
                 if time_since_activity.num_minutes() > 10 {
                     // Look at current task context
                     if let Some((current_task, _)) = agent.task_history.last() {
                         let task_desc_lower = current_task.description.to_lowercase();
-                        
+
                         // Check if task involves research or information gathering
                         for (indicator, search_prefix) in &search_indicators {
                             if task_desc_lower.contains(indicator) {
@@ -983,7 +984,8 @@ impl ProactiveMaster {
             }
 
             // Check recent failed tasks for missing information
-            let recent_failures: Vec<_> = agent.task_history
+            let recent_failures: Vec<_> = agent
+                .task_history
                 .iter()
                 .rev()
                 .take(3)
@@ -993,7 +995,7 @@ impl ProactiveMaster {
             for (failed_task, result) in recent_failures {
                 if let Some(error) = &result.error {
                     let error_lower = error.to_lowercase();
-                    
+
                     // Common error patterns that might benefit from search
                     if error_lower.contains("not found")
                         || error_lower.contains("unknown")
@@ -1013,9 +1015,18 @@ impl ProactiveMaster {
                                 action_type: "request_search".to_string(),
                                 description: format!("Search for solution to: {}", error),
                                 parameters: HashMap::from([
-                                    ("query".to_string(), format!("{} {}", failed_task.description, error)),
-                                    ("context".to_string(), format!("Error resolution for task {}", failed_task.id)),
-                                    ("requesting_agent".to_string(), agent.identity.agent_id.clone()),
+                                    (
+                                        "query".to_string(),
+                                        format!("{} {}", failed_task.description, error),
+                                    ),
+                                    (
+                                        "context".to_string(),
+                                        format!("Error resolution for task {}", failed_task.id),
+                                    ),
+                                    (
+                                        "requesting_agent".to_string(),
+                                        agent.identity.agent_id.clone(),
+                                    ),
                                 ]),
                                 expected_impact: "Find solution to resolve error".to_string(),
                             }],
@@ -1028,9 +1039,12 @@ impl ProactiveMaster {
 
         // Check project context for technology research needs
         let context = self.project_context.read().await;
-        
+
         // If in planning or setup phase, suggest research for tech stack
-        if matches!(context.current_phase, DevelopmentPhase::Planning | DevelopmentPhase::Setup) {
+        if matches!(
+            context.current_phase,
+            DevelopmentPhase::Planning | DevelopmentPhase::Setup
+        ) {
             for tech in &context.tech_stack {
                 decisions.push(ProactiveDecision {
                     decision_type: DecisionType::RequestSearch,
@@ -1039,7 +1053,7 @@ impl ProactiveMaster {
                         match context.current_phase {
                             DevelopmentPhase::Planning => "planning",
                             DevelopmentPhase::Setup => "setup",
-                            _ => "early"
+                            _ => "early",
                         },
                         tech
                     ),
@@ -1048,8 +1062,14 @@ impl ProactiveMaster {
                         action_type: "request_search".to_string(),
                         description: format!("{} best practices and setup guide", tech),
                         parameters: HashMap::from([
-                            ("query".to_string(), format!("{} best practices setup guide tutorial", tech)),
-                            ("context".to_string(), "Project setup and architecture planning".to_string()),
+                            (
+                                "query".to_string(),
+                                format!("{} best practices setup guide tutorial", tech),
+                            ),
+                            (
+                                "context".to_string(),
+                                "Project setup and architecture planning".to_string(),
+                            ),
                             ("requesting_agent".to_string(), "master-claude".to_string()),
                         ]),
                         expected_impact: "Ensure proper setup and architecture".to_string(),
@@ -1087,7 +1107,7 @@ impl ProactiveMaster {
         };
 
         coordination_bus.send_message(message).await?;
-        
+
         Ok(())
     }
 
@@ -1097,12 +1117,15 @@ impl ProactiveMaster {
         response: SearchResponse,
         coordination_bus: &CoordinationBus,
     ) -> Result<()> {
-        info!("Received search response with {} results", response.results.len());
+        info!(
+            "Received search response with {} results",
+            response.results.len()
+        );
 
         // Analyze search results and create appropriate tasks or insights
         if !response.results.is_empty() {
             let mut insights = Vec::new();
-            
+
             for (i, result) in response.results.iter().take(5).enumerate() {
                 insights.push(format!(
                     "{}. {} - {} (relevance: {:?})",
@@ -1132,7 +1155,10 @@ impl ProactiveMaster {
                 .send_message(AgentMessage::TaskGenerated {
                     task_id: review_task.id.clone(),
                     description: review_task.description.clone(),
-                    reasoning: format!("Search completed with {} relevant results", response.results.len()),
+                    reasoning: format!(
+                        "Search completed with {} relevant results",
+                        response.results.len()
+                    ),
                 })
                 .await?;
         }

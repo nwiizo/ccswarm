@@ -1436,9 +1436,54 @@ impl CliRunner {
                     println!("Agent: {}", agent_id);
                     println!("Status: {}", status["status"]);
                     println!("Updated: {}", status["timestamp"]);
+
+                    // Check if this is a backend agent and show backend-specific info
+                    if let Some(role) = status.get("role") {
+                        if role.as_str() == Some("Backend") {
+                            if let Some(backend_info) = status.get("backend_specific") {
+                                println!("\n🔧 Backend Status:");
+                                if let Some(api_health) = backend_info.get("api_health") {
+                                    println!(
+                                        "  API Health: {:.1}%",
+                                        api_health.as_f64().unwrap_or(0.0) * 100.0
+                                    );
+                                }
+                                if let Some(db) = backend_info.get("database") {
+                                    println!(
+                                        "  Database: {} ({})",
+                                        if db["is_connected"].as_bool().unwrap_or(false) {
+                                            "Connected"
+                                        } else {
+                                            "Disconnected"
+                                        },
+                                        db["database_type"].as_str().unwrap_or("Unknown")
+                                    );
+                                }
+                                if let Some(server) = backend_info.get("server") {
+                                    println!(
+                                        "  Server: {:.1}MB RAM, {:.1}% CPU",
+                                        server["memory_usage_mb"].as_f64().unwrap_or(0.0),
+                                        server["cpu_usage_percent"].as_f64().unwrap_or(0.0)
+                                    );
+                                }
+                                if let Some(services) =
+                                    backend_info.get("services").and_then(|s| s.as_array())
+                                {
+                                    println!("  Active Services: {}", services.len());
+                                }
+                                if let Some(activity) = backend_info.get("recent_activity") {
+                                    println!(
+                                        "  Recent API Calls: {}",
+                                        activity.as_u64().unwrap_or(0)
+                                    );
+                                }
+                            }
+                        }
+                    }
+
                     if detailed {
                         println!(
-                            "Details: {}",
+                            "\nDetails: {}",
                             serde_json::to_string_pretty(&status["additional_info"])?
                         );
                     }
@@ -1471,6 +1516,37 @@ impl CliRunner {
                         println!("Agent: {}", status["agent_id"]);
                         println!("  Status: {}", status["status"]);
                         println!("  Updated: {}", status["timestamp"]);
+
+                        // Show role-specific summary for backend agents
+                        if let Some(role) = status.get("role") {
+                            if role.as_str() == Some("Backend") {
+                                if let Some(backend_info) = status.get("backend_specific") {
+                                    if let Some(api_health) = backend_info.get("api_health") {
+                                        print!(
+                                            "  API Health: {:.0}% | ",
+                                            api_health.as_f64().unwrap_or(0.0) * 100.0
+                                        );
+                                    }
+                                    if let Some(db) = backend_info.get("database") {
+                                        print!(
+                                            "DB: {} | ",
+                                            if db["is_connected"].as_bool().unwrap_or(false) {
+                                                "✓"
+                                            } else {
+                                                "✗"
+                                            }
+                                        );
+                                    }
+                                    if let Some(services) =
+                                        backend_info.get("services").and_then(|s| s.as_array())
+                                    {
+                                        print!("Services: {}", services.len());
+                                    }
+                                    println!();
+                                }
+                            }
+                        }
+
                         if detailed {
                             println!(
                                 "  Details: {}",

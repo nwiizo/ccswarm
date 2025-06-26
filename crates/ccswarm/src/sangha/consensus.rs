@@ -22,7 +22,7 @@ impl Default for ConsensusConfig {
         Self {
             simple_majority_threshold: 0.51,
             super_majority_threshold: 0.67,
-            unanimous_threshold: 0.95, // Allow for small margin
+            unanimous_threshold: 0.95,   // Allow for small margin
             minimum_participation: 0.50, // At least 50% must vote
         }
     }
@@ -69,7 +69,7 @@ impl ConsensusAlgorithm for SimpleConsensus {
         }
 
         let percentages = self.calculate_vote_percentages(votes);
-        
+
         // Check for veto (if any veto exists, no consensus)
         if percentages.veto > 0.0 {
             return ConsensusResult {
@@ -78,8 +78,12 @@ impl ConsensusAlgorithm for SimpleConsensus {
                 agreement_percentage: percentages.aye,
                 metadata: [
                     ("reason".to_string(), "veto_exercised".to_string()),
-                    ("veto_percentage".to_string(), format!("{:.2}%", percentages.veto * 100.0)),
-                ].into(),
+                    (
+                        "veto_percentage".to_string(),
+                        format!("{:.2}%", percentages.veto * 100.0),
+                    ),
+                ]
+                .into(),
             };
         }
 
@@ -96,7 +100,7 @@ impl ConsensusAlgorithm for SimpleConsensus {
         }
 
         let agreement_percentage = percentages.aye / decisive_votes;
-        
+
         // Determine consensus type
         let consensus_type = if agreement_percentage >= self.config.unanimous_threshold {
             ConsensusType::Unanimous
@@ -118,11 +122,21 @@ impl ConsensusAlgorithm for SimpleConsensus {
             consensus_type: Some(consensus_type),
             agreement_percentage,
             metadata: [
-                ("aye_percentage".to_string(), format!("{:.2}%", percentages.aye * 100.0)),
-                ("nay_percentage".to_string(), format!("{:.2}%", percentages.nay * 100.0)),
-                ("abstain_percentage".to_string(), format!("{:.2}%", percentages.abstain * 100.0)),
+                (
+                    "aye_percentage".to_string(),
+                    format!("{:.2}%", percentages.aye * 100.0),
+                ),
+                (
+                    "nay_percentage".to_string(),
+                    format!("{:.2}%", percentages.nay * 100.0),
+                ),
+                (
+                    "abstain_percentage".to_string(),
+                    format!("{:.2}%", percentages.abstain * 100.0),
+                ),
                 ("total_votes".to_string(), votes.len().to_string()),
-            ].into(),
+            ]
+            .into(),
         }
     }
 
@@ -152,21 +166,22 @@ impl ConsensusAlgorithm for ByzantineConsensus {
     fn calculate_consensus(&self, votes: &[Vote]) -> ConsensusResult {
         // Byzantine consensus requires > 2/3 agreement
         let required_percentage = 2.0 / 3.0;
-        
+
         let total_weight: f64 = votes.iter().map(|v| v.weight).sum();
-        let aye_weight: f64 = votes.iter()
+        let aye_weight: f64 = votes
+            .iter()
             .filter(|v| v.choice == VoteChoice::Aye)
             .map(|v| v.weight)
             .sum();
-            
+
         let agreement_percentage = if total_weight > 0.0 {
             aye_weight / total_weight
         } else {
             0.0
         };
-        
+
         let reached = agreement_percentage > required_percentage;
-        
+
         ConsensusResult {
             reached,
             consensus_type: Some(if reached {
@@ -177,8 +192,12 @@ impl ConsensusAlgorithm for ByzantineConsensus {
             agreement_percentage,
             metadata: [
                 ("algorithm".to_string(), "byzantine".to_string()),
-                ("fault_tolerance".to_string(), format!("{:.2}%", self.fault_tolerance * 100.0)),
-            ].into(),
+                (
+                    "fault_tolerance".to_string(),
+                    format!("{:.2}%", self.fault_tolerance * 100.0),
+                ),
+            ]
+            .into(),
         }
     }
 
@@ -206,10 +225,11 @@ impl ProofOfStakeConsensus {
 impl ConsensusAlgorithm for ProofOfStakeConsensus {
     fn calculate_consensus(&self, votes: &[Vote]) -> ConsensusResult {
         // Filter votes by minimum stake (reputation)
-        let valid_votes: Vec<&Vote> = votes.iter()
+        let valid_votes: Vec<&Vote> = votes
+            .iter()
             .filter(|v| v.weight >= self.minimum_stake)
             .collect();
-            
+
         if valid_votes.is_empty() {
             return ConsensusResult {
                 reached: false,
@@ -218,16 +238,17 @@ impl ConsensusAlgorithm for ProofOfStakeConsensus {
                 metadata: [("reason".to_string(), "no_valid_stakes".to_string())].into(),
             };
         }
-        
+
         let total_stake: f64 = valid_votes.iter().map(|v| v.weight).sum();
-        let aye_stake: f64 = valid_votes.iter()
+        let aye_stake: f64 = valid_votes
+            .iter()
             .filter(|v| v.choice == VoteChoice::Aye)
             .map(|v| v.weight)
             .sum();
-            
+
         let agreement_percentage = aye_stake / total_stake;
         let reached = agreement_percentage > 0.5;
-        
+
         ConsensusResult {
             reached,
             consensus_type: Some(if reached {
@@ -240,7 +261,8 @@ impl ConsensusAlgorithm for ProofOfStakeConsensus {
                 ("algorithm".to_string(), "proof_of_stake".to_string()),
                 ("minimum_stake".to_string(), self.minimum_stake.to_string()),
                 ("valid_votes".to_string(), valid_votes.len().to_string()),
-            ].into(),
+            ]
+            .into(),
         }
     }
 
@@ -287,7 +309,7 @@ mod tests {
             create_vote(VoteChoice::Aye, 1.0),
             create_vote(VoteChoice::Aye, 1.0),
         ];
-        
+
         let result = consensus.calculate_consensus(&votes);
         assert!(result.reached);
         assert_eq!(result.consensus_type, Some(ConsensusType::Unanimous));
@@ -301,7 +323,7 @@ mod tests {
             create_vote(VoteChoice::Aye, 1.0),
             create_vote(VoteChoice::Nay, 1.0),
         ];
-        
+
         let result = consensus.calculate_consensus(&votes);
         assert!(result.reached);
         // 2/3 = 66.67% which is less than 67% threshold, so it's SimpleMajority
@@ -316,7 +338,7 @@ mod tests {
             create_vote(VoteChoice::Aye, 1.0),
             create_vote(VoteChoice::Veto, 1.0),
         ];
-        
+
         let result = consensus.calculate_consensus(&votes);
         assert!(!result.reached);
         assert_eq!(result.consensus_type, Some(ConsensusType::NoConsensus));

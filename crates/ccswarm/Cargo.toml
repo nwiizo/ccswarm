@@ -27,6 +27,10 @@ path = "demo_proactive_workflow.rs"
 name = "search_agent_sangha_demo"
 path = "examples/search_agent_sangha_demo.rs"
 
+[[example]]
+name = "backend_status_demo"
+path = "examples/backend_status_demo.rs"
+
 [dependencies]
 # Async runtime
 tokio = { version = "1.40", features = ["full"] }

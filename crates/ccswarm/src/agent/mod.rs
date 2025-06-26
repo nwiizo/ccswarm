@@ -1,3 +1,4 @@
+pub mod backend_status;
 pub mod claude;
 pub mod interleaved_thinking;
 pub mod isolation;
@@ -19,6 +20,7 @@ use std::path::PathBuf;
 use tokio::process::Command;
 use uuid::Uuid;
 
+pub use backend_status::{BackendStatus, BackendStatusExt};
 pub use isolation::{IsolationConfig, IsolationMode};
 pub use personality::{AgentPersonality, PersonalityTraits, Skill, TaskApproach, WorkingStyle};
 pub use phronesis::{LearningEventType, PhronesisManager, PracticalWisdom, WisdomCategory};

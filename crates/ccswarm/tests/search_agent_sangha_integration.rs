@@ -3,10 +3,8 @@
 use anyhow::Result;
 use ccswarm::agent::search_agent::SearchAgent;
 use ccswarm::coordination::CoordinationBus;
-use ccswarm::sangha::{
-    Proposal, ProposalStatus, ProposalType, Sangha, SanghaConfig, SanghaMember,
-};
 use ccswarm::identity::AgentRole;
+use ccswarm::sangha::{Proposal, ProposalStatus, ProposalType, Sangha, SanghaConfig, SanghaMember};
 use chrono::Utc;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -29,7 +27,7 @@ async fn test_search_agent_sangha_participation() -> Result<()> {
 
     // Create and initialize search agent
     let mut search_agent = SearchAgent::new("search-agent-1".to_string(), coordination_bus.clone());
-    
+
     // Skip gemini CLI verification for test
     // search_agent.initialize().await?;
 

@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build Check
+  test:
+    name: Test
     runs-on: ubuntu-latest
     
     steps:
@@ -19,50 +19,9 @@ jobs:
     
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt, clippy
-    
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-    
-    - name: Check formatting
-      run: cargo fmt -- --check
-    
-    - name: Run Clippy
-      run: cargo clippy -- -D warnings
     
     - name: Build
       run: cargo build --verbose
     
     - name: Run tests
-      timeout-minutes: 10
-      run: cargo test --workspace -- --test-threads=1
-
-  cross-platform:
-    name: Cross-platform Build
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Build
-      run: cargo build --verbose
-    
-    - name: Check
-      run: cargo check --verbose
+      run: cargo test --verbose

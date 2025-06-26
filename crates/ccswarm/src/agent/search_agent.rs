@@ -87,7 +87,13 @@ pub struct SearchAgent {
     /// Path to gemini CLI (defaults to "gemini" in PATH)
     gemini_path: String,
     /// Optional Sangha participant for autonomous decision-making
-    sangha_participant: Option<Arc<tokio::sync::Mutex<Box<dyn crate::sangha::search_agent_participant::SanghaParticipant + Send>>>>,
+    sangha_participant: Option<
+        Arc<
+            tokio::sync::Mutex<
+                Box<dyn crate::sangha::search_agent_participant::SanghaParticipant + Send>,
+            >,
+        >,
+    >,
 }
 
 impl SearchAgent {
@@ -133,7 +139,7 @@ impl SearchAgent {
         if let Some(participant) = &self.sangha_participant {
             let participant_clone = participant.clone();
             let sangha_clone = sangha.clone();
-            
+
             // Spawn background task for monitoring
             tokio::spawn(async move {
                 let mut participant = participant_clone.lock().await;
@@ -141,12 +147,18 @@ impl SearchAgent {
                     error!("Sangha monitoring error: {}", e);
                 }
             });
-            
-            info!("Started Sangha monitoring for search agent {}", self.agent_id);
+
+            info!(
+                "Started Sangha monitoring for search agent {}",
+                self.agent_id
+            );
         } else {
-            warn!("Sangha participation not enabled for search agent {}", self.agent_id);
+            warn!(
+                "Sangha participation not enabled for search agent {}",
+                self.agent_id
+            );
         }
-        
+
         Ok(())
     }
 

@@ -76,18 +76,18 @@ impl DoctrineManager {
             doctrines: Arc::new(RwLock::new(HashMap::new())),
             categories: Arc::new(RwLock::new(HashMap::new())),
         };
-        
+
         // Initialize with core principles
         // Note: We're not initializing in the constructor to avoid ownership issues
         // Call initialize_core_principles() separately after creation
-        
+
         manager
     }
 
     /// Initialize core principles
     pub async fn initialize_core_principles(&self) -> Result<()> {
         let principles = CorePrinciples::default();
-        
+
         // Agent Autonomy
         self.add_doctrine(Doctrine {
             id: Uuid::new_v4(),
@@ -102,15 +102,15 @@ impl DoctrineManager {
             status: DoctrineStatus::Active,
             precedence: 100,
             related_doctrines: vec![],
-            examples: vec![
-                DoctrineExample {
-                    description: "Frontend agent making UI decisions".to_string(),
-                    scenario: "Choosing between React components".to_string(),
-                    correct_application: "Frontend agent independently selects appropriate component".to_string(),
-                    incorrect_application: Some("Backend agent dictating UI choices".to_string()),
-                }
-            ],
-        }).await?;
+            examples: vec![DoctrineExample {
+                description: "Frontend agent making UI decisions".to_string(),
+                scenario: "Choosing between React components".to_string(),
+                correct_application: "Frontend agent independently selects appropriate component"
+                    .to_string(),
+                incorrect_application: Some("Backend agent dictating UI choices".to_string()),
+            }],
+        })
+        .await?;
 
         // Collective Benefit
         self.add_doctrine(Doctrine {
@@ -127,7 +127,8 @@ impl DoctrineManager {
             precedence: 100,
             related_doctrines: vec![],
             examples: vec![],
-        }).await?;
+        })
+        .await?;
 
         Ok(())
     }
@@ -136,45 +137,46 @@ impl DoctrineManager {
     pub async fn add_doctrine(&self, doctrine: Doctrine) -> Result<()> {
         let mut doctrines = self.doctrines.write().await;
         let mut categories = self.categories.write().await;
-        
-        categories.entry(doctrine.category)
+
+        categories
+            .entry(doctrine.category)
             .or_insert_with(Vec::new)
             .push(doctrine.id);
-            
+
         doctrines.insert(doctrine.id, doctrine);
-        
+
         Ok(())
     }
 
     /// Update an existing doctrine
     pub async fn update_doctrine(&self, id: Uuid, updates: DoctrineUpdate) -> Result<()> {
         let mut doctrines = self.doctrines.write().await;
-        
-        let doctrine = doctrines.get_mut(&id)
-            .context("Doctrine not found")?;
-            
+
+        let doctrine = doctrines.get_mut(&id).context("Doctrine not found")?;
+
         if let Some(content) = updates.content {
             doctrine.content = content;
         }
-        
+
         if let Some(rationale) = updates.rationale {
             doctrine.rationale = rationale;
         }
-        
+
         if let Some(examples) = updates.examples {
             doctrine.examples = examples;
         }
-        
+
         doctrine.updated_at = Utc::now();
         doctrine.version += 1;
-        
+
         Ok(())
     }
 
     /// Get all active doctrines
     pub async fn get_active_doctrines(&self) -> Vec<Doctrine> {
         let doctrines = self.doctrines.read().await;
-        doctrines.values()
+        doctrines
+            .values()
             .filter(|d| d.status == DoctrineStatus::Active)
             .cloned()
             .collect()
@@ -184,7 +186,7 @@ impl DoctrineManager {
     pub async fn get_by_category(&self, category: DoctrineCategory) -> Vec<Doctrine> {
         let categories = self.categories.read().await;
         let doctrines = self.doctrines.read().await;
-        
+
         if let Some(ids) = categories.get(&category) {
             ids.iter()
                 .filter_map(|id| doctrines.get(id))
@@ -201,7 +203,7 @@ impl DoctrineManager {
         let doctrines = self.get_active_doctrines().await;
         let mut violations = Vec::new();
         let mut warnings = Vec::new();
-        
+
         for doctrine in &doctrines {
             let check = self.check_doctrine_compliance(&doctrine, action);
             match check {
@@ -210,7 +212,7 @@ impl DoctrineManager {
                 ComplianceCheck::Violation(msg) => violations.push(msg),
             }
         }
-        
+
         ComplianceResult {
             compliant: violations.is_empty(),
             violations,
@@ -219,7 +221,11 @@ impl DoctrineManager {
     }
 
     /// Check compliance with a specific doctrine
-    fn check_doctrine_compliance(&self, _doctrine: &Doctrine, _action: &ProposedAction) -> ComplianceCheck {
+    fn check_doctrine_compliance(
+        &self,
+        _doctrine: &Doctrine,
+        _action: &ProposedAction,
+    ) -> ComplianceCheck {
         // This would contain actual compliance logic
         // For now, return compliant
         ComplianceCheck::Compliant
@@ -234,13 +240,12 @@ impl DoctrineManager {
     /// Deprecate a doctrine
     pub async fn deprecate_doctrine(&self, id: Uuid, _reason: String) -> Result<()> {
         let mut doctrines = self.doctrines.write().await;
-        
-        let doctrine = doctrines.get_mut(&id)
-            .context("Doctrine not found")?;
-            
+
+        let doctrine = doctrines.get_mut(&id).context("Doctrine not found")?;
+
         doctrine.status = DoctrineStatus::Deprecated;
         doctrine.updated_at = Utc::now();
-        
+
         Ok(())
     }
 }
@@ -331,7 +336,7 @@ mod tests {
     #[tokio::test]
     async fn test_doctrine_manager() {
         let manager = DoctrineManager::new();
-        
+
         let doctrine = Doctrine {
             id: Uuid::new_v4(),
             category: DoctrineCategory::OperationalGuideline,
@@ -347,13 +352,15 @@ mod tests {
             related_doctrines: vec![],
             examples: vec![],
         };
-        
+
         manager.add_doctrine(doctrine.clone()).await.unwrap();
-        
+
         let active = manager.get_active_doctrines().await;
         assert!(!active.is_empty());
-        
-        let by_category = manager.get_by_category(DoctrineCategory::OperationalGuideline).await;
+
+        let by_category = manager
+            .get_by_category(DoctrineCategory::OperationalGuideline)
+            .await;
         assert!(!by_category.is_empty());
     }
 }

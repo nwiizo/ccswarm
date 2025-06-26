@@ -60,7 +60,7 @@ impl ProposalBuilder {
     pub fn build(self) -> Proposal {
         let now = Utc::now();
         let voting_duration = self.voting_duration_secs.unwrap_or(300); // 5 minutes default
-        
+
         Proposal {
             id: Uuid::new_v4(),
             proposal_type: self.proposal_type,
@@ -228,7 +228,7 @@ impl Proposal {
             .required_consensus(ConsensusType::SimpleMajority)
             .data(serde_json::to_value(data)?)
             .build();
-            
+
         Ok(proposal)
     }
 
@@ -247,16 +247,12 @@ impl Proposal {
             .voting_duration(600) // 10 minutes for system changes
             .data(serde_json::to_value(data)?)
             .build();
-            
+
         Ok(proposal)
     }
 
     /// Create a doctrine proposal
-    pub fn doctrine(
-        title: String,
-        proposer: String,
-        data: DoctrineProposalData,
-    ) -> Result<Self> {
+    pub fn doctrine(title: String, proposer: String, data: DoctrineProposalData) -> Result<Self> {
         let proposal = ProposalBuilder::new(title, proposer, ProposalType::Doctrine)
             .description(format!(
                 "Doctrine change in {:?}: {}",
@@ -269,7 +265,7 @@ impl Proposal {
             })
             .data(serde_json::to_value(data)?)
             .build();
-            
+
         Ok(proposal)
     }
 
@@ -288,17 +284,20 @@ impl Proposal {
         if self.status != ProposalStatus::Draft {
             anyhow::bail!("Can only start voting on draft proposals");
         }
-        
+
         self.status = ProposalStatus::Voting;
         Ok(())
     }
 
     /// Cancel the proposal
     pub fn withdraw(&mut self) -> Result<()> {
-        if matches!(self.status, ProposalStatus::Passed | ProposalStatus::Rejected) {
+        if matches!(
+            self.status,
+            ProposalStatus::Passed | ProposalStatus::Rejected
+        ) {
             anyhow::bail!("Cannot withdraw completed proposals");
         }
-        
+
         self.status = ProposalStatus::Withdrawn;
         Ok(())
     }
@@ -319,11 +318,11 @@ impl ProposalManager {
     /// Submit a new proposal
     pub async fn submit(&self, mut proposal: Proposal) -> Result<Uuid> {
         proposal.start_voting()?;
-        
+
         let mut proposals = self.proposals.write().await;
         let id = proposal.id;
         proposals.insert(id, proposal);
-        
+
         Ok(id)
     }
 
@@ -336,7 +335,8 @@ impl ProposalManager {
     /// Get all active proposals
     pub async fn get_active(&self) -> Vec<Proposal> {
         let proposals = self.proposals.read().await;
-        proposals.values()
+        proposals
+            .values()
             .filter(|p| p.is_active())
             .cloned()
             .collect()
@@ -346,14 +346,14 @@ impl ProposalManager {
     pub async fn update_expired(&self) -> Result<Vec<Uuid>> {
         let mut proposals = self.proposals.write().await;
         let mut expired = Vec::new();
-        
+
         for (id, proposal) in proposals.iter_mut() {
             if proposal.status == ProposalStatus::Voting && proposal.is_expired() {
                 proposal.status = ProposalStatus::Expired;
                 expired.push(*id);
             }
         }
-        
+
         Ok(expired)
     }
 }
@@ -373,7 +373,7 @@ mod tests {
         .required_consensus(ConsensusType::SuperMajority)
         .voting_duration(600)
         .build();
-        
+
         assert_eq!(proposal.title, "Test Proposal");
         assert_eq!(proposal.proposer, "test-agent");
         assert_eq!(proposal.required_consensus, ConsensusType::SuperMajority);
@@ -397,13 +397,14 @@ mod tests {
             },
             success_criteria: vec!["Performance improvement".to_string()],
         };
-        
+
         let proposal = Proposal::agent_extension(
             "Add RSC support".to_string(),
             "frontend-agent".to_string(),
             data,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert_eq!(proposal.proposal_type, ProposalType::AgentExtension);
         assert_eq!(proposal.required_consensus, ConsensusType::SimpleMajority);
     }

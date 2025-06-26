@@ -6,7 +6,7 @@ pub mod proactive_master;
 
 // Re-export commonly used types
 pub use master_delegation::{DelegationDecision, DelegationStrategy, MasterDelegationEngine};
-pub use proactive_master::{ProactiveMaster, ProactiveDecision, DecisionType};
+pub use proactive_master::{DecisionType, ProactiveDecision, ProactiveMaster};
 
 #[cfg(test)]
 mod edge_case_tests;
@@ -388,18 +388,33 @@ impl MasterClaude {
 
         // Check if task needs search assistance
         let search_keywords = vec![
-            "research", "find information", "look up", "best practices",
-            "documentation", "examples", "how to", "comparison", "compare",
-            "alternatives", "investigate", "unclear", "unknown"
+            "research",
+            "find information",
+            "look up",
+            "best practices",
+            "documentation",
+            "examples",
+            "how to",
+            "comparison",
+            "compare",
+            "alternatives",
+            "investigate",
+            "unclear",
+            "unknown",
         ];
-        
+
         let task_desc_lower = task.description.to_lowercase();
-        let needs_search = search_keywords.iter().any(|&keyword| task_desc_lower.contains(keyword));
-        
+        let needs_search = search_keywords
+            .iter()
+            .any(|&keyword| task_desc_lower.contains(keyword));
+
         if needs_search && task.task_type != TaskType::Research {
             // Create a search request for this task
-            info!("Task '{}' appears to need search assistance", task.description);
-            
+            info!(
+                "Task '{}' appears to need search assistance",
+                task.description
+            );
+
             let search_request = crate::agent::search_agent::SearchRequest {
                 requesting_agent: "master-claude".to_string(),
                 query: task.description.clone(),
@@ -407,14 +422,14 @@ impl MasterClaude {
                 filters: None,
                 context: Some(format!("Supporting task: {}", task.id)),
             };
-            
+
             let message = AgentMessage::Coordination {
                 from_agent: "master-claude".to_string(),
                 to_agent: "search".to_string(),
                 message_type: CoordinationType::Custom("search_request".to_string()),
                 payload: serde_json::to_value(search_request)?,
             };
-            
+
             self.coordination_bus.send_message(message).await?;
         }
 
@@ -1090,16 +1105,24 @@ impl MasterClaude {
                 match message_type {
                     CoordinationType::Custom(msg_type) if msg_type == "search_response" => {
                         // Handle search response
-                        if let Ok(search_response) = serde_json::from_value::<crate::agent::search_agent::SearchResponse>(payload) {
-                            info!("Master Claude received search response with {} results", search_response.results.len());
-                            
+                        if let Ok(search_response) = serde_json::from_value::<
+                            crate::agent::search_agent::SearchResponse,
+                        >(payload)
+                        {
+                            info!(
+                                "Master Claude received search response with {} results",
+                                search_response.results.len()
+                            );
+
                             // Process search results to enhance task context
-                            let insights = search_response.results.iter()
+                            let insights = search_response
+                                .results
+                                .iter()
                                 .take(3)
                                 .map(|r| format!("- {}: {}", r.title, r.snippet))
                                 .collect::<Vec<_>>()
                                 .join("\n");
-                            
+
                             // Create a task to review and apply findings
                             let review_task = Task::new(
                                 format!("review-search-{}", Uuid::new_v4()),
@@ -1113,7 +1136,7 @@ impl MasterClaude {
                                 insights
                             ))
                             .with_duration(900); // 15 minutes
-                            
+
                             if let Err(e) = task_queue_tx.send(review_task).await {
                                 error!("Failed to queue search review task: {}", e);
                             }

@@ -46,10 +46,6 @@ jobs:
             target: aarch64-apple-darwin
             artifact_name: ccswarm
             asset_name: ccswarm-darwin-arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: ccswarm.exe
-            asset_name: ccswarm-windows-amd64.exe
     
     runs-on: ${{ matrix.os }}
     

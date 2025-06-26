@@ -1,9 +1,9 @@
 //! Session management for Sangha meetings
 
 use super::*;
+use chrono::{DateTime, Duration, Utc};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use chrono::{DateTime, Duration, Utc};
 
 /// Manages Sangha sessions (meetings)
 #[derive(Debug)]
@@ -146,8 +146,7 @@ impl SessionManager {
         }
 
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&session_id)
-            .context("Session not found")?;
+        let session = sessions.get_mut(&session_id).context("Session not found")?;
 
         if session.status != SessionStatus::Scheduled {
             anyhow::bail!("Session is not in scheduled state");
@@ -163,12 +162,10 @@ impl SessionManager {
     /// End the current session
     pub async fn end_session(&self) -> Result<()> {
         let mut active = self.active_session.lock().await;
-        let session_id = active.take()
-            .context("No active session")?;
+        let session_id = active.take().context("No active session")?;
 
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&session_id)
-            .context("Session not found")?;
+        let session = sessions.get_mut(&session_id).context("Session not found")?;
 
         session.status = SessionStatus::Completed;
         session.ended_at = Some(Utc::now());
@@ -179,12 +176,10 @@ impl SessionManager {
     /// Add a participant to the current session
     pub async fn add_participant(&self, agent_id: String) -> Result<()> {
         let active = self.active_session.lock().await;
-        let session_id = active.as_ref()
-            .context("No active session")?;
+        let session_id = active.as_ref().context("No active session")?;
 
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(session_id)
-            .context("Session not found")?;
+        let session = sessions.get_mut(session_id).context("Session not found")?;
 
         if !session.participants.contains(&agent_id) {
             session.participants.push(agent_id);
@@ -196,12 +191,10 @@ impl SessionManager {
     /// Remove a participant from the current session
     pub async fn remove_participant(&self, agent_id: &str) -> Result<()> {
         let active = self.active_session.lock().await;
-        let session_id = active.as_ref()
-            .context("No active session")?;
+        let session_id = active.as_ref().context("No active session")?;
 
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(session_id)
-            .context("Session not found")?;
+        let session = sessions.get_mut(session_id).context("Session not found")?;
 
         session.participants.retain(|id| id != agent_id);
 
@@ -215,12 +208,10 @@ impl SessionManager {
         status: AgendaItemStatus,
     ) -> Result<()> {
         let active = self.active_session.lock().await;
-        let session_id = active.as_ref()
-            .context("No active session")?;
+        let session_id = active.as_ref().context("No active session")?;
 
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(session_id)
-            .context("Session not found")?;
+        let session = sessions.get_mut(session_id).context("Session not found")?;
 
         for item in &mut session.agenda {
             if item.id == item_id {
@@ -235,12 +226,10 @@ impl SessionManager {
     /// Record a decision made during the session
     pub async fn record_decision(&self, decision: Decision) -> Result<()> {
         let active = self.active_session.lock().await;
-        let session_id = active.as_ref()
-            .context("No active session")?;
+        let session_id = active.as_ref().context("No active session")?;
 
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(session_id)
-            .context("Session not found")?;
+        let session = sessions.get_mut(session_id).context("Session not found")?;
 
         session.decisions.push(decision);
 
@@ -267,7 +256,8 @@ impl SessionManager {
     /// Get sessions by type
     pub async fn get_sessions_by_type(&self, session_type: SessionType) -> Vec<Session> {
         let sessions = self.sessions.read().await;
-        sessions.values()
+        sessions
+            .values()
             .filter(|s| s.session_type == session_type)
             .cloned()
             .collect()
@@ -279,7 +269,8 @@ impl SessionManager {
         reason: String,
         proposals: Vec<Uuid>,
     ) -> Result<Uuid> {
-        let agenda: Vec<AgendaItem> = proposals.into_iter()
+        let agenda: Vec<AgendaItem> = proposals
+            .into_iter()
             .map(|proposal_id| AgendaItem {
                 id: Uuid::new_v4(),
                 title: format!("Emergency Review: Proposal {}", proposal_id),
@@ -293,7 +284,7 @@ impl SessionManager {
             .collect();
 
         let session_id = self.create_session(SessionType::Emergency, agenda).await?;
-        
+
         // Automatically start emergency sessions
         self.start_session(session_id).await?;
 
@@ -303,8 +294,7 @@ impl SessionManager {
     /// Get session transcript
     pub async fn get_session_transcript(&self, session_id: Uuid) -> Result<SessionTranscript> {
         let sessions = self.sessions.read().await;
-        let session = sessions.get(&session_id)
-            .context("Session not found")?;
+        let session = sessions.get(&session_id).context("Session not found")?;
 
         Ok(SessionTranscript {
             session_id,
@@ -390,15 +380,16 @@ impl SessionScheduler {
     pub async fn get_upcoming(&self, limit: usize) -> Vec<ScheduledSession> {
         let schedule = self.schedule.read().await;
         let now = Utc::now();
-        
-        let mut upcoming: Vec<_> = schedule.iter()
+
+        let mut upcoming: Vec<_> = schedule
+            .iter()
             .filter(|s| s.scheduled_for > now)
             .cloned()
             .collect();
-            
+
         upcoming.sort_by_key(|s| s.scheduled_for);
         upcoming.truncate(limit);
-        
+
         upcoming
     }
 }
@@ -410,35 +401,39 @@ mod tests {
     #[tokio::test]
     async fn test_session_lifecycle() {
         let manager = SessionManager::new();
-        
-        let agenda = vec![
-            AgendaItem {
-                id: Uuid::new_v4(),
-                title: "Test Item".to_string(),
-                description: "Test description".to_string(),
-                item_type: AgendaItemType::ProposalDiscussion,
-                proposal_id: None,
-                presenter: "test-agent".to_string(),
-                time_allocated: Duration::minutes(10),
-                status: AgendaItemStatus::Pending,
-            }
-        ];
-        
-        let session_id = manager.create_session(SessionType::Regular, agenda).await.unwrap();
-        
+
+        let agenda = vec![AgendaItem {
+            id: Uuid::new_v4(),
+            title: "Test Item".to_string(),
+            description: "Test description".to_string(),
+            item_type: AgendaItemType::ProposalDiscussion,
+            proposal_id: None,
+            presenter: "test-agent".to_string(),
+            time_allocated: Duration::minutes(10),
+            status: AgendaItemStatus::Pending,
+        }];
+
+        let session_id = manager
+            .create_session(SessionType::Regular, agenda)
+            .await
+            .unwrap();
+
         // Start session
         manager.start_session(session_id).await.unwrap();
-        
+
         // Add participant
-        manager.add_participant("test-agent".to_string()).await.unwrap();
-        
+        manager
+            .add_participant("test-agent".to_string())
+            .await
+            .unwrap();
+
         // Get active session
         let active = manager.get_active_session().await;
         assert!(active.is_some());
-        
+
         // End session
         manager.end_session().await.unwrap();
-        
+
         // Verify no active session
         let active = manager.get_active_session().await;
         assert!(active.is_none());

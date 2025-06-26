@@ -13,9 +13,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use super::{
-    ConsensusType, Proposal, ProposalStatus, ProposalType, Sangha, Vote, VoteChoice,
-};
+use super::{ConsensusType, Proposal, ProposalStatus, ProposalType, Sangha, Vote, VoteChoice};
 use crate::agent::search_agent::{SearchAgent, SearchFilters, SearchRequest, SearchResult};
 use crate::coordination::CoordinationBus;
 use crate::identity::AgentRole;
@@ -231,7 +229,11 @@ impl SearchAgentSanghaParticipant {
         for word in &words {
             if word.chars().all(|c| c.is_uppercase()) && word.len() > 2 {
                 terms.push(word.to_string());
-            } else if word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+            } else if word
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
                 && word.len() > 4
             {
                 terms.push(word.to_string());
@@ -240,8 +242,16 @@ impl SearchAgentSanghaParticipant {
 
         // Look for compound terms
         for window in words.windows(2) {
-            if window[0].chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
-                && window[1].chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+            if window[0]
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+                && window[1]
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
             {
                 terms.push(format!("{} {}", window[0], window[1]));
             }
@@ -415,7 +425,13 @@ impl SearchAgentSanghaParticipant {
         let findings: Vec<String> = results
             .iter()
             .take(5)
-            .map(|r| format!("{}: {}", r.title, r.snippet.chars().take(150).collect::<String>()))
+            .map(|r| {
+                format!(
+                    "{}: {}",
+                    r.title,
+                    r.snippet.chars().take(150).collect::<String>()
+                )
+            })
             .collect();
 
         let sources: Vec<String> = results.iter().take(5).map(|r| r.url.clone()).collect();
@@ -536,7 +552,10 @@ impl SanghaParticipant for SearchAgentSanghaParticipant {
                     .collect::<Vec<_>>()
             };
 
-            info!("Found {} active proposals to research", active_proposals.len());
+            info!(
+                "Found {} active proposals to research",
+                active_proposals.len()
+            );
 
             // Research each proposal
             for proposal in active_proposals {
@@ -689,14 +708,18 @@ impl SanghaParticipant for SearchAgentSanghaParticipant {
                 NeedType::PerformanceOptimization => ProposalType::SystemExtension,
                 NeedType::SecurityEnhancement => ProposalType::Emergency,
             },
-            title: format!("Address {}: {}", match need.need_type {
-                NeedType::KnowledgeGap => "Knowledge Gap",
-                NeedType::CapabilityGap => "Capability Gap",
-                NeedType::ProcessImprovement => "Process Improvement",
-                NeedType::TechnicalDebt => "Technical Debt",
-                NeedType::PerformanceOptimization => "Performance Issue",
-                NeedType::SecurityEnhancement => "Security Gap",
-            }, need.description.chars().take(50).collect::<String>()),
+            title: format!(
+                "Address {}: {}",
+                match need.need_type {
+                    NeedType::KnowledgeGap => "Knowledge Gap",
+                    NeedType::CapabilityGap => "Capability Gap",
+                    NeedType::ProcessImprovement => "Process Improvement",
+                    NeedType::TechnicalDebt => "Technical Debt",
+                    NeedType::PerformanceOptimization => "Performance Issue",
+                    NeedType::SecurityEnhancement => "Security Gap",
+                },
+                need.description.chars().take(50).collect::<String>()
+            ),
             description: need.description,
             proposer: self.agent_id().to_string(),
             created_at: Utc::now(),
@@ -730,7 +753,10 @@ pub fn create_search_agent_participant(
     agent_id: String,
     coordination_bus: Arc<CoordinationBus>,
 ) -> Box<dyn SanghaParticipant> {
-    Box::new(SearchAgentSanghaParticipant::new(agent_id, coordination_bus))
+    Box::new(SearchAgentSanghaParticipant::new(
+        agent_id,
+        coordination_bus,
+    ))
 }
 
 #[cfg(test)]
@@ -740,10 +766,8 @@ mod tests {
     #[tokio::test]
     async fn test_extract_key_terms() {
         let coordination_bus = Arc::new(CoordinationBus::new().await.unwrap());
-        let participant = SearchAgentSanghaParticipant::new(
-            "test-search".to_string(),
-            coordination_bus,
-        );
+        let participant =
+            SearchAgentSanghaParticipant::new("test-search".to_string(), coordination_bus);
 
         let text = "Implement React Hooks API for Frontend Development";
         let terms = participant.extract_key_terms(text);
@@ -758,10 +782,8 @@ mod tests {
     #[tokio::test]
     async fn test_voting_decision_logic() {
         let coordination_bus = Arc::new(CoordinationBus::new().await.unwrap());
-        let participant = SearchAgentSanghaParticipant::new(
-            "test-search".to_string(),
-            coordination_bus,
-        );
+        let participant =
+            SearchAgentSanghaParticipant::new("test-search".to_string(), coordination_bus);
 
         // Test with positive results
         let positive_results = vec![

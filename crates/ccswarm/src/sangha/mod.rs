@@ -1,5 +1,5 @@
 //! Sangha - Collective decision-making mechanism for agents
-//! 
+//!
 //! This module implements the Sangha system, which enables agents to make
 //! collective decisions through consensus mechanisms inspired by Buddhist
 //! philosophical principles.
@@ -9,8 +9,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tokio::fs;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 pub mod consensus;
@@ -94,10 +94,10 @@ pub struct SanghaMember {
 pub trait ConsensusAlgorithm: Send + Sync + std::fmt::Debug {
     /// Calculate consensus based on votes
     fn calculate_consensus(&self, votes: &[Vote]) -> ConsensusResult;
-    
+
     /// Validate a proposal before voting
     fn validate_proposal(&self, proposal: &Proposal) -> Result<()>;
-    
+
     /// Get the algorithm name
     fn name(&self) -> &str;
 }
@@ -224,7 +224,7 @@ impl Sangha {
     pub fn new(config: SanghaConfig) -> Result<Self> {
         let storage_path = std::path::PathBuf::from("sangha_storage");
         std::fs::create_dir_all(&storage_path)?;
-        
+
         Ok(Self {
             id: Uuid::new_v4(),
             members: Arc::new(RwLock::new(HashMap::new())),
@@ -254,67 +254,79 @@ impl Sangha {
     /// Submit a new proposal
     pub async fn submit_proposal(&self, proposal: Proposal) -> Result<Uuid> {
         // Validate proposal
-        self.consensus.validate_proposal(&proposal)
+        self.consensus
+            .validate_proposal(&proposal)
             .context("Failed to validate proposal")?;
 
         let mut proposals = self.proposals.write().await;
-        
+
         // Check if we've reached max proposals
-        let active_count = proposals.values()
+        let active_count = proposals
+            .values()
             .filter(|p| matches!(p.status, ProposalStatus::Voting | ProposalStatus::Draft))
             .count();
-            
+
         if active_count >= self.config.max_active_proposals {
             anyhow::bail!("Maximum number of active proposals reached");
         }
 
         let proposal_id = proposal.id;
         proposals.insert(proposal_id, proposal);
-        
+
         Ok(proposal_id)
     }
 
     /// Cast a vote on a proposal
     pub async fn cast_vote(&self, mut vote: Vote) -> Result<()> {
         let proposals = self.proposals.read().await;
-        let proposal = proposals.get(&vote.proposal_id)
+        let proposal = proposals
+            .get(&vote.proposal_id)
             .context("Proposal not found")?;
-            
+
         if proposal.status != ProposalStatus::Voting {
             anyhow::bail!("Proposal is not open for voting");
         }
-        
+
         if proposal.voting_deadline < Utc::now() {
             anyhow::bail!("Voting deadline has passed");
         }
-        
+
         // Update vote weight based on voter
         vote.weight = self.get_voting_weight(&vote.voter_id).await;
-        
+
         // Store vote in memory
         let mut votes = self.votes.write().await;
-        votes.entry(vote.proposal_id)
+        votes
+            .entry(vote.proposal_id)
             .or_insert_with(Vec::new)
             .push(vote.clone());
-        
+
         // Persist vote to disk
         self.persist_vote(&vote).await?;
-        
-        tracing::info!("Vote cast by {} for proposal {}: {:?}", vote.voter_id, vote.proposal_id, vote.choice);
-        
+
+        tracing::info!(
+            "Vote cast by {} for proposal {}: {:?}",
+            vote.voter_id,
+            vote.proposal_id,
+            vote.choice
+        );
+
         Ok(())
     }
 
     /// Calculate consensus for a proposal
     pub async fn calculate_consensus(&self, proposal_id: Uuid) -> Result<ConsensusResult> {
         // Get all votes for the proposal
-        let votes = self.votes.read().await
+        let votes = self
+            .votes
+            .read()
+            .await
             .get(&proposal_id)
             .cloned()
             .unwrap_or_default();
-        
+
         let result = self.consensus.calculate_consensus(&votes);
-        
+
         // Update proposal status based on result
         let mut proposals = self.proposals.write().await;
         if let Some(proposal) = proposals.get_mut(&proposal_id) {
@@ -324,7 +336,7 @@ impl Sangha {
                 ProposalStatus::Rejected
             };
         }
-        
+
         Ok(result)
     }
 
@@ -334,7 +346,10 @@ impl Sangha {
         let members = self.members.read().await;
         if let Some(member) = members.get(voter_id) {
             match &member.role {
-                AgentRole::Frontend { .. } | AgentRole::Backend { .. } | AgentRole::DevOps { .. } | AgentRole::QA { .. } => 1.0,
+                AgentRole::Frontend { .. }
+                | AgentRole::Backend { .. }
+                | AgentRole::DevOps { .. }
+                | AgentRole::QA { .. } => 1.0,
                 AgentRole::Master { .. } => 1.2, // Master has slightly higher weight
                 AgentRole::Search { .. } => 0.8, // Search agent has slightly lower weight
             }
@@ -345,7 +360,9 @@ impl Sangha {
 
     /// Persist vote to disk
     async fn persist_vote(&self, vote: &Vote) -> Result<()> {
-        let vote_file = self.storage_path.join(format!("vote_{}.json", Uuid::new_v4()));
+        let vote_file = self
+            .storage_path
+            .join(format!("vote_{}.json", Uuid::new_v4()));
         let vote_json = serde_json::to_string_pretty(vote)?;
         fs::write(vote_file, vote_json).await?;
         Ok(())
@@ -354,7 +371,7 @@ impl Sangha {
     /// Load all votes from disk
     pub async fn load_votes(&self) -> Result<()> {
         let mut votes = self.votes.write().await;
-        
+
         let mut entries = fs::read_dir(&self.storage_path).await?;
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
@@ -363,7 +380,8 @@ impl Sangha {
                     if file_name.starts_with("vote_") {
                         if let Ok(content) = fs::read_to_string(&path).await {
                             if let Ok(vote) = serde_json::from_str::<Vote>(&content) {
-                                votes.entry(vote.proposal_id)
+                                votes
+                                    .entry(vote.proposal_id)
                                     .or_insert_with(Vec::new)
                                     .push(vote);
                             }
@@ -372,14 +390,16 @@ impl Sangha {
                 }
             }
         }
-        
+
         tracing::info!("Loaded {} proposal vote sets from storage", votes.len());
         Ok(())
     }
 
     /// Get all votes for a proposal
     pub async fn get_votes(&self, proposal_id: Uuid) -> Vec<Vote> {
-        self.votes.read().await
+        self.votes
+            .read()
+            .await
             .get(&proposal_id)
             .cloned()
             .unwrap_or_default()
@@ -389,7 +409,7 @@ impl Sangha {
     pub async fn get_vote_stats(&self, proposal_id: Uuid) -> VoteStats {
         let votes = self.get_votes(proposal_id).await;
         let mut stats = VoteStats::default();
-        
+
         for vote in votes {
             match vote.choice {
                 VoteChoice::Aye => stats.aye += 1,
@@ -399,7 +419,7 @@ impl Sangha {
             }
             stats.total_weight += vote.weight;
         }
-        
+
         stats.total = stats.aye + stats.nay + stats.abstain + stats.veto;
         stats
     }
@@ -408,12 +428,13 @@ impl Sangha {
     pub async fn get_stats(&self) -> SanghaStats {
         let members = self.members.read().await;
         let proposals = self.proposals.read().await;
-        
+
         SanghaStats {
             total_members: members.len(),
             active_members: members.values().filter(|m| m.is_active).count(),
             total_proposals: proposals.len(),
-            active_proposals: proposals.values()
+            active_proposals: proposals
+                .values()
                 .filter(|p| matches!(p.status, ProposalStatus::Voting | ProposalStatus::Draft))
                 .count(),
             consensus_algorithm: self.consensus.name().to_string(),
@@ -450,7 +471,7 @@ mod tests {
     async fn test_sangha_creation() {
         let config = SanghaConfig::default();
         let sangha = Sangha::new(config).unwrap();
-        
+
         let stats = sangha.get_stats().await;
         assert_eq!(stats.total_members, 0);
         assert_eq!(stats.total_proposals, 0);
@@ -459,7 +480,7 @@ mod tests {
     #[tokio::test]
     async fn test_member_management() {
         let sangha = Sangha::new(SanghaConfig::default()).unwrap();
-        
+
         let member = SanghaMember {
             agent_id: "test-agent".to_string(),
             role: AgentRole::Frontend {
@@ -472,15 +493,15 @@ mod tests {
             is_active: true,
             reputation: 1.0,
         };
-        
+
         sangha.add_member(member.clone()).await.unwrap();
-        
+
         let stats = sangha.get_stats().await;
         assert_eq!(stats.total_members, 1);
         assert_eq!(stats.active_members, 1);
-        
+
         sangha.remove_member(&member.agent_id).await.unwrap();
-        
+
         let stats = sangha.get_stats().await;
         assert_eq!(stats.total_members, 0);
     }
