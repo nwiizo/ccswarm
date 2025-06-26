@@ -63,6 +63,7 @@ impl CustomExecutor {
                     "Coordination only".to_string(),
                 ]
             }
+            crate::identity::AgentRole::Search { boundaries, .. } => boundaries.clone(),
         }
     }
 

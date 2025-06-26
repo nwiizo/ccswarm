@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.3.5** - Autonomous orchestration with proactive intelligence and security monitoring
+> 🚀 **Version 0.3.7** - AI Multi-Agent Orchestration with Search Agent and Enhanced Communication
 
 [![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
@@ -19,6 +19,7 @@
 | **[Contributing Guide](CONTRIBUTING.md)** | How to contribute to the project |
 | **[Architecture Overview](docs/ARCHITECTURE.md)** | Technical architecture and design decisions |
 | **[Application Specification](docs/APPLICATION_SPEC.md)** | Detailed feature specifications and API reference |
+| **[Search Agent Guide](docs/SEARCH_AGENT.md)** | Web search integration and research capabilities |
 
 ## 🎯 Quick Navigation
 
@@ -101,6 +102,14 @@ ccswarm/
 - **Session Persistence**: Automatic crash recovery and state restoration
 - **Standalone Capability**: ai-session can be used independently for any AI terminal workflows
 
+### 🔍 Search Agent Capabilities
+- **Web Search Integration**: Powered by Gemini CLI for intelligent web searches
+- **Research Automation**: Agents can request searches for documentation and best practices
+- **Filtered Searches**: Domain-specific, date-ranged, and language-filtered results
+- **Sangha Research**: Automatically researches proposals and casts informed votes
+- **Knowledge Gap Detection**: Identifies areas needing research and proposes initiatives
+- **Multi-Agent Support**: All agents can request searches via coordination bus
+
 ### 🏛️ Collective Intelligence
 - **Sangha System**: Buddhist-inspired democratic decision-making
 - **Autonomous Self-Extension**: Agents independently analyze and propose improvements
@@ -116,6 +125,7 @@ ccswarm/
 - **Git Worktree Isolation**: Parallel development without conflicts
 - **Auto-Accept Mode**: Safe automated execution with risk assessment
 - **LLM Quality Judge**: Advanced code evaluation with multi-dimensional scoring
+- **Search Agent**: Web search integration via Gemini CLI for research tasks
 
 ## 🚀 Quick Start
 
@@ -180,6 +190,22 @@ ccswarm auto-create "Create TODO app" --output ./my_app
 
 # Generate blog
 ccswarm auto-create "Create blog with auth" --output ./blog
+```
+
+### 5. Search Agent Usage
+
+```bash
+# Enable search agent in your project
+ccswarm init --name "MyProject" --agents frontend,backend,search
+
+# Task that triggers search
+ccswarm task "Research best practices for React Server Components"
+
+# Search agent automatically:
+# - Receives research tasks from Master Claude
+# - Executes web searches via Gemini CLI
+# - Returns relevant results to requesting agents
+# - Participates in Sangha with informed votes
 ```
 
 ## 🏗️ Architecture
@@ -255,6 +281,7 @@ pub enum AgentRole {
     Backend,   // API development (via ai-session)
     DevOps,    // Infrastructure (via ai-session)
     QA,        // Testing (via ai-session)
+    Search,    // Web search & research (via Gemini CLI)
     Master,    // Orchestration only (coordinates ai-sessions)
 }
 

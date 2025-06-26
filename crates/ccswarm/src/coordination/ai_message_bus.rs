@@ -636,6 +636,12 @@ impl MasterClaudeCoordination for MasterClaude {
                     "Verify test data setup",
                     "Review testing environment config",
                 ],
+                "Search" => vec![
+                    "Verify gemini CLI is installed and accessible",
+                    "Check search query syntax and filters",
+                    "Review search API rate limits",
+                    "Try different search terms or sources",
+                ],
                 _ => vec![
                     "Break down the problem into smaller steps",
                     "Check documentation and examples",

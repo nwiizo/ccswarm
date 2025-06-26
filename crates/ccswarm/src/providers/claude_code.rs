@@ -89,6 +89,14 @@ impl ClaudeCodeExecutor {
                  - Strategic decisions and planning\n\
                  - NEVER write code directly - delegate to specialists."
             }
+            crate::identity::AgentRole::Search { .. } => {
+                "REMEMBER: You are a SEARCH specialist. Focus ONLY on:\n\
+                 - Web search and information retrieval\n\
+                 - Query optimization and filtering\n\
+                 - Source evaluation and ranking\n\
+                 - Result presentation and summarization\n\
+                 - NEVER modify code - only gather information."
+            }
         }
         .to_string()
     }

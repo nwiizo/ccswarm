@@ -137,6 +137,25 @@ impl AiderExecutor {
                  \n"
                 .to_string()
             }
+            crate::identity::AgentRole::Search {
+                technologies,
+                responsibilities,
+                ..
+            } => {
+                format!(
+                    "## Agent Specialization: Search\n\
+                     Technologies: {}\n\
+                     Responsibilities: {}\n\
+                     \n\
+                     **IMPORTANT**: Focus only on information retrieval. Do not modify:\n\
+                     - Any source code files\n\
+                     - Configuration files\n\
+                     - Infrastructure settings\n\
+                     \n",
+                    technologies.join(", "),
+                    responsibilities.join(", ")
+                )
+            }
         }
     }
 
@@ -212,6 +231,12 @@ impl AiderExecutor {
                  - Collaborate with the requesting agent\n\
                  - Share expertise and knowledge\n\
                  - Help unblock the original task\n"
+            }
+            TaskType::Research => {
+                "- Research and gather information\n\
+                 - Analyze search results and findings\n\
+                 - Apply insights to improve implementation\n\
+                 - Document key findings and recommendations\n"
             }
         };
 

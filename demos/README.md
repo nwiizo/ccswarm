@@ -30,6 +30,19 @@ This directory contains demonstration projects, examples, and sample application
   - Auto-create demonstration code
   - Shows how to generate apps from descriptions
 
+### Backend Agent Search Scenarios
+- **backend_search_scenarios.rs** - Comprehensive demo of backend agent search patterns
+  - Database optimization research and implementation
+  - Authentication best practices (JWT vs OAuth2)
+  - Rate limiting strategies
+  - Microservices communication patterns
+  - Error handling best practices
+  
+- **Backend Workflow Scripts**:
+  - `backend_database_optimization.sh` - Step-by-step database performance troubleshooting
+  - `backend_auth_research.sh` - Authentication implementation research workflow
+  - `backend_api_patterns.sh` - API design patterns and best practices research
+
 ## Running Demos
 
 Each demo directory can contain its own README with specific instructions. General pattern:
@@ -43,6 +56,14 @@ cargo run -- auto-create "Create TODO app" --output ./demos/todo-app
 
 # Start with specific configuration
 cargo run -- start --config ./demos/multi-agent/ccswarm.json
+
+# Run backend search scenarios demo
+cargo run --example backend_search_demo
+
+# Run specific backend workflow scripts
+./demos/backend_database_optimization.sh
+./demos/backend_auth_research.sh
+./demos/backend_api_patterns.sh
 ```
 
 ## Note

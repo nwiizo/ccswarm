@@ -341,6 +341,30 @@ impl TaskBoundaryChecker {
                     Self::compile_patterns(forbidden),
                 )
             }
+
+            AgentRole::Search { .. } => {
+                // Search agent patterns - focuses on information retrieval
+                let allowed = vec![
+                    r"(?i)(search|find|lookup|query)",
+                    r"(?i)(information|research|discover)",
+                    r"(?i)(filter|refine|optimize.*query)",
+                    r"(?i)(web.*search|api.*search|gemini)",
+                    r"(?i)(result|source|reference)",
+                ];
+
+                let forbidden = vec![
+                    r"(?i)(implement|code|develop)",
+                    r"(?i)(modify|change|update.*file)",
+                    r"(?i)(deploy|release|build)",
+                    r"(?i)(create.*feature|add.*functionality)",
+                    r"(?i)(fix.*bug|patch|refactor)",
+                ];
+
+                (
+                    Self::compile_patterns(allowed),
+                    Self::compile_patterns(forbidden),
+                )
+            }
         }
     }
 

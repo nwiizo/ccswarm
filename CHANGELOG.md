@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7] - 2025-06-26
+
+### Added
+- **Search Agent Implementation**: New specialized agent for web search using Gemini CLI
+  - Integrated with coordination bus for inter-agent communication
+  - Support for filtered searches with domain, date range, language, and file type filters
+  - Search result parsing with relevance scoring
+  - Request/response message protocol for agent collaboration
+  
+- **Search Agent Sangha Participation**: Autonomous decision-making for search agents
+  - Intelligent proposal analysis using web search
+  - Evidence-based voting with search results
+  - Knowledge gap detection and initiative proposals
+  - Integration with Sangha collective intelligence system
+
+- **Enhanced Agent Communication**: Improved inter-agent messaging system
+  - Two-layer communication architecture (ccswarm + ai-session)
+  - AICoordinationBridge for seamless integration
+  - Low-latency coordination (<100ms)
+  - Message persistence and recovery
+
+### Changed
+- Updated architecture documentation to include Search Agent
+- Enhanced coordination bus with new message types for search requests
+- Improved agent role system with Search Agent boundaries
+- Refined Sangha participation for automated research
+
+### Fixed
+- Agent communication synchronization issues
+- Message persistence timing in coordination bus
+- Identity boundary enforcement for new agent types
+
 ## [0.3.6] - 2025-06-25
 
 ### Added

@@ -424,6 +424,50 @@ impl AgentPersonality {
                     Some("Orchestrating excellence through collaboration".to_string()),
                 )
             }
+            AgentRole::Search { technologies, .. } => {
+                let mut skills = HashMap::new();
+                skills.insert(
+                    "information_retrieval".to_string(),
+                    Skill::new("Information Retrieval".to_string(), 180),
+                );
+                skills.insert(
+                    "query_optimization".to_string(),
+                    Skill::new("Query Optimization".to_string(), 160),
+                );
+                skills.insert(
+                    "source_evaluation".to_string(),
+                    Skill::new("Source Evaluation".to_string(), 170),
+                );
+                skills.insert(
+                    "data_filtering".to_string(),
+                    Skill::new("Data Filtering".to_string(), 150),
+                );
+
+                for tech in technologies {
+                    skills.insert(tech.to_lowercase(), Skill::new(tech.clone(), 100));
+                }
+
+                (
+                    skills,
+                    PersonalityTraits {
+                        curiosity: 0.9,
+                        persistence: 0.7,
+                        collaboration: 0.5,
+                        risk_tolerance: 0.3,
+                        attention_to_detail: 0.85,
+                        innovation: 0.6,
+                        communication_style: CommunicationStyle::Analytical,
+                    },
+                    WorkingStyle {
+                        preferred_task_size: TaskSizePreference::Small,
+                        work_rhythm: WorkRhythm::Exploratory,
+                        quality_vs_speed: 0.8,
+                        documentation_preference: DocumentationStyle::Technical,
+                        testing_approach: TestingApproach::Pragmatic,
+                    },
+                    Some("Finding knowledge through intelligent search".to_string()),
+                )
+            }
         }
     }
 

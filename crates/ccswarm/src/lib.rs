@@ -21,8 +21,7 @@ pub mod monitoring;
 pub mod orchestrator;
 pub mod providers;
 pub mod resource;
-// Temporarily disabled due to compilation issues
-// pub mod sangha;
+pub mod sangha;
 pub mod security;
 pub mod session;
 pub mod streaming;

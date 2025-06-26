@@ -34,15 +34,15 @@ The workspace configuration enables:
 │  - Sangha consensus management                               │
 └─────────────────────┬───────────────────────────────────────┘
                       │
-        ┌─────────────┴─────────────┬─────────────┬────────────┐
-        │                           │             │            │
-┌───────▼────────┐  ┌──────────────▼──┐  ┌──────▼─────┐  ┌───▼────┐
-│Frontend Agent  │  │Backend Agent    │  │DevOps Agent│  │QA Agent│
-│- React/Vue     │  │- APIs/Database  │  │- Docker    │  │- Tests │
-│- UI/UX         │  │- Business Logic │  │- CI/CD     │  │- QA    │
-└────────────────┘  └─────────────────┘  └────────────┘  └────────┘
-        │                           │             │            │
-        └─────────────┬─────────────┴─────────────┴────────────┘
+        ┌─────────────┴─────────────┬─────────────┬────────────┬────────────┐
+        │                           │             │            │            │
+┌───────▼────────┐  ┌──────────────▼──┐  ┌──────▼─────┐  ┌───▼────┐  ┌────▼────┐
+│Frontend Agent  │  │Backend Agent    │  │DevOps Agent│  │QA Agent│  │Search   │
+│- React/Vue     │  │- APIs/Database  │  │- Docker    │  │- Tests │  │Agent    │
+│- UI/UX         │  │- Business Logic │  │- CI/CD     │  │- QA    │  │- Gemini │
+└────────────────┘  └─────────────────┘  └────────────┘  └────────┘  └─────────┘
+        │                           │             │            │            │
+        └─────────────┬─────────────┴─────────────┴────────────┴────────────┘
                       │
 ┌─────────────────────▼───────────────────────────────────────┐
 │                    AI-Session Management Layer               │
@@ -78,6 +78,14 @@ Specialized AI agents with strict role boundaries.
 - **Simple Agent**: Basic task execution
 - **Persistent Agent**: Maintains context across tasks
 - **Pool Agent**: Load-balanced agent groups
+- **Search Agent**: Web search and information gathering
+
+#### Specialized Agents
+- **Frontend Agent**: React, Vue, UI/UX development
+- **Backend Agent**: APIs, databases, server logic
+- **DevOps Agent**: Docker, CI/CD, infrastructure
+- **QA Agent**: Testing, quality assurance
+- **Search Agent**: Web search via Gemini CLI, research, Sangha participation
 
 #### Identity System (`crates/ccswarm/src/identity/`)
 - Enforces strict role boundaries
@@ -183,6 +191,28 @@ Need Identification → Proposal Generation
 Sangha Submission → Democratic Voting
     ↓
 Consensus Achievement → Implementation
+```
+
+### Search Agent Message Flow
+```
+Agent/Master Claude → Search Request → Coordination Bus
+    ↓
+Search Agent Receives → Query Validation → Filter Application
+    ↓
+Gemini CLI Execution → Result Parsing → Relevance Scoring
+    ↓
+Response Generation → Coordination Bus → Requesting Agent
+```
+
+### Search Agent Sangha Participation
+```
+Proposal Detection → Key Term Extraction → Query Generation
+    ↓
+Web Search Execution → Result Analysis → Evidence Generation
+    ↓
+Opinion Formation → Vote Calculation → Informed Voting
+    ↓
+Knowledge Gap Detection → Initiative Proposal → Sangha Submission
 ```
 
 ## Module Dependencies

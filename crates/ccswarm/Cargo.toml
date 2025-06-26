@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.3.6"
+version = "0.3.7"
 edition = "2021"
 authors = ["nwiizo"]
 description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
@@ -22,6 +22,10 @@ path = "test_isolated_proactive.rs"
 [[bin]]
 name = "demo_proactive_workflow"
 path = "demo_proactive_workflow.rs"
+
+[[example]]
+name = "search_agent_sangha_demo"
+path = "examples/search_agent_sangha_demo.rs"
 
 [dependencies]
 # Async runtime
