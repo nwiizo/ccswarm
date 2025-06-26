@@ -6,6 +6,7 @@ pub mod proactive_master;
 
 // Re-export commonly used types
 pub use master_delegation::{DelegationDecision, DelegationStrategy, MasterDelegationEngine};
+pub use proactive_master::{ProactiveMaster, ProactiveDecision, DecisionType};
 
 #[cfg(test)]
 mod edge_case_tests;
@@ -15,6 +16,8 @@ mod llm_quality_judge_test;
 mod orchestrator_integration_tests;
 #[cfg(test)]
 mod review_test;
+#[cfg(test)]
+mod search_integration_test;
 
 use anyhow::{Context, Result};
 use async_channel::{Receiver, Sender};
@@ -29,10 +32,9 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use self::llm_quality_judge::LLMQualityJudge;
-use self::proactive_master::ProactiveMaster;
 use crate::agent::{AgentStatus, ClaudeCodeAgent, Task, TaskType};
 use crate::config::CcswarmConfig;
-use crate::coordination::{AgentMessage, CoordinationBus};
+use crate::coordination::{AgentMessage, CoordinationBus, CoordinationType};
 use crate::git::shell::ShellWorktreeManager as WorktreeManager;
 use crate::identity::{
     default_backend_role, default_devops_role, default_frontend_role, default_qa_role,
@@ -384,6 +386,38 @@ impl MasterClaude {
     async fn assign_task(&self, task: Task) -> Result<()> {
         info!("Assigning task: {} - {}", task.id, task.description);
 
+        // Check if task needs search assistance
+        let search_keywords = vec![
+            "research", "find information", "look up", "best practices",
+            "documentation", "examples", "how to", "comparison", "compare",
+            "alternatives", "investigate", "unclear", "unknown"
+        ];
+        
+        let task_desc_lower = task.description.to_lowercase();
+        let needs_search = search_keywords.iter().any(|&keyword| task_desc_lower.contains(keyword));
+        
+        if needs_search && task.task_type != TaskType::Research {
+            // Create a search request for this task
+            info!("Task '{}' appears to need search assistance", task.description);
+            
+            let search_request = crate::agent::search_agent::SearchRequest {
+                requesting_agent: "master-claude".to_string(),
+                query: task.description.clone(),
+                max_results: Some(10),
+                filters: None,
+                context: Some(format!("Supporting task: {}", task.id)),
+            };
+            
+            let message = AgentMessage::Coordination {
+                from_agent: "master-claude".to_string(),
+                to_agent: "search".to_string(),
+                message_type: CoordinationType::Custom("search_request".to_string()),
+                payload: serde_json::to_value(search_request)?,
+            };
+            
+            self.coordination_bus.send_message(message).await?;
+        }
+
         // Select optimal agent
         let agent_id = self.select_optimal_agent(&task).await?;
 
@@ -478,6 +512,7 @@ impl MasterClaude {
             TaskType::Infrastructure => "DevOps",
             TaskType::Testing => "QA",
             TaskType::Remediation => "Backend", // Fallback for unassigned remediation
+            TaskType::Research => "Search",     // Research tasks go to search agent
             _ => "Backend",                     // Default
         };
 
@@ -1045,6 +1080,49 @@ impl MasterClaude {
                     "Custom message type '{}' received: {:?}",
                     message_type, data
                 );
+            }
+            AgentMessage::Coordination {
+                from_agent: _,
+                to_agent,
+                message_type,
+                payload,
+            } if to_agent == "master-claude" => {
+                match message_type {
+                    CoordinationType::Custom(msg_type) if msg_type == "search_response" => {
+                        // Handle search response
+                        if let Ok(search_response) = serde_json::from_value::<crate::agent::search_agent::SearchResponse>(payload) {
+                            info!("Master Claude received search response with {} results", search_response.results.len());
+                            
+                            // Process search results to enhance task context
+                            let insights = search_response.results.iter()
+                                .take(3)
+                                .map(|r| format!("- {}: {}", r.title, r.snippet))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            
+                            // Create a task to review and apply findings
+                            let review_task = Task::new(
+                                format!("review-search-{}", Uuid::new_v4()),
+                                format!("Review and apply search findings: {}", search_response.query_used),
+                                crate::agent::Priority::Medium,
+                                TaskType::Research,
+                            )
+                            .with_details(format!(
+                                "Search query: {}\n\nKey findings:\n{}\n\nReview these findings and apply relevant insights to improve the current implementation.",
+                                search_response.query_used,
+                                insights
+                            ))
+                            .with_duration(900); // 15 minutes
+                            
+                            if let Err(e) = task_queue_tx.send(review_task).await {
+                                error!("Failed to queue search review task: {}", e);
+                            }
+                        }
+                    }
+                    _ => {
+                        debug!("Received coordination message type: {:?}", message_type);
+                    }
+                }
             }
             _ => {}
         }

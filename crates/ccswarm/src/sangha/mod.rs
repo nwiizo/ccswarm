@@ -16,6 +16,7 @@ use uuid::Uuid;
 pub mod consensus;
 pub mod doctrine;
 pub mod proposal;
+pub mod search_agent_participant;
 pub mod session;
 pub mod voting;
 
@@ -274,7 +275,7 @@ impl Sangha {
     }
 
     /// Cast a vote on a proposal
-    pub async fn cast_vote(&self, vote: Vote) -> Result<()> {
+    pub async fn cast_vote(&self, mut vote: Vote) -> Result<()> {
         let proposals = self.proposals.read().await;
         let proposal = proposals.get(&vote.proposal_id)
             .context("Proposal not found")?;
@@ -287,26 +288,19 @@ impl Sangha {
             anyhow::bail!("Voting deadline has passed");
         }
         
-        // Store vote 
-        let vote = Vote {
-            voter_id: voter_id.to_string(),
-            proposal_id,
-            choice,
-            reason: reason.map(String::from),
-            cast_at: Utc::now(),
-            weight: self.get_voting_weight(voter_id).await,
-        };
+        // Update vote weight based on voter
+        vote.weight = self.get_voting_weight(&vote.voter_id).await;
         
         // Store vote in memory
         let mut votes = self.votes.write().await;
-        votes.entry(proposal_id)
+        votes.entry(vote.proposal_id)
             .or_insert_with(Vec::new)
             .push(vote.clone());
         
         // Persist vote to disk
         self.persist_vote(&vote).await?;
         
-        tracing::info!("Vote cast by {} for proposal {}: {:?}", voter_id, proposal_id, choice);
+        tracing::info!("Vote cast by {} for proposal {}: {:?}", vote.voter_id, vote.proposal_id, vote.choice);
         
         Ok(())
     }
@@ -339,8 +333,10 @@ impl Sangha {
         // Base weight is 1.0, can be adjusted based on agent reputation, role, etc.
         let members = self.members.read().await;
         if let Some(member) = members.get(voter_id) {
-            match member.role {
-                AgentRole::Frontend | AgentRole::Backend | AgentRole::DevOps | AgentRole::QA => 1.0,
+            match &member.role {
+                AgentRole::Frontend { .. } | AgentRole::Backend { .. } | AgentRole::DevOps { .. } | AgentRole::QA { .. } => 1.0,
+                AgentRole::Master { .. } => 1.2, // Master has slightly higher weight
+                AgentRole::Search { .. } => 0.8, // Search agent has slightly lower weight
             }
         } else {
             0.5 // Non-member has reduced voting weight

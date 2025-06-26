@@ -39,6 +39,7 @@ pub enum TaskType {
     Feature,
     Remediation, // Task to fix quality issues
     Assistance,  // Task to help another agent
+    Research,    // Task to research information
 }
 
 impl FromStr for TaskType {
@@ -57,6 +58,7 @@ impl FromStr for TaskType {
             "feature" | "feat" => Ok(TaskType::Feature),
             "remediation" | "fix" => Ok(TaskType::Remediation),
             "assistance" | "assist" | "help" => Ok(TaskType::Assistance),
+            "research" | "investigate" => Ok(TaskType::Research),
             _ => Err(anyhow::anyhow!("Unknown task type: {}", s)),
         }
     }
@@ -76,6 +78,7 @@ impl std::fmt::Display for TaskType {
             TaskType::Feature => write!(f, "Feature"),
             TaskType::Remediation => write!(f, "Remediation"),
             TaskType::Assistance => write!(f, "Assistance"),
+            TaskType::Research => write!(f, "Research"),
         }
     }
 }

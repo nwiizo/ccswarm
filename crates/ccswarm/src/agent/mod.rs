@@ -6,6 +6,7 @@ pub mod persistent;
 pub mod personality;
 pub mod phronesis;
 pub mod pool;
+pub mod search_agent;
 pub mod simple;
 pub mod task;
 pub mod task_builder;
@@ -333,6 +334,10 @@ impl ClaudeCodeAgent {
             AgentRole::Master { .. } => (
                 "Verify coordination capabilities".to_string(),
                 TaskType::Coordination,
+            ),
+            AgentRole::Search { .. } => (
+                "Verify search capabilities".to_string(),
+                TaskType::Assistance,
             ),
         };
 
@@ -851,6 +856,20 @@ impl ClaudeCodeAgent {
                             true,
                         )]
                     }
+                    crate::identity::AgentRole::Search { .. } => vec![
+                        OrchestrationBuilder::parallel_task(
+                            "analyze_search_query",
+                            "Analyze Search Query",
+                            "Parse and optimize the search query",
+                            true,
+                        ),
+                        OrchestrationBuilder::parallel_task(
+                            "identify_search_sources",
+                            "Identify Search Sources",
+                            "Determine best sources for information",
+                            false,
+                        ),
+                    ],
                 };
 
                 let analysis_step = OrchestrationBuilder::analysis_step(
@@ -1260,6 +1279,7 @@ impl ClaudeCodeAgent {
             TaskType::Bugfix | TaskType::Bug => 1.2,
             TaskType::Remediation => 1.5,
             TaskType::Assistance => 0.9,
+            TaskType::Research => 0.7,
         };
 
         let adjusted_experience = (experience_points as f32 * experience_multiplier) as u32;

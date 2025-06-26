@@ -9,7 +9,8 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::agent::{AgentStatus, ClaudeCodeAgent, Priority, Task, TaskResult, TaskType};
-use crate::coordination::{AgentMessage, CoordinationBus};
+use crate::agent::search_agent::{SearchRequest, SearchResponse};
+use crate::coordination::{AgentMessage, CoordinationBus, CoordinationType};
 
 /// Proactive Master Claude intelligence system
 pub struct ProactiveMaster {
@@ -227,13 +228,14 @@ pub struct ProactiveDecision {
     pub risk_assessment: RiskLevel,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DecisionType {
     GenerateTask,
     ReassignTask,
     ScaleTeam,
     ChangeStrategy,
     RequestIntervention,
+    RequestSearch,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -501,6 +503,10 @@ impl ProactiveMaster {
         // 4. Monitor goal progress
         let goal_decisions = self.monitor_goals().await?;
         decisions.extend(goal_decisions);
+
+        // 5. Analyze for search needs
+        let search_decisions = self.analyze_search_needs(agents).await?;
+        decisions.extend(search_decisions);
 
         // Execute high-confidence decisions automatically
         for decision in &decisions {
@@ -815,6 +821,13 @@ impl ProactiveMaster {
                         self.unblock_task(task_id).await?;
                     }
                 }
+                "request_search" => {
+                    if let Some(query) = action.parameters.get("query") {
+                        if let Some(context) = action.parameters.get("context") {
+                            self.request_search(query, context, coordination_bus).await?;
+                        }
+                    }
+                }
                 _ => {
                     debug!("Skipping execution of action: {}", action.action_type);
                 }
@@ -900,6 +913,230 @@ impl ProactiveMaster {
     pub async fn set_objective(&self, objective: Objective) -> Result<()> {
         let mut goals = self.goal_tracker.write().await;
         goals.objectives.push(objective);
+        Ok(())
+    }
+
+    /// Analyze if search is needed for current tasks
+    async fn analyze_search_needs(
+        &self,
+        agents: &DashMap<String, ClaudeCodeAgent>,
+    ) -> Result<Vec<ProactiveDecision>> {
+        let mut decisions = Vec::new();
+
+        // Patterns that indicate search might be helpful
+        let search_indicators = vec![
+            ("research", "Researching information about"),
+            ("find information", "Finding information about"),
+            ("look up", "Looking up"),
+            ("best practices", "Discovering best practices for"),
+            ("documentation", "Finding documentation for"),
+            ("examples", "Finding examples of"),
+            ("how to", "Understanding how to"),
+            ("comparison", "Comparing technologies"),
+            ("alternatives", "Finding alternatives to"),
+            ("error", "Investigating error"),
+            ("unknown", "Clarifying unknown concept"),
+            ("investigate", "Investigating"),
+        ];
+
+        // Check recent agent activities and errors
+        for entry in agents.iter() {
+            let agent = entry.value();
+            
+            // Check if agent is stuck and might need information
+            if matches!(agent.status, AgentStatus::Working) {
+                let time_since_activity = Utc::now() - agent.last_activity;
+                
+                // If stuck for more than 10 minutes, suggest search
+                if time_since_activity.num_minutes() > 10 {
+                    // Look at current task context
+                    if let Some((current_task, _)) = agent.task_history.last() {
+                        let task_desc_lower = current_task.description.to_lowercase();
+                        
+                        // Check if task involves research or information gathering
+                        for (indicator, search_prefix) in &search_indicators {
+                            if task_desc_lower.contains(indicator) {
+                                decisions.push(ProactiveDecision {
+                                    decision_type: DecisionType::RequestSearch,
+                                    reasoning: format!(
+                                        "Agent {} appears stuck on task requiring information: '{}'",
+                                        agent.identity.agent_id, current_task.description
+                                    ),
+                                    confidence: 0.85,
+                                    suggested_actions: vec![SuggestedAction {
+                                        action_type: "request_search".to_string(),
+                                        description: format!("{} {}", search_prefix, current_task.description),
+                                        parameters: HashMap::from([
+                                            ("query".to_string(), current_task.description.clone()),
+                                            ("context".to_string(), format!("Agent {} stuck on task", agent.identity.agent_id)),
+                                            ("requesting_agent".to_string(), agent.identity.agent_id.clone()),
+                                        ]),
+                                        expected_impact: "Provide information to unblock agent".to_string(),
+                                    }],
+                                    risk_assessment: RiskLevel::Low,
+                                });
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check recent failed tasks for missing information
+            let recent_failures: Vec<_> = agent.task_history
+                .iter()
+                .rev()
+                .take(3)
+                .filter(|(_, result)| !result.success)
+                .collect();
+
+            for (failed_task, result) in recent_failures {
+                if let Some(error) = &result.error {
+                    let error_lower = error.to_lowercase();
+                    
+                    // Common error patterns that might benefit from search
+                    if error_lower.contains("not found")
+                        || error_lower.contains("unknown")
+                        || error_lower.contains("missing documentation")
+                        || error_lower.contains("unclear")
+                        || error_lower.contains("deprecat")
+                        || error_lower.contains("no examples")
+                    {
+                        decisions.push(ProactiveDecision {
+                            decision_type: DecisionType::RequestSearch,
+                            reasoning: format!(
+                                "Task {} failed with error suggesting missing information: {}",
+                                failed_task.id, error
+                            ),
+                            confidence: 0.9,
+                            suggested_actions: vec![SuggestedAction {
+                                action_type: "request_search".to_string(),
+                                description: format!("Search for solution to: {}", error),
+                                parameters: HashMap::from([
+                                    ("query".to_string(), format!("{} {}", failed_task.description, error)),
+                                    ("context".to_string(), format!("Error resolution for task {}", failed_task.id)),
+                                    ("requesting_agent".to_string(), agent.identity.agent_id.clone()),
+                                ]),
+                                expected_impact: "Find solution to resolve error".to_string(),
+                            }],
+                            risk_assessment: RiskLevel::Low,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Check project context for technology research needs
+        let context = self.project_context.read().await;
+        
+        // If in planning or setup phase, suggest research for tech stack
+        if matches!(context.current_phase, DevelopmentPhase::Planning | DevelopmentPhase::Setup) {
+            for tech in &context.tech_stack {
+                decisions.push(ProactiveDecision {
+                    decision_type: DecisionType::RequestSearch,
+                    reasoning: format!(
+                        "Project in {} phase - gathering best practices for {}",
+                        match context.current_phase {
+                            DevelopmentPhase::Planning => "planning",
+                            DevelopmentPhase::Setup => "setup",
+                            _ => "early"
+                        },
+                        tech
+                    ),
+                    confidence: 0.75,
+                    suggested_actions: vec![SuggestedAction {
+                        action_type: "request_search".to_string(),
+                        description: format!("{} best practices and setup guide", tech),
+                        parameters: HashMap::from([
+                            ("query".to_string(), format!("{} best practices setup guide tutorial", tech)),
+                            ("context".to_string(), "Project setup and architecture planning".to_string()),
+                            ("requesting_agent".to_string(), "master-claude".to_string()),
+                        ]),
+                        expected_impact: "Ensure proper setup and architecture".to_string(),
+                    }],
+                    risk_assessment: RiskLevel::Low,
+                });
+            }
+        }
+
+        Ok(decisions)
+    }
+
+    /// Request a search from the search agent
+    async fn request_search(
+        &self,
+        query: &str,
+        context: &str,
+        coordination_bus: &CoordinationBus,
+    ) -> Result<()> {
+        info!("Requesting search for: {}", query);
+
+        let search_request = SearchRequest {
+            requesting_agent: "master-claude".to_string(),
+            query: query.to_string(),
+            max_results: Some(10),
+            filters: None,
+            context: Some(context.to_string()),
+        };
+
+        let message = AgentMessage::Coordination {
+            from_agent: "master-claude".to_string(),
+            to_agent: "search".to_string(),
+            message_type: CoordinationType::Custom("search_request".to_string()),
+            payload: serde_json::to_value(search_request)?,
+        };
+
+        coordination_bus.send_message(message).await?;
+        
+        Ok(())
+    }
+
+    /// Handle search response from search agent
+    pub async fn handle_search_response(
+        &self,
+        response: SearchResponse,
+        coordination_bus: &CoordinationBus,
+    ) -> Result<()> {
+        info!("Received search response with {} results", response.results.len());
+
+        // Analyze search results and create appropriate tasks or insights
+        if !response.results.is_empty() {
+            let mut insights = Vec::new();
+            
+            for (i, result) in response.results.iter().take(5).enumerate() {
+                insights.push(format!(
+                    "{}. {} - {} (relevance: {:?})",
+                    i + 1,
+                    result.title,
+                    result.snippet,
+                    result.relevance_score
+                ));
+            }
+
+            // Create a task to review and apply the findings
+            let review_task = Task::new(
+                format!("review-search-{}", Uuid::new_v4()),
+                format!("Review search findings for: {}", response.query_used),
+                Priority::Medium,
+                TaskType::Research,
+            )
+            .with_details(format!(
+                "Search query: {}\nTop findings:\n{}\n\nPlease review these findings and apply relevant insights to the current work.",
+                response.query_used,
+                insights.join("\n")
+            ))
+            .with_duration(1200); // 20 minutes
+
+            // Send task generation message
+            coordination_bus
+                .send_message(AgentMessage::TaskGenerated {
+                    task_id: review_task.id.clone(),
+                    description: review_task.description.clone(),
+                    reasoning: format!("Search completed with {} relevant results", response.results.len()),
+                })
+                .await?;
+        }
+
         Ok(())
     }
 }

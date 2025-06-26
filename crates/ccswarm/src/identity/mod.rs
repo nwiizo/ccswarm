@@ -60,6 +60,11 @@ pub enum AgentRole {
         oversight_roles: Vec<String>,
         quality_standards: QualityStandards,
     },
+    Search {
+        technologies: Vec<String>,
+        responsibilities: Vec<String>,
+        boundaries: Vec<String>,
+    },
 }
 
 impl AgentRole {
@@ -71,6 +76,7 @@ impl AgentRole {
             AgentRole::DevOps { .. } => "DevOps",
             AgentRole::QA { .. } => "QA",
             AgentRole::Master { .. } => "Master",
+            AgentRole::Search { .. } => "Search",
         }
     }
 
@@ -86,7 +92,8 @@ impl AgentRole {
             AgentRole::Frontend { technologies, .. }
             | AgentRole::Backend { technologies, .. }
             | AgentRole::DevOps { technologies, .. }
-            | AgentRole::QA { technologies, .. } => technologies.clone(),
+            | AgentRole::QA { technologies, .. }
+            | AgentRole::Search { technologies, .. } => technologies.clone(),
             AgentRole::Master { .. } => vec!["Orchestration".to_string()],
         }
     }
@@ -105,6 +112,9 @@ impl AgentRole {
             }
             | AgentRole::QA {
                 responsibilities, ..
+            }
+            | AgentRole::Search {
+                responsibilities, ..
             } => responsibilities.clone(),
             AgentRole::Master {
                 oversight_roles, ..
@@ -118,7 +128,8 @@ impl AgentRole {
             AgentRole::Frontend { boundaries, .. }
             | AgentRole::Backend { boundaries, .. }
             | AgentRole::DevOps { boundaries, .. }
-            | AgentRole::QA { boundaries, .. } => boundaries.clone(),
+            | AgentRole::QA { boundaries, .. }
+            | AgentRole::Search { boundaries, .. } => boundaries.clone(),
             AgentRole::Master { .. } => vec!["No direct code implementation".to_string()],
         }
     }
@@ -421,6 +432,31 @@ pub fn default_qa_role() -> AgentRole {
     }
 }
 
+pub fn default_search_role() -> AgentRole {
+    AgentRole::Search {
+        technologies: vec![
+            "Gemini CLI".to_string(),
+            "Web Search".to_string(),
+            "Information Retrieval".to_string(),
+            "Search APIs".to_string(),
+        ],
+        responsibilities: vec![
+            "Web Search".to_string(),
+            "Information Gathering".to_string(),
+            "Result Filtering".to_string(),
+            "Query Optimization".to_string(),
+            "Knowledge Discovery".to_string(),
+        ],
+        boundaries: vec![
+            "No code implementation".to_string(),
+            "No direct file modifications".to_string(),
+            "Read-only information gathering".to_string(),
+            "No execution of found code".to_string(),
+            "No decision making beyond search".to_string(),
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -455,6 +491,9 @@ mod tests {
             quality_standards: QualityStandards::default(),
         };
         assert_eq!(master.as_str(), "Master");
+
+        let search = default_search_role();
+        assert_eq!(search.as_str(), "Search");
     }
 
     #[test]

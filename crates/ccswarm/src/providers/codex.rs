@@ -218,6 +218,25 @@ impl CodexExecutor {
                     if quality_standards.security_scan_required { "Required" } else { "Optional" }
                 )
             }
+            crate::identity::AgentRole::Search {
+                technologies,
+                responsibilities,
+                boundaries,
+            } => {
+                format!(
+                    "SEARCH SPECIALIST\n\
+                     Technologies: {}\n\
+                     Responsibilities: {}\n\
+                     Boundaries: {}\n\
+                     \n\
+                     Focus exclusively on information retrieval and search operations. \
+                     Do not write or modify any code. Your role is to find and present \
+                     relevant information to help other agents complete their tasks.\n",
+                    technologies.join(", "),
+                    responsibilities.join(", "),
+                    boundaries.join(", ")
+                )
+            }
         };
 
         let guidelines = "\nGUIDELINES:\n\
@@ -332,6 +351,14 @@ impl CodexExecutor {
                  - Providing expert guidance\n\
                  - Collaborative problem solving\n\
                  - Knowledge sharing\n"
+            }
+            TaskType::Research => {
+                "RESEARCH TASK\n\
+                 Please research and analyze information with:\n\
+                 - Review search results thoroughly\n\
+                 - Extract key insights\n\
+                 - Apply findings to current work\n\
+                 - Document recommendations\n"
             }
         };
 
