@@ -159,9 +159,12 @@ pub struct SearchAgentSanghaParticipant {
 /// Active research task for a proposal
 #[derive(Debug, Clone)]
 struct ResearchTask {
+    #[allow(dead_code)]
     proposal_id: Uuid,
+    #[allow(dead_code)]
     queries: Vec<String>,
     results: Vec<SearchResult>,
+    #[allow(dead_code)]
     started_at: DateTime<Utc>,
     completed: bool,
 }
@@ -236,6 +239,7 @@ impl SearchAgentSanghaParticipant {
                 .unwrap_or(false)
                 && word.len() > 4
             {
+                // Same action as above - push to terms
                 terms.push(word.to_string());
             }
         }

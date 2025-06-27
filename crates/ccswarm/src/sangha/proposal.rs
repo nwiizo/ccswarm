@@ -308,6 +308,12 @@ pub struct ProposalManager {
     proposals: Arc<RwLock<HashMap<Uuid, Proposal>>>,
 }
 
+impl Default for ProposalManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProposalManager {
     pub fn new() -> Self {
         Self {

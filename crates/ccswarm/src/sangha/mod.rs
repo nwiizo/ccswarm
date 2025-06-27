@@ -26,6 +26,7 @@ use crate::identity::AgentRole;
 #[derive(Debug)]
 pub struct Sangha {
     /// Unique identifier for this Sangha instance
+    #[allow(dead_code)]
     id: Uuid,
     /// Active members (agents) in the Sangha
     members: Arc<RwLock<HashMap<String, SanghaMember>>>,
@@ -36,6 +37,7 @@ pub struct Sangha {
     /// Sangha configuration
     config: SanghaConfig,
     /// Session manager for meetings
+    #[allow(dead_code)]
     session_manager: session::SessionManager,
     /// Vote storage (proposal_id -> votes)
     votes: Arc<RwLock<HashMap<Uuid, Vec<Vote>>>>,

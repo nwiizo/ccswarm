@@ -28,6 +28,12 @@ impl Default for ConsensusConfig {
     }
 }
 
+impl Default for SimpleConsensus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimpleConsensus {
     pub fn new() -> Self {
         Self {
@@ -281,6 +287,7 @@ struct VotePercentages {
     nay: f64,
     abstain: f64,
     veto: f64,
+    #[allow(dead_code)]
     total_weight: f64,
 }
 

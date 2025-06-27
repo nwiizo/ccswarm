@@ -105,6 +105,12 @@ pub enum DecisionType {
     TaskAssignment,
 }
 
+impl Default for SessionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SessionManager {
     pub fn new() -> Self {
         Self {
@@ -345,6 +351,12 @@ pub enum Recurrence {
     Daily,
     Weekly,
     Monthly,
+}
+
+impl Default for SessionScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SessionScheduler {

@@ -70,18 +70,21 @@ impl Default for CorePrinciples {
     }
 }
 
+impl Default for DoctrineManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DoctrineManager {
     pub fn new() -> Self {
-        let manager = Self {
+        Self {
             doctrines: Arc::new(RwLock::new(HashMap::new())),
             categories: Arc::new(RwLock::new(HashMap::new())),
-        };
-
+        }
         // Initialize with core principles
         // Note: We're not initializing in the constructor to avoid ownership issues
         // Call initialize_core_principles() separately after creation
-
-        manager
     }
 
     /// Initialize core principles
@@ -205,7 +208,7 @@ impl DoctrineManager {
         let mut warnings = Vec::new();
 
         for doctrine in &doctrines {
-            let check = self.check_doctrine_compliance(&doctrine, action);
+            let check = self.check_doctrine_compliance(doctrine, action);
             match check {
                 ComplianceCheck::Compliant => continue,
                 ComplianceCheck::Warning(msg) => warnings.push(msg),
@@ -279,7 +282,9 @@ pub struct ComplianceResult {
 #[derive(Debug, Clone)]
 enum ComplianceCheck {
     Compliant,
+    #[allow(dead_code)]
     Warning(String),
+    #[allow(dead_code)]
     Violation(String),
 }
 
@@ -295,6 +300,7 @@ pub struct DoctrineVersion {
 
 /// Doctrine interpreter for natural language queries
 pub struct DoctrineInterpreter {
+    #[allow(dead_code)]
     doctrines: Arc<DoctrineManager>,
 }
 

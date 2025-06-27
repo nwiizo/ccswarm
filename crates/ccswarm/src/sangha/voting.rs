@@ -179,7 +179,7 @@ impl VotingManager {
             if let Some(reason) = &vote.reason {
                 reasons_by_choice
                     .entry(vote.choice)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(reason.clone());
             }
         }
@@ -190,7 +190,7 @@ impl VotingManager {
             votes_by_choice: votes.iter().map(|v| (v.choice, v.clone())).fold(
                 HashMap::new(),
                 |mut acc, (choice, vote)| {
-                    acc.entry(choice).or_insert_with(Vec::new).push(vote);
+                    acc.entry(choice).or_default().push(vote);
                     acc
                 },
             ),
@@ -284,6 +284,12 @@ pub struct VotingPowerCalculator {
     base_power: f64,
     reputation_multiplier: f64,
     tenure_multiplier: f64,
+}
+
+impl Default for VotingPowerCalculator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VotingPowerCalculator {
