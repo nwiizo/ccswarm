@@ -35,7 +35,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Data structures
 dashmap = "6.0"
 bytes = "1.7"
-ringbuf = "0.3"
+ringbuf = "0.4"
 
 # Compression and storage
 zstd = "0.13"
