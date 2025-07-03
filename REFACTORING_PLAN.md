@@ -1,0 +1,161 @@
+# ccswarm Code Refactoring Plan
+
+## Executive Summary
+
+The similarity-rs analysis identified significant code duplication across the ccswarm codebase, with some methods showing 95-100% similarity. This refactoring plan outlines actionable steps to reduce duplication, improve maintainability, and enhance code quality.
+
+## Key Findings
+
+### 1. CLI Module (`crates/ccswarm/src/cli/mod.rs`)
+- **Severity**: Critical
+- **Duplication**: 60+ instances of near-identical methods (95-100% similarity)
+- **Impact**: Maintenance burden, potential inconsistencies
+
+### 2. Error Diagrams (`crates/ccswarm/src/utils/error_diagrams.rs`)
+- **Severity**: High
+- **Duplication**: Multiple error display methods with 95-100% similarity
+- **Impact**: Redundant code, harder to add new error types
+
+### 3. MCP JSON-RPC (`crates/ccswarm/src/mcp/jsonrpc.rs`)
+- **Severity**: Medium
+- **Duplication**: Constructor methods with 90-100% similarity
+- **Impact**: Boilerplate code, potential for inconsistencies
+
+### 4. Session Management (`crates/ccswarm/src/session/`)
+- **Severity**: Medium-High
+- **Duplication**: Session lifecycle methods with 98%+ similarity
+- **Impact**: Complex maintenance, difficult to add features
+
+## Refactoring Strategy
+
+### Phase 1: Extract Common Patterns (Week 1)
+
+#### 1.1 CLI Command Handler Framework
+```rust
+// Create a generic command handler trait
+trait CommandHandler {
+    async fn execute(&self, context: &mut CliContext) -> Result<()>;
+    fn validate(&self) -> Result<()>;
+}
+
+// Replace duplicate methods with implementations
+struct InitHandler;
+struct TaskHandler;
+struct StatusHandler;
+// etc.
+```
+
+#### 1.2 Error Display Template
+```rust
+// Create a generic error display function
+fn display_error_diagram(
+    error_type: &str,
+    description: &str,
+    suggestions: Vec<&str>,
+    context: Option<&str>
+) -> String {
+    // Common formatting logic
+}
+```
+
+### Phase 2: Consolidate Business Logic (Week 2)
+
+#### 2.1 Session Management Abstraction
+```rust
+// Extract common session operations
+trait SessionOperations {
+    async fn create_session(&self, config: SessionConfig) -> Result<Session>;
+    async fn execute_in_session(&self, session: &Session, command: Command) -> Result<Output>;
+    async fn cleanup_session(&self, session: Session) -> Result<()>;
+}
+```
+
+#### 2.2 JSON-RPC Builder Pattern
+```rust
+// Implement builder for JSON-RPC objects
+struct JsonRpcBuilder<T> {
+    jsonrpc: String,
+    id: Option<RequestId>,
+}
+
+impl<T> JsonRpcBuilder<T> {
+    fn with_id(mut self, id: RequestId) -> Self { ... }
+    fn build(self) -> T { ... }
+}
+```
+
+### Phase 3: Modularize Components (Week 3)
+
+#### 3.1 Split CLI Module
+- `cli/commands/` - Individual command handlers
+- `cli/core/` - Core CLI infrastructure
+- `cli/utils/` - Shared utilities
+
+#### 3.2 Create Shared Libraries
+- `common/error_handling/` - Error display and handling
+- `common/session/` - Session management primitives
+- `common/protocols/` - Protocol implementations (JSON-RPC, etc.)
+
+## Implementation Plan
+
+### Week 1: Foundation
+1. **Day 1-2**: Create trait definitions and abstractions
+2. **Day 3-4**: Implement generic command handler framework
+3. **Day 5**: Update tests for new abstractions
+
+### Week 2: Core Refactoring
+1. **Day 1-2**: Refactor CLI module using command handlers
+2. **Day 3-4**: Consolidate error display logic
+3. **Day 5**: Refactor session management
+
+### Week 3: Finalization
+1. **Day 1-2**: Complete module reorganization
+2. **Day 3-4**: Update documentation and examples
+3. **Day 5**: Performance testing and optimization
+
+## Expected Benefits
+
+1. **Code Reduction**: ~40-50% reduction in LOC
+2. **Maintainability**: Single point of change for common patterns
+3. **Testability**: Easier to test individual components
+4. **Performance**: Potential for optimizations in common paths
+5. **Extensibility**: Simpler to add new commands/features
+
+## Risk Mitigation
+
+1. **Incremental Approach**: Refactor one module at a time
+2. **Comprehensive Testing**: Ensure 100% test coverage before changes
+3. **Feature Flags**: Use feature flags for gradual rollout
+4. **Performance Benchmarks**: Monitor performance impact
+
+## Success Metrics
+
+- [ ] Reduce code duplication to <10% (from current ~30%)
+- [ ] Maintain 100% test coverage
+- [ ] No performance regression (benchmark before/after)
+- [ ] Improved developer velocity (measure time to add new features)
+
+## Priority Order
+
+1. **CLI Module** - Highest impact, most duplication
+2. **Error Handling** - Quick win, improves UX
+3. **Session Management** - Complex but high value
+4. **JSON-RPC** - Lower priority, isolated impact
+
+## Next Steps
+
+1. Review and approve this plan
+2. Create feature branch: `refactor/reduce-duplication`
+3. Begin Phase 1 implementation
+4. Set up CI/CD checks for code similarity
+
+## Tools and Resources
+
+- `similarity-rs` - Continue using for validation
+- `cargo-tarpaulin` - Ensure test coverage
+- `criterion` - Performance benchmarking
+- `clippy` - Additional linting for patterns
+
+---
+
+*Generated by similarity-rs analysis on 2025-07-03*
