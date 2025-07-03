@@ -26,7 +26,6 @@ use crate::identity::AgentRole;
 #[derive(Debug)]
 pub struct Sangha {
     /// Unique identifier for this Sangha instance
-    #[allow(dead_code)]
     id: Uuid,
     /// Active members (agents) in the Sangha
     members: Arc<RwLock<HashMap<String, SanghaMember>>>,
@@ -37,7 +36,6 @@ pub struct Sangha {
     /// Sangha configuration
     config: SanghaConfig,
     /// Session manager for meetings
-    #[allow(dead_code)]
     session_manager: session::SessionManager,
     /// Vote storage (proposal_id -> votes)
     votes: Arc<RwLock<HashMap<Uuid, Vec<Vote>>>>,
@@ -441,6 +439,33 @@ impl Sangha {
                 .count(),
             consensus_algorithm: self.consensus.name().to_string(),
         }
+    }
+
+    /// Get the Sangha ID
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// Schedule a Sangha session
+    pub async fn schedule_session(
+        &self,
+        title: String,
+        scheduled_for: DateTime<Utc>,
+        agenda: Vec<String>,
+    ) -> Result<Uuid> {
+        self.session_manager
+            .schedule_session(title, scheduled_for, agenda)
+            .await
+    }
+
+    /// Start a scheduled session
+    pub async fn start_session(&self, session_id: Uuid) -> Result<()> {
+        self.session_manager.start_session(session_id).await
+    }
+
+    /// Get active session if any
+    pub async fn get_active_session(&self) -> Option<session::Session> {
+        self.session_manager.get_active_session().await
     }
 }
 

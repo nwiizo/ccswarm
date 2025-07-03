@@ -159,12 +159,9 @@ pub struct SearchAgentSanghaParticipant {
 /// Active research task for a proposal
 #[derive(Debug, Clone)]
 struct ResearchTask {
-    #[allow(dead_code)]
     proposal_id: Uuid,
-    #[allow(dead_code)]
     queries: Vec<String>,
     results: Vec<SearchResult>,
-    #[allow(dead_code)]
     started_at: DateTime<Utc>,
     completed: bool,
 }
@@ -230,16 +227,14 @@ impl SearchAgentSanghaParticipant {
 
         // Look for technical terms (capitalized words, acronyms)
         for word in &words {
-            if word.chars().all(|c| c.is_uppercase()) && word.len() > 2 {
-                terms.push(word.to_string());
-            } else if word
-                .chars()
-                .next()
-                .map(|c| c.is_uppercase())
-                .unwrap_or(false)
-                && word.len() > 4
+            if (word.chars().all(|c| c.is_uppercase()) && word.len() > 2)
+                || (word
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
+                    && word.len() > 4)
             {
-                // Same action as above - push to terms
                 terms.push(word.to_string());
             }
         }
@@ -331,12 +326,17 @@ impl SearchAgentSanghaParticipant {
     /// Analyze search results to form an opinion
     fn analyze_search_results(
         &self,
-        _proposal: &Proposal,
+        proposal: &Proposal,
         results: &[SearchResult],
     ) -> VotingDecision {
         let mut supporting_evidence = Vec::new();
         let mut concerns = Vec::new();
         let mut confidence = 0.5; // Start neutral
+
+        // Get research task to check timing and query relevance
+        let research_info = futures::executor::block_on(async {
+            self.active_research.read().await.get(&proposal.id).cloned()
+        });
 
         // Count positive and negative indicators
         let mut positive_count = 0;
@@ -344,7 +344,21 @@ impl SearchAgentSanghaParticipant {
 
         for result in results {
             let snippet_lower = result.snippet.to_lowercase();
-            let _title_lower = result.title.to_lowercase();
+            let title_lower = result.title.to_lowercase();
+
+            // Check relevance based on original queries
+            let _relevance_score = if let Some(ref task) = research_info {
+                task.queries
+                    .iter()
+                    .filter(|q| {
+                        title_lower.contains(&q.to_lowercase())
+                            || snippet_lower.contains(&q.to_lowercase())
+                    })
+                    .count() as f64
+                    / task.queries.len() as f64
+            } else {
+                0.5
+            };
 
             // Look for positive indicators
             if snippet_lower.contains("success")
@@ -510,6 +524,24 @@ impl SearchAgentSanghaParticipant {
         }
 
         needs
+    }
+
+    /// Get research timing information for a proposal
+    pub async fn get_research_timing(&self, proposal_id: Uuid) -> Option<(DateTime<Utc>, bool)> {
+        self.active_research
+            .read()
+            .await
+            .get(&proposal_id)
+            .map(|task| (task.started_at, task.completed))
+    }
+
+    /// Get all queries used for a proposal research
+    pub async fn get_research_queries(&self, proposal_id: Uuid) -> Option<Vec<String>> {
+        self.active_research
+            .read()
+            .await
+            .get(&proposal_id)
+            .map(|task| task.queries.clone())
     }
 }
 

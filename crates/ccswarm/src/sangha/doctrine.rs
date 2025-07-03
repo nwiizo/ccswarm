@@ -226,11 +226,68 @@ impl DoctrineManager {
     /// Check compliance with a specific doctrine
     fn check_doctrine_compliance(
         &self,
-        _doctrine: &Doctrine,
-        _action: &ProposedAction,
+        doctrine: &Doctrine,
+        action: &ProposedAction,
     ) -> ComplianceCheck {
-        // This would contain actual compliance logic
-        // For now, return compliant
+        // Check for violations based on doctrine category and action
+        match doctrine.category {
+            DoctrineCategory::CorePrinciple => {
+                // Check if action violates core principles
+                if action.action_type.contains("delete")
+                    && action.affects.contains(&"user_data".to_string())
+                {
+                    return ComplianceCheck::Violation(format!(
+                        "Action '{}' violates core principle '{}': User data must be protected",
+                        action.action_type, doctrine.title
+                    ));
+                }
+            }
+            DoctrineCategory::EthicalRule => {
+                // Check ethical rules
+                if action.action_type.contains("privacy") && action.description.contains("bypass") {
+                    return ComplianceCheck::Violation(format!(
+                        "Action '{}' violates ethical rule '{}': Privacy controls cannot be bypassed",
+                        action.action_type, doctrine.title
+                    ));
+                }
+            }
+            DoctrineCategory::OperationalGuideline => {
+                // Check operational guidelines
+                if action.action_type.contains("deploy") && !action.description.contains("test") {
+                    return ComplianceCheck::Warning(format!(
+                        "Action '{}' may not comply with guideline '{}': Deployments should be tested first",
+                        action.action_type, doctrine.title
+                    ));
+                }
+            }
+            DoctrineCategory::TechnicalStandard => {
+                // Check technical standards
+                if action.action_type.contains("api") && !action.description.contains("versioned") {
+                    return ComplianceCheck::Warning(format!(
+                        "Action '{}' may not follow standard '{}': APIs should be versioned",
+                        action.action_type, doctrine.title
+                    ));
+                }
+            }
+            DoctrineCategory::ProcessDefinition => {
+                // Check process definitions
+                if action.action_type.contains("merge") && !action.description.contains("review") {
+                    return ComplianceCheck::Violation(format!(
+                        "Action '{}' violates process '{}': Code must be reviewed before merging",
+                        action.action_type, doctrine.title
+                    ));
+                }
+            }
+        }
+
+        // Additional specific checks based on doctrine content
+        if doctrine.content.contains("security") && action.action_type.contains("public") {
+            return ComplianceCheck::Warning(
+                "Security-related actions should be carefully reviewed before making public"
+                    .to_string(),
+            );
+        }
+
         ComplianceCheck::Compliant
     }
 
@@ -282,9 +339,7 @@ pub struct ComplianceResult {
 #[derive(Debug, Clone)]
 enum ComplianceCheck {
     Compliant,
-    #[allow(dead_code)]
     Warning(String),
-    #[allow(dead_code)]
     Violation(String),
 }
 
@@ -300,7 +355,6 @@ pub struct DoctrineVersion {
 
 /// Doctrine interpreter for natural language queries
 pub struct DoctrineInterpreter {
-    #[allow(dead_code)]
     doctrines: Arc<DoctrineManager>,
 }
 
@@ -310,20 +364,58 @@ impl DoctrineInterpreter {
     }
 
     /// Interpret a query about doctrines
-    pub async fn interpret_query(&self, _query: &str) -> InterpretationResult {
-        // This would use NLP to understand the query
-        // For now, return a simple result
+    pub async fn interpret_query(&self, query: &str) -> InterpretationResult {
+        let query_lower = query.to_lowercase();
+        let all_doctrines = self.doctrines.get_active_doctrines().await;
+        let mut relevant_doctrines = Vec::new();
+        let mut confidence = 0.0;
+
+        // Simple keyword matching for now
+        for doctrine in &all_doctrines {
+            let title_match = doctrine.title.to_lowercase().contains(&query_lower);
+            let content_match = doctrine.content.to_lowercase().contains(&query_lower);
+
+            if title_match || content_match {
+                relevant_doctrines.push(doctrine.id);
+                confidence = if title_match { 0.8 } else { 0.6 };
+            }
+        }
+
+        let interpretation = if relevant_doctrines.is_empty() {
+            "No relevant doctrines found for the query".to_string()
+        } else {
+            format!(
+                "Found {} relevant doctrine(s) for: {}",
+                relevant_doctrines.len(),
+                query
+            )
+        };
+
         InterpretationResult {
-            relevant_doctrines: vec![],
-            interpretation: "Query interpretation not implemented".to_string(),
-            confidence: 0.0,
+            relevant_doctrines,
+            interpretation,
+            confidence,
         }
     }
 
     /// Find relevant doctrines for a situation
-    pub async fn find_relevant_doctrines(&self, _situation: &str) -> Vec<Doctrine> {
-        // This would use semantic search
-        vec![]
+    pub async fn find_relevant_doctrines(&self, situation: &str) -> Vec<Doctrine> {
+        let situation_lower = situation.to_lowercase();
+        let all_doctrines = self.doctrines.get_active_doctrines().await;
+
+        // Filter doctrines based on situation keywords
+        all_doctrines
+            .into_iter()
+            .filter(|doctrine| {
+                // Check if doctrine is relevant to the situation
+                let keywords = ["security", "deploy", "merge", "api", "data", "review"];
+                keywords.iter().any(|&keyword| {
+                    situation_lower.contains(keyword)
+                        && (doctrine.title.to_lowercase().contains(keyword)
+                            || doctrine.content.to_lowercase().contains(keyword))
+                })
+            })
+            .collect()
     }
 }
 

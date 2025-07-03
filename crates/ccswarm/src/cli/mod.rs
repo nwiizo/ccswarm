@@ -3,7 +3,10 @@
 #![allow(clippy::collapsible_else_if)]
 #![allow(clippy::get_first)]
 
+mod command_handler;
+mod commands;
 mod error_help;
+mod health;
 mod interactive_help;
 mod output;
 mod progress;
@@ -255,6 +258,33 @@ pub enum Commands {
         /// Search help topics
         #[arg(short, long)]
         search: Option<String>,
+    },
+
+    /// System health checks and diagnostics
+    Health {
+        /// Check agent health status
+        #[arg(long)]
+        check_agents: bool,
+
+        /// Check AI-session health
+        #[arg(long)]
+        check_sessions: bool,
+
+        /// Show resource usage
+        #[arg(long)]
+        resources: bool,
+
+        /// Run full diagnostics
+        #[arg(long)]
+        diagnose: bool,
+
+        /// Show detailed output
+        #[arg(short, long)]
+        detailed: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Check system health and diagnose issues
@@ -1217,6 +1247,24 @@ impl CliRunner {
             Commands::Tutorial { chapter } => self.handle_tutorial(*chapter).await,
             Commands::HelpTopic { topic, search } => {
                 self.handle_help(topic.as_deref(), search.as_deref()).await
+            }
+            Commands::Health {
+                check_agents,
+                check_sessions,
+                resources,
+                diagnose,
+                detailed,
+                format,
+            } => {
+                self.handle_health(
+                    *check_agents,
+                    *check_sessions,
+                    *resources,
+                    *diagnose,
+                    *detailed,
+                    format,
+                )
+                .await
             }
             Commands::Doctor {
                 fix,
@@ -5232,6 +5280,128 @@ impl CliRunner {
             help.show_topic(t);
         } else {
             help.show_topic_list();
+        }
+
+        Ok(())
+    }
+
+    async fn handle_health(
+        &self,
+        check_agents: bool,
+        check_sessions: bool,
+        resources: bool,
+        diagnose: bool,
+        detailed: bool,
+        format: &str,
+    ) -> Result<()> {
+        use crate::cli::health::{run_diagnostics, HealthChecker};
+        use crate::coordination::StatusTracker;
+
+        // Run diagnostics if requested
+        if diagnose {
+            return run_diagnostics(&self.repo_path).await;
+        }
+
+        // Initialize health checker
+        let status_tracker = StatusTracker::new().await?;
+        let health_checker = HealthChecker::new(status_tracker);
+
+        // Add monitoring system if available
+        // TODO: Get monitoring system from running orchestrator
+        // let monitoring = MonitoringSystem::new();
+        // let health_checker = health_checker.with_monitoring(monitoring);
+
+        // Perform health checks based on flags
+        let report = if check_agents && !check_sessions && !resources {
+            // Only check agents
+            let checks = health_checker.check_agents_only().await?;
+            let overall_status = if checks
+                .iter()
+                .any(|c| c.status == health::HealthStatus::Down)
+            {
+                health::HealthStatus::Critical
+            } else if checks
+                .iter()
+                .any(|c| c.status == health::HealthStatus::Critical)
+            {
+                health::HealthStatus::Critical
+            } else if checks
+                .iter()
+                .any(|c| c.status == health::HealthStatus::Warning)
+            {
+                health::HealthStatus::Warning
+            } else {
+                health::HealthStatus::Healthy
+            };
+
+            let total_agents = checks.len();
+            let healthy_agents = checks
+                .iter()
+                .filter(|c| c.status == health::HealthStatus::Healthy)
+                .count();
+            health::SystemHealthReport {
+                timestamp: chrono::Utc::now(),
+                overall_status,
+                checks,
+                total_agents,
+                healthy_agents,
+                active_tasks: 0,
+                session_count: 0,
+            }
+        } else if check_sessions && !check_agents && !resources {
+            // Only check sessions
+            let checks = health_checker.check_sessions_only().await?;
+            let overall_status = if checks
+                .iter()
+                .any(|c| c.status == health::HealthStatus::Down)
+            {
+                health::HealthStatus::Critical
+            } else if checks
+                .iter()
+                .any(|c| c.status == health::HealthStatus::Critical)
+            {
+                health::HealthStatus::Critical
+            } else if checks
+                .iter()
+                .any(|c| c.status == health::HealthStatus::Warning)
+            {
+                health::HealthStatus::Warning
+            } else {
+                health::HealthStatus::Healthy
+            };
+
+            let session_count = checks.len();
+            health::SystemHealthReport {
+                timestamp: chrono::Utc::now(),
+                overall_status,
+                checks,
+                total_agents: 0,
+                healthy_agents: 0,
+                active_tasks: 0,
+                session_count,
+            }
+        } else {
+            // Full health check
+            health_checker.check_all().await?
+        };
+
+        // Output results based on format
+        match format {
+            "json" => {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            }
+            _ => {
+                if detailed {
+                    report.print_detailed();
+                } else {
+                    report.print_summary();
+                }
+            }
+        }
+
+        // Exit with non-zero code if unhealthy
+        if report.overall_status == health::HealthStatus::Critical {
+            std::process::exit(1);
         }
 
         Ok(())

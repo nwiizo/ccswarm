@@ -141,6 +141,10 @@ impl ConsensusAlgorithm for SimpleConsensus {
                     format!("{:.2}%", percentages.abstain * 100.0),
                 ),
                 ("total_votes".to_string(), votes.len().to_string()),
+                (
+                    "total_voting_weight".to_string(),
+                    format!("{:.2}", percentages.total_weight),
+                ),
             ]
             .into(),
         }
@@ -287,7 +291,6 @@ struct VotePercentages {
     nay: f64,
     abstain: f64,
     veto: f64,
-    #[allow(dead_code)]
     total_weight: f64,
 }
 

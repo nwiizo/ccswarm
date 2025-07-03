@@ -144,6 +144,47 @@ impl SessionManager {
         Ok(session_id)
     }
 
+    /// Schedule a session
+    pub async fn schedule_session(
+        &self,
+        title: String,
+        scheduled_for: DateTime<Utc>,
+        agenda: Vec<String>,
+    ) -> Result<Uuid> {
+        let agenda_items: Vec<AgendaItem> = agenda
+            .into_iter()
+            .enumerate()
+            .map(|(i, topic)| AgendaItem {
+                id: Uuid::new_v4(),
+                title: topic.clone(),
+                description: format!("Discussion item {}", i + 1),
+                item_type: AgendaItemType::ProposalDiscussion,
+                proposal_id: None,
+                presenter: "Sangha".to_string(),
+                time_allocated: Duration::minutes(10),
+                status: AgendaItemStatus::Pending,
+            })
+            .collect();
+
+        let session = Session {
+            id: Uuid::new_v4(),
+            session_type: SessionType::Regular,
+            started_at: scheduled_for,
+            ended_at: None,
+            participants: Vec::new(),
+            agenda: agenda_items,
+            decisions: Vec::new(),
+            status: SessionStatus::Scheduled,
+            notes: format!("Session: {}", title),
+        };
+
+        let session_id = session.id;
+        let mut sessions = self.sessions.write().await;
+        sessions.insert(session_id, session);
+
+        Ok(session_id)
+    }
+
     /// Start a session
     pub async fn start_session(&self, session_id: Uuid) -> Result<()> {
         let mut active = self.active_session.lock().await;

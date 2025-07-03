@@ -2,10 +2,50 @@
 
 use colored::Colorize;
 
+/// Common error diagram template structure
+#[derive(Debug)]
+pub struct DiagramConfig {
+    pub title: String,
+    pub title_color: colored::Color,
+    pub sections: Vec<DiagramSection>,
+}
+
+#[derive(Debug)]
+pub struct DiagramSection {
+    pub content: String,
+    pub highlights: Vec<(String, colored::Color)>,
+}
+
 /// Visual error diagrams for common scenarios
 pub struct ErrorDiagrams;
 
 impl ErrorDiagrams {
+    /// Generic diagram builder
+    fn build_diagram(config: DiagramConfig) -> String {
+        let mut result = String::new();
+        
+        // Add title
+        result.push_str(&format!("\n    {}\n", 
+            config.title.color(config.title_color).bold()
+        ));
+        
+        // Add sections
+        for section in config.sections {
+            let mut section_content = section.content;
+            
+            // Apply highlights
+            for (text, color) in section.highlights {
+                section_content = section_content.replace(
+                    &format!("{{{}}}", text),
+                    &text.color(color).to_string()
+                );
+            }
+            
+            result.push_str(&section_content);
+        }
+        
+        result
+    }
     /// Network connectivity diagram
     pub fn network_error() -> String {
         format!(
