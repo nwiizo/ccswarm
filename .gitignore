@@ -84,3 +84,4 @@ crates/ccswarm/test-projects/
 COMPILATION_FIX_SUMMARY.md
 blog_post*.md
 *.draft.md
+.vibe-ticket/
