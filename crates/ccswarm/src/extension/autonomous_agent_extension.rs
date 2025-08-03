@@ -416,7 +416,11 @@ impl NeedIdentifier {
         }
 
         // Sort by priority
-        needs.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap());
+        needs.sort_by(|a, b| {
+            b.priority
+                .partial_cmp(&a.priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(needs)
     }
