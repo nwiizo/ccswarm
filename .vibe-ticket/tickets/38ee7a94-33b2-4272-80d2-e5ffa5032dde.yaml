@@ -1,0 +1,16 @@
+id: 38ee7a94-33b2-4272-80d2-e5ffa5032dde
+slug: 202508032118-async-operation-framework
+title: Implement async operation framework with retry and timeout
+description: ''
+priority: high
+status: todo
+tags:
+- refactoring
+- async
+- patterns
+created_at: 2025-08-03T12:18:39.229516Z
+started_at: null
+closed_at: null
+assignee: null
+tasks: []
+metadata: {}

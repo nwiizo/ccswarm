@@ -1,0 +1,16 @@
+id: 411cc50d-b3d4-4467-96ed-1a3a4f516ab1
+slug: 202508032118-migrate-proactive-master
+title: Migrate proactive_master.rs to pattern DSL (64% reduction)
+description: ''
+priority: high
+status: todo
+tags:
+- refactoring
+- orchestrator
+- pattern-dsl
+created_at: 2025-08-03T12:18:34.659690Z
+started_at: null
+closed_at: null
+assignee: null
+tasks: []
+metadata: {}

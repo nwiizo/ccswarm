@@ -19,3 +19,4 @@ ui:
   theme: dark
   editor: vi
   emoji: true
+  page_size: 20
