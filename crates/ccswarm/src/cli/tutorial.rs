@@ -429,7 +429,9 @@ TodoApp/
     async fn simulate_typing(&self, text: &str) {
         for ch in text.chars() {
             print!("{}", ch);
-            io::stdout().flush().unwrap();
+            io::stdout().flush().unwrap_or_else(|e| {
+            eprintln!("Failed to flush stdout: {}", e);
+        });
             sleep(Duration::from_millis(30)).await;
         }
     }
@@ -437,12 +439,16 @@ TodoApp/
     async fn animate_progress(&self, message: &str, duration_ms: u64) {
         print!("  {} ", "⏳".bright_yellow());
         print!("{}", message);
-        io::stdout().flush().unwrap();
+        io::stdout().flush().unwrap_or_else(|e| {
+            eprintln!("Failed to flush stdout: {}", e);
+        });
 
         sleep(Duration::from_millis(duration_ms)).await;
 
         print!("\r  {} {}\n", "✅".bright_green(), message);
-        io::stdout().flush().unwrap();
+        io::stdout().flush().unwrap_or_else(|e| {
+            eprintln!("Failed to flush stdout: {}", e);
+        });
     }
 
     async fn wait_for_enter(&self, prompt: &str) -> Result<()> {
@@ -470,7 +476,9 @@ TodoApp/
 
 fn clear_screen() {
     print!("\x1B[2J\x1B[1;1H");
-    io::stdout().flush().unwrap();
+    io::stdout().flush().unwrap_or_else(|e| {
+            eprintln!("Failed to flush stdout: {}", e);
+        });
 }
 
 // Quick tips that appear during operations

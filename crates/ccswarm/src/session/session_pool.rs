@@ -360,7 +360,7 @@ impl SessionPool {
                         a.stats
                             .current_load
                             .partial_cmp(&b.stats.current_load)
-                            .unwrap()
+                            .unwrap_or(std::cmp::Ordering::Equal)
                     })
                     .map(|s| Arc::new((*s).clone()))
             }
@@ -397,7 +397,7 @@ impl SessionPool {
                     .max_by(|a, b| {
                         let score_a = self.calculate_session_score(a);
                         let score_b = self.calculate_session_score(b);
-                        score_a.partial_cmp(&score_b).unwrap()
+                        score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
                     })
                     .map(|s| Arc::new((*s).clone()))
             }

@@ -150,7 +150,8 @@ impl SystemHealthReport {
                 if let Some(details) = &check.details {
                     println!(
                         "    Details: {}",
-                        serde_json::to_string_pretty(details).unwrap()
+                        serde_json::to_string_pretty(details)
+                            .unwrap_or_else(|e| format!("Failed to serialize details: {}", e))
                     );
                 }
             }
@@ -165,7 +166,8 @@ impl SystemHealthReport {
                 if let Some(details) = &check.details {
                     println!(
                         "    Details: {}",
-                        serde_json::to_string_pretty(details).unwrap()
+                        serde_json::to_string_pretty(details)
+                            .unwrap_or_else(|e| format!("Failed to serialize details: {}", e))
                     );
                 }
             }
@@ -180,7 +182,8 @@ impl SystemHealthReport {
                 if let Some(details) = &check.details {
                     println!(
                         "    Details: {}",
-                        serde_json::to_string_pretty(details).unwrap()
+                        serde_json::to_string_pretty(details)
+                            .unwrap_or_else(|e| format!("Failed to serialize details: {}", e))
                     );
                 }
             }

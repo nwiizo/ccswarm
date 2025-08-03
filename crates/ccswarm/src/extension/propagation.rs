@@ -572,7 +572,7 @@ impl PropagationManager {
         // Mark as propagating
         self.propagation_status
             .lock()
-            .map_err(|e| ExtensionError::Custom(format!("Failed to acquire lock: {}", e)))?.insert(
+            .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?.insert(
             agent_id.to_string(),
             PropagationStatus::Propagating {
                 started_at: chrono::Utc::now(),
@@ -608,7 +608,7 @@ impl PropagationManager {
             {
                 self.propagation_status
             .lock()
-            .map_err(|e| ExtensionError::Custom(format!("Failed to acquire lock: {}", e)))?.insert(
+            .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?.insert(
                     agent_id.clone(),
                     PropagationStatus::Propagating {
                         started_at: chrono::Utc::now(),

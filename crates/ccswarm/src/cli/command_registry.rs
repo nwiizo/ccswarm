@@ -51,7 +51,7 @@ impl CommandRegistry {
                 {
                     runner.init_project(name, repo_url.as_deref(), agents).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -69,7 +69,7 @@ impl CommandRegistry {
                         .start_orchestrator(*daemon, *port, isolation, *use_real_api)
                         .await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -79,7 +79,7 @@ impl CommandRegistry {
                 if let Commands::Status { detailed, agent } = cmd {
                     runner.show_status(*detailed, agent.as_deref()).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -89,7 +89,7 @@ impl CommandRegistry {
                 if let Commands::Task { action } = cmd {
                     runner.handle_task(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -99,7 +99,7 @@ impl CommandRegistry {
                 if let Commands::Agents { all } = cmd {
                     runner.list_agents(*all).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -109,7 +109,7 @@ impl CommandRegistry {
                 if let Commands::Review { agent, strict } = cmd {
                     runner.run_review(agent.as_deref(), *strict).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -119,7 +119,7 @@ impl CommandRegistry {
                 if let Commands::Worktree { action } = cmd {
                     runner.handle_worktree(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -134,7 +134,7 @@ impl CommandRegistry {
                 {
                     runner.show_logs(*follow, agent.as_deref(), *lines).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -144,7 +144,7 @@ impl CommandRegistry {
                 if let Commands::Config { action } = cmd {
                     runner.handle_config(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -154,7 +154,7 @@ impl CommandRegistry {
                 if let Commands::Delegate { action } = cmd {
                     runner.handle_delegate(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -164,7 +164,7 @@ impl CommandRegistry {
                 if let Commands::Session { action } = cmd {
                     runner.handle_session(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -174,7 +174,7 @@ impl CommandRegistry {
                 if let Commands::Resource { action } = cmd {
                     runner.handle_resource(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -192,7 +192,7 @@ impl CommandRegistry {
                         .handle_auto_create(description, None, *auto_deploy, output)
                         .await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -202,7 +202,7 @@ impl CommandRegistry {
                 if let Commands::Sangha { action } = cmd {
                     runner.handle_sangha(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -212,7 +212,7 @@ impl CommandRegistry {
                 if let Commands::Extend { action } = cmd {
                     runner.handle_extend(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -222,7 +222,7 @@ impl CommandRegistry {
                 if let Commands::Search { action } = cmd {
                     runner.handle_search(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -232,7 +232,7 @@ impl CommandRegistry {
                 if let Commands::Evolution { action } = cmd {
                     runner.handle_evolution(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -242,7 +242,7 @@ impl CommandRegistry {
                 if let Commands::Quality { action } = cmd {
                     runner.handle_quality(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -252,7 +252,7 @@ impl CommandRegistry {
                 if let Commands::Template { action } = cmd {
                     runner.handle_template(action).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -262,7 +262,7 @@ impl CommandRegistry {
                 if let Commands::Tutorial { chapter } = cmd {
                     runner.handle_tutorial(*chapter).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -274,7 +274,7 @@ impl CommandRegistry {
                         .handle_help(topic.as_deref(), search.as_deref())
                         .await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -301,7 +301,7 @@ impl CommandRegistry {
                         )
                         .await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -318,7 +318,7 @@ impl CommandRegistry {
                         .handle_doctor(*fix, error.as_deref(), *check_api)
                         .await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -336,7 +336,7 @@ impl CommandRegistry {
                         .handle_quickstart(name.as_deref(), *no_prompt, *all_agents, *with_tests)
                         .await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });
@@ -411,7 +411,7 @@ macro_rules! register_command {
                 if let $pattern = cmd {
                     $handler(runner).await
                 } else {
-                    unreachable!()
+                    anyhow::bail!("Command type mismatch in registry handler")
                 }
             })
         });

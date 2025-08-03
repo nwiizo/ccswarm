@@ -146,7 +146,7 @@ impl ProgressTracker {
                     print!(" - {}", sub_msgs.last().unwrap().dimmed());
                 }
 
-                io::stdout().flush().unwrap();
+                let _ = io::stdout().flush();
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         });
@@ -331,12 +331,12 @@ pub struct StatusLine;
 impl StatusLine {
     pub fn update(message: impl AsRef<str>) {
         print!("\r\x1B[K{}", message.as_ref());
-        io::stdout().flush().unwrap();
+        let _ = io::stdout().flush();
     }
 
     pub fn complete() {
         print!("\r\x1B[K");
-        io::stdout().flush().unwrap();
+        let _ = io::stdout().flush();
     }
 }
 
@@ -350,7 +350,7 @@ pub async fn wait_with_message(message: impl Into<String>) -> tokio::task::JoinH
 
         loop {
             print!("\r{} {}", msg, frames[i].bright_cyan());
-            io::stdout().flush().unwrap();
+            let _ = io::stdout().flush();
             i = (i + 1) % frames.len();
             tokio::time::sleep(Duration::from_millis(500)).await;
         }

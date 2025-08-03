@@ -246,7 +246,7 @@ impl MasterDelegationEngine {
             if let Some(confidence) = Self::evaluate_condition(&rule.condition, task, &task_lower) {
                 let total_confidence = confidence + rule.confidence_boost;
 
-                if best_match.is_none() || total_confidence > best_match.as_ref().unwrap().1 {
+                if best_match.as_ref().map_or(true, |(_, prev_confidence)| total_confidence > *prev_confidence) {
                     best_match = Some((rule.clone(), total_confidence.min(1.0)));
                 }
             }
@@ -293,7 +293,7 @@ impl MasterDelegationEngine {
             let workload = metrics.current_tasks as f64 / 10.0; // Normalize to 0-1
             let availability_score = metrics.availability * (1.0 - workload);
 
-            if best_agent.is_none() || availability_score > best_agent.as_ref().unwrap().1 {
+            if best_agent.as_ref().map_or(true, |(_, prev_score)| availability_score > *prev_score) {
                 best_agent = Some((metrics.agent_role.clone(), availability_score));
             }
         }
@@ -324,7 +324,7 @@ impl MasterDelegationEngine {
         for metrics in self.agent_metrics.values() {
             let expertise_score = metrics.specialization_score * metrics.success_rate;
 
-            if best_match.is_none() || expertise_score > best_match.as_ref().unwrap().1 {
+            if best_match.as_ref().map_or(true, |(_, prev_score)| expertise_score > *prev_score) {
                 best_match = Some((metrics.agent_role.clone(), expertise_score));
             }
         }

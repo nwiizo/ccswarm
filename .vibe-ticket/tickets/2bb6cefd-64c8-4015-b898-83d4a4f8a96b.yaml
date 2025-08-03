@@ -1,0 +1,16 @@
+id: 2bb6cefd-64c8-4015-b898-83d4a4f8a96b
+slug: 202508032128-reduce-code-duplication-agents
+title: Reduce code duplication across agent implementations
+description: ''
+priority: high
+status: todo
+tags:
+- refactoring
+- architecture
+- agents
+created_at: 2025-08-03T12:28:44.320701Z
+started_at: null
+closed_at: null
+assignee: null
+tasks: []
+metadata: {}

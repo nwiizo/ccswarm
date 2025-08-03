@@ -1,0 +1,16 @@
+id: 04e3ff7a-f417-44f8-bf01-83c5656e7e4b
+slug: 202508032128-split-large-modules
+title: Split large modules into smaller, focused submodules
+description: ''
+priority: medium
+status: todo
+tags:
+- refactoring
+- architecture
+- maintainability
+created_at: 2025-08-03T12:28:49.110714Z
+started_at: null
+closed_at: null
+assignee: null
+tasks: []
+metadata: {}

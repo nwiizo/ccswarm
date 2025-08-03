@@ -1,0 +1,17 @@
+id: 3d930ad1-5ec0-4c55-9f47-fabd0777383c
+slug: 202508032153-ccswarm-subagent-integration
+title: ccswarm サブエージェント統合仕様 - Claude Codeネイティブ機能への移行
+description: ''
+priority: critical
+status: todo
+tags:
+- architecture
+- refactoring
+- claude-code
+- integration
+created_at: 2025-08-03T12:53:56.202196Z
+started_at: null
+closed_at: null
+assignee: null
+tasks: []
+metadata: {}

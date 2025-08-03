@@ -509,7 +509,9 @@ impl MasterClaude {
     async fn select_optimal_agent(&self, task: &Task) -> Result<String> {
         // For remediation tasks, use the assigned agent if specified
         if task.task_type == TaskType::Remediation && task.assigned_to.is_some() {
-            return Ok(task.assigned_to.as_ref().unwrap().clone());
+            return Ok(task.assigned_to.as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Assigned agent not found for remediation task"))?
+                .clone());
         }
 
         // Determine required specialization
