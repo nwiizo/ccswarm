@@ -3,8 +3,8 @@
 #![allow(clippy::collapsible_else_if)]
 #![allow(clippy::get_first)]
 
-mod command_handler;
-mod commands;
+mod command_registry;
+
 mod error_help;
 mod health;
 mod interactive_help;
@@ -1195,92 +1195,9 @@ impl CliRunner {
 
     /// Run the CLI command
     pub async fn run(&self, command: &Commands) -> Result<()> {
-        match command {
-            Commands::Init {
-                name,
-                repo_url,
-                agents,
-            } => self.init_project(name, repo_url.as_deref(), agents).await,
-            Commands::Start {
-                daemon,
-                port,
-                isolation,
-                use_real_api,
-            } => {
-                self.start_orchestrator(*daemon, *port, isolation, *use_real_api)
-                    .await
-            }
-            Commands::Tui => self.start_tui().await,
-            Commands::Stop => self.stop_orchestrator().await,
-            Commands::Status { detailed, agent } => {
-                self.show_status(*detailed, agent.as_deref()).await
-            }
-            Commands::Task { action } => self.handle_task(action).await,
-            Commands::Agents { all } => self.list_agents(*all).await,
-            Commands::Review { agent, strict } => self.run_review(agent.as_deref(), *strict).await,
-            Commands::Worktree { action } => self.handle_worktree(action).await,
-            Commands::Logs {
-                follow,
-                agent,
-                lines,
-            } => self.show_logs(*follow, agent.as_deref(), *lines).await,
-            Commands::Config { action } => self.handle_config(action).await,
-            Commands::Delegate { action } => self.handle_delegate(action).await,
-            Commands::Session { action } => self.handle_session(action).await,
-            Commands::Resource { action } => self.handle_resource(action).await,
-            Commands::AutoCreate {
-                description,
-                template: _,
-                auto_deploy,
-                output,
-            } => {
-                self.handle_auto_create(description, None, *auto_deploy, output)
-                    .await
-            }
-            Commands::Sangha { action } => self.handle_sangha(action).await,
-            Commands::Extend { action } => self.handle_extend(action).await,
-            Commands::Search { action } => self.handle_search(action).await,
-            Commands::Evolution { action } => self.handle_evolution(action).await,
-            Commands::Quality { action } => self.handle_quality(action).await,
-            Commands::Template { action } => self.handle_template(action).await,
-            Commands::Setup => self.handle_setup().await,
-            Commands::Tutorial { chapter } => self.handle_tutorial(*chapter).await,
-            Commands::HelpTopic { topic, search } => {
-                self.handle_help(topic.as_deref(), search.as_deref()).await
-            }
-            Commands::Health {
-                check_agents,
-                check_sessions,
-                resources,
-                diagnose,
-                detailed,
-                format,
-            } => {
-                self.handle_health(
-                    *check_agents,
-                    *check_sessions,
-                    *resources,
-                    *diagnose,
-                    *detailed,
-                    format,
-                )
-                .await
-            }
-            Commands::Doctor {
-                fix,
-                error,
-                check_api,
-            } => self.handle_doctor(*fix, error.as_deref(), *check_api).await,
-            Commands::Quickstart {
-                name,
-                no_prompt,
-                all_agents,
-                with_tests,
-            } => {
-                self.handle_quickstart(name.as_deref(), *no_prompt, *all_agents, *with_tests)
-                    .await
-            }
-        }
+        // Use the command registry for centralized command handling
+        let registry = self::command_registry::get_command_registry();
+        registry.execute(self, command).await
     }
 
     async fn init_project(
@@ -5317,12 +5234,7 @@ impl CliRunner {
             let checks = health_checker.check_agents_only().await?;
             let overall_status = if checks
                 .iter()
-                .any(|c| c.status == health::HealthStatus::Down)
-            {
-                health::HealthStatus::Critical
-            } else if checks
-                .iter()
-                .any(|c| c.status == health::HealthStatus::Critical)
+                .any(|c| matches!(c.status, health::HealthStatus::Down | health::HealthStatus::Critical))
             {
                 health::HealthStatus::Critical
             } else if checks
@@ -5353,12 +5265,7 @@ impl CliRunner {
             let checks = health_checker.check_sessions_only().await?;
             let overall_status = if checks
                 .iter()
-                .any(|c| c.status == health::HealthStatus::Down)
-            {
-                health::HealthStatus::Critical
-            } else if checks
-                .iter()
-                .any(|c| c.status == health::HealthStatus::Critical)
+                .any(|c| matches!(c.status, health::HealthStatus::Down | health::HealthStatus::Critical))
             {
                 health::HealthStatus::Critical
             } else if checks

@@ -20,7 +20,7 @@ impl JsonRpcBuilder {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn request(self, id: RequestId, method: String, params: Option<Value>) -> JsonRpcRequest {
         JsonRpcRequest {
             jsonrpc: self.jsonrpc,
@@ -29,7 +29,7 @@ impl JsonRpcBuilder {
             params,
         }
     }
-    
+
     pub fn response_success(self, id: RequestId, result: Value) -> JsonRpcResponse {
         JsonRpcResponse {
             jsonrpc: self.jsonrpc,
@@ -38,7 +38,7 @@ impl JsonRpcBuilder {
             error: None,
         }
     }
-    
+
     pub fn response_error(self, id: RequestId, error: JsonRpcError) -> JsonRpcResponse {
         JsonRpcResponse {
             jsonrpc: self.jsonrpc,
@@ -47,7 +47,7 @@ impl JsonRpcBuilder {
             error: Some(error),
         }
     }
-    
+
     pub fn notification(self, method: String, params: Option<Value>) -> JsonRpcNotification {
         JsonRpcNotification {
             jsonrpc: self.jsonrpc,
@@ -146,9 +146,13 @@ pub struct JsonRpcError {
 impl JsonRpcError {
     /// Create an error with the given code and message
     fn create_error(code: i32, message: String, data: Option<Value>) -> Self {
-        Self { code, message, data }
+        Self {
+            code,
+            message,
+            data,
+        }
     }
-    
+
     /// Parse error
     pub fn parse_error() -> Self {
         Self::create_error(-32700, "Parse error".to_string(), None)

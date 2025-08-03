@@ -1,0 +1,16 @@
+id: 55df8f62-9d07-4c4e-b5db-79439fae8dec
+slug: 202508032111-refactor-command-registry
+title: Apply command registry pattern to reduce CLI match statements
+description: ''
+priority: medium
+status: todo
+tags:
+- refactoring
+- cli
+- pattern
+created_at: 2025-08-03T12:11:21.895115Z
+started_at: null
+closed_at: null
+assignee: null
+tasks: []
+metadata: {}

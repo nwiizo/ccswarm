@@ -24,6 +24,20 @@ This project uses a Cargo workspace with the following structure:
 - **Async First**: Use tokio async/await, never block the runtime
 - **Error Handling**: Use Result<T, E> with custom error types, no .unwrap() in production
 
+#### Command Registry Pattern
+- **Purpose**: Eliminates massive match statements in CLI handling
+- **Implementation**: Uses HashMap of command handlers with async closures
+- **Benefits**: Reduces code duplication, improves maintainability
+- **Location**: `crates/ccswarm/src/cli/command_registry.rs`
+- **Usage**: Register commands once, dispatch dynamically
+
+#### Error Template System
+- **Purpose**: Standardizes error diagrams and visualizations
+- **Implementation**: Template engine with reusable diagram patterns
+- **Templates**: Box diagrams, flow diagrams, network diagrams
+- **Location**: `crates/ccswarm/src/utils/error_template.rs`
+- **Benefits**: Consistent error presentation, reduced duplication
+
 ### Testing Strategy
 - Unit tests colocated with implementation in `#[cfg(test)]` modules
 - Integration tests in `crates/ccswarm/tests/` directory
@@ -122,6 +136,33 @@ cargo run -p ccswarm -- sangha vote <proposal-id> aye --reason "Improves API fle
 cargo run -p ccswarm -- extend autonomous --continuous
 ```
 
+### New User Experience
+```bash
+# Interactive setup wizard for first-time users
+cargo run -p ccswarm -- setup
+
+# Interactive tutorial to learn ccswarm
+cargo run -p ccswarm -- tutorial
+cargo run -p ccswarm -- tutorial --chapter 2  # Start from specific chapter
+
+# Enhanced help system with examples
+cargo run -p ccswarm -- help-topic "agent management"
+cargo run -p ccswarm -- help-topic --search "error"
+```
+
+### System Health and Diagnostics
+```bash
+# System health checks
+cargo run -p ccswarm -- health --check-agents --check-sessions
+cargo run -p ccswarm -- health --diagnose --detailed
+cargo run -p ccswarm -- health --resources --format json
+
+# Doctor command for diagnosing and fixing issues
+cargo run -p ccswarm -- doctor
+cargo run -p ccswarm -- doctor --fix
+cargo run -p ccswarm -- doctor --error "E001"
+```
+
 ## Project-Specific Guidelines
 
 ### Agent Role Enforcement
@@ -163,6 +204,14 @@ ccswarm/
 ├── crates/
 │   ├── ccswarm/                 # Main application crate
 │   │   ├── src/                 # Source code
+│   │   │   ├── cli/             # CLI module with command registry
+│   │   │   │   ├── command_registry.rs  # Command dispatch system
+│   │   │   │   ├── command_handler.rs   # Command execution logic
+│   │   │   │   ├── commands/            # Individual command modules
+│   │   │   │   └── ...                  # Other CLI utilities
+│   │   │   └── utils/           # Utility modules
+│   │   │       ├── error_template.rs    # Error diagram templates
+│   │   │       └── ...                  # Other utilities
 │   │   ├── tests/               # Integration tests
 │   │   └── Cargo.toml           # Crate configuration
 │   └── ai-session/              # AI session library crate

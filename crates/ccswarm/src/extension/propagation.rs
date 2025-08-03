@@ -570,7 +570,9 @@ impl PropagationManager {
         // Simulate propagation with status tracking
 
         // Mark as propagating
-        self.propagation_status.lock().unwrap().insert(
+        self.propagation_status
+            .lock()
+            .map_err(|e| ExtensionError::Custom(format!("Failed to acquire lock: {}", e)))?.insert(
             agent_id.to_string(),
             PropagationStatus::Propagating {
                 started_at: chrono::Utc::now(),
@@ -582,7 +584,7 @@ impl PropagationManager {
 
         // For simulation, return success
         Ok(PropagationResult::Success {
-            adoption_time: TimeDelta::try_seconds(1).unwrap(),
+            adoption_time: TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()),
             improvements: vec![
                 "Extension successfully installed".to_string(),
                 "Performance metrics improved".to_string(),
@@ -604,7 +606,9 @@ impl PropagationManager {
 
             // Mark agent as having propagation in progress
             {
-                self.propagation_status.lock().unwrap().insert(
+                self.propagation_status
+            .lock()
+            .map_err(|e| ExtensionError::Custom(format!("Failed to acquire lock: {}", e)))?.insert(
                     agent_id.clone(),
                     PropagationStatus::Propagating {
                         started_at: chrono::Utc::now(),
@@ -624,14 +628,17 @@ impl PropagationManager {
             let status = self
                 .propagation_status
                 .lock()
-                .unwrap()
+                .unwrap_or_else(|e| {
+                    tracing::error!("Failed to acquire lock: {}", e);
+                    e.into_inner()
+                })
                 .get(agent_id)
                 .cloned();
 
             let result = match status {
                 Some(PropagationStatus::Completed) => {
                     PropagationResult::Success {
-                        adoption_time: TimeDelta::try_seconds(30).unwrap(), // Simulated
+                        adoption_time: TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()), // Simulated
                         improvements: vec![
                             format!("Extension deployed to {}", agent_id),
                             "Metrics collection started".to_string(),
@@ -650,12 +657,15 @@ impl PropagationManager {
 
                         // Update status to completed
                         self.propagation_status
-                            .lock()
-                            .unwrap()
+                .lock()
+                .unwrap_or_else(|e| {
+                    tracing::error!("Failed to acquire lock: {}", e);
+                    e.into_inner()
+                })
                             .insert(agent_id.clone(), PropagationStatus::Completed);
 
                         PropagationResult::Success {
-                            adoption_time: TimeDelta::try_seconds(30).unwrap(),
+                            adoption_time: TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()),
                             improvements: vec![
                                 "Extension installed successfully".to_string(),
                                 "Extension activated".to_string(),
@@ -665,7 +675,7 @@ impl PropagationManager {
                         // Still in progress
                         PropagationResult::Deferred {
                             reason: "Still in progress".to_string(),
-                            retry_after: chrono::Utc::now() + TimeDelta::try_seconds(10).unwrap(),
+                            retry_after: chrono::Utc::now() + TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()),
                         }
                     }
                 }
@@ -676,7 +686,7 @@ impl PropagationManager {
                     // Other statuses - treat as in progress
                     PropagationResult::Deferred {
                         reason: "Operation in progress".to_string(),
-                        retry_after: chrono::Utc::now() + TimeDelta::try_seconds(5).unwrap(),
+                        retry_after: chrono::Utc::now() + TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()),
                     }
                 }
                 None => {
@@ -709,7 +719,10 @@ impl PropagationManager {
             // Note: This would need to be implemented with proper status tracking
             self.propagation_status
                 .lock()
-                .unwrap()
+                .unwrap_or_else(|e| {
+                    tracing::error!("Failed to acquire lock: {}", e);
+                    e.into_inner()
+                })
                 .insert(agent_id.clone(), PropagationStatus::RolledBack);
         }
 
@@ -770,7 +783,8 @@ impl PropagationManager {
                 })
                 .sum();
 
-            TimeDelta::try_seconds(total_time / successful_propagations as i64).unwrap()
+            TimeDelta::try_seconds(total_time / successful_propagations as i64)
+                .unwrap_or(TimeDelta::zero())
         } else {
             TimeDelta::zero()
         };
@@ -849,7 +863,13 @@ impl PropagationManager {
 
     /// Get all propagation statuses
     pub async fn get_all_propagation_statuses(&self) -> HashMap<String, PropagationStatus> {
-        self.propagation_status.lock().unwrap().clone()
+        self.propagation_status
+            .lock()
+            .unwrap_or_else(|e| {
+                tracing::error!("Failed to acquire lock: {}", e);
+                e.into_inner()
+            })
+            .clone()
     }
 }
 

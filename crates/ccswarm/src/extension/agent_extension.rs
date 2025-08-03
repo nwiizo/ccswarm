@@ -180,7 +180,11 @@ impl SearchStrategy for DocumentationSearchStrategy {
         }
 
         // Sort by relevance
-        results.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
+        results.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(results)
     }
@@ -667,7 +671,11 @@ impl AgentExtensionManager {
     }
 
     fn rank_opportunities(&self, opportunities: &mut [ExtensionOpportunity]) {
-        opportunities.sort_by(|a, b| b.potential_impact.partial_cmp(&a.potential_impact).unwrap());
+        opportunities.sort_by(|a, b| {
+            b.potential_impact
+                .partial_cmp(&a.potential_impact)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     async fn get_current_capabilities(&self) -> Result<Vec<String>> {

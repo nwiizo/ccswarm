@@ -159,7 +159,7 @@ pub struct SearchAgentSanghaParticipant {
 /// Active research task for a proposal
 #[derive(Debug, Clone)]
 struct ResearchTask {
-    proposal_id: Uuid,
+    _proposal_id: Uuid,
     queries: Vec<String>,
     results: Vec<SearchResult>,
     started_at: DateTime<Utc>,
@@ -273,7 +273,7 @@ impl SearchAgentSanghaParticipant {
 
         // Create research task
         let research_task = ResearchTask {
-            proposal_id: proposal.id,
+            _proposal_id: proposal.id,
             queries: queries.clone(),
             results: Vec::new(),
             started_at: Utc::now(),

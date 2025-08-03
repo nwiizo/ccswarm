@@ -77,6 +77,7 @@ ccswarm/
 - **Progress Indicators**: Real-time feedback for all operations
 - **Contextual Help**: `ccswarm help <topic>` for detailed guidance
 - **System Doctor**: `ccswarm doctor --fix` diagnoses and fixes issues
+- **CLI Performance**: Ongoing refactoring for improved performance and maintainability
 
 ### 🧠 Proactive Master Claude
 - **Autonomous Orchestration**: Intelligent task prediction and generation (enabled by default)
@@ -161,6 +162,12 @@ ccswarm init --name "MyProject" --agents frontend,backend,devops
 
 # With specific template
 ccswarm init --name "AiderProject" --template aider-focused
+
+# Quick start with minimal configuration
+ccswarm quickstart "TodoApp"
+
+# Quick start with specific agents
+ccswarm quickstart "MyBlog" --agents frontend,backend,search
 ```
 
 ### 2.5. Learn with Interactive Tutorial
@@ -362,6 +369,27 @@ ccswarm delegate task "Add auth" --agent backend --priority high
 
 # View delegation statistics
 ccswarm delegate stats --period 24h
+```
+
+### System Management
+```bash
+# Check system health
+ccswarm health
+ccswarm health --detailed
+
+# Monitor agent health
+ccswarm health agents
+ccswarm health sessions
+
+# Template management
+ccswarm template list
+ccswarm template create "MyTemplate" --from-project ./my-app
+ccswarm template apply "MyTemplate" --output ./new-app
+
+# Evolution tracking
+ccswarm evolution status
+ccswarm evolution history --agent frontend
+ccswarm evolution metrics --period 7d
 ```
 
 ### Auto-Create Applications (Enhanced)
@@ -974,6 +1002,14 @@ ccswarm tutorial
 
 # Check system health
 ccswarm doctor
+
+# Diagnose and fix issues automatically
+ccswarm doctor --fix
+
+# Check specific components
+ccswarm doctor --check sessions
+ccswarm doctor --check agents
+ccswarm doctor --check environment
 
 # Get contextual help
 ccswarm help tasks

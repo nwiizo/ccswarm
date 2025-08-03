@@ -1,0 +1,46 @@
+id: 040046a2-b57c-45f1-bdaf-17ef39fd9e8b
+slug: 202508032118-implement-macro-infrastructure
+title: Implement macro infrastructure for code generation
+description: ''
+priority: high
+status: doing
+tags:
+- refactoring
+- macros
+- foundation
+created_at: 2025-08-03T12:18:15.339163Z
+started_at: 2025-08-03T12:19:14.273886Z
+closed_at: null
+assignee: null
+tasks:
+- id: f59ac404-eee2-479c-8a97-598b8307e800
+  title: Create macros.rs in crates/ccswarm/src/utils/
+  completed: false
+  created_at: 2025-08-03T12:19:34.304168Z
+  completed_at: null
+- id: d1d702a8-833e-45f7-b5e6-60baae26c4c5
+  title: Implement define_messages! macro for message type generation
+  completed: false
+  created_at: 2025-08-03T12:19:39.183442Z
+  completed_at: null
+- id: b54e14eb-f94e-4b50-a7f6-59b755d72346
+  title: Implement async_state_machine! macro for state management
+  completed: false
+  created_at: 2025-08-03T12:19:43.174537Z
+  completed_at: null
+- id: ac1d3589-b1e2-4b83-a631-9decc05714c5
+  title: Implement pattern_dsl! macro for pattern definitions
+  completed: false
+  created_at: 2025-08-03T12:19:47.367624Z
+  completed_at: null
+- id: da8be81c-1ebd-4e2f-b67f-27072e861cb2
+  title: Create async_operation! macro for retry/timeout handling
+  completed: false
+  created_at: 2025-08-03T12:19:51.385253Z
+  completed_at: null
+- id: 18dbb931-deee-4123-9dea-664a4ca8ee61
+  title: Add comprehensive tests for all macros
+  completed: false
+  created_at: 2025-08-03T12:19:55.976795Z
+  completed_at: null
+metadata: {}

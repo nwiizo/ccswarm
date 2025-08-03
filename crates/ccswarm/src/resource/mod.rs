@@ -231,7 +231,8 @@ impl ResourceMonitor {
         let limits = custom_limits.unwrap_or_else(|| self.global_limits.clone());
         let state = AgentResourceState::new(agent_id.clone(), pid, limits);
 
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
         agents.insert(agent_id.clone(), state);
 
         let _ = self
@@ -243,7 +244,8 @@ impl ResourceMonitor {
 
     /// Stop monitoring an agent
     pub fn stop_monitoring(&self, agent_id: &str) -> Result<()> {
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
         agents.remove(agent_id);
 
         let _ = self.event_tx.send(ResourceEvent::MonitoringStopped {
@@ -255,7 +257,8 @@ impl ResourceMonitor {
 
     /// Update resource limits for an agent
     pub fn update_limits(&self, agent_id: &str, limits: ResourceLimits) -> Result<()> {
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
         if let Some(state) = agents.get_mut(agent_id) {
             state.limits = limits;
             Ok(())
@@ -266,7 +269,12 @@ impl ResourceMonitor {
 
     /// Get current resource usage for an agent
     pub fn get_agent_usage(&self, agent_id: &str) -> Option<ResourceUsage> {
-        let agents = self.agents.read().unwrap();
+        let agents = self.agents.read()
+            .map_err(|e| {
+                tracing::error!("Failed to acquire read lock: {}", e);
+                e
+            })
+            .ok()?;
         agents
             .get(agent_id)
             .map(|state| state.current_usage.clone())
@@ -274,14 +282,25 @@ impl ResourceMonitor {
 
     /// Get resource state for an agent
     pub fn get_agent_state(&self, agent_id: &str) -> Option<AgentResourceState> {
-        let agents = self.agents.read().unwrap();
+        let agents = self.agents.read()
+            .map_err(|e| {
+                tracing::error!("Failed to acquire read lock: {}", e);
+                e
+            })
+            .ok()?;
         agents.get(agent_id).cloned()
     }
 
     /// Get all agent states
     pub fn get_all_states(&self) -> Vec<AgentResourceState> {
-        let agents = self.agents.read().unwrap();
-        agents.values().cloned().collect()
+        self.agents.read()
+            .map_err(|e| {
+                tracing::error!("Failed to acquire read lock: {}", e);
+                e
+            })
+            .ok()
+            .map(|agents| agents.values().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Subscribe to resource events
@@ -305,13 +324,15 @@ impl ResourceMonitor {
     async fn update_all_agents(&self) -> Result<()> {
         // Refresh system information
         {
-            let mut system = self.system.lock().unwrap();
+            let mut system = self.system.lock()
+                .map_err(|e| anyhow::anyhow!("Failed to acquire system lock: {}", e))?;
             system.refresh_all();
         }
 
         // Get current agent states
         let agent_ids: Vec<String> = {
-            let agents = self.agents.read().unwrap();
+            let agents = self.agents.read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
             agents.keys().cloned().collect()
         };
 
@@ -328,7 +349,8 @@ impl ResourceMonitor {
     /// Update resource usage for a specific agent
     async fn update_agent_resources(&self, agent_id: &str) -> Result<()> {
         let (pid, limits) = {
-            let agents = self.agents.read().unwrap();
+            let agents = self.agents.read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
             let state = agents.get(agent_id).context("Agent not found")?;
             (state.pid, state.limits.clone())
         };
@@ -345,7 +367,8 @@ impl ResourceMonitor {
         let mut should_suspend = false;
         let mut should_emit_limit_event = false;
         {
-            let mut agents = self.agents.write().unwrap();
+            let mut agents = self.agents.write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
             if let Some(state) = agents.get_mut(agent_id) {
                 state.update_usage(usage.clone());
 
@@ -392,7 +415,8 @@ impl ResourceMonitor {
 
     /// Get resource usage for a process by PID
     fn get_process_usage(&self, pid: u32) -> Result<ResourceUsage> {
-        let system = self.system.lock().unwrap();
+        let system = self.system.lock()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire system lock: {}", e))?;
         let pid = Pid::from(pid as usize);
 
         if let Some(process) = system.process(pid) {
@@ -418,7 +442,8 @@ impl ResourceMonitor {
 
     /// Find agent process by name pattern and get its usage
     fn find_agent_process_usage(&self, _agent_id: &str) -> Result<ResourceUsage> {
-        let system = self.system.lock().unwrap();
+        let system = self.system.lock()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire system lock: {}", e))?;
 
         // Look for processes that might be the agent
         // Pattern: ccswarm processes with agent ID in command line
@@ -426,8 +451,9 @@ impl ResourceMonitor {
             // Try to get process name and cmd
             if let Some(name) = process.name().to_str() {
                 if name.contains("ccswarm")
-                    || (process.exe().is_some()
-                        && process.exe().unwrap().to_string_lossy().contains("ccswarm"))
+                    || process.exe()
+                        .map(|exe| exe.to_string_lossy().contains("ccswarm"))
+                        .unwrap_or(false)
                 {
                     // Check if this might be our agent by looking at the process
                     let total_memory = system.total_memory();
@@ -461,7 +487,8 @@ impl ResourceMonitor {
 
     /// Resume a suspended agent
     pub async fn resume_agent(&self, agent_id: &str) -> Result<()> {
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
         if let Some(state) = agents.get_mut(agent_id) {
             if state.is_suspended {
                 state.is_suspended = false;
@@ -479,7 +506,13 @@ impl ResourceMonitor {
 
     /// Get resource efficiency statistics
     pub fn get_efficiency_stats(&self) -> ResourceEfficiencyStats {
-        let agents = self.agents.read().unwrap();
+        let agents_guard = self.agents.read()
+            .map_err(|e| {
+                tracing::error!("Failed to acquire read lock: {}", e);
+                e
+            });
+        
+        if let Ok(agents) = agents_guard {
 
         let total_agents = agents.len();
         let suspended_agents = agents.values().filter(|s| s.is_suspended).count();
@@ -527,6 +560,19 @@ impl ResourceMonitor {
             } else {
                 0.0
             },
+        }
+        } else {
+            // Return default stats if lock acquisition failed
+            ResourceEfficiencyStats {
+                total_agents: 0,
+                active_agents: 0,
+                suspended_agents: 0,
+                average_cpu_usage: 0.0,
+                average_memory_usage: 0,
+                average_memory_percent: 0.0,
+                total_memory_usage: 0,
+                suspension_rate: 0.0,
+            }
         }
     }
 }
