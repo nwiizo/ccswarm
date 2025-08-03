@@ -1,6 +1,6 @@
 pub mod ai_session_adapter;
 pub mod base_session;
-pub mod claude_session;
+pub mod session_optimization;pub mod claude_session;
 pub mod context_bridge;
 pub mod coordinator;
 pub mod error;

@@ -1,15 +1,28 @@
 //! Utility functions and helpers
 
+pub mod async_error_boundary;
+pub mod async_macros;
 pub mod command;
+pub mod command_macros;
+pub mod consolidated_error_handling;
 pub mod error;
 pub mod error_diagrams;
+pub mod error_handling_macros;
 pub mod error_recovery;
+pub mod macros;
 pub mod user_error;
 
 #[cfg(test)]
 mod error_tests;
 
+pub use async_error_boundary::{
+    boundary, with_retry, AsyncCircuitBreaker, AsyncErrorBoundary, ConcurrentBoundary,
+};
 pub use command::CommandExecutor;
+pub use consolidated_error_handling::{
+    CCSwarmError, ErrorContext, ErrorContextExt, GlobalErrorHandler,
+    AgentError, ConfigError, NetworkError, OrchestrationError, SessionError, TaskError,
+};
 pub use error::ResultExt;
 pub use error_diagrams::{show_diagram, ErrorDiagrams};
 pub use error_recovery::{ErrorRecoveryDB, ErrorResolver, RecoveryAction};

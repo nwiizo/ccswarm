@@ -532,6 +532,203 @@ impl ErrorDiagrams {
         result
     }
 
+    /// Session pool exhausted diagram
+    pub fn session_pool_exhausted(role: &str) -> String {
+        let config = DiagramConfig {
+            title: format!("Session Pool Exhausted for Role: {}", role),
+            title_color: colored::Color::BrightRed,
+            sections: vec![
+                DiagramSection {
+                    content: r#"    {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}
+    {{BOX_V}}                    Session Pool Status                      {{BOX_V}}
+    {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}
+    
+    Pool: {role_name}
+    {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}
+    {{BOX_V}} Session 1: {busy1} {{BOX_V}}
+    {{BOX_V}} Session 2: {busy2} {{BOX_V}}
+    {{BOX_V}} Session 3: {busy3} {{BOX_V}}
+    {{BOX_V}} Session 4: {busy4} {{BOX_V}}
+    {{BOX_V}} Session 5: {busy5} {{BOX_V}}
+    {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}
+    
+    {{CROSS}} All sessions busy!
+    {{WARN}} No available sessions
+    
+    Recovery Actions:
+    1. Wait for session to free up
+    2. Increase pool size limit
+    3. Use fallback agent
+"#.to_string(),
+                    highlights: vec![
+                        ("role_name".to_string(), colored::Color::BrightYellow),
+                        ("busy1".to_string(), colored::Color::Red),
+                        ("busy2".to_string(), colored::Color::Red),
+                        ("busy3".to_string(), colored::Color::Red),
+                        ("busy4".to_string(), colored::Color::Red),
+                        ("busy5".to_string(), colored::Color::Red),
+                    ],
+                    section_type: SectionType::BoxDiagram,
+                },
+            ],
+            footer: None,
+        };
+
+        let mut result = Self::build_diagram(config);
+        result = result.replace("{role_name}", role);
+        result = result.replace("{busy1}", "BUSY");
+        result = result.replace("{busy2}", "BUSY");
+        result = result.replace("{busy3}", "BUSY");
+        result = result.replace("{busy4}", "BUSY");
+        result = result.replace("{busy5}", "BUSY");
+        
+        result
+    }
+
+    /// Circular dependency diagram
+    pub fn circular_dependency(task_ids: &[String]) -> String {
+        let config = DiagramConfig {
+            title: "Circular Dependency Detected:".to_string(),
+            title_color: colored::Color::BrightRed,
+            sections: vec![
+                DiagramSection {
+                    content: r#"    {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}
+    {{BOX_V}} {task1} {{BOX_V}}
+    {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}
+            {{ARROW_D}}
+            depends on
+            {{ARROW_D}}
+    {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}
+    {{BOX_V}} {task2} {{BOX_V}}
+    {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}
+            {{ARROW_D}}
+            depends on
+            {{ARROW_D}}
+    {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}
+    {{BOX_V}} {task3} {{BOX_V}}
+    {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}
+            {{ARROW_D}}
+            depends on
+            {{ARROW_U}}
+    
+    {{CROSS}} Circular dependency!
+    Tasks cannot be executed.
+"#.to_string(),
+                    highlights: vec![
+                        ("task1".to_string(), colored::Color::BrightCyan),
+                        ("task2".to_string(), colored::Color::BrightCyan),
+                        ("task3".to_string(), colored::Color::BrightCyan),
+                    ],
+                    section_type: SectionType::FlowDiagram,
+                },
+            ],
+            footer: Some("Break the cycle by removing one dependency.".to_string()),
+        };
+
+        let mut result = Self::build_diagram(config);
+        if task_ids.len() >= 3 {
+            result = result.replace("{task1}", &task_ids[0]);
+            result = result.replace("{task2}", &task_ids[1]);
+            result = result.replace("{task3}", &task_ids[2]);
+        } else {
+            result = result.replace("{task1}", "Task A");
+            result = result.replace("{task2}", "Task B");
+            result = result.replace("{task3}", "Task C");
+        }
+        
+        result
+    }
+
+    /// Role violation diagram
+    pub fn role_violation(agent: &str, forbidden_action: &str) -> String {
+        let config = DiagramConfig {
+            title: "Agent Role Violation:".to_string(),
+            title_color: colored::Color::BrightRed,
+            sections: vec![
+                DiagramSection {
+                    content: r#"    {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}
+    {{BOX_V}} {agent_name} {{BOX_V}}
+    {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}
+            {{ARROW_D}}
+            attempted
+            {{ARROW_D}}
+    {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}
+    {{BOX_V}} {forbidden} {{BOX_V}}
+    {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}
+    
+    {{CROSS}} FORBIDDEN!
+    
+    Allowed actions for {agent_role}:
+    {{CHECK}} UI/UX development
+    {{CHECK}} Component creation
+    {{CHECK}} Styling and CSS
+    
+    Not allowed:
+    {{CROSS}} Database operations
+    {{CROSS}} API modifications
+    {{CROSS}} Infrastructure changes
+"#.to_string(),
+                    highlights: vec![
+                        ("agent_name".to_string(), colored::Color::BrightYellow),
+                        ("forbidden".to_string(), colored::Color::BrightRed),
+                        ("agent_role".to_string(), colored::Color::BrightYellow),
+                    ],
+                    section_type: SectionType::BoxDiagram,
+                },
+            ],
+            footer: Some("Agents must stay within their designated roles.".to_string()),
+        };
+
+        let mut result = Self::build_diagram(config);
+        result = result.replace("{agent_name}", agent);
+        result = result.replace("{forbidden}", forbidden_action);
+        result = result.replace("{agent_role}", &agent.replace("-agent", ""));
+        
+        result
+    }
+
+    /// Connection failed diagram
+    pub fn connection_failed(endpoint: &str, reason: &str) -> String {
+        let config = DiagramConfig {
+            title: "Network Connection Failed:".to_string(),
+            title_color: colored::Color::BrightRed,
+            sections: vec![
+                DiagramSection {
+                    content: r#"    {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}       {{BOX_TL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_TR}}
+    {{BOX_V}}   ccswarm   {{BOX_V}}  ❌  {{BOX_V}} {endpoint_name} {{BOX_V}}
+    {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}       {{BOX_BL}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_H}}{{BOX_BR}}
+    
+    Error: {error_reason}
+    
+    Possible causes:
+    {{WARN}} Network connectivity issue
+    {{WARN}} Service unavailable
+    {{WARN}} Authentication failure
+    {{WARN}} Firewall blocking connection
+    
+    Try:
+    1. Check your internet connection
+    2. Verify API credentials
+    3. Check service status
+    4. Review firewall settings
+"#.to_string(),
+                    highlights: vec![
+                        ("endpoint_name".to_string(), colored::Color::BrightWhite),
+                        ("error_reason".to_string(), colored::Color::BrightRed),
+                    ],
+                    section_type: SectionType::BoxDiagram,
+                },
+            ],
+            footer: None,
+        };
+
+        let mut result = Self::build_diagram(config);
+        result = result.replace("{endpoint_name}", endpoint);
+        result = result.replace("{error_reason}", reason);
+        
+        result
+    }
+
     /// Agent communication flow
     pub fn agent_error() -> String {
         let config = DiagramConfig {
