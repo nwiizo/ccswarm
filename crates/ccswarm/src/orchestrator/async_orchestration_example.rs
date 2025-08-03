@@ -3,7 +3,7 @@
 /// This module demonstrates how to use error boundaries for reliable task orchestration.
 
 use anyhow::Result;
-use crate::utils::{boundary, with_retry, AsyncCircuitBreaker, ConcurrentBoundary};
+use crate::utils::{boundary, boundary_with_fallback, with_retry, AsyncCircuitBreaker, ConcurrentBoundary};
 use crate::task::Task;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -48,16 +48,15 @@ impl ResilientOrchestrator {
         let agent = agent_name.to_string();
         
         breaker.execute(
-            boundary(
+            boundary_with_fallback(
                 self.delegate_task_internal(task, agent_name),
-                format!("delegate_task_{}", task_id)
+                &format!("delegate_task_{}", task_id),
+                async move {
+                    tracing::warn!("Fallback: Reassigning task {} from agent {}", task_id, agent);
+                    // In real implementation, would reassign to another agent
+                    Ok("fallback_result".to_string())
+                }
             )
-            .with_fallback(move || async move {
-                tracing::warn!("Fallback: Reassigning task {} from agent {}", task_id, agent);
-                // In real implementation, would reassign to another agent
-                Ok(())
-            })
-            .execute()
         ).await
     }
 

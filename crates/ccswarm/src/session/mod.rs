@@ -1,11 +1,12 @@
 pub mod ai_session_adapter;
 pub mod base_session;
-pub mod session_optimization;pub mod claude_session;
+pub mod claude_session;
 pub mod context_bridge;
 pub mod coordinator;
 pub mod error;
 pub mod memory;
 pub mod persistent_session;
+pub mod session_optimization;
 pub mod session_pool;
 pub mod traits;
 pub mod worktree_session;

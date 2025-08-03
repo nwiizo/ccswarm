@@ -581,7 +581,7 @@ impl ErrorDiagrams {
         result = result.replace("{busy3}", "BUSY");
         result = result.replace("{busy4}", "BUSY");
         result = result.replace("{busy5}", "BUSY");
-        
+
         result
     }
 
@@ -635,7 +635,7 @@ impl ErrorDiagrams {
             result = result.replace("{task2}", "Task B");
             result = result.replace("{task3}", "Task C");
         }
-        
+
         result
     }
 
@@ -683,7 +683,7 @@ impl ErrorDiagrams {
         result = result.replace("{agent_name}", agent);
         result = result.replace("{forbidden}", forbidden_action);
         result = result.replace("{agent_role}", &agent.replace("-agent", ""));
-        
+
         result
     }
 
@@ -725,7 +725,7 @@ impl ErrorDiagrams {
         let mut result = Self::build_diagram(config);
         result = result.replace("{endpoint_name}", endpoint);
         result = result.replace("{error_reason}", reason);
-        
+
         result
     }
 

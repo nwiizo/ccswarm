@@ -430,8 +430,8 @@ TodoApp/
         for ch in text.chars() {
             print!("{}", ch);
             io::stdout().flush().unwrap_or_else(|e| {
-            eprintln!("Failed to flush stdout: {}", e);
-        });
+                eprintln!("Failed to flush stdout: {}", e);
+            });
             sleep(Duration::from_millis(30)).await;
         }
     }
@@ -477,8 +477,8 @@ TodoApp/
 fn clear_screen() {
     print!("\x1B[2J\x1B[1;1H");
     io::stdout().flush().unwrap_or_else(|e| {
-            eprintln!("Failed to flush stdout: {}", e);
-        });
+        eprintln!("Failed to flush stdout: {}", e);
+    });
 }
 
 // Quick tips that appear during operations
