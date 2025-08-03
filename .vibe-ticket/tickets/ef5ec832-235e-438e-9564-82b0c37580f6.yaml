@@ -1,0 +1,16 @@
+id: ef5ec832-235e-438e-9564-82b0c37580f6
+slug: 202508032111-async-error-boundaries
+title: Add proper error boundaries for async operations
+description: ''
+priority: high
+status: todo
+tags:
+- refactoring
+- async
+- error-handling
+created_at: 2025-08-03T12:11:37.721738Z
+started_at: null
+closed_at: null
+assignee: null
+tasks: []
+metadata: {}

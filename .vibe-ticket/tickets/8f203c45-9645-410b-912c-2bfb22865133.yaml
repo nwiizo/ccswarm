@@ -1,0 +1,16 @@
+id: 8f203c45-9645-410b-912c-2bfb22865133
+slug: 202508032111-module-reorganization
+title: Reorganize module structure based on cohesion analysis
+description: ''
+priority: medium
+status: todo
+tags:
+- refactoring
+- architecture
+- modularity
+created_at: 2025-08-03T12:11:47.513802Z
+started_at: null
+closed_at: null
+assignee: null
+tasks: []
+metadata: {}
