@@ -80,7 +80,7 @@ mockall = { version = "0.13", optional = true }
 [dev-dependencies]
 tokio-test = "0.4"
 proptest = "1.5"
-criterion = "0.5"
+criterion = "0.7"
 tempfile = "3.10"
 
 [features]
