@@ -47,7 +47,7 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 
 # IPC and communication
 crossbeam-channel = "0.5"
-ipc-channel = { version = "0.18", features = ["async"] }
+ipc-channel = { version = "0.20", features = ["async"] }
 
 # File system
 notify = "6.1"
