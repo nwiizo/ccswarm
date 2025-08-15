@@ -257,6 +257,16 @@ impl CommandRegistry {
             })
         });
 
+        self.register("subagent", |_runner, cmd| {
+            Box::pin(async move {
+                if let Commands::Subagent { command } = cmd {
+                    crate::cli::subagent_commands::execute_subagent_command(command.clone()).await
+                } else {
+                    anyhow::bail!("Command type mismatch in registry handler")
+                }
+            })
+        });
+
         self.register("tutorial", |runner, cmd| {
             Box::pin(async move {
                 if let Commands::Tutorial { chapter } = cmd {
@@ -392,6 +402,7 @@ impl CommandRegistry {
             Commands::Evolution { .. } => "evolution",
             Commands::Quality { .. } => "quality",
             Commands::Template { .. } => "template",
+            Commands::Subagent { .. } => "subagent",
             Commands::Setup => "setup",
             Commands::Tutorial { .. } => "tutorial",
             Commands::HelpTopic { .. } => "help",
