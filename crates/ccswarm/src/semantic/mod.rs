@@ -6,24 +6,17 @@
 pub mod common;
 pub mod analyzer;
 pub mod cross_codebase_optimization;
-pub mod dynamic_agent_generation;
-pub mod knowledge_sharing;
 pub mod memory;
 pub mod refactoring_system;
 pub mod sangha_voting;
-pub mod subagent_integration;
 pub mod symbol_index;
-pub mod task_analyzer;
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub use analyzer::SemanticAnalyzer;
-pub use knowledge_sharing::SemanticKnowledgeSharing;
 pub use memory::ProjectMemory;
-pub use subagent_integration::SemanticSubAgent;
 pub use symbol_index::SymbolIndex;
-pub use task_analyzer::SemanticTaskAnalyzer;
 
 /// Configuration for semantic features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,8 +63,6 @@ pub struct SemanticManager {
     analyzer: Arc<SemanticAnalyzer>,
     memory: Arc<ProjectMemory>,
     symbol_index: Arc<SymbolIndex>,
-    knowledge_sharing: Arc<SemanticKnowledgeSharing>,
-    task_analyzer: Arc<SemanticTaskAnalyzer>,
 }
 
 impl SemanticManager {
@@ -80,22 +71,12 @@ impl SemanticManager {
         let analyzer = Arc::new(SemanticAnalyzer::new(config.clone()).await?);
         let memory = Arc::new(ProjectMemory::new(config.max_memories).await?);
         let symbol_index = Arc::new(SymbolIndex::new().await?);
-        let knowledge_sharing =
-            Arc::new(SemanticKnowledgeSharing::new(memory.clone(), symbol_index.clone()).await?);
-
-        let task_analyzer = Arc::new(SemanticTaskAnalyzer::new(
-            analyzer.clone(),
-            symbol_index.clone(),
-            memory.clone(),
-        ));
 
         Ok(Self {
             config,
             analyzer,
             memory,
             symbol_index,
-            knowledge_sharing,
-            task_analyzer,
         })
     }
 
@@ -137,15 +118,6 @@ impl SemanticManager {
         self.symbol_index.clone()
     }
 
-    /// Get the knowledge sharing system
-    pub fn knowledge_sharing(&self) -> Arc<SemanticKnowledgeSharing> {
-        self.knowledge_sharing.clone()
-    }
-
-    /// Get the task analyzer
-    pub fn task_analyzer(&self) -> Arc<SemanticTaskAnalyzer> {
-        self.task_analyzer.clone()
-    }
 }
 
 /// Result type for semantic operations

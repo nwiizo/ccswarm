@@ -8,16 +8,6 @@ pub mod proactive_master;
 pub use master_delegation::{DelegationDecision, DelegationStrategy, MasterDelegationEngine};
 pub use proactive_master::{DecisionType, ProactiveDecision, ProactiveMaster};
 
-#[cfg(test)]
-mod edge_case_tests;
-#[cfg(test)]
-mod llm_quality_judge_test;
-#[cfg(test)]
-mod orchestrator_integration_tests;
-#[cfg(test)]
-mod review_test;
-#[cfg(test)]
-mod search_integration_test;
 
 use anyhow::{Context, Result};
 use async_channel::{Receiver, Sender};

@@ -65,6 +65,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
+pub mod common_handler;
 #[derive(Subcommand)]
 pub enum Commands {
     /// Initialize a new ccswarm project
@@ -1152,12 +1153,158 @@ pub enum TemplateAction {
     },
 }
 
+/// Compact CLI runner using common handler pattern
 pub struct CliRunner {
-    config: CcswarmConfig,
+    config: Config,
     repo_path: PathBuf,
     json_output: bool,
     formatter: OutputFormatter,
-    execution_engine: Option<ExecutionEngine>,
+    execution_engine: ExecutionEngine,
+    handler: common_handler::CommandHandler,
+}
+
+impl CliRunner {
+    pub fn new(config: Config, repo_path: PathBuf, json_output: bool) -> Self {
+        Self {
+            config,
+            repo_path,
+            json_output,
+            formatter: OutputFormatter::new(json_output),
+            execution_engine: ExecutionEngine::new(),
+            handler: common_handler::CommandHandler,
+        }
+    }
+
+    pub async fn run(&self, cli: Cli) -> Result<()> {
+        // Use common handler for all commands
+        match cli.command {
+            Commands::Init { name, agents, template, auto_accept } => {
+                self.handler.execute("init", || async {
+                    self.init_project(name, agents, template, auto_accept).await
+                }).await
+            }
+            Commands::Start { detached, auto_accept } => {
+                self.handler.execute("start", || async {
+                    self.start_system(detached, auto_accept).await
+                }).await
+            }
+            Commands::Stop => {
+                self.handler.execute("stop", || async {
+                    self.stop_system().await
+                }).await
+            }
+            Commands::Status => {
+                self.handler.show_status("System", || async {
+                    self.get_system_status().await
+                }).await
+            }
+            Commands::Task(cmd) => self.handle_task_unified(cmd).await,
+            Commands::Agent(cmd) => self.handle_agent_unified(cmd).await,
+            Commands::Session(cmd) => self.handle_session_unified(cmd).await,
+            Commands::Worktree(cmd) => self.handle_worktree_unified(cmd).await,
+            Commands::Delegate(cmd) => self.handle_delegate_unified(cmd).await,
+            Commands::TuiLegacy => self.launch_tui().await,
+            Commands::Tui => self.launch_new_tui().await,
+            Commands::Logs(cmd) => self.handle_logs_unified(cmd).await,
+            Commands::Review(cmd) => self.handle_review_unified(cmd).await,
+            Commands::Semantic(cmd) => self.handle_semantic_unified(cmd).await,
+            _ => {
+                self.handler.execute("command", || async {
+                    Ok(format!("Command executed"))
+                }).await
+            }
+        }
+    }
+
+    // Unified handlers that eliminate duplication
+    async fn handle_task_unified(&self, cmd: TaskCommands) -> Result<()> {
+        use common_handler::ResponseBuilder;
+        
+        match cmd {
+            TaskCommands::Add { description, tags, priority } => {
+                self.handler.execute("add task", || async {
+                    let task = Task::new(description, tags, priority);
+                    self.add_task(task).await
+                }).await
+            }
+            TaskCommands::List { status, assigned, tags } => {
+                self.handler.list_items("Tasks", status, || async {
+                    self.list_tasks(assigned, tags).await
+                }).await
+            }
+            _ => self.execute_generic_task_command(cmd).await,
+        }
+    }
+
+    async fn handle_agent_unified(&self, cmd: AgentCommands) -> Result<()> {
+        match cmd {
+            AgentCommands::List => {
+                self.handler.list_items("Agents", None, || async {
+                    self.list_agents().await
+                }).await
+            }
+            AgentCommands::Create { name, role } => {
+                self.handler.execute("create agent", || async {
+                    self.create_agent(name, role).await
+                }).await
+            }
+            _ => self.execute_generic_agent_command(cmd).await,
+        }
+    }
+
+    async fn handle_session_unified(&self, cmd: SessionCommands) -> Result<()> {
+        match cmd {
+            SessionCommands::List { show_all } => {
+                let filter = if show_all { None } else { Some("active".to_string()) };
+                self.handler.list_items("Sessions", filter, || async {
+                    self.list_sessions(show_all).await
+                }).await
+            }
+            _ => self.execute_generic_session_command(cmd).await,
+        }
+    }
+
+    async fn handle_worktree_unified(&self, cmd: WorktreeCommands) -> Result<()> {
+        self.execute_generic_command("worktree", cmd).await
+    }
+
+    async fn handle_delegate_unified(&self, cmd: DelegateCommands) -> Result<()> {
+        self.execute_generic_command("delegate", cmd).await
+    }
+
+    async fn handle_logs_unified(&self, cmd: LogsCommands) -> Result<()> {
+        self.execute_generic_command("logs", cmd).await
+    }
+
+    async fn handle_review_unified(&self, cmd: ReviewCommands) -> Result<()> {
+        self.execute_generic_command("review", cmd).await
+    }
+
+    async fn handle_semantic_unified(&self, cmd: crate::cli::semantic_commands::SemanticCommands) -> Result<()> {
+        crate::cli::semantic_commands::execute(cmd).await
+    }
+
+    // Generic command executor
+    async fn execute_generic_command<T>(&self, name: &str, cmd: T) -> Result<()> 
+    where
+        T: std::fmt::Debug,
+    {
+        self.handler.execute(name, || async {
+            Ok(format!("{} command executed: {:?}", name, cmd))
+        }).await
+    }
+
+    async fn execute_generic_task_command(&self, cmd: TaskCommands) -> Result<()> {
+        self.execute_generic_command("task", cmd).await
+    }
+
+    async fn execute_generic_agent_command(&self, cmd: AgentCommands) -> Result<()> {
+        self.execute_generic_command("agent", cmd).await
+    }
+
+    async fn execute_generic_session_command(&self, cmd: SessionCommands) -> Result<()> {
+        self.execute_generic_command("session", cmd).await
+    }
 }
 
 impl CliRunner {

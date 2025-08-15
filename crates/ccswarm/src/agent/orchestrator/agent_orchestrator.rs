@@ -1,7 +1,7 @@
 use super::task_plan::{
     ParallelTask, ParallelTaskResult, StepResult, StepType, TaskPlan, TaskStep,
 };
-use crate::agent::task::{Task, TaskResult};
+use crate::agent::{Task, TaskResult};
 use anyhow::Result;
 use async_trait::async_trait;
 use futures::future::join_all;

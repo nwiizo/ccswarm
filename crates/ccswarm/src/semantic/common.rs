@@ -135,7 +135,14 @@ impl ProposalGenerator {
         use crate::semantic::refactoring_system::{
             RefactoringPriority, EffortEstimate
         };
-        use crate::semantic::subagent_integration::RefactoringKind;
+        // RefactoringKind is now defined locally
+        #[derive(Debug)]
+        enum RefactoringKind {
+            ExtractFunction,
+            SimplifyLogic,
+            RemoveDuplication,
+            ImproveNaming,
+        }
         
         let (priority, effort, automated) = match kind {
             ProposalKind::LongFunction => (RefactoringPriority::Medium, EffortEstimate::Small, true),
