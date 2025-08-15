@@ -4,6 +4,7 @@
 #![allow(clippy::get_first)]
 
 mod command_registry;
+mod subagent_commands;
 
 mod error_help;
 mod health;
