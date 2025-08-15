@@ -218,24 +218,26 @@ impl ClaudeCodeExecutor {
         if self.config.json_output {
             if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&output) {
                 return TaskResult {
+                    task_id: task.id.clone(),
                     success: true,
-                    output: json_value,
+                    output: Some(json_value.to_string()),
                     error: None,
-                    duration,
+                    duration: Some(duration),
                 };
             }
         }
 
         // Fallback to text output
         TaskResult {
+            task_id: task.id.clone(),
             success: true,
-            output: serde_json::json!({
+            output: Some(serde_json::json!({
                 "response": output,
                 "task_id": task.id,
                 "format": "text"
-            }),
+            }).to_string()),
             error: None,
-            duration,
+            duration: Some(duration),
         }
     }
 }
@@ -295,10 +297,11 @@ impl ProviderExecutor for ClaudeCodeExecutor {
                 );
 
                 Ok(TaskResult {
+                    task_id: task.id.clone(),
                     success: false,
-                    output: serde_json::json!({}),
+                    output: Some(serde_json::json!({}).to_string()),
                     error: Some(e.to_string()),
-                    duration,
+                    duration: Some(duration),
                 })
             }
         }

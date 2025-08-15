@@ -2,9 +2,8 @@
 /// 
 /// This module provides integration between subagents and the ai-session crate,
 /// enabling token-efficient context management and session persistence.
-
 use super::{SubagentDefinition, SubagentError, SubagentResult};
-use crate::session::ai_session_adapter::{SessionManagerAdapter, EfficiencyStats};
+use crate::session::ai_session_adapter::SessionManagerAdapter;
 use crate::identity::AgentRole;
 use ai_session::SessionConfig as AISessionConfig;
 use std::collections::HashMap;
@@ -101,7 +100,7 @@ impl SubagentSessionManager {
         definition: &SubagentDefinition,
     ) -> SubagentResult<String> {
         // Convert subagent definition to AI-Session config
-        let ai_config = self.create_ai_session_config(definition);
+        let _ai_config = self.create_ai_session_config(definition);
         
         // Create the AI-Session adapter
         let working_dir = self.config.persistence_dir.as_ref()
@@ -111,7 +110,7 @@ impl SubagentSessionManager {
         
         // Create actual agent session with SessionManagerAdapter
         let agent_role = Self::determine_agent_role(&definition.name);
-        let agent_session = adapter.create_agent_session(
+        let _agent_session = adapter.create_agent_session(
             instance_id.to_string(),
             agent_role,
             working_dir,
@@ -173,10 +172,9 @@ impl SubagentSessionManager {
             .map_err(|e| SubagentError::Delegation(format!("Failed to read output: {}", e)))?;
         
         // Update token metrics from efficiency stats
-        if let Ok(stats) = session.adapter.get_efficiency_stats().await {
-            session.metadata.tokens_used = stats.total_tokens_used;
-            session.metadata.tokens_saved = stats.tokens_saved;
-        }
+        let stats = session.adapter.get_efficiency_stats().await;
+        session.metadata.tokens_used = stats.total_tasks_completed * 1000; // Estimate
+        session.metadata.tokens_saved = stats.estimated_token_savings;
         
         Ok(result)
     }
@@ -250,10 +248,9 @@ impl SubagentSessionManager {
         
         // Context compression is handled automatically by ai-session
         // Just update the efficiency stats
-        if let Ok(stats) = session.adapter.get_efficiency_stats().await {
-            session.metadata.tokens_saved = stats.tokens_saved;
-            log::info!("Session {} efficiency: saved {} tokens", session_id, stats.tokens_saved);
-        }
+        let stats = session.adapter.get_efficiency_stats().await;
+        session.metadata.tokens_saved = stats.estimated_token_savings;
+        log::info!("Session {} efficiency: saved {} tokens", session_id, stats.estimated_token_savings);
         
         Ok(())
     }
@@ -275,7 +272,7 @@ impl SubagentSessionManager {
             .ok_or_else(|| SubagentError::NotFound(format!("To session not found: {}", to_session)))?;
         
         // Create coordination message
-        let coord_message = serde_json::json!({
+        let _coord_message = serde_json::json!({
             "from": from.metadata.subagent_name,
             "to": to.metadata.subagent_name,
             "message": message,
@@ -321,7 +318,7 @@ impl SubagentSessionManager {
     ) -> SubagentResult<()> {
         let mut sessions = self.sessions.write().await;
         
-        if let Some(mut session) = sessions.remove(session_id) {
+        if let Some(session) = sessions.remove(session_id) {
             // Terminate the AI-Session
             session.adapter.terminate_session(&session.instance_id).await
                 .map_err(|e| SubagentError::Delegation(format!("Failed to cleanup session: {}", e)))?;

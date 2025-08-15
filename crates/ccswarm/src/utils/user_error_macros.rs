@@ -1,6 +1,5 @@
 /// Macro system for generating user-friendly error messages without duplication
 /// This module reduces 60+ duplicate methods to a single macro-based implementation
-
 use super::error_diagrams::ErrorDiagrams;
 use super::user_error::UserError;
 

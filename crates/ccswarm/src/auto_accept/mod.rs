@@ -1,4 +1,4 @@
-use crate::agent::task::Task;
+use crate::agent::Task;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

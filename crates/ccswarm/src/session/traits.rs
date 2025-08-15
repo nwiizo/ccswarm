@@ -33,6 +33,12 @@ pub enum SessionStatus {
     Terminating,
     /// Session has been terminated
     Terminated,
+    /// Session is paused
+    Paused,      // 追加
+    /// Session is detached
+    Detached,    // 追加
+    /// Session is running in background
+    Background,  // 追加
 }
 
 /// Basic information about a session

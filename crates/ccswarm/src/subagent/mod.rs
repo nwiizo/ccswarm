@@ -3,7 +3,6 @@
 /// This module provides integration with Claude Code's native subagent feature,
 /// allowing ccswarm to leverage built-in subagent capabilities for improved
 /// context management and parallel processing.
-
 pub mod parser;
 pub mod manager;
 pub mod converter;

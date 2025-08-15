@@ -301,8 +301,6 @@ impl AgentConverter {
 }
 
 mod tests {
-    use super::*;
-    use crate::config::ClaudeConfig;
 
     #[test]
     fn test_convert_frontend_agent() {

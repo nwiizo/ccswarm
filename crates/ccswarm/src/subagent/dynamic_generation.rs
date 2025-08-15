@@ -2,7 +2,6 @@
 /// 
 /// This module provides functionality to dynamically generate specialized
 /// subagents based on project requirements and detected patterns.
-
 use super::{SubagentDefinition, SubagentError, SubagentResult, SubagentTools};
 // use crate::semantic::analyzer::SemanticAnalyzer; // Commented out as it's not properly initialized
 use std::collections::HashMap;
@@ -405,7 +404,7 @@ impl DynamicSubagentGenerator {
     }
     
     /// Analyze project to build context
-    async fn analyze_project(&self, project_path: &Path) -> SubagentResult<ProjectContext> {
+    async fn analyze_project(&self, _project_path: &Path) -> SubagentResult<ProjectContext> {
         // This would integrate with semantic analyzer in real implementation
         // For now, return mock data
         Ok(ProjectContext {

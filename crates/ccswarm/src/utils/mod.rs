@@ -10,6 +10,7 @@ pub mod error;
 pub mod error_diagrams;
 pub mod error_handling_macros;
 pub mod error_recovery;
+pub mod generic_handler;
 pub mod macros;
 pub mod user_error;
 pub mod user_error_macros;
