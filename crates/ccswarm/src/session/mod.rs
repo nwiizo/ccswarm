@@ -1,3 +1,4 @@
+pub mod session_common;
 pub mod ai_session_adapter;
 pub mod base_session;
 pub mod claude_session;

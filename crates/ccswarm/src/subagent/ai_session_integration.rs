@@ -173,10 +173,9 @@ impl SubagentSessionManager {
             .map_err(|e| SubagentError::Delegation(format!("Failed to read output: {}", e)))?;
         
         // Update token metrics from efficiency stats
-        if let Ok(stats) = session.adapter.get_efficiency_stats().await {
-            session.metadata.tokens_used = stats.total_tokens_used;
-            session.metadata.tokens_saved = stats.tokens_saved;
-        }
+        let stats = session.adapter.get_efficiency_stats().await;
+        session.metadata.tokens_used = stats.total_tasks_completed * 1000; // Estimate
+        session.metadata.tokens_saved = stats.estimated_token_savings;
         
         Ok(result)
     }
@@ -250,10 +249,9 @@ impl SubagentSessionManager {
         
         // Context compression is handled automatically by ai-session
         // Just update the efficiency stats
-        if let Ok(stats) = session.adapter.get_efficiency_stats().await {
-            session.metadata.tokens_saved = stats.tokens_saved;
-            log::info!("Session {} efficiency: saved {} tokens", session_id, stats.tokens_saved);
-        }
+        let stats = session.adapter.get_efficiency_stats().await;
+        session.metadata.tokens_saved = stats.estimated_token_savings;
+        log::info!("Session {} efficiency: saved {} tokens", session_id, stats.estimated_token_savings);
         
         Ok(())
     }

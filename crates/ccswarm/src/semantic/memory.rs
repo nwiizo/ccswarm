@@ -54,6 +54,7 @@ pub enum MemoryType {
     BugPattern,
     Performance,
     Security,
+    Decision,
     Other(String),
 }
 

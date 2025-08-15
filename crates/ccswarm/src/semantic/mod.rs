@@ -3,6 +3,7 @@
 //! This module provides integration with serena's semantic code analysis capabilities,
 //! enabling intelligent code understanding, symbol-level operations, and project memory management.
 
+pub mod common;
 pub mod analyzer;
 pub mod cross_codebase_optimization;
 pub mod dynamic_agent_generation;
