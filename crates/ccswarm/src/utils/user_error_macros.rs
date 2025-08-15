@@ -2,7 +2,7 @@
 /// This module reduces 60+ duplicate methods to a single macro-based implementation
 
 use super::error_diagrams::ErrorDiagrams;
-use super::user_error_refactored::UserError;
+use super::user_error::UserError;
 
 /// Macro for defining common error patterns
 /// Reduces code duplication from 90%+ to less than 20%

@@ -3,7 +3,6 @@
 /// This module handles parsing of the YAML frontmatter and markdown content
 /// from .claude/agents/*.md files
 use super::{SubagentDefinition, SubagentError, SubagentResult};
-use serde_yaml;
 use std::fs;
 use std::path::Path;
 
