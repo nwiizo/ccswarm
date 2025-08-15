@@ -12,6 +12,8 @@ pub mod error_handling_macros;
 pub mod error_recovery;
 pub mod macros;
 pub mod user_error;
+pub mod user_error_macros;
+pub mod user_error_refactored;
 
 #[cfg(test)]
 mod error_tests;

@@ -240,6 +240,12 @@ pub enum Commands {
         action: TemplateAction,
     },
 
+    /// Manage Claude Code subagents
+    Subagent {
+        #[command(subcommand)]
+        command: subagent_commands::SubagentCommand,
+    },
+
     /// Interactive setup wizard for new users
     Setup,
 
