@@ -7,16 +7,15 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-pub mod agent_extension;
-pub mod autonomous_agent_extension;
+// pub mod agent_extension; // Module not found
+// pub mod autonomous_agent_extension; // Module not found
 pub mod meta_learning;
-pub mod propagation;
-pub mod system_extension;
+// pub mod propagation; // Module not found
+// pub mod system_extension; // Module not found
 
 use crate::identity::AgentRole;
 // Remove imports - these types don't exist in extension_stub
@@ -145,14 +144,11 @@ pub enum ExtensionStatus {
     Rejected,
 }
 
-/// Manages extensions for the system
 pub struct ExtensionManager {
     /// Active extensions
     extensions: Arc<RwLock<HashMap<Uuid, Extension>>>,
     /// Extension history
     history: Arc<RwLock<Vec<ExtensionRecord>>>,
-    /// Reference to Sangha for approvals
-    // sangha: Arc<Sangha>, // Temporarily commented - Sangha not available
     /// Extension templates
     templates: Arc<RwLock<HashMap<String, ExtensionTemplate>>>,
 }

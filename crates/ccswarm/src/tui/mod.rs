@@ -35,7 +35,7 @@ pub async fn run_tui() -> Result<()> {
     result
 }
 
-pub async fn run_tui_with_engine(engine: Arc<RwLock<MasterClaude>>) -> Result<()> {
+pub async fn run_tui_with_engine(_engine: Arc<RwLock<MasterClaude>>) -> Result<()> {
     use crossterm::{
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
         ExecutableCommand,

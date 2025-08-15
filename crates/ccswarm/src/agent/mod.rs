@@ -13,6 +13,19 @@ pub struct Agent {
     pub capabilities: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentCapability {
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMessage {
+    pub from: String,
+    pub to: String,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentRole {
     Frontend,
@@ -32,6 +45,8 @@ pub enum AgentStatus {
     Suspended,
     Error(String),
     Initializing,
+    WaitingForReview,   // 追加
+    ShuttingDown,       // 追加
 }
 
 
@@ -43,6 +58,8 @@ pub struct Task {
     pub task_type: TaskType,
     pub priority: Priority,
     pub status: TaskStatus,
+    pub details: Option<String>,           // 追加
+    pub estimated_duration: Option<u32>,   // 追加（秒単位）
 }
 
 impl Task {
@@ -53,7 +70,32 @@ impl Task {
             task_type,
             priority,
             status: TaskStatus::Pending,
+            details: None,
+            estimated_duration: None,
         }
+    }
+
+    // 4引数版のコンストラクタ（後方互換性のため）
+    pub fn new_with_id(id: String, description: String, priority: Priority, task_type: TaskType) -> Self {
+        Self {
+            id,
+            description,
+            task_type,
+            priority,
+            status: TaskStatus::Pending,
+            details: None,
+            estimated_duration: None,
+        }
+    }
+
+    pub fn with_duration(mut self, duration: u32) -> Self {
+        self.estimated_duration = Some(duration);
+        self
+    }
+    
+    pub fn with_details(mut self, details: String) -> Self {
+        self.details = Some(details);
+        self
     }
 }
 
@@ -66,9 +108,14 @@ pub enum TaskType {
     Testing,
     Performance,
     Development,
+    Infrastructure,
+    Coordination,
+    Research,   // 追加
+    Bugfix,     // 追加
+    Review,     // 追加
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum Priority {
     Low,
     Medium,
@@ -274,120 +321,9 @@ pub struct AgentStatistics {
     pub total_tasks_completed: usize,
 }
 
-/// Simplified persistent agent using generic handlers
-pub struct PersistentAgent {
-    base: Agent,
-    session_manager: StateManager<SessionState>,
-}
 
-#[derive(Default)]
-struct SessionState {
-    session_id: Option<String>,
-    context: Vec<String>,
-    token_count: usize,
-}
 
-impl PersistentAgent {
-    pub fn new(name: String, role: AgentRole) -> Self {
-        Self {
-            base: Agent {
-                id: uuid::Uuid::new_v4().to_string(),
-                name,
-                role,
-                status: AgentStatus::Idle,
-                capabilities: vec![],
-            },
-            session_manager: StateManager::new(),
-        }
-    }
-    
-    pub async fn start_session(&self) -> Result<String> {
-        let session_id = uuid::Uuid::new_v4().to_string();
-        
-        self.session_manager.update(|s| {
-            s.session_id = Some(session_id.clone());
-            s.context.clear();
-            s.token_count = 0;
-            Ok(())
-        }).await?;
-        
-        Ok(session_id)
-    }
-    
-    pub async fn add_context(&self, context: String) -> Result<()> {
-        self.session_manager.update(|s| {
-            s.context.push(context);
-            s.token_count += 100; // Simplified token counting
-            Ok(())
-        }).await
-    }
-    
-    pub async fn get_efficiency(&self) -> Result<f64> {
-        self.session_manager.read(|s| {
-            if s.token_count == 0 {
-                Ok(0.0)
-            } else {
-                Ok(s.context.len() as f64 / s.token_count as f64 * 100.0)
-            }
-        }).await
-    }
-}
-
-/// Simplified pool agent manager
-pub struct PoolAgentManager {
-    pool: ListManager<Agent>,
-    max_size: usize,
-}
-
-impl PoolAgentManager {
-    pub fn new(max_size: usize) -> Self {
-        Self {
-            pool: ListManager::new(),
-            max_size,
-        }
-    }
-    
-    pub async fn add_to_pool(&self, agent: Agent) -> Result<()> {
-        let current = self.pool.list().await?;
-        if current.len() < self.max_size {
-            self.pool.add(agent).await
-        } else {
-            Err(anyhow::anyhow!("Pool is full"))
-        }
-    }
-    
-    pub async fn get_available(&self) -> Result<Option<Agent>> {
-        self.pool.find(|a| a.status == AgentStatus::Idle).await
-    }
-    
-    pub async fn scale(&self, target_size: usize) -> Result<()> {
-        let current = self.pool.list().await?;
-        
-        if target_size > current.len() {
-            // Add agents
-            for i in current.len()..target_size {
-                let agent = Agent {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    name: format!("pool-agent-{}", i),
-                    role: AgentRole::Custom("Pool".to_string()),
-                    status: AgentStatus::Idle,
-                    capabilities: vec![],
-                };
-                self.pool.add(agent).await?;
-            }
-        } else if target_size < current.len() {
-            // Remove agents
-            let to_remove = current.len() - target_size;
-            for _ in 0..to_remove {
-                self.pool.remove(|a| a.status == AgentStatus::Idle).await?;
-            }
-        }
-        
-        Ok(())
-    }
-}
-
-// Submodules for compatibility
+// Submodules
 pub mod isolation;
 pub mod orchestrator;
 pub mod pool;
@@ -395,24 +331,77 @@ pub mod search_agent;
 pub mod simple;
 pub mod claude;
 
-// Re-export isolation mode
-pub use isolation::IsolationMode;
-
 // Module for persistent agents
 pub mod persistent {
     use super::*;
     
+    #[derive(Debug, Clone)]
     pub struct PersistentClaudeAgent {
         pub agent: Agent,
+        pub session_id: String,
     }
     
+    impl PersistentClaudeAgent {
+        pub fn new(name: String, role: AgentRole) -> Self {
+            Self {
+                agent: Agent {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    name,
+                    role,
+                    status: AgentStatus::Idle,
+                    capabilities: vec![],
+                },
+                session_id: uuid::Uuid::new_v4().to_string(),
+            }
+        }
+
+        pub async fn execute_task(&mut self, task: Task) -> Result<TaskResult> {
+            self.agent.status = AgentStatus::Working;
+            
+            // Simulate task execution
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            
+            self.agent.status = AgentStatus::Idle;
+            
+            Ok(TaskResult {
+                task_id: task.id,
+                success: true,
+                output: Some("Task completed".to_string()),
+                error: None,
+                duration: Some(std::time::Duration::from_millis(100)),
+            })
+        }
+
+        pub async fn execute_task_batch(&mut self, tasks: Vec<Task>) -> Result<Vec<TaskResult>> {
+            let mut results = Vec::new();
+            for task in tasks {
+                results.push(self.execute_task(task).await?);
+            }
+            Ok(results)
+        }
+
+        pub async fn get_session_stats(&self) -> SessionStats {
+            SessionStats {
+                token_count: 1000,  // Placeholder
+                messages: vec!["Session started".to_string()],
+            }
+        }
+
+        pub async fn establish_identity_once(&mut self) -> Result<()> {
+            // Placeholder for identity establishment
+            Ok(())
+        }
+    }
+    
+    #[derive(Debug, Clone)]
     pub struct SessionStats {
         pub token_count: usize,
         pub messages: Vec<String>,
     }
 }
 
-// Re-exports for backward compatibility
+// Re-exports
+pub use isolation::IsolationMode;
 pub use self::orchestrator::AgentOrchestrator;
 pub use self::pool::AgentPool;
 
@@ -429,6 +418,33 @@ pub struct ClaudeCodeAgent {
 impl ClaudeCodeAgent {
     pub fn new(name: String, role: AgentRole) -> Self {
         let id = uuid::Uuid::new_v4().to_string();
+        let identity_role = match role {
+            AgentRole::Frontend => crate::identity::AgentRole::Frontend {
+                technologies: vec![],
+                responsibilities: vec![],
+                boundaries: vec![],
+            },
+            AgentRole::Backend => crate::identity::AgentRole::Backend {
+                technologies: vec![],
+                responsibilities: vec![],
+                boundaries: vec![],
+            },
+            AgentRole::DevOps => crate::identity::AgentRole::DevOps {
+                technologies: vec![],
+                responsibilities: vec![],
+                boundaries: vec![],
+            },
+            AgentRole::QA => crate::identity::AgentRole::QA {
+                technologies: vec![],
+                responsibilities: vec![],
+                boundaries: vec![],
+            },
+            _ => crate::identity::AgentRole::Frontend {
+                technologies: vec![],
+                responsibilities: vec![],
+                boundaries: vec![],
+            },
+        };
         Self {
             agent: Agent {
                 id: id.clone(),
@@ -438,15 +454,13 @@ impl ClaudeCodeAgent {
                 capabilities: vec![],
             },
             identity: crate::identity::AgentIdentity {
-                id,
-                name,
-                role: match role {
-                    AgentRole::Frontend => crate::identity::AgentRole::Frontend,
-                    AgentRole::Backend => crate::identity::AgentRole::Backend,
-                    AgentRole::DevOps => crate::identity::AgentRole::DevOps,
-                    AgentRole::QA => crate::identity::AgentRole::QA,
-                    _ => crate::identity::AgentRole::Frontend,
-                },
+                agent_id: id.clone(),
+                specialization: identity_role,
+                workspace_path: std::path::PathBuf::new(),
+                env_vars: std::collections::HashMap::new(),
+                session_id: uuid::Uuid::new_v4().to_string(),
+                parent_process_id: String::new(),
+                initialized_at: chrono::Utc::now(),
             },
             status: AgentStatus::Idle,
             current_task: None,
@@ -471,6 +485,7 @@ impl ClaudeCodeAgent {
             success: true,
             output: Some("Task completed".to_string()),
             error: None,
+            duration: Some(self.last_activity.elapsed()),
         })
     }
 }

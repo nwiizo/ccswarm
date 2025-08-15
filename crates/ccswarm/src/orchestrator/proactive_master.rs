@@ -533,13 +533,13 @@ impl ProactiveMaster {
 
             // Check if agent is stuck
             if matches!(agent.status, AgentStatus::Working) {
-                let time_since_activity = Utc::now() - agent.last_activity;
-                if time_since_activity.num_minutes() > 15 {
+                let time_since_activity = agent.last_activity.elapsed();
+                if time_since_activity.as_secs() > 900 {  // 15 minutes
                     decisions.push(ProactiveDecision {
                         decision_type: DecisionType::RequestIntervention,
                         reasoning: format!(
                             "Agent {} has been working on the same task for {} minutes without progress",
-                            agent_id, time_since_activity.num_minutes()
+                            agent_id, time_since_activity.as_secs() / 60
                         ),
                         confidence: 0.9,
                         suggested_actions: vec![
@@ -562,9 +562,9 @@ impl ProactiveMaster {
             if recent_tasks.len() >= 3 {
                 let avg_completion_time: f64 = recent_tasks
                     .iter()
-                    .filter_map(|(_task, result)| {
+                    .filter_map(|result| {
                         if result.success {
-                            Some(result.duration.as_secs() as f64 / 60.0)
+                            result.duration.map(|d| d.as_secs() as f64 / 60.0)
                         } else {
                             None
                         }
@@ -643,19 +643,20 @@ impl ProactiveMaster {
             let agent = entry.value();
 
             // Check last completed task
-            if let Some((last_task, last_result)) = agent.task_history.last() {
+            if let Some(last_result) = agent.task_history.last() {
                 if last_result.success {
                     // Find matching completion patterns
                     for pattern in &predictor.completion_patterns {
-                        if pattern.completed_task_type == last_task.task_type
-                            && pattern.probability > 0.7
-                        {
-                            for task_template in &pattern.follow_up_tasks {
-                                decisions.push(ProactiveDecision {
+                        if let Some(current_task) = &agent.current_task {
+                            if pattern.completed_task_type == current_task.task_type
+                                && pattern.probability > 0.7
+                            {
+                                for task_template in &pattern.follow_up_tasks {
+                                    decisions.push(ProactiveDecision {
                                     decision_type: DecisionType::GenerateTask,
                                     reasoning: format!(
                                         "Pattern match: {:?} completion typically requires {}",
-                                        last_task.task_type, task_template.description_template
+                                        current_task.task_type, task_template.description_template
                                     ),
                                     confidence: pattern.probability,
                                     suggested_actions: vec![SuggestedAction {
@@ -669,19 +670,21 @@ impl ProactiveMaster {
                                                 "template".to_string(),
                                                 serde_json::to_string(task_template)?,
                                             ),
-                                            ("parent_task".to_string(), last_task.id.clone()),
+                                            ("parent_task".to_string(), current_task.id.clone()),
                                         ]),
                                         expected_impact: "Maintain development momentum"
                                             .to_string(),
                                     }],
                                     risk_assessment: RiskLevel::Low,
-                                });
+                                    });
+                                }
                             }
                         }
                     }
 
                     // Check for pattern triggers in task description
-                    let description_lower = last_task.description.to_lowercase();
+                    if let Some(current_task) = &agent.current_task {
+                        let description_lower = current_task.description.to_lowercase();
                     for (pattern_id, pattern) in &predictor.pattern_library {
                         for trigger in &pattern.trigger_conditions {
                             if description_lower.contains(&trigger.to_lowercase()) {
@@ -702,7 +705,7 @@ impl ProactiveMaster {
                                                 ),
                                                 parameters: HashMap::from([
                                                     ("template".to_string(), serde_json::to_string(task_template)?),
-                                                    ("trigger_task".to_string(), last_task.id.clone()),
+                                                    ("trigger_task".to_string(), current_task.id.clone()),
                                                 ]),
                                                 expected_impact: "Ensure complete feature implementation".to_string(),
                                             },
@@ -712,6 +715,7 @@ impl ProactiveMaster {
                                 }
                             }
                         }
+                    }
                     }
                 }
             }
@@ -844,7 +848,7 @@ impl ProactiveMaster {
         let description = template.description_template.clone();
 
         Ok(
-            Task::new(task_id, description, template.priority, template.task_type)
+            Task::new_with_id(task_id, description, template.priority, template.task_type.clone())
                 .with_duration((template.estimated_duration * 60) as u32),
         ) // convert minutes to seconds
     }
@@ -882,7 +886,7 @@ impl ProactiveMaster {
             let mut graph = self.dependency_graph.write().await;
             if let Some(node) = graph.nodes.get_mut(&task.id) {
                 node.status = TaskNodeStatus::Completed;
-                node.actual_duration = Some(result.duration.as_secs() / 60); // convert to minutes
+                node.actual_duration = result.duration.map(|d| d.as_secs() / 60); // convert to minutes
             }
         }
 
@@ -946,12 +950,12 @@ impl ProactiveMaster {
 
             // Check if agent is stuck and might need information
             if matches!(agent.status, AgentStatus::Working) {
-                let time_since_activity = Utc::now() - agent.last_activity;
+                let time_since_activity = agent.last_activity.elapsed();
 
                 // If stuck for more than 10 minutes, suggest search
-                if time_since_activity.num_minutes() > 10 {
+                if time_since_activity.as_secs() > 600 {  // 10 minutes
                     // Look at current task context
-                    if let Some((current_task, _)) = agent.task_history.last() {
+                    if let Some(current_task) = &agent.current_task {
                         let task_desc_lower = current_task.description.to_lowercase();
 
                         // Check if task involves research or information gathering
@@ -989,10 +993,10 @@ impl ProactiveMaster {
                 .iter()
                 .rev()
                 .take(3)
-                .filter(|(_, result)| !result.success)
+                .filter(|result| !result.success)
                 .collect();
 
-            for (failed_task, result) in recent_failures {
+            for result in recent_failures {
                 if let Some(error) = &result.error {
                     let error_lower = error.to_lowercase();
 
@@ -1008,7 +1012,7 @@ impl ProactiveMaster {
                             decision_type: DecisionType::RequestSearch,
                             reasoning: format!(
                                 "Task {} failed with error suggesting missing information: {}",
-                                failed_task.id, error
+                                result.task_id, error
                             ),
                             confidence: 0.9,
                             suggested_actions: vec![SuggestedAction {
@@ -1017,11 +1021,11 @@ impl ProactiveMaster {
                                 parameters: HashMap::from([
                                     (
                                         "query".to_string(),
-                                        format!("{} {}", failed_task.description, error),
+                                        format!("Task {} error: {}", result.task_id, error),
                                     ),
                                     (
                                         "context".to_string(),
-                                        format!("Error resolution for task {}", failed_task.id),
+                                        format!("Error resolution for task {}", result.task_id),
                                     ),
                                     (
                                         "requesting_agent".to_string(),
@@ -1137,11 +1141,11 @@ impl ProactiveMaster {
             }
 
             // Create a task to review and apply the findings
-            let review_task = Task::new(
+            let review_task = Task::new_with_id(
                 format!("review-search-{}", Uuid::new_v4()),
                 format!("Review search findings for: {}", response.query_used),
                 Priority::Medium,
-                TaskType::Research,
+                TaskType::Research
             )
             .with_details(format!(
                 "Search query: {}\nTop findings:\n{}\n\nPlease review these findings and apply relevant insights to the current work.",

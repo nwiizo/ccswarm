@@ -477,14 +477,15 @@ impl SearchAgent {
 
         // Send task completion
         let task_result = TaskResult {
+            task_id: task_id.clone(),
             success: true,
-            output: serde_json::json!({
+            output: Some(serde_json::json!({
                 "results": results,
                 "total_found": results.len(),
                 "query": query,
-            }),
+            }).to_string()),
             error: None,
-            duration: std::time::Duration::from_secs(1), // Placeholder
+            duration: Some(std::time::Duration::from_secs(1)), // Placeholder
         };
 
         let completion = AgentMessage::TaskCompleted {

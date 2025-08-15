@@ -46,9 +46,10 @@ impl CommandHandler {
         
         let mut results = Vec::new();
         let mut errors = 0;
+        let total_items = items.len();
         
         for (idx, item) in items.into_iter().enumerate() {
-            print!("  [{}/{}] Processing {}... ", idx + 1, items.len() + errors, item);
+            print!("  [{}/{}] Processing {}... ", idx + 1, total_items + errors, item);
             
             match operation(item).await {
                 Ok(result) => {
@@ -78,7 +79,7 @@ impl CommandHandler {
     ) -> Result<()>
     where
         F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<StatusInfo>>,
+        Fut: Future<Output = Result<Box<dyn StatusInfo>>>,
     {
         println!("{}", format!("📊 {} Status", entity_name).bright_cyan().bold());
         

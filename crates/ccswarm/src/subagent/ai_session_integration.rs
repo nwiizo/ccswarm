@@ -100,7 +100,7 @@ impl SubagentSessionManager {
         definition: &SubagentDefinition,
     ) -> SubagentResult<String> {
         // Convert subagent definition to AI-Session config
-        let ai_config = self.create_ai_session_config(definition);
+        let _ai_config = self.create_ai_session_config(definition);
         
         // Create the AI-Session adapter
         let working_dir = self.config.persistence_dir.as_ref()
@@ -110,7 +110,7 @@ impl SubagentSessionManager {
         
         // Create actual agent session with SessionManagerAdapter
         let agent_role = Self::determine_agent_role(&definition.name);
-        let agent_session = adapter.create_agent_session(
+        let _agent_session = adapter.create_agent_session(
             instance_id.to_string(),
             agent_role,
             working_dir,
@@ -272,7 +272,7 @@ impl SubagentSessionManager {
             .ok_or_else(|| SubagentError::NotFound(format!("To session not found: {}", to_session)))?;
         
         // Create coordination message
-        let coord_message = serde_json::json!({
+        let _coord_message = serde_json::json!({
             "from": from.metadata.subagent_name,
             "to": to.metadata.subagent_name,
             "message": message,
@@ -318,7 +318,7 @@ impl SubagentSessionManager {
     ) -> SubagentResult<()> {
         let mut sessions = self.sessions.write().await;
         
-        if let Some(mut session) = sessions.remove(session_id) {
+        if let Some(session) = sessions.remove(session_id) {
             // Terminate the AI-Session
             session.adapter.terminate_session(&session.instance_id).await
                 .map_err(|e| SubagentError::Delegation(format!("Failed to cleanup session: {}", e)))?;

@@ -103,8 +103,8 @@ impl SessionManagerAdapter {
 
         // Update the agent session with correct IDs
         let mut agent_session = agent_session;
-        agent_session.id = ccswarm_session_id.clone();
-        agent_session.tmux_session = format!("ai-session-{}", ai_session.id);
+        agent_session.session_id = ccswarm_session_id.clone();
+        // Note: tmux_session field no longer exists, ai-session manages this internally
 
         // Store mappings
         {
@@ -216,7 +216,7 @@ impl SessionManagerAdapter {
                 SessionStatus::Active => AISessionStatus::Running,
                 SessionStatus::Paused => AISessionStatus::Paused,
                 SessionStatus::Terminated => AISessionStatus::Terminated,
-                SessionStatus::Error(_) => AISessionStatus::Error,
+                SessionStatus::Error => AISessionStatus::Error,
                 _ => AISessionStatus::Running,
             };
 
@@ -382,7 +382,7 @@ impl From<SessionStatus> for AISessionStatus {
             SessionStatus::Detached => AISessionStatus::Running,
             SessionStatus::Background => AISessionStatus::Running,
             SessionStatus::Terminated => AISessionStatus::Terminated,
-            SessionStatus::Error(_) => AISessionStatus::Error,
+            SessionStatus::Error => AISessionStatus::Error,
         }
     }
 }

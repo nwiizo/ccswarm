@@ -490,11 +490,11 @@ mod tests {
         // Create multiple tasks
         let tasks: Vec<_> = (0..10)
             .map(|i| {
-                Task::new(
+                Task::new_with_id(
                     format!("task-{}", i),
                     format!("Test task {}", i),
                     Priority::Medium,
-                    TaskType::Development,
+                    TaskType::Development
                 )
             })
             .collect();

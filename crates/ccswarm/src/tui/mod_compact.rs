@@ -1,12 +1,12 @@
 /// Compact TUI module - Unified implementation
-use crate::utils::generic_handler::{StateManager, EventBus, Event};
+use crate::utils::generic_handler::{StateManager, EventBus};
 use anyhow::Result;
 use crossterm::event::{self, Event as CrosstermEvent, KeyCode};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::Line,
     widgets::{Block, Borders, List, ListItem, Paragraph, Tabs},
     Frame, Terminal,
 };
@@ -85,7 +85,7 @@ impl TuiApp {
                     Constraint::Min(0),
                     Constraint::Length(5),
                 ])
-                .split(f.size());
+                .split(f.area());
             
             // Render components in their areas
             if let Some(tabs) = self.components.get(0) {

@@ -127,19 +127,19 @@ impl SimpleClaudeAgent {
         // シミュレートされたタスク実行
         let result = self.simulate_task_execution(&task).await?;
 
-        let duration = start_time.elapsed();
+        let _duration = start_time.elapsed();
         let task_result = if result.is_success {
             TaskResult::success(
+                task.id.clone(),
                 serde_json::json!({
                     "agent_id": self.identity.agent_id,
                     "task_id": task.id,
                     "result": result.output,
                     "notes": result.notes
-                }),
-                duration,
+                }).to_string(),
             )
         } else {
-            TaskResult::failure(result.error_message, duration)
+            TaskResult::failure(task.id.clone(), result.error_message)
         };
 
         // タスク履歴に追加

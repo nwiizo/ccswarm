@@ -11,15 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-// Define AgentRole locally for semantic voting
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum AgentRole {
-    Frontend,
-    Backend,
-    DevOps,
-    QA,
-    Semantic,
-}
+// Use AgentRole from identity module
+use crate::identity::AgentRole;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

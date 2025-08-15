@@ -1,5 +1,7 @@
 pub mod boundary;
 
+pub struct IdentityManager;
+
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use regex::Regex;

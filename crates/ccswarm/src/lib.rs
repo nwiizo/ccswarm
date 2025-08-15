@@ -13,7 +13,6 @@ pub mod config;
 pub mod coordination;
 pub mod execution;
 pub mod extension;
-pub mod extension_stub;
 pub mod git;
 pub mod identity;
 pub mod mcp;
@@ -37,6 +36,7 @@ pub mod workspace;
 #[cfg(test)]
 mod tests;
 
-pub use agent::*;
-pub use identity::*;
+// Re-export specific types to avoid ambiguity
+pub use agent::{Agent, AgentCapability, AgentMessage, AgentRole, Priority, Task, TaskBuilder, TaskResult, TaskType};
+pub use identity::AgentIdentity;
 pub use orchestrator::*;
