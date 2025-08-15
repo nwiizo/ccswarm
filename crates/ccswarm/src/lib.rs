@@ -23,8 +23,10 @@ pub mod providers;
 pub mod resource;
 pub mod sangha;
 pub mod security;
+pub mod semantic;
 pub mod session;
 pub mod streaming;
+pub mod subagent;
 pub mod template;
 // Use ai-session's tmux bridge instead of our own tmux module
 pub use ai_session::tmux_bridge as tmux;
