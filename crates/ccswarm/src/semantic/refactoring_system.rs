@@ -27,12 +27,22 @@ pub enum EffortEstimate {
     Large,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RefactoringKind {
+    ExtractFunction,
+    SimplifyLogic,
+    RemoveDuplication,
+    ImproveNaming,
+    OptimizePerformance,
+    ImproveTestability,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RefactoringProposal {
     pub id: String,
     pub title: String,
     pub description: String,
-    pub kind: crate::semantic::subagent_integration::RefactoringKind,
+    pub kind: RefactoringKind,
     pub targets: Vec<String>,
     pub benefits: Vec<String>,
     pub risks: Vec<String>,

@@ -9,9 +9,7 @@ use crate::config::ClaudeConfig;
 use crate::identity::{AgentIdentity, AgentRole};
 use crate::workspace::SimpleWorkspaceManager;
 
-// Orchestrator implementation in separate file
-#[path = "simple_orchestrator.rs"]
-mod simple_orchestrator;
+// Orchestrator implementation removed - use main orchestrator module instead
 
 /// Git不使用のシンプルなエージェント
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -27,10 +27,13 @@ pub enum AgentRole {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AgentStatus {
     Idle,
+    Available,
     Working,
     Suspended,
     Error(String),
+    Initializing,
 }
+
 
 // Task-related types for compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +45,18 @@ pub struct Task {
     pub status: TaskStatus,
 }
 
+impl Task {
+    pub fn new(description: String, task_type: TaskType, priority: Priority) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            description,
+            task_type,
+            priority,
+            status: TaskStatus::Pending,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TaskType {
     Feature,
@@ -50,6 +65,7 @@ pub enum TaskType {
     Documentation,
     Testing,
     Performance,
+    Development,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -74,6 +90,29 @@ pub struct TaskResult {
     pub success: bool,
     pub output: Option<String>,
     pub error: Option<String>,
+    pub duration: Option<std::time::Duration>,
+}
+
+impl TaskResult {
+    pub fn success(task_id: String, output: String) -> Self {
+        Self {
+            task_id,
+            success: true,
+            output: Some(output),
+            error: None,
+            duration: None,
+        }
+    }
+    
+    pub fn failure(task_id: String, error: String) -> Self {
+        Self {
+            task_id,
+            success: false,
+            output: None,
+            error: Some(error),
+            duration: None,
+        }
+    }
 }
 
 pub struct TaskBuilder {
@@ -349,9 +388,15 @@ impl PoolAgentManager {
 }
 
 // Submodules for compatibility
+pub mod isolation;
 pub mod orchestrator;
 pub mod pool;
 pub mod search_agent;
+pub mod simple;
+pub mod claude;
+
+// Re-export isolation mode
+pub use isolation::IsolationMode;
 
 // Module for persistent agents
 pub mod persistent {
@@ -373,19 +418,59 @@ pub use self::pool::AgentPool;
 
 // Claude-specific types
 pub struct ClaudeCodeAgent {
-    agent: Agent,
+    pub agent: Agent,
+    pub identity: crate::identity::AgentIdentity,
+    pub status: AgentStatus,
+    pub current_task: Option<Task>,
+    pub last_activity: std::time::Instant,
+    pub task_history: Vec<TaskResult>,
 }
 
 impl ClaudeCodeAgent {
     pub fn new(name: String, role: AgentRole) -> Self {
+        let id = uuid::Uuid::new_v4().to_string();
         Self {
             agent: Agent {
-                id: uuid::Uuid::new_v4().to_string(),
-                name,
-                role,
+                id: id.clone(),
+                name: name.clone(),
+                role: role.clone(),
                 status: AgentStatus::Idle,
                 capabilities: vec![],
             },
+            identity: crate::identity::AgentIdentity {
+                id,
+                name,
+                role: match role {
+                    AgentRole::Frontend => crate::identity::AgentRole::Frontend,
+                    AgentRole::Backend => crate::identity::AgentRole::Backend,
+                    AgentRole::DevOps => crate::identity::AgentRole::DevOps,
+                    AgentRole::QA => crate::identity::AgentRole::QA,
+                    _ => crate::identity::AgentRole::Frontend,
+                },
+            },
+            status: AgentStatus::Idle,
+            current_task: None,
+            last_activity: std::time::Instant::now(),
+            task_history: vec![],
         }
+    }
+    
+    pub async fn execute_task(&mut self, task: Task) -> Result<TaskResult> {
+        self.status = AgentStatus::Working;
+        self.current_task = Some(task.clone());
+        self.last_activity = std::time::Instant::now();
+        
+        // Simulate task execution
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
+        self.status = AgentStatus::Idle;
+        self.current_task = None;
+        
+        Ok(TaskResult {
+            task_id: task.id,
+            success: true,
+            output: Some("Task completed".to_string()),
+            error: None,
+        })
     }
 }
