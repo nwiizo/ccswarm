@@ -50,7 +50,7 @@ crossbeam-channel = "0.5"
 ipc-channel = { version = "0.18", features = ["async"] }
 
 # File system
-notify = "6.1"
+notify = "8.2"
 tempfile = "3.10"
 
 # Pattern matching and parsing
