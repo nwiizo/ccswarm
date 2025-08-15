@@ -1,6 +1,7 @@
 //! Utility functions and helpers
 
 pub mod async_error_boundary;
+pub mod async_error_boundary_simple;
 pub mod async_macros;
 pub mod command;
 pub mod command_macros;
@@ -15,13 +16,12 @@ pub mod user_error;
 #[cfg(test)]
 mod error_tests;
 
-pub use async_error_boundary::{
-    boundary, with_retry, AsyncCircuitBreaker, AsyncErrorBoundary, ConcurrentBoundary,
-};
+pub use async_error_boundary::{with_retry, AsyncCircuitBreaker, ConcurrentBoundary};
+pub use async_error_boundary_simple::{boundary, boundary_with_fallback};
 pub use command::CommandExecutor;
 pub use consolidated_error_handling::{
-    CCSwarmError, ErrorContext, ErrorContextExt, GlobalErrorHandler,
-    AgentError, ConfigError, NetworkError, OrchestrationError, SessionError, TaskError,
+    AgentError, CCSwarmError, ConfigError, ErrorContext, ErrorContextExt, GlobalErrorHandler,
+    NetworkError, OrchestrationError, SessionError, TaskError,
 };
 pub use error::ResultExt;
 pub use error_diagrams::{show_diagram, ErrorDiagrams};

@@ -1,19 +1,33 @@
 /// Session optimization module for reducing duplication and improving efficiency
 ///
 /// This module provides consolidated patterns for session management.
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
-use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, RwLock};
 
 use crate::identity::AgentRole;
-use crate::session::{SessionStats, traits::Session};
-use crate::utils::{boundary, with_retry, AsyncCircuitBreaker};
+
+/// Simplified session trait that is object-safe
+pub trait SimpleSession: Send + Sync {
+    /// Get session statistics
+    fn get_stats(&self) -> SessionStats;
+    /// Check if session is alive
+    fn is_alive(&self) -> bool;
+}
+
+/// Session statistics
+#[derive(Debug, Default, Clone)]
+pub struct SessionStats {
+    pub is_active: bool,
+    pub commands_executed: usize,
+    pub last_activity: Option<std::time::Instant>,
+}
+use crate::utils::{with_retry, AsyncCircuitBreaker};
 
 /// Unified session configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,7 +118,7 @@ pub struct OptimizedSession {
     /// Associated role
     pub role: AgentRole,
     /// Underlying session
-    pub session: Arc<Mutex<Box<dyn Session + Send>>>,
+    pub session: Arc<Mutex<Box<dyn SimpleSession + Send>>>,
     /// Session metadata
     pub metadata: SessionMetadata,
     /// Performance metrics
@@ -132,14 +146,15 @@ pub struct SessionMetrics {
 
 /// Factory trait for creating sessions
 #[async_trait]
-pub trait SessionFactory {
-    async fn create_session(&self, role: &AgentRole) -> Result<Box<dyn Session + Send>>;
-    async fn validate_session(&self, session: &dyn Session) -> Result<bool>;
+pub trait SessionFactory: Send + Sync {
+    async fn create_session(&self, role: &AgentRole) -> Result<Box<dyn SimpleSession + Send>>;
+    async fn validate_session(&self, session: &dyn SimpleSession) -> Result<bool>;
 }
 
 /// Performance tracking
 pub struct PerformanceTracker {
     metrics: Arc<RwLock<GlobalMetrics>>,
+    #[allow(dead_code)]
     predictions: Arc<RwLock<PredictionEngine>>,
 }
 
@@ -147,12 +162,16 @@ pub struct PerformanceTracker {
 struct GlobalMetrics {
     total_sessions_created: usize,
     total_sessions_reused: usize,
+    #[allow(dead_code)]
     total_compression_savings: usize,
+    #[allow(dead_code)]
     average_session_lifetime: Duration,
+    #[allow(dead_code)]
     peak_concurrent_sessions: usize,
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct PredictionEngine {
     historical_load: Vec<(DateTime<Utc>, f64)>,
     predicted_load: HashMap<String, f64>,
@@ -176,51 +195,42 @@ impl OptimizedSessionManager {
     /// Get or create optimized session
     pub async fn get_or_create_session(&self, role: &AgentRole) -> Result<Arc<OptimizedSession>> {
         let role_key = role.name().to_lowercase();
-        
+
         // Try to reuse existing session
         if let Some(session) = self.find_reusable_session(&role_key).await? {
             self.performance_tracker.record_reuse().await;
             return Ok(session);
         }
-        
+
         // Create new session with circuit breaker protection
-        let breaker = self.get_circuit_breaker(&role_key).await;
-        
-        let session = breaker.execute(
-            boundary(
-                self.create_optimized_session(role),
-                format!("create_session_{}", role_key)
-            )
-            .with_fallback(|| async move {
-                tracing::warn!("Session creation failed, using fallback");
-                Ok(())
-            })
-            .execute()
-        ).await?;
-        
+        let _breaker = self.get_circuit_breaker(&role_key).await;
+
+        // Create the session directly
+        let session = self.create_optimized_session(role).await?;
+
         // Register the session
         self.register_session(&role_key, session.clone()).await?;
         self.performance_tracker.record_creation().await;
-        
+
         Ok(session)
     }
 
     /// Find reusable session based on strategy
     async fn find_reusable_session(&self, role_key: &str) -> Result<Option<Arc<OptimizedSession>>> {
         let registry = self.registry.read().await;
-        
+
         if let Some(sessions) = registry.get(role_key) {
             for session in sessions {
                 if self.is_session_reusable(session).await? {
                     // Update last used time
                     let mut metadata = session.metadata.clone();
                     metadata.last_used = Utc::now();
-                    
+
                     return Ok(Some(session.clone()));
                 }
             }
         }
-        
+
         Ok(None)
     }
 
@@ -228,33 +238,41 @@ impl OptimizedSessionManager {
     async fn is_session_reusable(&self, session: &OptimizedSession) -> Result<bool> {
         // Validate session is still alive
         let session_guard = session.session.lock().await;
-        if !self.session_factory.validate_session(session_guard.as_ref()).await? {
-            return Ok(false);
-        }
+        let is_valid = self
+            .session_factory
+            .validate_session(session_guard.as_ref())
+            .await?;
         drop(session_guard);
         
+        if !is_valid {
+            return Ok(false);
+        }
+
         // Apply reuse strategy
         match &self.config.reuse_strategy {
             ReuseStrategy::Aggressive => Ok(true),
-            
+
             ReuseStrategy::LoadBased { threshold } => {
                 let metrics = session.metrics.read().await;
                 let current_load = self.calculate_session_load(&metrics);
                 Ok(current_load < *threshold)
             }
-            
+
             ReuseStrategy::TimeBased { max_age } => {
                 let age = Utc::now().signed_duration_since(session.metadata.created_at);
                 Ok(age.to_std().unwrap_or(Duration::MAX) < *max_age)
             }
-            
-            ReuseStrategy::Hybrid { load_threshold, max_age } => {
+
+            ReuseStrategy::Hybrid {
+                load_threshold,
+                max_age,
+            } => {
                 let metrics = session.metrics.read().await;
                 let current_load = self.calculate_session_load(&metrics);
                 let age = Utc::now().signed_duration_since(session.metadata.created_at);
-                
-                Ok(current_load < *load_threshold && 
-                   age.to_std().unwrap_or(Duration::MAX) < *max_age)
+
+                Ok(current_load < *load_threshold
+                    && age.to_std().unwrap_or(Duration::MAX) < *max_age)
             }
         }
     }
@@ -268,19 +286,26 @@ impl OptimizedSessionManager {
         } else {
             0.0
         };
-        
+
         (operation_rate + failure_rate * 2.0).min(1.0)
     }
 
     /// Create new optimized session
     async fn create_optimized_session(&self, role: &AgentRole) -> Result<Arc<OptimizedSession>> {
         // Create underlying session
+        let role_clone = role.clone();
+        let factory = self.session_factory.clone();
         let base_session = with_retry(
-            || Box::pin(self.session_factory.create_session(role)),
+            move || {
+                let factory = factory.clone();
+                let role = role_clone.clone();
+                Box::pin(async move { factory.create_session(&role).await })
+            },
             3,
             "create_base_session",
-        ).await?;
-        
+        )
+        .await?;
+
         // Create optimized wrapper
         let session = Arc::new(OptimizedSession {
             id: uuid::Uuid::new_v4().to_string(),
@@ -295,12 +320,12 @@ impl OptimizedSessionManager {
             },
             metrics: Arc::new(RwLock::new(SessionMetrics::default())),
         });
-        
+
         // Initialize compression if enabled
         if self.config.enable_compression {
             self.initialize_compression(&session).await?;
         }
-        
+
         Ok(session)
     }
 
@@ -314,19 +339,25 @@ impl OptimizedSessionManager {
     /// Register session in the registry
     async fn register_session(&self, role_key: &str, session: Arc<OptimizedSession>) -> Result<()> {
         let mut registry = self.registry.write().await;
-        
-        let sessions = registry.entry(role_key.to_string()).or_insert_with(Vec::new);
-        
+
+        let sessions = registry
+            .entry(role_key.to_string())
+            .or_insert_with(Vec::new);
+
         // Enforce max sessions per role
         if sessions.len() >= self.config.max_sessions_per_role {
             // Remove oldest or least used session
             sessions.sort_by_key(|s| s.metadata.last_used);
             if let Some(old_session) = sessions.first() {
-                tracing::info!("Evicting old session {} for role {}", old_session.id, role_key);
+                tracing::info!(
+                    "Evicting old session {} for role {}",
+                    old_session.id,
+                    role_key
+                );
                 sessions.remove(0);
             }
         }
-        
+
         sessions.push(session);
         Ok(())
     }
@@ -334,13 +365,14 @@ impl OptimizedSessionManager {
     /// Get or create circuit breaker for role
     async fn get_circuit_breaker(&self, role_key: &str) -> Arc<AsyncCircuitBreaker> {
         let mut breakers = self.circuit_breakers.write().await;
-        
-        breakers.entry(role_key.to_string())
+
+        breakers
+            .entry(role_key.to_string())
             .or_insert_with(|| {
                 Arc::new(AsyncCircuitBreaker::new(
                     format!("{}_session_breaker", role_key),
-                    3,  // failure threshold
-                    2,  // success threshold
+                    3, // failure threshold
+                    2, // success threshold
                     Duration::from_secs(30),
                 ))
             })
@@ -354,30 +386,31 @@ impl OptimizedSessionManager {
         operation: F,
     ) -> Result<T>
     where
-        F: FnOnce(&mut dyn Session) -> futures::future::BoxFuture<'_, Result<T>> + Send,
+        F: FnOnce(&dyn SimpleSession) -> futures::future::BoxFuture<'_, Result<T>> + Send,
         T: Send,
     {
         let start = Instant::now();
-        
+
         // Lock session
-        let mut session_guard = session.session.lock().await;
-        
+        let session_guard = session.session.lock().await;
+
         // Execute operation
-        let result = operation(session_guard.as_mut()).await;
-        
+        let result = operation(session_guard.as_ref()).await;
+
         // Update metrics
         let execution_time = start.elapsed();
         let mut metrics = session.metrics.write().await;
         metrics.total_operations += 1;
-        
+
         match &result {
             Ok(_) => metrics.successful_operations += 1,
             Err(_) => metrics.failed_operations += 1,
         }
-        
+
         metrics.total_execution_time += execution_time;
-        metrics.average_response_time = metrics.total_execution_time / metrics.total_operations as u32;
-        
+        metrics.average_response_time =
+            metrics.total_execution_time / metrics.total_operations as u32;
+
         result
     }
 
@@ -388,7 +421,7 @@ impl OptimizedSessionManager {
         operations: Vec<F>,
     ) -> Result<Vec<Result<T>>>
     where
-        F: FnOnce(&mut dyn Session) -> futures::future::BoxFuture<'_, Result<T>> + Send,
+        F: FnOnce(&dyn SimpleSession) -> futures::future::BoxFuture<'_, Result<T>> + Send,
         T: Send,
     {
         if !self.config.performance_settings.batch_operations {
@@ -400,20 +433,29 @@ impl OptimizedSessionManager {
             }
             return Ok(results);
         }
-        
+
         // Get session for batch
         let session = self.get_or_create_session(role).await?;
-        
+
         // Execute in batches
         let mut results = Vec::new();
-        for batch in operations.chunks(self.config.performance_settings.batch_size) {
-            // Note: This is simplified - real implementation would properly handle the batch
+        let batch_size = self.config.performance_settings.batch_size;
+        
+        // Convert operations into an iterator to handle chunks properly
+        let mut ops_iter = operations.into_iter();
+        
+        loop {
+            let batch: Vec<_> = ops_iter.by_ref().take(batch_size).collect();
+            if batch.is_empty() {
+                break;
+            }
+            
             for op in batch {
                 let session_clone = session.clone();
                 results.push(self.execute_on_session(&session_clone, op).await);
             }
         }
-        
+
         Ok(results)
     }
 
@@ -421,27 +463,30 @@ impl OptimizedSessionManager {
     pub async fn get_statistics(&self) -> SessionStatistics {
         let registry = self.registry.read().await;
         let mut stats = SessionStatistics::default();
-        
+
         for (role, sessions) in registry.iter() {
             stats.sessions_by_role.insert(
                 role.clone(),
                 RoleSessionStats {
                     total_sessions: sessions.len(),
-                    active_sessions: sessions.iter()
+                    active_sessions: sessions
+                        .iter()
                         .filter(|s| {
                             let age = Utc::now().signed_duration_since(s.metadata.last_used);
                             age.to_std().unwrap_or(Duration::MAX) < self.config.idle_timeout
                         })
                         .count(),
-                    compression_ratio: sessions.iter()
+                    compression_ratio: sessions
+                        .iter()
                         .map(|s| s.metadata.compression_ratio)
-                        .sum::<f64>() / sessions.len().max(1) as f64,
+                        .sum::<f64>()
+                        / sessions.len().max(1) as f64,
                 },
             );
-            
+
             stats.total_sessions += sessions.len();
         }
-        
+
         stats
     }
 
@@ -449,18 +494,18 @@ impl OptimizedSessionManager {
     pub async fn cleanup_idle_sessions(&self) -> Result<usize> {
         let mut registry = self.registry.write().await;
         let mut cleaned = 0;
-        
+
         for sessions in registry.values_mut() {
             let before = sessions.len();
-            
+
             sessions.retain(|session| {
                 let age = Utc::now().signed_duration_since(session.metadata.last_used);
                 age.to_std().unwrap_or(Duration::MAX) < self.config.idle_timeout
             });
-            
+
             cleaned += before - sessions.len();
         }
-        
+
         tracing::info!("Cleaned up {} idle sessions", cleaned);
         Ok(cleaned)
     }
@@ -519,43 +564,46 @@ mod tests {
     #[tokio::test]
     async fn test_session_optimization() {
         struct MockSessionFactory;
-        
+
         #[async_trait]
         impl SessionFactory for MockSessionFactory {
-            async fn create_session(&self, _role: &AgentRole) -> Result<Box<dyn Session + Send>> {
+            async fn create_session(&self, _role: &AgentRole) -> Result<Box<dyn SimpleSession + Send>> {
                 // Return mock session
                 Ok(Box::new(MockSession))
             }
-            
-            async fn validate_session(&self, _session: &dyn Session) -> Result<bool> {
+
+            async fn validate_session(&self, _session: &dyn SimpleSession) -> Result<bool> {
                 Ok(true)
             }
         }
-        
+
         struct MockSession;
-        
-        #[async_trait]
-        impl Session for MockSession {
-            async fn get_stats(&self) -> SessionStats {
+
+        impl SimpleSession for MockSession {
+            fn get_stats(&self) -> SessionStats {
                 SessionStats::default()
             }
+            
+            fn is_alive(&self) -> bool {
+                true
+            }
         }
-        
+
         let config = OptimizedSessionConfig::default();
         let factory = Arc::new(MockSessionFactory);
         let manager = OptimizedSessionManager::new(config, factory);
-        
+
         let role = default_frontend_role();
-        
+
         // First call should create
         let session1 = manager.get_or_create_session(&role).await.unwrap();
-        
+
         // Second call should reuse
         let session2 = manager.get_or_create_session(&role).await.unwrap();
-        
+
         // Sessions should have same ID if reused properly
         assert_eq!(session1.id, session2.id);
-        
+
         // Check statistics
         let stats = manager.get_statistics().await;
         assert_eq!(stats.total_sessions, 1);

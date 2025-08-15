@@ -2,19 +2,17 @@
 ///
 /// This module provides error boundaries that prevent panic propagation
 /// and ensure graceful degradation in async contexts.
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::future::Future;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::pin::Pin;
-use std::task::{self, Poll};
-use tokio::task::JoinError;
 use tracing::{error, warn};
 
 /// Error boundary for async operations
+#[allow(dead_code)]
 pub struct AsyncErrorBoundary<F> {
     future: F,
     name: String,
+    #[allow(clippy::type_complexity)]
     fallback: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send>>,
 }
 
@@ -42,48 +40,8 @@ where
         self
     }
 
-    /// Execute within the error boundary
-    pub async fn execute(self) -> Result<F::Output> {
-        let name = self.name.clone();
-        
-        // Wrap in AssertUnwindSafe to catch panics
-        let result = tokio::task::spawn(async move {
-            catch_unwind(AssertUnwindSafe(self.future))
-                .await
-                .map_err(|panic| {
-                    let panic_msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                        s.to_string()
-                    } else if let Some(s) = panic.downcast_ref::<String>() {
-                        s.clone()
-                    } else {
-                        "Unknown panic".to_string()
-                    };
-                    
-                    error!("Panic in async boundary '{}': {}", name, panic_msg);
-                    anyhow::anyhow!("Panic occurred: {}", panic_msg)
-                })
-        })
-        .await;
-
-        match result {
-            Ok(Ok(value)) => Ok(value),
-            Ok(Err(e)) => {
-                error!("Error in async boundary '{}': {:#}", self.name, e);
-                
-                // Execute fallback if available
-                if let Some(fallback) = self.fallback {
-                    warn!("Executing fallback for '{}'", self.name);
-                    let _ = fallback().await;
-                }
-                
-                Err(e)
-            }
-            Err(join_error) => {
-                error!("Task join error in '{}': {:#}", self.name, join_error);
-                Err(anyhow::anyhow!("Task failed to complete: {}", join_error))
-            }
-        }
-    }
+    // Note: execute method moved to async_error_boundary_simple.rs for simpler implementation
+    // Use boundary() or boundary_with_fallback() functions instead
 }
 
 /// Boundary for multiple concurrent operations
@@ -128,22 +86,22 @@ impl ConcurrentBoundary {
 
     /// Execute all operations within the boundary
     pub async fn execute(self) -> Result<Vec<Result<()>>> {
-        use futures::future::{join_all, select_all, FutureExt};
+        use futures::future::{join_all, select_all};
 
         if self.fail_fast {
             // Execute with fail-fast behavior
             let mut futures = self.operations;
             let mut results = Vec::new();
-            
+
             while !futures.is_empty() {
                 let (result, _index, remaining) = select_all(futures).await;
-                
+
                 match result {
                     Ok(_) => results.push(Ok(())),
                     Err(e) => {
                         error!("Operation failed in '{}': {:#}", self.name, e);
                         results.push(Err(e));
-                        
+
                         // Cancel remaining operations
                         for _ in remaining {
                             results.push(Err(anyhow::anyhow!("Cancelled due to fail-fast")));
@@ -151,17 +109,17 @@ impl ConcurrentBoundary {
                         break;
                     }
                 }
-                
+
                 futures = remaining;
             }
-            
+
             Ok(results)
         } else {
             // Execute all operations regardless of failures
             let results = join_all(self.operations).await;
-            
+
             let failure_count = results.iter().filter(|r| r.is_err()).count();
-            
+
             if let Some(max) = self.max_failures {
                 if failure_count > max {
                     return Err(anyhow::anyhow!(
@@ -172,7 +130,7 @@ impl ConcurrentBoundary {
                     ));
                 }
             }
-            
+
             Ok(results)
         }
     }
@@ -217,7 +175,7 @@ impl AsyncCircuitBreaker {
         F: Future<Output = Result<T>>,
     {
         let state = self.state.read().await.clone();
-        
+
         match state {
             CircuitState::Open { opened_at } => {
                 if opened_at.elapsed() >= self.timeout {
@@ -244,10 +202,10 @@ impl AsyncCircuitBreaker {
             }
             Err(e) => {
                 let mut state = self.state.write().await;
-                
+
                 if let CircuitState::Closed { failure_count } = &mut *state {
                     *failure_count += 1;
-                    
+
                     if *failure_count >= self.failure_threshold {
                         warn!("Circuit breaker '{}' opening due to failures", self.name);
                         *state = CircuitState::Open {
@@ -255,7 +213,7 @@ impl AsyncCircuitBreaker {
                         };
                     }
                 }
-                
+
                 Err(e)
             }
         }
@@ -268,20 +226,23 @@ impl AsyncCircuitBreaker {
         match operation.await {
             Ok(result) => {
                 let mut state = self.state.write().await;
-                
+
                 if let CircuitState::HalfOpen { success_count } = &mut *state {
                     *success_count += 1;
-                    
+
                     if *success_count >= self.success_threshold {
                         warn!("Circuit breaker '{}' closing after recovery", self.name);
                         *state = CircuitState::Closed { failure_count: 0 };
                     }
                 }
-                
+
                 Ok(result)
             }
             Err(e) => {
-                warn!("Circuit breaker '{}' reopening due to failure in half-open state", self.name);
+                warn!(
+                    "Circuit breaker '{}' reopening due to failure in half-open state",
+                    self.name
+                );
                 *self.state.write().await = CircuitState::Open {
                     opened_at: tokio::time::Instant::now(),
                 };
@@ -292,7 +253,7 @@ impl AsyncCircuitBreaker {
 }
 
 /// Create an error boundary for async operations
-pub fn boundary<F>(future: F, name: impl Into<String>) -> AsyncErrorBoundary<F>
+pub fn create_boundary<F>(future: F, name: impl Into<String>) -> AsyncErrorBoundary<F>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -312,7 +273,7 @@ where
     let name = name.into();
     let mut attempts = 0;
     let mut delay = tokio::time::Duration::from_millis(100);
-    
+
     loop {
         match operation().await {
             Ok(result) => return Ok(result),
@@ -337,14 +298,13 @@ where
 mod tests {
     use super::*;
 
+    // Note: execute() method moved to async_error_boundary_simple.rs
+    // Use boundary() function instead
     #[tokio::test]
     async fn test_async_error_boundary() {
-        let boundary = AsyncErrorBoundary::new(
-            async { Ok::<_, anyhow::Error>(42) },
-            "test_boundary",
-        );
+        use crate::utils::boundary;
         
-        let result = boundary.execute().await;
+        let result = boundary(async { Ok::<_, anyhow::Error>(42) }, "test_boundary").await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
     }
@@ -357,15 +317,19 @@ mod tests {
             2, // success threshold
             tokio::time::Duration::from_millis(100),
         );
-        
+
         // First call should succeed
         let result = breaker.execute(async { Ok::<_, anyhow::Error>(1) }).await;
         assert!(result.is_ok());
-        
+
         // Two failures should open the circuit
-        let _ = breaker.execute(async { Err::<i32, _>(anyhow::anyhow!("fail")) }).await;
-        let _ = breaker.execute(async { Err::<i32, _>(anyhow::anyhow!("fail")) }).await;
-        
+        let _ = breaker
+            .execute(async { Err::<i32, _>(anyhow::anyhow!("fail")) })
+            .await;
+        let _ = breaker
+            .execute(async { Err::<i32, _>(anyhow::anyhow!("fail")) })
+            .await;
+
         // Circuit should be open
         let result = breaker.execute(async { Ok::<_, anyhow::Error>(2) }).await;
         assert!(result.is_err());
@@ -378,7 +342,7 @@ mod tests {
             .add_operation(async { Ok(()) })
             .add_operation(async { Err(anyhow::anyhow!("test error")) })
             .max_failures(1);
-        
+
         let results = boundary.execute().await.unwrap();
         assert_eq!(results.len(), 3);
         assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 2);

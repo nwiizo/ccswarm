@@ -572,12 +572,13 @@ impl PropagationManager {
         // Mark as propagating
         self.propagation_status
             .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?.insert(
-            agent_id.to_string(),
-            PropagationStatus::Propagating {
-                started_at: chrono::Utc::now(),
-            },
-        );
+            .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?
+            .insert(
+                agent_id.to_string(),
+                PropagationStatus::Propagating {
+                    started_at: chrono::Utc::now(),
+                },
+            );
 
         // Simulate async propagation (in real implementation, this would be actual agent communication)
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -607,13 +608,14 @@ impl PropagationManager {
             // Mark agent as having propagation in progress
             {
                 self.propagation_status
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?.insert(
-                    agent_id.clone(),
-                    PropagationStatus::Propagating {
-                        started_at: chrono::Utc::now(),
-                    },
-                );
+                    .lock()
+                    .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?
+                    .insert(
+                        agent_id.clone(),
+                        PropagationStatus::Propagating {
+                            started_at: chrono::Utc::now(),
+                        },
+                    );
             }
 
             // In a real implementation, this would start async propagation
@@ -657,11 +659,11 @@ impl PropagationManager {
 
                         // Update status to completed
                         self.propagation_status
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("Failed to acquire lock: {}", e);
-                    e.into_inner()
-                })
+                            .lock()
+                            .unwrap_or_else(|e| {
+                                tracing::error!("Failed to acquire lock: {}", e);
+                                e.into_inner()
+                            })
                             .insert(agent_id.clone(), PropagationStatus::Completed);
 
                         PropagationResult::Success {
@@ -675,7 +677,8 @@ impl PropagationManager {
                         // Still in progress
                         PropagationResult::Deferred {
                             reason: "Still in progress".to_string(),
-                            retry_after: chrono::Utc::now() + TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()),
+                            retry_after: chrono::Utc::now()
+                                + TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()),
                         }
                     }
                 }
@@ -686,7 +689,8 @@ impl PropagationManager {
                     // Other statuses - treat as in progress
                     PropagationResult::Deferred {
                         reason: "Operation in progress".to_string(),
-                        retry_after: chrono::Utc::now() + TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()),
+                        retry_after: chrono::Utc::now()
+                            + TimeDelta::try_seconds(1).unwrap_or(TimeDelta::zero()),
                     }
                 }
                 None => {

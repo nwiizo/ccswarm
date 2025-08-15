@@ -5232,10 +5232,12 @@ impl CliRunner {
         let report = if check_agents && !check_sessions && !resources {
             // Only check agents
             let checks = health_checker.check_agents_only().await?;
-            let overall_status = if checks
-                .iter()
-                .any(|c| matches!(c.status, health::HealthStatus::Down | health::HealthStatus::Critical))
-            {
+            let overall_status = if checks.iter().any(|c| {
+                matches!(
+                    c.status,
+                    health::HealthStatus::Down | health::HealthStatus::Critical
+                )
+            }) {
                 health::HealthStatus::Critical
             } else if checks
                 .iter()
@@ -5263,10 +5265,12 @@ impl CliRunner {
         } else if check_sessions && !check_agents && !resources {
             // Only check sessions
             let checks = health_checker.check_sessions_only().await?;
-            let overall_status = if checks
-                .iter()
-                .any(|c| matches!(c.status, health::HealthStatus::Down | health::HealthStatus::Critical))
-            {
+            let overall_status = if checks.iter().any(|c| {
+                matches!(
+                    c.status,
+                    health::HealthStatus::Down | health::HealthStatus::Critical
+                )
+            }) {
                 health::HealthStatus::Critical
             } else if checks
                 .iter()

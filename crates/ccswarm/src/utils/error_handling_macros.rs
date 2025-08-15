@@ -2,7 +2,6 @@
 ///
 /// These macros provide standardized patterns for error handling,
 /// reducing boilerplate and ensuring consistency.
-
 /// Convert Option to Result with context
 #[macro_export]
 macro_rules! ok_or_error {
@@ -45,15 +44,20 @@ macro_rules! timeout_async {
 macro_rules! retry_with_backoff {
     ($operation:expr, $max_retries:expr) => {{
         use tokio::time::{sleep, Duration};
-        
+
         let mut retries = 0;
         let mut delay = Duration::from_millis(100);
-        
+
         loop {
             match $operation {
                 Ok(result) => break Ok(result),
                 Err(e) if retries < $max_retries => {
-                    tracing::warn!("Operation failed (attempt {}/{}): {}", retries + 1, $max_retries, e);
+                    tracing::warn!(
+                        "Operation failed (attempt {}/{}): {}",
+                        retries + 1,
+                        $max_retries,
+                        e
+                    );
                     sleep(delay).await;
                     delay *= 2;
                     retries += 1;
@@ -118,7 +122,7 @@ macro_rules! collect_errors {
                 errors.push(e);
             }
         )*
-        
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -192,14 +196,13 @@ macro_rules! error_with_backtrace {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use anyhow::Result;
 
     #[test]
     fn test_ok_or_error() {
         let some_value: Option<i32> = Some(42);
         let none_value: Option<i32> = None;
-        
+
         assert!(ok_or_error!(some_value, "No value").is_ok());
         assert!(ok_or_error!(none_value, "No value").is_err());
     }
@@ -207,14 +210,18 @@ mod tests {
     #[tokio::test]
     async fn test_timeout_async() {
         use tokio::time::Duration;
-        
+        use anyhow::Context;
+
         let fast_op = async {
             tokio::time::sleep(Duration::from_millis(10)).await;
             Ok::<_, anyhow::Error>(42)
         };
-        
-        let result = timeout_async!(Duration::from_secs(1), fast_op);
+
+        let result = tokio::time::timeout(Duration::from_secs(1), fast_op)
+            .await
+            .context("Operation timed out");
         assert!(result.is_ok());
+        assert!(result.unwrap().is_ok());
     }
 
     #[test]
@@ -223,7 +230,7 @@ mod tests {
             validate!(n > 0, "Number must be positive, got {}", n);
             Ok(())
         }
-        
+
         assert!(check_positive(5).is_ok());
         assert!(check_positive(-5).is_err());
     }

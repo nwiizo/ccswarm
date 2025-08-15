@@ -239,7 +239,8 @@ impl ClaudeCodeAgent {
             .args([
                 "worktree",
                 "add",
-                self.worktree_path.to_str()
+                self.worktree_path
+                    .to_str()
                     .ok_or_else(|| anyhow::anyhow!("Invalid UTF-8 in worktree path"))?,
                 &self.branch_name,
             ])

@@ -235,7 +235,10 @@ impl HealthChecker {
         checks.push(self.check_coordination_bus().await);
 
         // Determine overall status
-        let overall_status = if checks.iter().any(|c| matches!(c.status, HealthStatus::Down | HealthStatus::Critical)) {
+        let overall_status = if checks
+            .iter()
+            .any(|c| matches!(c.status, HealthStatus::Down | HealthStatus::Critical))
+        {
             HealthStatus::Critical
         } else if checks.iter().any(|c| c.status == HealthStatus::Warning) {
             HealthStatus::Warning
