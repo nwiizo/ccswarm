@@ -19,7 +19,7 @@ anyhow = "1.0"
 thiserror = "2.0"
 
 # PTY and process management
-portable-pty = "0.8"
+portable-pty = "0.9"
 nix = { version = "0.30", features = ["term", "process", "signal", "fs"] }
 
 # Serialization
