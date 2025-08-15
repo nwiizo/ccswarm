@@ -1,5 +1,5 @@
 /// Compact agent module - Unified implementation
-use crate::utils::generic_handler::{StateManager, ListManager, MessageProcessor, EventBus};
+use crate::utils::generic_handler::{StateManager, ListManager, EventBus};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

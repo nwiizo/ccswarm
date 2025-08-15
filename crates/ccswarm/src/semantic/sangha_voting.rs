@@ -1,5 +1,5 @@
 /// Sangha semantic voting system - Optimized version
-use super::common::{MetricsCollector, MetricType, ProposalGenerator, ProposalKind};
+use super::common::{MetricsCollector, MetricType};
 use crate::semantic::{
     analyzer::{SemanticAnalyzer, Symbol},
     memory::{Memory, MemoryType, ProjectMemory},

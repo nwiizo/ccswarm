@@ -1,5 +1,4 @@
 /// Common utilities for semantic features
-use std::sync::Arc;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use crate::semantic::{

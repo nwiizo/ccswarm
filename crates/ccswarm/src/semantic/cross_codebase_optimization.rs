@@ -1,10 +1,10 @@
 /// Cross-codebase optimization - Optimized version
-use super::common::{MetricsCollector, MetricType, SymbolOperations};
+use super::common::{MetricsCollector, MetricType};
 use crate::semantic::memory::ProjectMemory;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

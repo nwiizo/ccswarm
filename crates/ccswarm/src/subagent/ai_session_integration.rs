@@ -2,9 +2,8 @@
 /// 
 /// This module provides integration between subagents and the ai-session crate,
 /// enabling token-efficient context management and session persistence.
-
 use super::{SubagentDefinition, SubagentError, SubagentResult};
-use crate::session::ai_session_adapter::{SessionManagerAdapter, EfficiencyStats};
+use crate::session::ai_session_adapter::SessionManagerAdapter;
 use crate::identity::AgentRole;
 use ai_session::SessionConfig as AISessionConfig;
 use std::collections::HashMap;

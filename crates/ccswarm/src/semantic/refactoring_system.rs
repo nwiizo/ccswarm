@@ -1,7 +1,7 @@
 /// Automatic refactoring system - Optimized version
 use super::common::{ProposalGenerator, ProposalKind, SymbolOperations, MetricsCollector, MetricType};
 use crate::semantic::{
-    analyzer::{SemanticAnalyzer, Symbol, SymbolKind},
+    analyzer::{SemanticAnalyzer, Symbol},
     memory::{Memory, MemoryType, ProjectMemory},
     symbol_index::SymbolIndex,
 };
