@@ -231,11 +231,14 @@ impl ClaudeCodeExecutor {
         TaskResult {
             task_id: task.id.clone(),
             success: true,
-            output: Some(serde_json::json!({
-                "response": output,
-                "task_id": task.id,
-                "format": "text"
-            }).to_string()),
+            output: Some(
+                serde_json::json!({
+                    "response": output,
+                    "task_id": task.id,
+                    "format": "text"
+                })
+                .to_string(),
+            ),
             error: None,
             duration: Some(duration),
         }

@@ -135,7 +135,10 @@ impl CommonErrors {
             format!("{} API key not found", provider),
             "The AI provider requires an API key to function",
             vec![
-                format!("Set the environment variable: export {}_API_KEY=your-key", provider.to_uppercase()),
+                format!(
+                    "Set the environment variable: export {}_API_KEY=your-key",
+                    provider.to_uppercase()
+                ),
                 "Add it to your .env file for persistence".to_string(),
                 format!("Visit the {} console to get your API key", provider),
             ],

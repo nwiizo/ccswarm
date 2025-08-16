@@ -1,5 +1,5 @@
 /// Sangha semantic voting system - Optimized version
-use super::common::{MetricsCollector, MetricType};
+use super::common::{MetricType, MetricsCollector};
 use crate::semantic::{
     analyzer::{SemanticAnalyzer, Symbol},
     memory::{Memory, MemoryType, ProjectMemory},
@@ -94,30 +94,28 @@ impl VotingHandler {
     async fn process_vote(&self, proposal: &Proposal, vote: &Vote) -> Result<f64> {
         // Generic vote processing logic
         let weight = self.calculate_vote_weight(&vote.voter_role, &proposal.proposal_type);
-        
+
         // Update metrics
         let mut metrics = self.metrics.write().await;
         metrics.update(MetricType::Analysis, 1);
-        
+
         Ok(weight)
     }
-    
+
     fn calculate_vote_weight(&self, role: &AgentRole, proposal_type: &ProposalType) -> f64 {
         // Unified weight calculation
         // Convert identity::AgentRole to simplified match
         let weight = match proposal_type {
-            ProposalType::ArchitectureChange => {
-                match role {
-                    AgentRole::Frontend { .. } => 0.8,
-                    AgentRole::Backend { .. } => 0.9,
-                    _ => 1.0,
-                }
+            ProposalType::ArchitectureChange => match role {
+                AgentRole::Frontend { .. } => 0.8,
+                AgentRole::Backend { .. } => 0.9,
+                _ => 1.0,
             },
             _ => 1.0,
         };
         weight
     }
-    
+
     async fn store_result(&self, proposal: &Proposal, result: &VotingResult) -> Result<()> {
         let memory = Memory {
             id: format!("voting_{}", proposal.id),
@@ -130,7 +128,7 @@ impl VotingHandler {
             updated_at: Utc::now(),
             access_count: 0,
         };
-        
+
         self.memory.store_memory(memory).await?;
         Ok(())
     }
@@ -179,10 +177,10 @@ impl SanghaSemanticVoting {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
-        
+
         let mut proposals = self.proposals.write().await;
         proposals.push(proposal.clone());
-        
+
         Ok(proposal)
     }
 
@@ -195,7 +193,7 @@ impl SanghaSemanticVoting {
         reasoning: String,
     ) -> Result<()> {
         let mut proposals = self.proposals.write().await;
-        
+
         if let Some(proposal) = proposals.iter_mut().find(|p| p.id == proposal_id) {
             let vote = Vote {
                 voter_id,
@@ -205,12 +203,12 @@ impl SanghaSemanticVoting {
                 confidence: 0.8,
                 timestamp: Utc::now(),
             };
-            
+
             self.handler.process_vote(proposal, &vote).await?;
             proposal.votes.push(vote);
             proposal.updated_at = Utc::now();
         }
-        
+
         Ok(())
     }
 
@@ -220,17 +218,17 @@ impl SanghaSemanticVoting {
             .iter()
             .find(|p| p.id == proposal_id)
             .ok_or_else(|| anyhow::anyhow!("Proposal not found"))?;
-        
+
         let (approvals, total) = self.count_votes(&proposal.votes);
         let approval_percentage = (approvals as f64 / total as f64) * 100.0;
-        
+
         let consensus_achieved = match self.consensus_algorithm {
             ConsensusAlgorithm::SimpleMajority => approval_percentage > 50.0,
             ConsensusAlgorithm::Supermajority => approval_percentage >= 66.7,
             ConsensusAlgorithm::Unanimous => approval_percentage == 100.0,
             ConsensusAlgorithm::WeightedConsensus => approval_percentage > 60.0,
         };
-        
+
         let result = VotingResult {
             proposal_id: proposal_id.to_string(),
             final_decision: if consensus_achieved {
@@ -242,9 +240,9 @@ impl SanghaSemanticVoting {
             consensus_achieved,
             implementation_recommendations: vec![],
         };
-        
+
         self.handler.store_result(proposal, &result).await?;
-        
+
         Ok(result)
     }
 
@@ -252,7 +250,12 @@ impl SanghaSemanticVoting {
         let proposals = self.proposals.read().await;
         Ok(proposals
             .iter()
-            .filter(|p| matches!(p.status, ProposalStatus::Voting | ProposalStatus::UnderReview))
+            .filter(|p| {
+                matches!(
+                    p.status,
+                    ProposalStatus::Voting | ProposalStatus::UnderReview
+                )
+            })
             .cloned()
             .collect())
     }

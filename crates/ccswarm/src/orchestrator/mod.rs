@@ -36,20 +36,20 @@ impl MasterClaude {
             state: Arc::new(RwLock::new(OrchestratorState::default())),
         }
     }
-    
+
     pub async fn analyze_task(&self, description: &str) -> Result<TaskPlan> {
         Ok(TaskPlan {
             description: description.to_string(),
             steps: vec!["Step 1".to_string(), "Step 2".to_string()],
         })
     }
-    
+
     pub async fn delegate_task(&self, _task: &str, _agent: &str) -> Result<()> {
         let mut state = self.state.write().await;
         state.tasks_completed += 1;
         Ok(())
     }
-    
+
     pub async fn get_status(&self) -> Result<String> {
         let state = self.state.read().await;
         Ok(format!("Tasks completed: {}", state.tasks_completed))

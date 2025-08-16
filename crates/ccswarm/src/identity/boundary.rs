@@ -400,7 +400,7 @@ mod tests {
             "1".to_string(),
             "Create a React component for user profile".to_string(),
             Priority::Medium,
-            TaskType::Development
+            TaskType::Development,
         )
         .with_details("Using TypeScript and Tailwind CSS".to_string());
 
@@ -419,7 +419,7 @@ mod tests {
             "2".to_string(),
             "Create REST API endpoint for authentication".to_string(),
             Priority::High,
-            TaskType::Development
+            TaskType::Development,
         );
 
         let result = checker.evaluate_task(&task).await;
@@ -439,7 +439,7 @@ mod tests {
             "3".to_string(),
             "Update the user system".to_string(),
             Priority::Medium,
-            TaskType::Development
+            TaskType::Development,
         );
 
         let result = checker.evaluate_task(&task).await;

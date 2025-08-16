@@ -15,7 +15,7 @@ macro_rules! define_error {
                 .with_code($code)
         }
     };
-    
+
     // Error with dynamic title
     ($name:ident($($arg:ident: $arg_ty:ty),*), $title:expr, $details:expr, $code:expr) => {
         pub fn $name($($arg: $arg_ty),*) -> UserError {
@@ -24,7 +24,7 @@ macro_rules! define_error {
                 .with_code($code)
         }
     };
-    
+
     // Error with suggestions
     ($name:ident, $title:expr, $details:expr, $code:expr, suggestions: [$($suggestion:expr),*]) => {
         pub fn $name() -> UserError {
@@ -37,10 +37,10 @@ macro_rules! define_error {
             error
         }
     };
-    
+
     // Error with dynamic parameters and suggestions
-    ($name:ident($($arg:ident: $arg_ty:ty),*), $title:expr, $details:expr, $code:expr, 
-     suggestions: [$($suggestion:expr),*], 
+    ($name:ident($($arg:ident: $arg_ty:ty),*), $title:expr, $details:expr, $code:expr,
+     suggestions: [$($suggestion:expr),*],
      diagram: $diagram:expr,
      auto_fix: $auto_fix:expr) => {
         pub fn $name($($arg: $arg_ty),*) -> UserError {
@@ -101,14 +101,16 @@ impl ErrorCategory {
             ErrorCategory::Session => Some(ErrorDiagrams::session_error()),
             ErrorCategory::Agent => Some(ErrorDiagrams::agent_error()),
             ErrorCategory::Configuration => Some(ErrorDiagrams::config_error()),
-            ErrorCategory::Git | ErrorCategory::Worktree => Some(ErrorDiagrams::git_worktree_error()),
+            ErrorCategory::Git | ErrorCategory::Worktree => {
+                Some(ErrorDiagrams::git_worktree_error())
+            }
             ErrorCategory::Permission => Some(ErrorDiagrams::permission_error()),
             ErrorCategory::Network => Some(ErrorDiagrams::network_error()),
             ErrorCategory::Task => Some(ErrorDiagrams::task_error()),
             ErrorCategory::AI => None,
         }
     }
-    
+
     /// Determine if this category of error can be auto-fixed
     pub fn is_auto_fixable(&self) -> bool {
         matches!(
@@ -120,7 +122,7 @@ impl ErrorCategory {
                 | ErrorCategory::Worktree
         )
     }
-    
+
     /// Get the error code prefix for this category
     pub fn code_prefix(&self) -> &str {
         match self {
@@ -154,22 +156,22 @@ impl ErrorFactory {
         let mut error = UserError::new(title.into())
             .with_details(details.into())
             .with_code(code);
-        
+
         for suggestion in suggestions {
             error = error.suggest(suggestion);
         }
-        
+
         if let Some(diagram) = category.get_diagram() {
             error = error.with_diagram(diagram);
         }
-        
+
         if category.is_auto_fixable() {
             error = error.auto_fixable();
         }
-        
+
         error
     }
-    
+
     /// Create a parameterized error
     pub fn create_with_params<F>(
         category: ErrorCategory,
@@ -181,13 +183,7 @@ impl ErrorFactory {
     where
         F: FnOnce() -> String,
     {
-        Self::create(
-            category,
-            title_fn(),
-            details,
-            suggestions,
-            error_number,
-        )
+        Self::create(category, title_fn(), details, suggestions, error_number)
     }
 }
 
@@ -246,14 +242,14 @@ macro_rules! define_parameterized_errors {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_error_category_properties() {
         assert!(ErrorCategory::Session.is_auto_fixable());
         assert!(!ErrorCategory::Network.is_auto_fixable());
         assert_eq!(ErrorCategory::Environment.code_prefix(), "ENV");
     }
-    
+
     #[test]
     fn test_error_factory() {
         let error = ErrorFactory::create(
@@ -263,7 +259,7 @@ mod tests {
             vec!["Suggestion 1".to_string()],
             1,
         );
-        
+
         assert_eq!(error.title, "Test Error");
         assert_eq!(error.error_code, Some("SES001".to_string()));
         assert!(error.can_auto_fix);

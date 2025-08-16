@@ -303,7 +303,7 @@ mod tests {
     #[tokio::test]
     async fn test_async_error_boundary() {
         use crate::utils::boundary;
-        
+
         let result = boundary(async { Ok::<_, anyhow::Error>(42) }, "test_boundary").await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);

@@ -458,7 +458,7 @@ mod tests {
             "test-task".to_string(),
             "Test task".to_string(),
             crate::agent::Priority::High,
-            crate::agent::TaskType::Development
+            crate::agent::TaskType::Development,
         );
 
         queue.add_task(&task).await.unwrap();

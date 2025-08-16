@@ -1,14 +1,14 @@
+pub mod ai_session_integration;
+pub mod converter;
+pub mod delegation;
+pub mod dynamic_generation;
+pub mod manager;
 /// Claude Code Native Subagent Integration Module
 ///
 /// This module provides integration with Claude Code's native subagent feature,
 /// allowing ccswarm to leverage built-in subagent capabilities for improved
 /// context management and parallel processing.
 pub mod parser;
-pub mod manager;
-pub mod converter;
-pub mod delegation;
-pub mod ai_session_integration;
-pub mod dynamic_generation;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

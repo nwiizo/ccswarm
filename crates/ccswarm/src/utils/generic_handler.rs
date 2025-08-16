@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 pub trait Operation: Send + Sync {
     type Input;
     type Output;
-    
+
     async fn execute(&self, input: Self::Input) -> Result<Self::Output>;
 }
 
@@ -25,7 +25,7 @@ impl<T: Default + Send + Sync> StateManager<T> {
             state: Arc::new(RwLock::new(T::default())),
         }
     }
-    
+
     pub async fn update<F, R>(&self, updater: F) -> Result<R>
     where
         F: FnOnce(&mut T) -> Result<R> + Send,
@@ -34,7 +34,7 @@ impl<T: Default + Send + Sync> StateManager<T> {
         let mut state = self.state.write().await;
         updater(&mut *state)
     }
-    
+
     pub async fn read<F, R>(&self, reader: F) -> Result<R>
     where
         F: FnOnce(&T) -> Result<R> + Send,
@@ -56,13 +56,13 @@ impl<T: Clone + Send + Sync> ListManager<T> {
             items: Arc::new(RwLock::new(Vec::new())),
         }
     }
-    
+
     pub async fn add(&self, item: T) -> Result<()> {
         let mut items = self.items.write().await;
         items.push(item);
         Ok(())
     }
-    
+
     pub async fn remove<F>(&self, predicate: F) -> Result<bool>
     where
         F: Fn(&T) -> bool,
@@ -72,12 +72,12 @@ impl<T: Clone + Send + Sync> ListManager<T> {
         items.retain(|item| !predicate(item));
         Ok(len_before != items.len())
     }
-    
+
     pub async fn list(&self) -> Result<Vec<T>> {
         let items = self.items.read().await;
         Ok(items.clone())
     }
-    
+
     pub async fn find<F>(&self, predicate: F) -> Result<Option<T>>
     where
         F: Fn(&T) -> bool,
@@ -103,22 +103,22 @@ impl<M: Send + Sync, R: Send + Sync> MessageProcessor<M, R> {
             handlers: Arc::new(RwLock::new(Vec::new())),
         }
     }
-    
+
     pub async fn register(&self, handler: Box<dyn MessageHandler<M, R> + Send + Sync>) {
         let mut handlers = self.handlers.write().await;
         handlers.push(handler);
     }
-    
+
     pub async fn process(&self, message: M) -> Vec<R> {
         let handlers = self.handlers.read().await;
         let mut results = Vec::new();
-        
+
         for handler in handlers.iter() {
             if let Some(result) = handler.handle(&message).await {
                 results.push(result);
             }
         }
-        
+
         results
     }
 }
@@ -146,19 +146,19 @@ impl<T: Clone + Send + Sync> EventBus<T> {
             subscribers: Arc::new(RwLock::new(Vec::new())),
         }
     }
-    
+
     pub async fn subscribe(&self, subscriber: Arc<dyn EventSubscriber<T> + Send + Sync>) {
         let mut subscribers = self.subscribers.write().await;
         subscribers.push(subscriber);
     }
-    
+
     pub async fn publish(&self, data: T) {
         let event = Event {
             id: uuid::Uuid::new_v4().to_string(),
             timestamp: chrono::Utc::now(),
             data,
         };
-        
+
         let subscribers = self.subscribers.read().await;
         for subscriber in subscribers.iter() {
             subscriber.on_event(&event).await;
@@ -179,12 +179,12 @@ impl<T: Clone + Send + Sync> ResourcePool<T> {
             max_size,
         }
     }
-    
+
     pub async fn acquire(&self) -> Option<T> {
         let mut resources = self.resources.write().await;
         resources.pop()
     }
-    
+
     pub async fn release(&self, resource: T) -> Result<()> {
         let mut resources = self.resources.write().await;
         if resources.len() < self.max_size {
@@ -192,7 +192,7 @@ impl<T: Clone + Send + Sync> ResourcePool<T> {
         }
         Ok(())
     }
-    
+
     pub async fn size(&self) -> usize {
         let resources = self.resources.read().await;
         resources.len()

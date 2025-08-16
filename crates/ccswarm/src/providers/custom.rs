@@ -180,13 +180,16 @@ impl CustomExecutor {
                 return TaskResult {
                     task_id: task.id.clone(),
                     success: true,
-                    output: Some(serde_json::to_string(&serde_json::json!({
-                        "result": json_value,
-                        "task_id": task.id,
-                        "provider": "custom",
-                        "command": self.config.command,
-                        "format": "json"
-                    })).unwrap_or_else(|_| "JSON conversion failed".to_string())),
+                    output: Some(
+                        serde_json::to_string(&serde_json::json!({
+                            "result": json_value,
+                            "task_id": task.id,
+                            "provider": "custom",
+                            "command": self.config.command,
+                            "format": "json"
+                        }))
+                        .unwrap_or_else(|_| "JSON conversion failed".to_string()),
+                    ),
                     error: None,
                     duration: Some(duration),
                 };
@@ -204,14 +207,17 @@ impl CustomExecutor {
         TaskResult {
             task_id: task.id.clone(),
             success,
-            output: Some(serde_json::to_string(&serde_json::json!({
-                "response": output,
-                "task_id": task.id,
-                "provider": "custom",
-                "command": self.config.command,
-                "format": "text",
-                "working_directory": self.config.working_directory,
-            })).unwrap_or_else(|_| "JSON conversion failed".to_string())),
+            output: Some(
+                serde_json::to_string(&serde_json::json!({
+                    "response": output,
+                    "task_id": task.id,
+                    "provider": "custom",
+                    "command": self.config.command,
+                    "format": "text",
+                    "working_directory": self.config.working_directory,
+                }))
+                .unwrap_or_else(|_| "JSON conversion failed".to_string()),
+            ),
             error,
             duration: Some(duration),
         }
@@ -381,10 +387,13 @@ impl ProviderExecutor for CustomExecutor {
                 Ok(TaskResult {
                     task_id: task.id.clone(),
                     success: false,
-                    output: Some(serde_json::to_string(&serde_json::json!({
-                        "provider": "custom",
-                        "command": self.config.command,
-                    })).unwrap_or_else(|_| "JSON conversion failed".to_string())),
+                    output: Some(
+                        serde_json::to_string(&serde_json::json!({
+                            "provider": "custom",
+                            "command": self.config.command,
+                        }))
+                        .unwrap_or_else(|_| "JSON conversion failed".to_string()),
+                    ),
                     error: Some(e.to_string()),
                     duration: Some(duration),
                 })

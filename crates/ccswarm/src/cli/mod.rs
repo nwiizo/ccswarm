@@ -9,7 +9,7 @@ use std::path::PathBuf;
 pub struct Cli {
     #[arg(short, long, help = "Enable verbose output")]
     pub verbose: bool,
-    
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -52,9 +52,8 @@ impl CliRunner {
     pub async fn new(_cli: &Cli) -> Result<Self> {
         Ok(Self)
     }
-    
+
     pub async fn run(&self, command: &Commands) -> Result<()> {
-        
         match command {
             Commands::Init { name, agents } => {
                 println!("Initializing project: {} with agents: {}", name, agents);
@@ -64,9 +63,7 @@ impl CliRunner {
                 println!("Starting ccswarm...");
                 Ok(())
             }
-            Commands::Tui => {
-                crate::tui::run_tui().await
-            }
+            Commands::Tui => crate::tui::run_tui().await,
             Commands::Task { description } => {
                 println!("Creating task: {}", description);
                 Ok(())
@@ -75,23 +72,24 @@ impl CliRunner {
                 println!("Status: Running");
                 Ok(())
             }
-            Commands::Session { command } => {
-                match command {
-                    SessionCommands::List => {
-                        println!("Sessions: None");
-                        Ok(())
-                    }
-                    SessionCommands::Stats => {
-                        println!("Stats: No data");
-                        Ok(())
-                    }
-                    SessionCommands::Attach { id } => {
-                        println!("Attaching to session: {}", id);
-                        Ok(())
-                    }
+            Commands::Session { command } => match command {
+                SessionCommands::List => {
+                    println!("Sessions: None");
+                    Ok(())
                 }
-            }
-            Commands::AutoCreate { description, output } => {
+                SessionCommands::Stats => {
+                    println!("Stats: No data");
+                    Ok(())
+                }
+                SessionCommands::Attach { id } => {
+                    println!("Attaching to session: {}", id);
+                    Ok(())
+                }
+            },
+            Commands::AutoCreate {
+                description,
+                output,
+            } => {
                 println!("Auto-creating: {} at {:?}", description, output);
                 Ok(())
             }

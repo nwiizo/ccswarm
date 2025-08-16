@@ -87,13 +87,16 @@ impl PersistentClaudeSession {
         Ok(TaskResult {
             task_id: task.id.clone(),
             success: true,
-            output: Some(serde_json::json!({
-                "task_id": task.id,
-                "agent_id": self.identity.agent_id.clone(),
-                "response": response,
-                "files_created": [],
-                "files_modified": [],
-            }).to_string()),
+            output: Some(
+                serde_json::json!({
+                    "task_id": task.id,
+                    "agent_id": self.identity.agent_id.clone(),
+                    "response": response,
+                    "files_created": [],
+                    "files_modified": [],
+                })
+                .to_string(),
+            ),
             error: None,
             duration: Some(std::time::Duration::from_secs(10)),
         })

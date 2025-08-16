@@ -136,7 +136,8 @@ impl SimpleClaudeAgent {
                     "task_id": task.id,
                     "result": result.output,
                     "notes": result.notes
-                }).to_string(),
+                })
+                .to_string(),
             )
         } else {
             TaskResult::failure(task.id.clone(), result.error_message)

@@ -1,11 +1,11 @@
-pub mod mod_compact;
 pub mod event;
+pub mod mod_compact;
 pub mod tests;
 
 pub use mod_compact::*;
 
-use anyhow::Result;
 use crate::orchestrator::MasterClaude;
+use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -31,7 +31,7 @@ pub async fn run_tui() -> Result<()> {
     disable_raw_mode()?;
     terminal.backend_mut().execute(LeaveAlternateScreen)?;
     terminal.show_cursor()?;
-    
+
     result
 }
 
@@ -57,6 +57,6 @@ pub async fn run_tui_with_engine(_engine: Arc<RwLock<MasterClaude>>) -> Result<(
     disable_raw_mode()?;
     terminal.backend_mut().execute(LeaveAlternateScreen)?;
     terminal.show_cursor()?;
-    
+
     result
 }

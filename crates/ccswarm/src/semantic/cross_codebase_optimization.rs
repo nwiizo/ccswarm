@@ -1,5 +1,5 @@
 /// Cross-codebase optimization - Optimized version
-use super::common::{MetricsCollector, MetricType};
+use super::common::{MetricType, MetricsCollector};
 use crate::semantic::memory::ProjectMemory;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -143,19 +143,15 @@ struct UnifiedAnalyzer {
 }
 
 impl UnifiedAnalyzer {
-    async fn analyze_generic<T, F>(
-        &self,
-        analysis_type: &str,
-        analyzer_fn: F,
-    ) -> SemanticResult<T>
+    async fn analyze_generic<T, F>(&self, analysis_type: &str, analyzer_fn: F) -> SemanticResult<T>
     where
         F: FnOnce() -> T,
     {
         log::info!("Performing {} analysis", analysis_type);
-        
+
         let mut metrics = self.metrics.write().await;
         metrics.update(MetricType::Analysis, 1);
-        
+
         let result = analyzer_fn();
         Ok(result)
     }
@@ -195,9 +191,10 @@ impl CrossCodebaseOptimizer {
 
     pub async fn analyze_all(&self) -> SemanticResult<CrossCodebaseAnalysis> {
         let repos = self.repositories.read().await.clone();
-        
+
         // Use unified analyzer for all analysis types
-        let optimization_opportunities = self.analyzer
+        let optimization_opportunities = self
+            .analyzer
             .analyze_generic("optimization", || {
                 vec![OptimizationOpportunity {
                     optimization_type: OptimizationType::CachingStrategy,
@@ -207,16 +204,16 @@ impl CrossCodebaseOptimizer {
                 }]
             })
             .await?;
-        
-        let security_findings = self.analyzer
-            .analyze_generic("security", || vec![])
-            .await?;
-        
-        let performance_bottlenecks = self.analyzer
+
+        let security_findings = self.analyzer.analyze_generic("security", || vec![]).await?;
+
+        let performance_bottlenecks = self
+            .analyzer
             .analyze_generic("performance", || vec![])
             .await?;
-        
-        let technical_debt_map = self.analyzer
+
+        let technical_debt_map = self
+            .analyzer
             .analyze_generic("technical_debt", || TechnicalDebtMap {
                 total_debt_hours: 100.0,
                 debt_by_repository: HashMap::new(),
@@ -227,9 +224,9 @@ impl CrossCodebaseOptimizer {
                 },
             })
             .await?;
-        
+
         let recommendations = self.generate_recommendations(&optimization_opportunities);
-        
+
         Ok(CrossCodebaseAnalysis {
             repositories: repos,
             optimization_opportunities,
@@ -249,10 +246,7 @@ impl CrossCodebaseOptimizer {
             .map(|opp| Recommendation {
                 recommendation_type: RecommendationType::CodeChange,
                 title: format!("Apply {:?} optimization", opp.optimization_type),
-                description: format!(
-                    "Expected improvement: {:.1}%",
-                    opp.estimated_improvement
-                ),
+                description: format!("Expected improvement: {:.1}%", opp.estimated_improvement),
                 priority: "High".to_string(),
                 estimated_impact: "Significant".to_string(),
             })
@@ -261,7 +255,7 @@ impl CrossCodebaseOptimizer {
 
     pub async fn generate_report(&self) -> SemanticResult<String> {
         let analysis = self.analyze_all().await?;
-        
+
         let mut report = String::from("# Cross-Codebase Optimization Report\n\n");
         report.push_str("## Executive Summary\n\n");
         report.push_str(&format!(
@@ -284,14 +278,17 @@ impl CrossCodebaseOptimizer {
             "- Total technical debt: {:.0} hours\n\n",
             analysis.technical_debt_map.total_debt_hours
         ));
-        
+
         report.push_str("## Recommendations\n\n");
         for rec in &analysis.recommendations {
             report.push_str(&format!("### {}\n", rec.title));
             report.push_str(&format!("{}\n", rec.description));
-            report.push_str(&format!("Priority: {} | Impact: {}\n\n", rec.priority, rec.estimated_impact));
+            report.push_str(&format!(
+                "Priority: {} | Impact: {}\n\n",
+                rec.priority, rec.estimated_impact
+            ));
         }
-        
+
         Ok(report)
     }
 }

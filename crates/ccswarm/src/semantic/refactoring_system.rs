@@ -1,5 +1,7 @@
 /// Automatic refactoring system - Optimized version
-use super::common::{ProposalGenerator, ProposalKind, SymbolOperations, MetricsCollector, MetricType};
+use super::common::{
+    MetricType, MetricsCollector, ProposalGenerator, ProposalKind, SymbolOperations,
+};
 use crate::semantic::{
     analyzer::{SemanticAnalyzer, Symbol},
     memory::{Memory, MemoryType, ProjectMemory},
@@ -87,20 +89,23 @@ impl AutomaticRefactoringSystem {
     pub async fn scan_codebase(&mut self) -> Result<Vec<RefactoringProposal>> {
         let mut proposals = Vec::new();
         let symbols = self.symbol_index.get_all_symbols().await?;
-        
+
         // Use a unified check method with different strategies
         for symbol in &symbols {
             if let Some(proposal) = self.check_symbol(symbol).await? {
                 proposals.push(proposal);
             }
         }
-        
-        self.metrics.write().await.update(MetricType::Proposals, proposals.len());
+
+        self.metrics
+            .write()
+            .await
+            .update(MetricType::Proposals, proposals.len());
         self.metrics.write().await.update(MetricType::Analysis, 1);
-        
+
         let mut stored = self.proposals.write().await;
         stored.extend(proposals.clone());
-        
+
         Ok(proposals)
     }
 
@@ -108,36 +113,45 @@ impl AutomaticRefactoringSystem {
         if let Some(body) = &symbol.body {
             let lines = body.lines().count();
             let complexity = SymbolOperations::calculate_complexity(body);
-            
+
             // Unified check logic
             if lines > 50 {
                 return Ok(Some(ProposalGenerator::generate_proposal(
                     ProposalKind::LongFunction,
                     format!("Extract functions from {}", symbol.name),
-                    format!("Function {} has {} lines (recommended: max 50)", symbol.name, lines),
+                    format!(
+                        "Function {} has {} lines (recommended: max 50)",
+                        symbol.name, lines
+                    ),
                     vec![symbol.path.clone()],
                 )));
             }
-            
+
             if complexity > 10 {
                 return Ok(Some(ProposalGenerator::generate_proposal(
                     ProposalKind::ComplexLogic,
                     format!("Simplify complex logic in {}", symbol.name),
-                    format!("Function {} has cyclomatic complexity of {} (recommended: max 10)", symbol.name, complexity),
+                    format!(
+                        "Function {} has cyclomatic complexity of {} (recommended: max 10)",
+                        symbol.name, complexity
+                    ),
                     vec![symbol.path.clone()],
                 )));
             }
-            
+
             if !self.check_naming(&symbol.name) {
                 return Ok(Some(ProposalGenerator::generate_proposal(
                     ProposalKind::NamingConvention,
                     format!("Rename {} to follow convention", symbol.name),
-                    format!("Name '{}' doesn't follow Rust naming conventions", symbol.name),
+                    format!(
+                        "Name '{}' doesn't follow Rust naming conventions",
+                        symbol.name
+                    ),
                     vec![symbol.path.clone()],
                 )));
             }
         }
-        
+
         Ok(None)
     }
 
@@ -145,14 +159,16 @@ impl AutomaticRefactoringSystem {
         // Simple naming convention check
         match name.chars().next() {
             Some(c) if c.is_uppercase() => name.chars().all(|c| c.is_alphanumeric() || c == '_'),
-            Some(c) if c.is_lowercase() => name.chars().all(|c| c.is_lowercase() || c == '_' || c.is_numeric()),
+            Some(c) if c.is_lowercase() => name
+                .chars()
+                .all(|c| c.is_lowercase() || c == '_' || c.is_numeric()),
             _ => false,
         }
     }
 
     pub async fn apply_proposal(&mut self, proposal_id: &str) -> Result<()> {
         let proposals = self.proposals.read().await;
-        
+
         if let Some(proposal) = proposals.iter().find(|p| p.id == proposal_id) {
             if proposal.automated {
                 // Store in memory for tracking
@@ -167,12 +183,12 @@ impl AutomaticRefactoringSystem {
                     updated_at: Utc::now(),
                     access_count: 0,
                 };
-                
+
                 self.memory.store_memory(memory).await?;
                 self.metrics.write().await.update(MetricType::Applied, 1);
             }
         }
-        
+
         Ok(())
     }
 

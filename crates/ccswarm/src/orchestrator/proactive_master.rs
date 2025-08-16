@@ -534,7 +534,8 @@ impl ProactiveMaster {
             // Check if agent is stuck
             if matches!(agent.status, AgentStatus::Working) {
                 let time_since_activity = agent.last_activity.elapsed();
-                if time_since_activity.as_secs() > 900 {  // 15 minutes
+                if time_since_activity.as_secs() > 900 {
+                    // 15 minutes
                     decisions.push(ProactiveDecision {
                         decision_type: DecisionType::RequestIntervention,
                         reasoning: format!(
@@ -653,29 +654,33 @@ impl ProactiveMaster {
                             {
                                 for task_template in &pattern.follow_up_tasks {
                                     decisions.push(ProactiveDecision {
-                                    decision_type: DecisionType::GenerateTask,
-                                    reasoning: format!(
-                                        "Pattern match: {:?} completion typically requires {}",
-                                        current_task.task_type, task_template.description_template
-                                    ),
-                                    confidence: pattern.probability,
-                                    suggested_actions: vec![SuggestedAction {
-                                        action_type: "create_task".to_string(),
-                                        description: format!(
-                                            "Create follow-up task: {}",
+                                        decision_type: DecisionType::GenerateTask,
+                                        reasoning: format!(
+                                            "Pattern match: {:?} completion typically requires {}",
+                                            current_task.task_type,
                                             task_template.description_template
                                         ),
-                                        parameters: HashMap::from([
-                                            (
-                                                "template".to_string(),
-                                                serde_json::to_string(task_template)?,
+                                        confidence: pattern.probability,
+                                        suggested_actions: vec![SuggestedAction {
+                                            action_type: "create_task".to_string(),
+                                            description: format!(
+                                                "Create follow-up task: {}",
+                                                task_template.description_template
                                             ),
-                                            ("parent_task".to_string(), current_task.id.clone()),
-                                        ]),
-                                        expected_impact: "Maintain development momentum"
-                                            .to_string(),
-                                    }],
-                                    risk_assessment: RiskLevel::Low,
+                                            parameters: HashMap::from([
+                                                (
+                                                    "template".to_string(),
+                                                    serde_json::to_string(task_template)?,
+                                                ),
+                                                (
+                                                    "parent_task".to_string(),
+                                                    current_task.id.clone(),
+                                                ),
+                                            ]),
+                                            expected_impact: "Maintain development momentum"
+                                                .to_string(),
+                                        }],
+                                        risk_assessment: RiskLevel::Low,
                                     });
                                 }
                             }
@@ -685,37 +690,43 @@ impl ProactiveMaster {
                     // Check for pattern triggers in task description
                     if let Some(current_task) = &agent.current_task {
                         let description_lower = current_task.description.to_lowercase();
-                    for (pattern_id, pattern) in &predictor.pattern_library {
-                        for trigger in &pattern.trigger_conditions {
-                            if description_lower.contains(&trigger.to_lowercase()) {
-                                for task_template in &pattern.generated_tasks {
-                                    decisions.push(ProactiveDecision {
-                                        decision_type: DecisionType::GenerateTask,
-                                        reasoning: format!(
-                                            "Pattern '{}' triggered by: {}",
-                                            pattern_id, trigger
-                                        ),
-                                        confidence: pattern.confidence,
-                                        suggested_actions: vec![
-                                            SuggestedAction {
+                        for (pattern_id, pattern) in &predictor.pattern_library {
+                            for trigger in &pattern.trigger_conditions {
+                                if description_lower.contains(&trigger.to_lowercase()) {
+                                    for task_template in &pattern.generated_tasks {
+                                        decisions.push(ProactiveDecision {
+                                            decision_type: DecisionType::GenerateTask,
+                                            reasoning: format!(
+                                                "Pattern '{}' triggered by: {}",
+                                                pattern_id, trigger
+                                            ),
+                                            confidence: pattern.confidence,
+                                            suggested_actions: vec![SuggestedAction {
                                                 action_type: "create_task".to_string(),
                                                 description: format!(
                                                     "Auto-generate: {}",
                                                     task_template.description_template
                                                 ),
                                                 parameters: HashMap::from([
-                                                    ("template".to_string(), serde_json::to_string(task_template)?),
-                                                    ("trigger_task".to_string(), current_task.id.clone()),
+                                                    (
+                                                        "template".to_string(),
+                                                        serde_json::to_string(task_template)?,
+                                                    ),
+                                                    (
+                                                        "trigger_task".to_string(),
+                                                        current_task.id.clone(),
+                                                    ),
                                                 ]),
-                                                expected_impact: "Ensure complete feature implementation".to_string(),
-                                            },
-                                        ],
-                                        risk_assessment: RiskLevel::Low,
-                                    });
+                                                expected_impact:
+                                                    "Ensure complete feature implementation"
+                                                        .to_string(),
+                                            }],
+                                            risk_assessment: RiskLevel::Low,
+                                        });
+                                    }
                                 }
                             }
                         }
-                    }
                     }
                 }
             }
@@ -847,10 +858,13 @@ impl ProactiveMaster {
         let task_id = format!("auto-{}", Uuid::new_v4());
         let description = template.description_template.clone();
 
-        Ok(
-            Task::new_with_id(task_id, description, template.priority, template.task_type.clone())
-                .with_duration((template.estimated_duration * 60) as u32),
-        ) // convert minutes to seconds
+        Ok(Task::new_with_id(
+            task_id,
+            description,
+            template.priority,
+            template.task_type.clone(),
+        )
+        .with_duration((template.estimated_duration * 60) as u32)) // convert minutes to seconds
     }
 
     /// Unblock a task in the dependency graph
@@ -886,7 +900,8 @@ impl ProactiveMaster {
             let mut graph = self.dependency_graph.write().await;
             if let Some(node) = graph.nodes.get_mut(&task.id) {
                 node.status = TaskNodeStatus::Completed;
-                node.actual_duration = result.duration.map(|d| d.as_secs() / 60); // convert to minutes
+                node.actual_duration = result.duration.map(|d| d.as_secs() / 60);
+                // convert to minutes
             }
         }
 
@@ -953,7 +968,8 @@ impl ProactiveMaster {
                 let time_since_activity = agent.last_activity.elapsed();
 
                 // If stuck for more than 10 minutes, suggest search
-                if time_since_activity.as_secs() > 600 {  // 10 minutes
+                if time_since_activity.as_secs() > 600 {
+                    // 10 minutes
                     // Look at current task context
                     if let Some(current_task) = &agent.current_task {
                         let task_desc_lower = current_task.description.to_lowercase();

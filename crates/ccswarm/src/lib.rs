@@ -37,6 +37,9 @@ pub mod workspace;
 mod tests;
 
 // Re-export specific types to avoid ambiguity
-pub use agent::{Agent, AgentCapability, AgentMessage, AgentRole, Priority, Task, TaskBuilder, TaskResult, TaskType};
+pub use agent::{
+    Agent, AgentCapability, AgentMessage, AgentRole, Priority, Task, TaskBuilder, TaskResult,
+    TaskType,
+};
 pub use identity::AgentIdentity;
 pub use orchestrator::*;

@@ -312,7 +312,7 @@ impl SessionManagerAdapter {
             if session.status == SessionStatus::Active || session.status == SessionStatus::Busy {
                 active_sessions += 1;
             }
-            total_tasks += 1;  // Count each session as one task for now
+            total_tasks += 1; // Count each session as one task for now
         }
 
         // Estimate session efficiency gains from context compression

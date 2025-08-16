@@ -10,7 +10,7 @@ use ccswarm::config::{
     ProjectConfig, RepositoryConfig, ThinkMode,
 };
 use ccswarm::orchestrator::{
-    proactive_master::{Milestone, Objective, ProactiveMaster},
+    proactive_master::{Milestone, Objective, OrchestratorStatus, ProactiveMaster, StatusReport},
     MasterClaude,
 };
 use ccswarm::security::SecurityAgent;
@@ -262,43 +262,43 @@ async fn test_master_claude_isolated() -> Result<()> {
     // Test setting strategic objectives
     // TODO: set_objective method needs to be implemented
     let objective_id = "obj_123".to_string(); // Placeholder
-    // master_claude
-    //     .set_objective(
-    //         "Modern E-commerce Platform".to_string(),
-    //         "Build scalable e-commerce platform with microservices architecture".to_string(),
-    //         Some(Utc::now() + chrono::Duration::days(90)),
-    //     )
-    //     .await?;
+                                              // master_claude
+                                              //     .set_objective(
+                                              //         "Modern E-commerce Platform".to_string(),
+                                              //         "Build scalable e-commerce platform with microservices architecture".to_string(),
+                                              //         Some(Utc::now() + chrono::Duration::days(90)),
+                                              //     )
+                                              //     .await?;
     println!("✅ 戦略的目標設定完了: {}", objective_id);
 
     // Add multiple interconnected milestones
     // TODO: add_milestone method needs to be implemented
     let frontend_milestone_id = "milestone_frontend".to_string(); // Placeholder
-    // master_claude
-    //     .add_milestone(
-    //         "Frontend Platform".to_string(),
-    //         "React-based frontend with Next.js and TypeScript".to_string(),
-    //         Some(Utc::now() + chrono::Duration::days(30)),
-    //     )
-    //     .await?;
+                                                                  // master_claude
+                                                                  //     .add_milestone(
+                                                                  //         "Frontend Platform".to_string(),
+                                                                  //         "React-based frontend with Next.js and TypeScript".to_string(),
+                                                                  //         Some(Utc::now() + chrono::Duration::days(30)),
+                                                                  //     )
+                                                                  //     .await?;
 
     let backend_milestone_id = "milestone_backend".to_string(); // Placeholder
-    // master_claude
-    //     .add_milestone(
-    //         "Backend Microservices".to_string(),
-    //         "Node.js microservices with Docker and Kubernetes".to_string(),
-    //         Some(Utc::now() + chrono::Duration::days(45)),
-    //     )
-    //     .await?;
+                                                                // master_claude
+                                                                //     .add_milestone(
+                                                                //         "Backend Microservices".to_string(),
+                                                                //         "Node.js microservices with Docker and Kubernetes".to_string(),
+                                                                //         Some(Utc::now() + chrono::Duration::days(45)),
+                                                                //     )
+                                                                //     .await?;
 
     let deployment_milestone_id = "milestone_deployment".to_string(); // Placeholder
-    // master_claude
-    //     .add_milestone(
-    //         "Cloud Deployment".to_string(),
-    //         "AWS deployment with CI/CD pipeline".to_string(),
-    //         Some(Utc::now() + chrono::Duration::days(60)),
-    //     )
-    //     .await?;
+                                                                      // master_claude
+                                                                      //     .add_milestone(
+                                                                      //         "Cloud Deployment".to_string(),
+                                                                      //         "AWS deployment with CI/CD pipeline".to_string(),
+                                                                      //         Some(Utc::now() + chrono::Duration::days(60)),
+                                                                      //     )
+                                                                      //     .await?;
 
     println!("✅ 相互接続マイルストーン追加完了:");
     println!("   Frontend: {}", frontend_milestone_id);
@@ -308,7 +308,7 @@ async fn test_master_claude_isolated() -> Result<()> {
     // Trigger proactive analysis (core feature test)
     // TODO: trigger_proactive_analysis method needs to be implemented
     let decisions: Vec<crate::orchestrator::master_delegation::DelegationDecision> = Vec::new(); // Placeholder
-    // let decisions = master_claude.trigger_proactive_analysis().await?;
+                                                                                                 // let decisions = master_claude.trigger_proactive_analysis().await?;
     println!(
         "\n🤖 プロアクティブ分析結果: {} 件の意思決定",
         decisions.len()
@@ -357,11 +357,7 @@ async fn test_master_claude_isolated() -> Result<()> {
     ];
 
     for (task_id, description, priority) in development_tasks {
-        let mut task = Task::new(
-            description.to_string(),
-            TaskType::Development,
-            priority,
-        );
+        let mut task = Task::new(description.to_string(), TaskType::Development, priority);
         task.id = task_id.to_string();
         // TODO: add_task method needs to be implemented
         // master_claude.add_task(task).await?;

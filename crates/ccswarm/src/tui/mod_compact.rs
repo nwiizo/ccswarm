@@ -1,5 +1,5 @@
 /// Compact TUI module - Unified implementation
-use crate::utils::generic_handler::{StateManager, EventBus};
+use crate::utils::generic_handler::{EventBus, StateManager};
 use anyhow::Result;
 use crossterm::event::{self, Event as CrosstermEvent, KeyCode};
 use ratatui::{
@@ -50,32 +50,34 @@ impl TuiApp {
             events: Arc::new(EventBus::new()),
             components: Vec::new(),
         };
-        
+
         // Initialize with default components
         app.components.push(Box::new(TabsComponent::new()));
         app.components.push(Box::new(ListComponent::new()));
         app.components.push(Box::new(LogComponent::new()));
-        
+
         app
     }
-    
+
     pub async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
-        self.state.update(|s| {
-            s.is_running = true;
-            Ok(())
-        }).await?;
-        
+        self.state
+            .update(|s| {
+                s.is_running = true;
+                Ok(())
+            })
+            .await?;
+
         while self.state.read(|s| Ok(s.is_running)).await? {
             self.draw(terminal).await?;
             self.handle_events().await?;
         }
-        
+
         Ok(())
     }
-    
+
     async fn draw<B: Backend>(&self, terminal: &mut Terminal<B>) -> Result<()> {
         let state = self.state.read(|s| Ok(s.clone())).await?;
-        
+
         terminal.draw(|f| {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -86,7 +88,7 @@ impl TuiApp {
                     Constraint::Length(5),
                 ])
                 .split(f.area());
-            
+
             // Render components in their areas
             if let Some(tabs) = self.components.get(0) {
                 tabs.render(f, chunks[0], &state);
@@ -98,42 +100,50 @@ impl TuiApp {
                 log.render(f, chunks[2], &state);
             }
         })?;
-        
+
         Ok(())
     }
-    
+
     async fn handle_events(&mut self) -> Result<()> {
         if event::poll(std::time::Duration::from_millis(100))? {
             if let CrosstermEvent::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') => {
-                        self.state.update(|s| {
-                            s.is_running = false;
-                            Ok(())
-                        }).await?;
+                        self.state
+                            .update(|s| {
+                                s.is_running = false;
+                                Ok(())
+                            })
+                            .await?;
                         self.events.publish(TuiEvent::Quit).await;
                     }
                     KeyCode::Tab => {
-                        self.state.update(|s| {
-                            s.selected_tab = (s.selected_tab + 1) % 4;
-                            Ok(())
-                        }).await?;
+                        self.state
+                            .update(|s| {
+                                s.selected_tab = (s.selected_tab + 1) % 4;
+                                Ok(())
+                            })
+                            .await?;
                     }
                     KeyCode::Up => {
-                        self.state.update(|s| {
-                            if s.selected_item > 0 {
-                                s.selected_item -= 1;
-                            }
-                            Ok(())
-                        }).await?;
+                        self.state
+                            .update(|s| {
+                                if s.selected_item > 0 {
+                                    s.selected_item -= 1;
+                                }
+                                Ok(())
+                            })
+                            .await?;
                     }
                     KeyCode::Down => {
-                        self.state.update(|s| {
-                            if s.selected_item < s.items.len().saturating_sub(1) {
-                                s.selected_item += 1;
-                            }
-                            Ok(())
-                        }).await?;
+                        self.state
+                            .update(|s| {
+                                if s.selected_item < s.items.len().saturating_sub(1) {
+                                    s.selected_item += 1;
+                                }
+                                Ok(())
+                            })
+                            .await?;
                     }
                     _ => {}
                 }
@@ -141,16 +151,19 @@ impl TuiApp {
         }
         Ok(())
     }
-    
+
     pub async fn add_message(&self, message: String) {
-        let _ = self.state.update(|s| {
-            s.messages.push(message.clone());
-            if s.messages.len() > 100 {
-                s.messages.remove(0);
-            }
-            Ok(())
-        }).await;
-        
+        let _ = self
+            .state
+            .update(|s| {
+                s.messages.push(message.clone());
+                if s.messages.len() > 100 {
+                    s.messages.remove(0);
+                }
+                Ok(())
+            })
+            .await;
+
         self.events.publish(TuiEvent::MessageAdded(message)).await;
     }
 }
@@ -170,20 +183,21 @@ impl TabsComponent {
 
 impl Component for TabsComponent {
     fn render(&self, f: &mut Frame, area: Rect, state: &AppState) {
-        let titles: Vec<Line> = self.titles
-            .iter()
-            .map(|t| Line::from(*t))
-            .collect();
-        
+        let titles: Vec<Line> = self.titles.iter().map(|t| Line::from(*t)).collect();
+
         let tabs = Tabs::new(titles)
             .block(Block::default().borders(Borders::ALL).title("Navigation"))
             .select(state.selected_tab)
             .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
-        
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            );
+
         f.render_widget(tabs, area);
     }
-    
+
     fn handle_input(&mut self, _key: KeyCode, _state: &mut AppState) -> Result<()> {
         Ok(())
     }
@@ -200,26 +214,29 @@ impl ListComponent {
 
 impl Component for ListComponent {
     fn render(&self, f: &mut Frame, area: Rect, state: &AppState) {
-        let items: Vec<ListItem> = state.items
+        let items: Vec<ListItem> = state
+            .items
             .iter()
             .enumerate()
             .map(|(i, item)| {
                 let style = if i == state.selected_item {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
                 ListItem::new(Line::from(item.as_str())).style(style)
             })
             .collect();
-        
+
         let list = List::new(items)
             .block(Block::default().borders(Borders::ALL).title("Items"))
             .style(Style::default().fg(Color::White));
-        
+
         f.render_widget(list, area);
     }
-    
+
     fn handle_input(&mut self, _key: KeyCode, _state: &mut AppState) -> Result<()> {
         Ok(())
     }
@@ -236,20 +253,21 @@ impl LogComponent {
 
 impl Component for LogComponent {
     fn render(&self, f: &mut Frame, area: Rect, state: &AppState) {
-        let messages: Vec<Line> = state.messages
+        let messages: Vec<Line> = state
+            .messages
             .iter()
             .rev()
             .take(area.height as usize - 2)
             .map(|msg| Line::from(msg.as_str()))
             .collect();
-        
+
         let log = Paragraph::new(messages)
             .block(Block::default().borders(Borders::ALL).title("Logs"))
             .style(Style::default().fg(Color::Gray));
-        
+
         f.render_widget(log, area);
     }
-    
+
     fn handle_input(&mut self, _key: KeyCode, _state: &mut AppState) -> Result<()> {
         Ok(())
     }
@@ -262,28 +280,29 @@ pub struct Dashboard {
 
 impl Dashboard {
     pub fn new() -> Self {
-        Self {
-            app: TuiApp::new(),
-        }
+        Self { app: TuiApp::new() }
     }
-    
+
     pub async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         // Initialize with sample data
-        self.app.state.update(|s| {
-            s.items = vec![
-                "Agent 1: Frontend Specialist".to_string(),
-                "Agent 2: Backend Specialist".to_string(),
-                "Agent 3: DevOps Engineer".to_string(),
-                "Agent 4: QA Tester".to_string(),
-            ];
-            s.messages = vec![
-                "System initialized".to_string(),
-                "Agents loaded".to_string(),
-                "Ready for tasks".to_string(),
-            ];
-            Ok(())
-        }).await?;
-        
+        self.app
+            .state
+            .update(|s| {
+                s.items = vec![
+                    "Agent 1: Frontend Specialist".to_string(),
+                    "Agent 2: Backend Specialist".to_string(),
+                    "Agent 3: DevOps Engineer".to_string(),
+                    "Agent 4: QA Tester".to_string(),
+                ];
+                s.messages = vec![
+                    "System initialized".to_string(),
+                    "Agents loaded".to_string(),
+                    "Ready for tasks".to_string(),
+                ];
+                Ok(())
+            })
+            .await?;
+
         self.app.run(terminal).await
     }
 }

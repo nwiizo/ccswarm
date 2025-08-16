@@ -301,8 +301,6 @@ impl AgentConverter {
 }
 
 mod tests {
-    
-    
 
     #[test]
     fn test_convert_frontend_agent() {

@@ -32,7 +32,12 @@ pub struct AgentSession {
 }
 
 impl AgentSession {
-    pub fn new(agent_id: String, role: crate::agent::AgentRole, working_directory: String, description: String) -> Self {
+    pub fn new(
+        agent_id: String,
+        role: crate::agent::AgentRole,
+        working_directory: String,
+        description: String,
+    ) -> Self {
         Self {
             agent_id,
             role,
@@ -69,7 +74,7 @@ impl SessionManager {
             sessions: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    
+
     pub async fn create_session(&self, agent_name: String) -> Result<String> {
         let id = uuid::Uuid::new_v4().to_string();
         let info = SessionInfo {
@@ -77,12 +82,12 @@ impl SessionManager {
             agent_name,
             created_at: std::time::Instant::now(),
         };
-        
+
         let mut sessions = self.sessions.write().await;
         sessions.insert(id.clone(), info);
         Ok(id)
     }
-    
+
     pub async fn get_stats(&self) -> Result<SessionStats> {
         let sessions = self.sessions.read().await;
         Ok(SessionStats {
@@ -92,7 +97,7 @@ impl SessionManager {
             messages_processed: 0,
         })
     }
-    
+
     pub async fn list_sessions(&self) -> Result<Vec<String>> {
         let sessions = self.sessions.read().await;
         Ok(sessions.keys().cloned().collect())

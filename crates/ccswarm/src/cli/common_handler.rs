@@ -8,25 +8,33 @@ pub struct CommandHandler;
 
 impl CommandHandler {
     /// Execute a generic CLI command with consistent error handling and output
-    pub async fn execute<F, Fut, T>(
-        command_name: &str,
-        operation: F,
-    ) -> Result<()>
+    pub async fn execute<F, Fut, T>(command_name: &str, operation: F) -> Result<()>
     where
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<T>>,
         T: std::fmt::Display,
     {
-        println!("{}",  format!("🚀 Executing {}...", command_name).bright_blue().bold());
-        
+        println!(
+            "{}",
+            format!("🚀 Executing {}...", command_name)
+                .bright_blue()
+                .bold()
+        );
+
         match operation().await {
             Ok(result) => {
-                println!("{}", format!("✅ {} completed successfully", command_name).bright_green());
+                println!(
+                    "{}",
+                    format!("✅ {} completed successfully", command_name).bright_green()
+                );
                 println!("{}", result);
                 Ok(())
             }
             Err(e) => {
-                eprintln!("{}", format!("❌ {} failed: {}", command_name, e).bright_red());
+                eprintln!(
+                    "{}",
+                    format!("❌ {} failed: {}", command_name, e).bright_red()
+                );
                 Err(e)
             }
         }
@@ -42,15 +50,23 @@ impl CommandHandler {
         F: Fn(String) -> Fut,
         Fut: Future<Output = Result<T>>,
     {
-        println!("{}", format!("🔄 Processing {} items for {}", items.len(), command_name).bright_blue());
-        
+        println!(
+            "{}",
+            format!("🔄 Processing {} items for {}", items.len(), command_name).bright_blue()
+        );
+
         let mut results = Vec::new();
         let mut errors = 0;
         let total_items = items.len();
-        
+
         for (idx, item) in items.into_iter().enumerate() {
-            print!("  [{}/{}] Processing {}... ", idx + 1, total_items + errors, item);
-            
+            print!(
+                "  [{}/{}] Processing {}... ",
+                idx + 1,
+                total_items + errors,
+                item
+            );
+
             match operation(item).await {
                 Ok(result) => {
                     println!("{}", "✓".bright_green());
@@ -62,34 +78,43 @@ impl CommandHandler {
                 }
             }
         }
-        
+
         if errors > 0 {
-            eprintln!("{}", format!("⚠️  {} completed with {} errors", command_name, errors).yellow());
+            eprintln!(
+                "{}",
+                format!("⚠️  {} completed with {} errors", command_name, errors).yellow()
+            );
         } else {
-            println!("{}", format!("✅ {} completed successfully", command_name).bright_green());
+            println!(
+                "{}",
+                format!("✅ {} completed successfully", command_name).bright_green()
+            );
         }
-        
+
         Ok(results)
     }
 
     /// Execute a status display operation
-    pub async fn show_status<F, Fut>(
-        entity_name: &str,
-        fetcher: F,
-    ) -> Result<()>
+    pub async fn show_status<F, Fut>(entity_name: &str, fetcher: F) -> Result<()>
     where
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<Box<dyn StatusInfo>>>,
     {
-        println!("{}", format!("📊 {} Status", entity_name).bright_cyan().bold());
-        
+        println!(
+            "{}",
+            format!("📊 {} Status", entity_name).bright_cyan().bold()
+        );
+
         match fetcher().await {
             Ok(status) => {
                 status.display();
                 Ok(())
             }
             Err(e) => {
-                eprintln!("{}", format!("Failed to get {} status: {}", entity_name, e).red());
+                eprintln!(
+                    "{}",
+                    format!("Failed to get {} status: {}", entity_name, e).red()
+                );
                 Err(e)
             }
         }
@@ -111,9 +136,9 @@ impl CommandHandler {
         } else {
             format!("📋 All {}", entity_name)
         };
-        
+
         println!("{}", title.bright_cyan().bold());
-        
+
         match fetcher().await {
             Ok(items) => {
                 if items.is_empty() {
@@ -163,18 +188,18 @@ impl ResponseBuilder {
             sections: Vec::new(),
         }
     }
-    
+
     pub fn add_section(mut self, title: &str, items: Vec<String>) -> Self {
         self.sections.push((title.to_string(), items));
         self
     }
-    
+
     pub fn build(self) -> String {
         let mut output = String::new();
-        
+
         for (title, items) in self.sections {
             output.push_str(&format!("\n{}\n", title.bright_cyan().bold()));
-            
+
             if items.is_empty() {
                 output.push_str("  (none)\n");
             } else {
@@ -183,7 +208,7 @@ impl ResponseBuilder {
                 }
             }
         }
-        
+
         output
     }
 }

@@ -19,8 +19,8 @@ use crate::agent::{Task, TaskResult};
 use crate::coordination::conversion::{AgentMappingRegistry, UnifiedAgentInfo};
 use crate::coordination::AgentMessage as CCSwarmAgentMessage;
 use crate::identity::AgentRole;
-use crate::orchestrator::MasterClaude;
 use crate::orchestrator::master_delegation::DelegationDecision;
+use crate::orchestrator::MasterClaude;
 
 /// Enhanced message types for ccswarm coordination
 /// NOTE: These extend ai-session's AgentMessage for ccswarm-specific needs

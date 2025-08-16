@@ -3,8 +3,8 @@
 //! This module provides integration with serena's semantic code analysis capabilities,
 //! enabling intelligent code understanding, symbol-level operations, and project memory management.
 
-pub mod common;
 pub mod analyzer;
+pub mod common;
 pub mod cross_codebase_optimization;
 pub mod memory;
 pub mod refactoring_system;
@@ -117,7 +117,6 @@ impl SemanticManager {
     pub fn symbol_index(&self) -> Arc<SymbolIndex> {
         self.symbol_index.clone()
     }
-
 }
 
 /// Result type for semantic operations

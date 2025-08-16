@@ -1,5 +1,5 @@
 /// Compact agent module - Unified implementation
-use crate::utils::generic_handler::{StateManager, ListManager, EventBus};
+use crate::utils::generic_handler::{EventBus, ListManager, StateManager};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -49,7 +49,7 @@ impl AgentRole {
             AgentRole::Custom(name) => name,
         }
     }
-    
+
     /// Convert from identity::AgentRole to agent::AgentRole
     pub fn from_identity_role(identity_role: &crate::identity::AgentRole) -> Self {
         match identity_role {
@@ -61,7 +61,7 @@ impl AgentRole {
             crate::identity::AgentRole::Master { .. } => AgentRole::Custom("Master".to_string()),
         }
     }
-    
+
     /// Convert to identity::AgentRole with default configurations
     pub fn to_identity_role(&self) -> crate::identity::AgentRole {
         match self {
@@ -76,7 +76,12 @@ impl AgentRole {
                 boundaries: vec!["No functional changes".to_string()],
             },
             AgentRole::Custom(name) if name == "Master" => crate::identity::AgentRole::Master {
-                oversight_roles: vec!["Frontend".to_string(), "Backend".to_string(), "DevOps".to_string(), "QA".to_string()],
+                oversight_roles: vec![
+                    "Frontend".to_string(),
+                    "Backend".to_string(),
+                    "DevOps".to_string(),
+                    "QA".to_string(),
+                ],
                 quality_standards: crate::identity::QualityStandards::default(),
             },
             AgentRole::Custom(_) => crate::identity::default_frontend_role(), // Default fallback
@@ -92,10 +97,9 @@ pub enum AgentStatus {
     Suspended,
     Error(String),
     Initializing,
-    WaitingForReview,   // 追加
-    ShuttingDown,       // 追加
+    WaitingForReview, // 追加
+    ShuttingDown,     // 追加
 }
-
 
 // Task-related types for compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,8 +109,8 @@ pub struct Task {
     pub task_type: TaskType,
     pub priority: Priority,
     pub status: TaskStatus,
-    pub details: Option<String>,           // 追加
-    pub estimated_duration: Option<u32>,   // 追加（秒単位）
+    pub details: Option<String>,         // 追加
+    pub estimated_duration: Option<u32>, // 追加（秒単位）
 }
 
 impl Task {
@@ -123,7 +127,12 @@ impl Task {
     }
 
     // 4引数版のコンストラクタ（後方互換性のため）
-    pub fn new_with_id(id: String, description: String, priority: Priority, task_type: TaskType) -> Self {
+    pub fn new_with_id(
+        id: String,
+        description: String,
+        priority: Priority,
+        task_type: TaskType,
+    ) -> Self {
         Self {
             id,
             description,
@@ -139,7 +148,7 @@ impl Task {
         self.estimated_duration = Some(duration);
         self
     }
-    
+
     pub fn with_details(mut self, details: String) -> Self {
         self.details = Some(details);
         self
@@ -157,9 +166,9 @@ pub enum TaskType {
     Development,
     Infrastructure,
     Coordination,
-    Research,   // 追加
-    Bugfix,     // 追加
-    Review,     // 追加
+    Research, // 追加
+    Bugfix,   // 追加
+    Review,   // 追加
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
@@ -197,7 +206,7 @@ impl TaskResult {
             duration: None,
         }
     }
-    
+
     pub fn failure(task_id: String, error: String) -> Self {
         Self {
             task_id,
@@ -227,17 +236,17 @@ impl TaskBuilder {
             },
         }
     }
-    
+
     pub fn with_type(mut self, task_type: TaskType) -> Self {
         self.task.task_type = task_type;
         self
     }
-    
+
     pub fn with_priority(mut self, priority: Priority) -> Self {
         self.task.priority = priority;
         self
     }
-    
+
     pub fn build(self) -> Task {
         self.task
     }
@@ -271,7 +280,7 @@ impl AgentManager {
             events: Arc::new(EventBus::new()),
         }
     }
-    
+
     pub async fn create_agent(&self, name: String, role: AgentRole) -> Result<Agent> {
         let agent = Agent {
             id: uuid::Uuid::new_v4().to_string(),
@@ -280,49 +289,59 @@ impl AgentManager {
             status: AgentStatus::Idle,
             capabilities: self.get_role_capabilities(&role),
         };
-        
+
         self.agents.add(agent.clone()).await?;
-        self.state.update(|s| {
-            s.active_count += 1;
-            Ok(())
-        }).await?;
-        
-        self.events.publish(AgentEvent::Created(agent.id.clone())).await;
-        
+        self.state
+            .update(|s| {
+                s.active_count += 1;
+                Ok(())
+            })
+            .await?;
+
+        self.events
+            .publish(AgentEvent::Created(agent.id.clone()))
+            .await;
+
         Ok(agent)
     }
-    
+
     pub async fn list_agents(&self) -> Result<Vec<Agent>> {
         self.agents.list().await
     }
-    
+
     pub async fn get_agent(&self, id: &str) -> Result<Option<Agent>> {
         self.agents.find(|a| a.id == id).await
     }
-    
+
     pub async fn update_status(&self, id: &str, status: AgentStatus) -> Result<()> {
         // In real implementation, would update in ListManager
-        self.events.publish(AgentEvent::StatusChanged(id.to_string(), status)).await;
+        self.events
+            .publish(AgentEvent::StatusChanged(id.to_string(), status))
+            .await;
         Ok(())
     }
-    
+
     pub async fn execute_task(&self, agent_id: &str, task: &str) -> Result<String> {
         self.update_status(agent_id, AgentStatus::Working).await?;
-        
+
         // Simulate task execution
         let result = format!("Task '{}' completed by agent {}", task, agent_id);
-        
+
         self.update_status(agent_id, AgentStatus::Idle).await?;
-        self.state.update(|s| {
-            s.total_tasks += 1;
-            Ok(())
-        }).await?;
-        
-        self.events.publish(AgentEvent::TaskCompleted(agent_id.to_string())).await;
-        
+        self.state
+            .update(|s| {
+                s.total_tasks += 1;
+                Ok(())
+            })
+            .await?;
+
+        self.events
+            .publish(AgentEvent::TaskCompleted(agent_id.to_string()))
+            .await;
+
         Ok(result)
     }
-    
+
     fn get_role_capabilities(&self, role: &AgentRole) -> Vec<String> {
         match role {
             AgentRole::Frontend => vec![
@@ -348,15 +367,21 @@ impl AgentManager {
             _ => vec!["General".to_string()],
         }
     }
-    
+
     pub async fn get_statistics(&self) -> Result<AgentStatistics> {
         let agents = self.agents.list().await?;
-        let state = self.state.read(|s| Ok((s.active_count, s.total_tasks))).await?;
-        
+        let state = self
+            .state
+            .read(|s| Ok((s.active_count, s.total_tasks)))
+            .await?;
+
         Ok(AgentStatistics {
             total_agents: agents.len(),
             active_agents: state.0,
-            idle_agents: agents.iter().filter(|a| a.status == AgentStatus::Idle).count(),
+            idle_agents: agents
+                .iter()
+                .filter(|a| a.status == AgentStatus::Idle)
+                .count(),
             total_tasks_completed: state.1,
         })
     }
@@ -370,26 +395,24 @@ pub struct AgentStatistics {
     pub total_tasks_completed: usize,
 }
 
-
-
 // Submodules
+pub mod claude;
 pub mod isolation;
 pub mod orchestrator;
 pub mod pool;
 pub mod search_agent;
 pub mod simple;
-pub mod claude;
 
 // Module for persistent agents
 pub mod persistent {
     use super::*;
-    
+
     #[derive(Debug, Clone)]
     pub struct PersistentClaudeAgent {
         pub agent: Agent,
         pub session_id: String,
     }
-    
+
     impl PersistentClaudeAgent {
         pub fn new(name: String, role: AgentRole) -> Self {
             Self {
@@ -406,12 +429,12 @@ pub mod persistent {
 
         pub async fn execute_task(&mut self, task: Task) -> Result<TaskResult> {
             self.agent.status = AgentStatus::Working;
-            
+
             // Simulate task execution
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            
+
             self.agent.status = AgentStatus::Idle;
-            
+
             Ok(TaskResult {
                 task_id: task.id,
                 success: true,
@@ -431,7 +454,7 @@ pub mod persistent {
 
         pub async fn get_session_stats(&self) -> SessionStats {
             SessionStats {
-                token_count: 1000,  // Placeholder
+                token_count: 1000, // Placeholder
                 messages: vec!["Session started".to_string()],
             }
         }
@@ -441,7 +464,7 @@ pub mod persistent {
             Ok(())
         }
     }
-    
+
     #[derive(Debug, Clone)]
     pub struct SessionStats {
         pub token_count: usize,
@@ -450,9 +473,9 @@ pub mod persistent {
 }
 
 // Re-exports
-pub use isolation::IsolationMode;
 pub use self::orchestrator::AgentOrchestrator;
 pub use self::pool::AgentPool;
+pub use isolation::IsolationMode;
 
 // Claude-specific types
 pub struct ClaudeCodeAgent {
@@ -517,18 +540,18 @@ impl ClaudeCodeAgent {
             task_history: vec![],
         }
     }
-    
+
     pub async fn execute_task(&mut self, task: Task) -> Result<TaskResult> {
         self.status = AgentStatus::Working;
         self.current_task = Some(task.clone());
         self.last_activity = std::time::Instant::now();
-        
+
         // Simulate task execution
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         self.status = AgentStatus::Idle;
         self.current_task = None;
-        
+
         Ok(TaskResult {
             task_id: task.id,
             success: true,

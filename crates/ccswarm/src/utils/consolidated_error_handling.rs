@@ -43,8 +43,15 @@ pub enum RecoveryAction {
 impl std::fmt::Display for RecoveryAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RecoveryAction::Retry { max_attempts, backoff_ms } => {
-                write!(f, "Retry {} times with {}ms backoff", max_attempts, backoff_ms)
+            RecoveryAction::Retry {
+                max_attempts,
+                backoff_ms,
+            } => {
+                write!(
+                    f,
+                    "Retry {} times with {}ms backoff",
+                    max_attempts, backoff_ms
+                )
             }
             RecoveryAction::Fallback { description } => {
                 write!(f, "Fallback: {}", description)
@@ -61,8 +68,15 @@ impl std::fmt::Display for RecoveryAction {
             RecoveryAction::LoadBalance { strategy } => {
                 write!(f, "Load balance using {} strategy", strategy)
             }
-            RecoveryAction::CircuitBreak { threshold, timeout_ms } => {
-                write!(f, "Circuit break after {} failures, timeout {}ms", threshold, timeout_ms)
+            RecoveryAction::CircuitBreak {
+                threshold,
+                timeout_ms,
+            } => {
+                write!(
+                    f,
+                    "Circuit break after {} failures, timeout {}ms",
+                    threshold, timeout_ms
+                )
             }
             RecoveryAction::Log { level } => {
                 write!(f, "Log at {} level", level)
@@ -407,7 +421,7 @@ impl GlobalErrorHandler {
         // Clone recovery actions to avoid borrowing issues
         let recovery_actions = context.recovery_actions.clone();
         let error_debug = format!("{:?}", context.error);
-        
+
         // Execute recovery actions
         for action in recovery_actions {
             match action {
@@ -428,7 +442,7 @@ impl GlobalErrorHandler {
                     let key = error_debug.clone();
                     let mut breakers = self.circuit_breakers.write().await;
                     breakers.insert(key.clone(), true);
-                    
+
                     let breakers_clone = self.circuit_breakers.clone();
                     let timeout = timeout_ms;
                     tokio::spawn(async move {

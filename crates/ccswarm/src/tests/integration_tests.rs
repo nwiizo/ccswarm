@@ -494,7 +494,7 @@ mod tests {
                     format!("task-{}", i),
                     format!("Test task {}", i),
                     Priority::Medium,
-                    TaskType::Development
+                    TaskType::Development,
                 )
             })
             .collect();

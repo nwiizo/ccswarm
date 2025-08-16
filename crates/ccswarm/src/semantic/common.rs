@@ -1,10 +1,7 @@
+use crate::semantic::{analyzer::Symbol, refactoring_system::RefactoringProposal};
 /// Common utilities for semantic features
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use crate::semantic::{
-    analyzer::Symbol,
-    refactoring_system::RefactoringProposal,
-};
 
 /// Generic handler trait for all semantic operations
 #[async_trait::async_trait]
@@ -131,20 +128,25 @@ impl ProposalGenerator {
         description: String,
         targets: Vec<String>,
     ) -> RefactoringProposal {
-        use crate::semantic::refactoring_system::{
-            RefactoringPriority, EffortEstimate
-        };
+        use crate::semantic::refactoring_system::{EffortEstimate, RefactoringPriority};
         // Use the refactoring_system module's RefactoringKind
-        
-        
+
         let (priority, effort, automated) = match kind {
-            ProposalKind::LongFunction => (RefactoringPriority::Medium, EffortEstimate::Small, true),
-            ProposalKind::ComplexLogic => (RefactoringPriority::High, EffortEstimate::Medium, false),
+            ProposalKind::LongFunction => {
+                (RefactoringPriority::Medium, EffortEstimate::Small, true)
+            }
+            ProposalKind::ComplexLogic => {
+                (RefactoringPriority::High, EffortEstimate::Medium, false)
+            }
             ProposalKind::DuplicateCode => (RefactoringPriority::High, EffortEstimate::Large, true),
-            ProposalKind::NamingConvention => (RefactoringPriority::Low, EffortEstimate::Small, true),
-            ProposalKind::Architecture => (RefactoringPriority::Critical, EffortEstimate::Large, false),
+            ProposalKind::NamingConvention => {
+                (RefactoringPriority::Low, EffortEstimate::Small, true)
+            }
+            ProposalKind::Architecture => {
+                (RefactoringPriority::Critical, EffortEstimate::Large, false)
+            }
         };
-        
+
         RefactoringProposal {
             id: uuid::Uuid::new_v4().to_string(),
             title,
@@ -208,7 +210,7 @@ impl MetricsCollector {
             MetricType::Analysis => self.analysis_runs += 1,
         }
     }
-    
+
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "total_symbols": self.total_symbols,
@@ -233,16 +235,13 @@ pub enum MetricType {
 pub struct SymbolOperations;
 
 impl SymbolOperations {
-    pub async fn find_and_process<F, R>(
-        symbols: Vec<Symbol>,
-        filter: F,
-    ) -> Vec<R>
+    pub async fn find_and_process<F, R>(symbols: Vec<Symbol>, filter: F) -> Vec<R>
     where
         F: Fn(&Symbol) -> Option<R>,
     {
         symbols.iter().filter_map(filter).collect()
     }
-    
+
     pub fn calculate_complexity(body: &str) -> usize {
         let mut complexity = 1;
         for line in body.lines() {
@@ -258,19 +257,17 @@ impl SymbolOperations {
         }
         complexity
     }
-    
+
     pub fn calculate_similarity(s1: &str, s2: &str) -> f64 {
         let lines1: Vec<&str> = s1.lines().collect();
         let lines2: Vec<&str> = s2.lines().collect();
-        
+
         if lines1.is_empty() || lines2.is_empty() {
             return 0.0;
         }
-        
-        let common = lines1.iter()
-            .filter(|l| lines2.contains(l))
-            .count();
-        
+
+        let common = lines1.iter().filter(|l| lines2.contains(l)).count();
+
         let total = lines1.len().max(lines2.len());
         common as f64 / total as f64
     }
