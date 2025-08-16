@@ -276,7 +276,7 @@ impl WorktreeSessionManager {
 
         // Step 3: Establish identity once
         {
-            let mut agent_guard = agent.lock().await;
+            let agent_guard = agent.lock().await;
             // Identity establishment no longer needed with simplified structure
         }
 

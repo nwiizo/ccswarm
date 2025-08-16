@@ -135,7 +135,7 @@ impl ProposalGenerator {
             RefactoringPriority, EffortEstimate
         };
         // Use the refactoring_system module's RefactoringKind
-        use crate::semantic::refactoring_system::RefactoringKind;
+        
         
         let (priority, effort, automated) = match kind {
             ProposalKind::LongFunction => (RefactoringPriority::Medium, EffortEstimate::Small, true),

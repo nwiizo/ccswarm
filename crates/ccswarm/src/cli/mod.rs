@@ -7,6 +7,9 @@ use std::path::PathBuf;
 #[command(name = "ccswarm")]
 #[command(about = "AI Multi-Agent Orchestration System")]
 pub struct Cli {
+    #[arg(short, long, help = "Enable verbose output")]
+    pub verbose: bool,
+    
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -46,10 +49,13 @@ pub enum SessionCommands {
 pub struct CliRunner;
 
 impl CliRunner {
-    pub async fn run() -> Result<()> {
-        let cli = Cli::parse();
+    pub async fn new(_cli: &Cli) -> Result<Self> {
+        Ok(Self)
+    }
+    
+    pub async fn run(&self, command: &Commands) -> Result<()> {
         
-        match cli.command {
+        match command {
             Commands::Init { name, agents } => {
                 println!("Initializing project: {} with agents: {}", name, agents);
                 Ok(())

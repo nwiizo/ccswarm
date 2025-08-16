@@ -235,7 +235,7 @@ impl SessionManagerAdapter {
         config: AutoAcceptConfig,
     ) -> Result<()> {
         if let Some(agent_session) = self.get_session(session_id).await {
-            let mut session = agent_session.lock().await;
+            let session = agent_session.lock().await;
             // Auto-accept configuration is handled at ai-session level
             // session.enable_auto_accept(config);  // Method doesn't exist
         }

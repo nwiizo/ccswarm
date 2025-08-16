@@ -17,7 +17,7 @@ use ai_session::coordination::{AgentId, AgentMessage as AISessionMessage, Messag
 
 use crate::agent::{Task, TaskResult};
 use crate::coordination::conversion::{AgentMappingRegistry, UnifiedAgentInfo};
-use crate::coordination::{AgentMessage as CCSwarmAgentMessage, CoordinationType};
+use crate::coordination::AgentMessage as CCSwarmAgentMessage;
 use crate::identity::AgentRole;
 use crate::orchestrator::MasterClaude;
 use crate::orchestrator::master_delegation::DelegationDecision;

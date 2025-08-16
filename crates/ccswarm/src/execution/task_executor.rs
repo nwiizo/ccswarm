@@ -58,7 +58,7 @@ impl TaskExecutor {
         let task_queue = Arc::new(TaskQueue::new());
 
         // Create agent pool and spawn configured agents
-        let mut agent_pool = AgentPool::new().await?;
+        let agent_pool = AgentPool::new().await?;
         for agent_type in config.agents.keys() {
             let role = match agent_type.as_str() {
                 "frontend" => AgentRole::Frontend,
