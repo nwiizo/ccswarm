@@ -27,7 +27,13 @@ pub struct MasterClaude {
 #[derive(Default)]
 struct OrchestratorState {
     tasks_completed: usize,
-    active_agents: usize,
+    _active_agents: usize,
+}
+
+impl Default for MasterClaude {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MasterClaude {

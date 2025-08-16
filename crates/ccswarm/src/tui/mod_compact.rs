@@ -43,6 +43,12 @@ pub enum TuiEvent {
     Quit,
 }
 
+impl Default for TuiApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TuiApp {
     pub fn new() -> Self {
         let mut app = Self {
@@ -90,7 +96,7 @@ impl TuiApp {
                 .split(f.area());
 
             // Render components in their areas
-            if let Some(tabs) = self.components.get(0) {
+            if let Some(tabs) = self.components.first() {
                 tabs.render(f, chunks[0], &state);
             }
             if let Some(list) = self.components.get(1) {
@@ -170,20 +176,20 @@ impl TuiApp {
 
 /// Generic tabs component
 struct TabsComponent {
-    titles: Vec<&'static str>,
+    _titles: Vec<&'static str>,
 }
 
 impl TabsComponent {
     fn new() -> Self {
         Self {
-            titles: vec!["Overview", "Agents", "Tasks", "Sessions"],
+            _titles: vec!["Overview", "Agents", "Tasks", "Sessions"],
         }
     }
 }
 
 impl Component for TabsComponent {
     fn render(&self, f: &mut Frame, area: Rect, state: &AppState) {
-        let titles: Vec<Line> = self.titles.iter().map(|t| Line::from(*t)).collect();
+        let titles: Vec<Line> = self._titles.iter().map(|t| Line::from(*t)).collect();
 
         let tabs = Tabs::new(titles)
             .block(Block::default().borders(Borders::ALL).title("Navigation"))
@@ -276,6 +282,12 @@ impl Component for LogComponent {
 /// Simplified dashboard using generic components
 pub struct Dashboard {
     app: TuiApp,
+}
+
+impl Default for Dashboard {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Dashboard {

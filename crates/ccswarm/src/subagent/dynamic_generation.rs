@@ -107,6 +107,12 @@ pub struct ComplexityMetrics {
     pub test_coverage: f32,
 }
 
+impl Default for DynamicSubagentGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DynamicSubagentGenerator {
     /// Create a new generator
     pub fn new() -> Self {
@@ -274,19 +280,19 @@ impl DynamicSubagentGenerator {
         let template = self.get_template_for_type(&request.agent_type)?;
 
         // Generate name
-        let name = self.generate_name(&template, request);
+        let name = self.generate_name(template, request);
 
         // Generate description
-        let description = self.generate_description(&template, request);
+        let description = self.generate_description(template, request);
 
         // Generate tools
-        let tools = self.generate_tools(&template, request);
+        let tools = self.generate_tools(template, request);
 
         // Generate capabilities
-        let capabilities = self.generate_capabilities(&template, request);
+        let capabilities = self.generate_capabilities(template, request);
 
         // Generate instructions
-        let instructions = self.generate_instructions(&template, request);
+        let instructions = self.generate_instructions(template, request);
 
         // Create metadata
         let mut metadata = HashMap::new();

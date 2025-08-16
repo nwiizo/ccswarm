@@ -205,11 +205,11 @@ impl CrossCodebaseOptimizer {
             })
             .await?;
 
-        let security_findings = self.analyzer.analyze_generic("security", || vec![]).await?;
+        let security_findings = self.analyzer.analyze_generic("security", std::vec::Vec::new).await?;
 
         let performance_bottlenecks = self
             .analyzer
-            .analyze_generic("performance", || vec![])
+            .analyze_generic("performance", std::vec::Vec::new)
             .await?;
 
         let technical_debt_map = self

@@ -10,12 +10,12 @@ pub struct AiderConfig {
 }
 
 pub struct AiderExecutor {
-    config: AiderConfig,
+    _config: AiderConfig,
 }
 
 impl AiderExecutor {
     pub fn new(config: AiderConfig) -> Self {
-        Self { config }
+        Self { _config: config }
     }
 }
 

@@ -208,7 +208,7 @@ impl SessionManagerAdapter {
     ) -> Result<()> {
         if let Some(agent_session) = self.get_session(session_id).await {
             let mut session = agent_session.lock().await;
-            session.status = status.clone();
+            session.status = status;
             // Status already updated
         }
 

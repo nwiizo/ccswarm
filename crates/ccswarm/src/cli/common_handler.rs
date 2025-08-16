@@ -182,6 +182,12 @@ pub struct ResponseBuilder {
     sections: Vec<(String, Vec<String>)>,
 }
 
+impl Default for ResponseBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ResponseBuilder {
     pub fn new() -> Self {
         Self {

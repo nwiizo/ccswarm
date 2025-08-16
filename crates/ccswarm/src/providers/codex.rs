@@ -10,12 +10,12 @@ pub struct CodexConfig {
 }
 
 pub struct CodexExecutor {
-    config: CodexConfig,
+    _config: CodexConfig,
 }
 
 impl CodexExecutor {
     pub fn new(config: CodexConfig) -> Self {
-        Self { config }
+        Self { _config: config }
     }
 }
 

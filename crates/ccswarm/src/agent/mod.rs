@@ -16,7 +16,7 @@ pub struct Agent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentCapability {
     pub name: String,
-    pub description: String,
+    pub _description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +270,12 @@ pub enum AgentEvent {
     Created(String),
     StatusChanged(String, AgentStatus),
     TaskCompleted(String),
+}
+
+impl Default for AgentManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AgentManager {

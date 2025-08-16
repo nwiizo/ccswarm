@@ -19,6 +19,12 @@ pub struct StateManager<T> {
     state: Arc<RwLock<T>>,
 }
 
+impl<T: Default + Send + Sync> Default for StateManager<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Default + Send + Sync> StateManager<T> {
     pub fn new() -> Self {
         Self {
@@ -48,6 +54,12 @@ impl<T: Default + Send + Sync> StateManager<T> {
 /// Generic list manager
 pub struct ListManager<T> {
     items: Arc<RwLock<Vec<T>>>,
+}
+
+impl<T: Clone + Send + Sync> Default for ListManager<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T: Clone + Send + Sync> ListManager<T> {
@@ -97,6 +109,12 @@ pub trait MessageHandler<M, R>: Send + Sync {
     async fn handle(&self, message: &M) -> Option<R>;
 }
 
+impl<M: Send + Sync, R: Send + Sync> Default for MessageProcessor<M, R> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<M: Send + Sync, R: Send + Sync> MessageProcessor<M, R> {
     pub fn new() -> Self {
         Self {
@@ -138,6 +156,12 @@ pub struct EventBus<T> {
 #[async_trait]
 pub trait EventSubscriber<T>: Send + Sync {
     async fn on_event(&self, event: &Event<T>);
+}
+
+impl<T: Clone + Send + Sync> Default for EventBus<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T: Clone + Send + Sync> EventBus<T> {

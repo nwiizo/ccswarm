@@ -206,7 +206,7 @@ impl WorktreeSessionManager {
     async fn create_new_worktree_session(
         &self,
         role: AgentRole,
-        claude_config: ClaudeConfig,
+        _claude_config: ClaudeConfig,
     ) -> Result<Arc<Mutex<PersistentClaudeAgent>>> {
         let agent_id = format!("{}-agent-{}", role.name().to_lowercase(), Uuid::new_v4());
         let branch_name = format!("{}/{}", self.config.branch_prefix, &agent_id);
@@ -239,7 +239,7 @@ impl WorktreeSessionManager {
         self.update_session_info(&agent_id, session_info.clone())
             .await;
 
-        let _worktree_info = self
+        let _ = self
             .git_manager
             .create_worktree(&session_info.worktree_path, &branch_name)
             .await
@@ -276,7 +276,7 @@ impl WorktreeSessionManager {
 
         // Step 3: Establish identity once
         {
-            let agent_guard = agent.lock().await;
+            let _agent_guard = agent.lock().await;
             // Identity establishment no longer needed with simplified structure
         }
 

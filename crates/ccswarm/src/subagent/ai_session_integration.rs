@@ -107,7 +107,7 @@ impl SubagentSessionManager {
             .config
             .persistence_dir
             .as_ref()
-            .map(|d| std::path::PathBuf::from(d))
+            .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::path::PathBuf::from("."));
         let adapter = Arc::new(SessionManagerAdapter::new(working_dir.clone()));
 

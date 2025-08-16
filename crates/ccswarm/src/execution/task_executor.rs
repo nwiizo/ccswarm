@@ -6,7 +6,6 @@ use tokio::time::{interval, sleep};
 use tracing::{error, info};
 
 use super::task_queue::{QueuedTask, TaskQueue};
-use crate::agent::orchestrator::AgentOrchestrator;
 use crate::agent::pool::AgentPool;
 use crate::agent::{AgentRole, Task, TaskResult};
 use crate::config::CcswarmConfig;

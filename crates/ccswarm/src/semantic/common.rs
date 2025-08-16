@@ -30,10 +30,10 @@ pub struct HandlerFactory;
 impl HandlerFactory {
     pub fn create_handler(handler_type: HandlerType) -> Box<dyn SemanticHandler> {
         match handler_type {
-            HandlerType::Analysis => Box::new(AnalysisHandler::default()),
-            HandlerType::Refactoring => Box::new(RefactoringHandler::default()),
-            HandlerType::Symbol => Box::new(SymbolHandler::default()),
-            HandlerType::Memory => Box::new(MemoryHandler::default()),
+            HandlerType::Analysis => Box::new(AnalysisHandler),
+            HandlerType::Refactoring => Box::new(RefactoringHandler),
+            HandlerType::Symbol => Box::new(SymbolHandler),
+            HandlerType::Memory => Box::new(MemoryHandler),
         }
     }
 }

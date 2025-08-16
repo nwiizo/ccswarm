@@ -93,7 +93,7 @@ pub struct PersistentSessionManager {
     workspace_root: PathBuf,
 
     /// Cleanup task handle
-    cleanup_handle: Option<tokio::task::JoinHandle<()>>,
+    _cleanup_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl PersistentSessionManager {
@@ -104,7 +104,7 @@ impl PersistentSessionManager {
             session_info: Arc::new(RwLock::new(HashMap::new())),
             config,
             workspace_root,
-            cleanup_handle: None,
+            _cleanup_handle: None,
         }
     }
 
@@ -133,7 +133,7 @@ impl PersistentSessionManager {
             }
         });
 
-        self.cleanup_handle = Some(cleanup_handle);
+        self._cleanup_handle = Some(cleanup_handle);
         Ok(())
     }
 
@@ -197,7 +197,7 @@ impl PersistentSessionManager {
         &self,
         agent_id: String,
         role: AgentRole,
-        claude_config: ClaudeConfig,
+        _claude_config: ClaudeConfig,
     ) -> Result<Arc<Mutex<PersistentClaudeAgent>>> {
         tracing::info!("Creating new persistent session for agent: {}", agent_id);
 
@@ -454,7 +454,7 @@ impl PersistentSessionManager {
         tracing::info!("Shutting down persistent session manager");
 
         // Cancel cleanup task
-        if let Some(handle) = self.cleanup_handle.take() {
+        if let Some(handle) = self._cleanup_handle.take() {
             handle.abort();
         }
 

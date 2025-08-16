@@ -10,7 +10,7 @@ use ccswarm::config::{
     ProjectConfig, RepositoryConfig, ThinkMode,
 };
 use ccswarm::orchestrator::{
-    proactive_master::{Milestone, Objective, OrchestratorStatus, ProactiveMaster, StatusReport},
+    proactive_master::{Milestone, Objective, ProactiveMaster},
     MasterClaude,
 };
 use ccswarm::security::SecurityAgent;
@@ -98,7 +98,7 @@ async fn test_proactive_master_standalone() -> Result<()> {
         ("database-setup", "Configure PostgreSQL database", 1800),
     ];
 
-    for (task_id, description, duration_secs) in completed_tasks {
+    for (task_id, description, _duration_secs) in completed_tasks {
         let mut task = Task::new(
             description.to_string(),
             TaskType::Development,
@@ -107,12 +107,12 @@ async fn test_proactive_master_standalone() -> Result<()> {
         task.id = task_id.to_string();
 
         let result = TaskResult::success(
+            task.id.clone(),
             serde_json::json!({
                 "files_modified": 3,
                 "tests_added": 2,
                 "complexity": "medium"
-            }),
-            std::time::Duration::from_secs(duration_secs),
+            }).to_string(),
         );
 
         proactive_master
@@ -307,7 +307,7 @@ async fn test_master_claude_isolated() -> Result<()> {
 
     // Trigger proactive analysis (core feature test)
     // TODO: trigger_proactive_analysis method needs to be implemented
-    let decisions: Vec<crate::orchestrator::master_delegation::DelegationDecision> = Vec::new(); // Placeholder
+    let decisions: Vec<String> = Vec::new(); // Placeholder - simplified type
                                                                                                  // let decisions = master_claude.trigger_proactive_analysis().await?;
     println!(
         "\n🤖 プロアクティブ分析結果: {} 件の意思決定",
@@ -315,16 +315,7 @@ async fn test_master_claude_isolated() -> Result<()> {
     );
 
     for (i, decision) in decisions.iter().enumerate() {
-        println!("   {}. 決定タイプ: {:?}", i + 1, decision.decision_type);
-        println!("      理由: {}", decision.reasoning);
-        println!("      信頼度: {:.2}", decision.confidence);
-        println!("      リスク評価: {:?}", decision.risk_assessment);
-        if !decision.suggested_actions.is_empty() {
-            println!(
-                "      提案アクション: {}",
-                decision.suggested_actions[0].description
-            );
-        }
+        println!("   {}. 決定: {}", i + 1, decision);
     }
 
     // Add realistic development tasks
@@ -367,27 +358,32 @@ async fn test_master_claude_isolated() -> Result<()> {
 
     // Generate comprehensive status report
     // TODO: generate_status_report method needs to be implemented
-    let status_report = crate::orchestrator::proactive_master::StatusReport {
+    // Using simplified inline struct since StatusReport is not exported
+    struct TestStatusReport {
+        orchestrator_id: String,
+        status: String,
+        total_agents: usize,
+        active_agents: usize,
+        total_tasks_processed: usize,
+        successful_tasks: usize,
+        failed_tasks: usize,
+        pending_tasks: usize,
+    }
+    
+    let status_report = TestStatusReport {
         orchestrator_id: "master".to_string(),
-        status: crate::orchestrator::proactive_master::OrchestratorStatus::Active,
+        status: "Active".to_string(),
         total_agents: 4,
         active_agents: 2,
         total_tasks_processed: 0,
         successful_tasks: 0,
         failed_tasks: 0,
-        strategic_objectives_count: 1,
-        milestones_count: 3,
-        achievements_count: 0,
-        analysis_insights_count: 0,
-        uptime: std::time::Duration::from_secs(60),
-        average_task_duration: std::time::Duration::from_secs(30),
-        last_analysis: Utc::now(),
-        health_score: 100.0,
+        pending_tasks: 2,
     };
     // let status_report = master_claude.generate_status_report().await?;
     println!("\n📊 Master Claude 総合ステータスレポート:");
     println!("   オーケストレーターID: {}", status_report.orchestrator_id);
-    println!("   ステータス: {:?}", status_report.status);
+    println!("   ステータス: {}", status_report.status);
     println!("   エージェント総数: {}", status_report.total_agents);
     println!("   アクティブエージェント: {}", status_report.active_agents);
     println!(
