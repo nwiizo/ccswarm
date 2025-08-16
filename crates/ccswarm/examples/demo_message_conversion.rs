@@ -2,7 +2,7 @@ use ai_session::coordination::{
     AgentId as AISessionAgentId, AgentMessage as AISessionMessage,
     MessagePriority as AISessionPriority,
 };
-use ccswarm::agent::{AgentStatus, ClaudeCodeAgent, Priority, TaskResult};
+use ccswarm::agent::{AgentStatus, ClaudeCodeAgent, TaskResult};
 /// Example demonstrating the message conversion strategy between ccswarm and ai-session
 ///
 /// This example shows how the type conversion layer enables MasterClaude integration
@@ -15,10 +15,9 @@ use ccswarm::coordination::conversion::{
     AgentMappingRegistry, ConversionError, FromAISessionMessage, IntoAISessionMessage,
     UnifiedAgentInfo,
 };
-use ccswarm::coordination::{AgentMessage as CCSwarmMessage, CoordinationType};
+use ccswarm::coordination::{AgentMessage as CCSwarmMessage};
 use ccswarm::identity::{default_backend_role, default_frontend_role};
 use ccswarm::orchestrator::agent_access::AgentAttributeAccess;
-use chrono::Utc;
 use std::time::Duration;
 
 #[tokio::main]
@@ -84,15 +83,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         agent_id: "frontend-specialist-001".to_string(),
         task_id: "task-create-login-form".to_string(),
         result: TaskResult {
+            task_id: "task-create-login-form".to_string(),
             success: true,
-            output: serde_json::json!({
+            output: Some(serde_json::json!({
                 "message": "Login form component created successfully",
                 "files_created": ["LoginForm.tsx", "LoginForm.css", "LoginForm.test.tsx"],
                 "lines_of_code": 250,
                 "test_coverage": 98.5,
-            }),
+            }).to_string()),
             error: None,
-            duration: Duration::from_secs(120),
+            duration: Some(Duration::from_secs(120)),
         },
     };
 

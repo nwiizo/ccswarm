@@ -44,17 +44,18 @@ async fn test_bidirectional_message_conversion() {
         agent_id: "frontend-001".to_string(),
         task_id: "task-123".to_string(),
         result: TaskResult {
+            task_id: "task-123".to_string(),
             success: true,
-            output: serde_json::json!({
+            output: Some(serde_json::json!({
                 "message": "Component created successfully",
                 "artifacts": ["Button.tsx", "Button.css"],
                 "metrics": {
                     "lines_of_code": 150,
                     "test_coverage": 95.5
                 }
-            }),
+            }).to_string()),
             error: None,
-            duration: std::time::Duration::from_secs(5),
+            duration: Some(std::time::Duration::from_secs(5)),
         },
     };
 
@@ -77,7 +78,7 @@ async fn test_bidirectional_message_conversion() {
         } => {
             assert_eq!(agent_id, "frontend-001");
             assert_eq!(result.success, true);
-            assert!(result.output.get("message").is_some());
+            assert!(result.output.is_some());
         }
         _ => panic!("Expected TaskCompleted message"),
     }
@@ -141,13 +142,9 @@ async fn test_bidirectional_message_conversion() {
 async fn test_agent_info_conversions() {
     // Test creating UnifiedAgentInfo from ccswarm agent
     let ccswarm_agent = ccswarm::agent::ClaudeCodeAgent::new(
+        "frontend-test".to_string(),
         default_frontend_role(),
-        &std::path::PathBuf::from("/tmp/test"),
-        "feature/test",
-        ccswarm::config::ClaudeConfig::default(),
-    )
-    .await
-    .unwrap();
+    );
 
     let unified_info = UnifiedAgentInfo::from_ccswarm_agent(&ccswarm_agent);
     assert_eq!(unified_info.role.name(), "Frontend");

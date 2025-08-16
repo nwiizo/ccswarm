@@ -64,9 +64,9 @@ async fn main() -> Result<()> {
         println!("  Assigning to: {} agent", target_role);
 
         // Find the target session
-        if let Some((_, session)) = sessions.iter().find(|(role, _)| *role == target_role) {
+        if let Some((_, _session)) = sessions.iter().find(|(role, _)| *role == target_role) {
             // Send task via coordination bus
-            let message = BroadcastMessage {
+            let _message = BroadcastMessage {
                 id: uuid::Uuid::new_v4(),
                 from: AgentId::new(), // Orchestrator agent
                 content: format!(
@@ -84,7 +84,7 @@ async fn main() -> Result<()> {
             sleep(Duration::from_millis(500)).await;
 
             // Agent sends status update
-            let status_message = BroadcastMessage {
+            let _status_message = BroadcastMessage {
                 id: uuid::Uuid::new_v4(),
                 from: AgentId::new(), // Session agent
                 content: format!("Status: processing task '{}' (progress: 25%)", task_desc),
