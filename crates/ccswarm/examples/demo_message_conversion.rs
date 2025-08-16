@@ -199,7 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Demonstrate standardized agent attribute access
-fn demonstrate_agent_access(agent: &ClaudeCodeAgent) {
+fn _demonstrate_agent_access(agent: &ClaudeCodeAgent) {
     println!("Agent Attributes via standardized access:");
     println!("  - ID: {}", agent.agent_id());
     println!("  - Role: {}", agent.role().name());

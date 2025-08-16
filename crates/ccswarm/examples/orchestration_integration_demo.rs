@@ -22,10 +22,9 @@ async fn main() -> Result<()> {
 
     // Create a complex task that will trigger agent orchestration
     let complex_task = Task::new(
-        "task-complex-1".to_string(),
         "Implement user authentication system with JWT tokens and refresh mechanism".to_string(),
-        Priority::High,
         TaskType::Feature,
+        Priority::High,
     )
     .with_details(
         "Create a comprehensive authentication system including:\n\
@@ -41,10 +40,9 @@ async fn main() -> Result<()> {
 
     // Create a simple task for comparison
     let simple_task = Task::new(
-        "task-simple-1".to_string(),
         "Fix typo in README".to_string(),
-        Priority::Low,
         TaskType::Documentation,
+        Priority::Low,
     )
     .with_details("Fix spelling error in the installation section".to_string())
     .with_duration(300); // 5 minutes
@@ -53,7 +51,7 @@ async fn main() -> Result<()> {
     let config = create_test_config();
 
     // Initialize Master Claude orchestrator
-    let master = MasterClaude::new(config, workspace_path.clone()).await?;
+    let master = MasterClaude::new();
     master.initialize().await?;
 
     info!(

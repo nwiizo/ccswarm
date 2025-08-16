@@ -141,9 +141,11 @@ async fn test_bidirectional_message_conversion() {
 #[tokio::test]
 async fn test_agent_info_conversions() {
     // Test creating UnifiedAgentInfo from ccswarm agent
+    let identity_role = default_frontend_role();
+    let agent_role = ccswarm::agent::AgentRole::from_identity_role(&identity_role);
     let ccswarm_agent = ccswarm::agent::ClaudeCodeAgent::new(
         "frontend-test".to_string(),
-        default_frontend_role(),
+        agent_role,
     );
 
     let unified_info = UnifiedAgentInfo::from_ccswarm_agent(&ccswarm_agent);
