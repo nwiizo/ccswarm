@@ -63,9 +63,9 @@ pub struct SessionManager {
 
 #[derive(Clone)]
 struct SessionInfo {
-    id: String,
-    agent_name: String,
-    created_at: std::time::Instant,
+    _id: String,
+    _agent_name: String,
+    _created_at: std::time::Instant,
 }
 
 impl Default for SessionManager {
@@ -84,9 +84,9 @@ impl SessionManager {
     pub async fn create_session(&self, agent_name: String) -> Result<String> {
         let id = uuid::Uuid::new_v4().to_string();
         let info = SessionInfo {
-            id: id.clone(),
-            agent_name,
-            created_at: std::time::Instant::now(),
+            _id: id.clone(),
+            _agent_name: agent_name,
+            _created_at: std::time::Instant::now(),
         };
 
         let mut sessions = self.sessions.write().await;

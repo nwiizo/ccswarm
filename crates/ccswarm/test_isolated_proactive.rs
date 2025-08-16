@@ -253,10 +253,10 @@ async fn test_master_claude_isolated() -> Result<()> {
     create_test_project_structure(&repo_path).await?;
 
     // Create proactive-enabled configuration
-    let config = create_proactive_test_config();
+    let _config = create_proactive_test_config();
 
     // Initialize Master Claude with proactive mode enabled
-    let master_claude = MasterClaude::new();
+    let _master_claude = MasterClaude::new();
     println!("✅ Master Claude (プロアクティブモード有効) 初期化完了");
 
     // Test setting strategic objectives

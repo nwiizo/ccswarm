@@ -364,33 +364,6 @@ impl SubagentSessionManager {
         config
     }
 
-    /// Map subagent tools to AI-Session capabilities
-    fn map_tools_to_capabilities(&self, definition: &SubagentDefinition) -> Vec<String> {
-        let mut capabilities = Vec::new();
-
-        // Standard tools
-        for tool in &definition.tools.standard {
-            capabilities.push(format!("standard:{}", tool));
-        }
-
-        // Semantic tools
-        for tool in &definition.tools.semantic {
-            capabilities.push(format!("semantic:{}", tool));
-        }
-
-        // Memory tools
-        for tool in &definition.tools.memory {
-            capabilities.push(format!("memory:{}", tool));
-        }
-
-        // Custom tools
-        for tool in &definition.tools.custom {
-            capabilities.push(format!("custom:{}", tool));
-        }
-
-        capabilities
-    }
-
     /// Determine agent role from subagent name
     fn determine_agent_role(name: &str) -> AgentRole {
         let lower_name = name.to_lowercase();

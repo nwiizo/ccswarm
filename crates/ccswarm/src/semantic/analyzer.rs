@@ -85,18 +85,18 @@ impl SymbolChange {
 
 /// Semantic analyzer for code understanding
 pub struct SemanticAnalyzer {
-    config: SemanticConfig,
+    _config: SemanticConfig,
     symbol_cache: Arc<RwLock<HashMap<String, Symbol>>>,
-    pattern_cache: Arc<RwLock<HashMap<String, Vec<String>>>>,
+    _pattern_cache: Arc<RwLock<HashMap<String, Vec<String>>>>,
 }
 
 impl SemanticAnalyzer {
     /// Create a new semantic analyzer
     pub async fn new(config: SemanticConfig) -> SemanticResult<Self> {
         Ok(Self {
-            config,
+            _config: config,
             symbol_cache: Arc::new(RwLock::new(HashMap::new())),
-            pattern_cache: Arc::new(RwLock::new(HashMap::new())),
+            _pattern_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 

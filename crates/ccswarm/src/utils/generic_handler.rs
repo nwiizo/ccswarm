@@ -99,9 +99,12 @@ impl<T: Clone + Send + Sync> ListManager<T> {
     }
 }
 
+/// Type alias for message handler collection to reduce complexity
+type HandlerCollection<M, R> = Arc<RwLock<Vec<Box<dyn MessageHandler<M, R> + Send + Sync>>>>;
+
 /// Generic message processor
 pub struct MessageProcessor<M, R> {
-    handlers: Arc<RwLock<Vec<Box<dyn MessageHandler<M, R> + Send + Sync>>>>,
+    handlers: HandlerCollection<M, R>,
 }
 
 #[async_trait]

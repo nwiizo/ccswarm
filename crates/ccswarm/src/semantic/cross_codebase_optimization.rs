@@ -159,7 +159,7 @@ impl UnifiedAnalyzer {
 
 pub struct CrossCodebaseOptimizer {
     repositories: Arc<RwLock<Vec<Repository>>>,
-    memory: Arc<ProjectMemory>,
+    _memory: Arc<ProjectMemory>,
     analyzer: Arc<UnifiedAnalyzer>,
 }
 
@@ -167,7 +167,7 @@ impl CrossCodebaseOptimizer {
     pub fn new(memory: Arc<ProjectMemory>) -> Self {
         Self {
             repositories: Arc::new(RwLock::new(Vec::new())),
-            memory,
+            _memory: memory,
             analyzer: Arc::new(UnifiedAnalyzer {
                 metrics: Arc::new(RwLock::new(MetricsCollector::default())),
             }),

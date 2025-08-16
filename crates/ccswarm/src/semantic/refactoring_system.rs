@@ -64,7 +64,7 @@ pub enum IssueSeverity {
 }
 
 pub struct AutomaticRefactoringSystem {
-    analyzer: Arc<SemanticAnalyzer>,
+    _analyzer: Arc<SemanticAnalyzer>,
     symbol_index: Arc<SymbolIndex>,
     memory: Arc<ProjectMemory>,
     proposals: Arc<RwLock<Vec<RefactoringProposal>>>,
@@ -78,7 +78,7 @@ impl AutomaticRefactoringSystem {
         memory: Arc<ProjectMemory>,
     ) -> Self {
         Self {
-            analyzer,
+            _analyzer: analyzer,
             symbol_index,
             memory,
             proposals: Arc::new(RwLock::new(Vec::new())),
