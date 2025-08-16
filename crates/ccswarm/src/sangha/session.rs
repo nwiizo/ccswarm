@@ -7,7 +7,7 @@ use tokio::sync::{Mutex, RwLock};
 
 /// Manages Sangha sessions (meetings)
 #[derive(Debug)]
-pub struct SessionManager {
+pub struct SanghaSessionManager {
     sessions: Arc<RwLock<HashMap<Uuid, Session>>>,
     active_session: Arc<Mutex<Option<Uuid>>>,
 }
@@ -105,13 +105,16 @@ pub enum DecisionType {
     TaskAssignment,
 }
 
-impl Default for SessionManager {
+// Add backward compatibility alias
+pub type SessionManager = SanghaSessionManager;
+
+impl Default for SanghaSessionManager {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SessionManager {
+impl SanghaSessionManager {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),

@@ -93,7 +93,7 @@ pub struct PersistentSessionManager {
     workspace_root: PathBuf,
 
     /// Cleanup task handle
-    cleanup_handle: Option<tokio::task::JoinHandle<()>>,
+    _cleanup_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl PersistentSessionManager {
@@ -104,7 +104,7 @@ impl PersistentSessionManager {
             session_info: Arc::new(RwLock::new(HashMap::new())),
             config,
             workspace_root,
-            cleanup_handle: None,
+            _cleanup_handle: None,
         }
     }
 
@@ -133,7 +133,7 @@ impl PersistentSessionManager {
             }
         });
 
-        self.cleanup_handle = Some(cleanup_handle);
+        self._cleanup_handle = Some(cleanup_handle);
         Ok(())
     }
 
@@ -179,7 +179,7 @@ impl PersistentSessionManager {
                 if info.status == PersistentSessionStatus::Idle {
                     // Try to lock the agent, but don't block indefinitely
                     if let Ok(agent) = session.try_lock() {
-                        if agent.identity.specialization.name() == role.name() {
+                        if agent.agent.role.name() == role.name() {
                             // Found a reusable session
                             return Some(Arc::clone(session));
                         }
@@ -197,7 +197,7 @@ impl PersistentSessionManager {
         &self,
         agent_id: String,
         role: AgentRole,
-        claude_config: ClaudeConfig,
+        _claude_config: ClaudeConfig,
     ) -> Result<Arc<Mutex<PersistentClaudeAgent>>> {
         tracing::info!("Creating new persistent session for agent: {}", agent_id);
 
@@ -219,7 +219,8 @@ impl PersistentSessionManager {
         };
 
         // Create persistent agent
-        let agent = PersistentClaudeAgent::new(identity, claude_config).await?;
+        let agent_role = crate::agent::AgentRole::from_identity_role(&identity.specialization);
+        let agent = PersistentClaudeAgent::new(identity.agent_id.clone(), agent_role);
         let agent = Arc::new(Mutex::new(agent));
 
         // Create session info
@@ -230,7 +231,7 @@ impl PersistentSessionManager {
             last_activity: Utc::now(),
             status: PersistentSessionStatus::Creating,
             tasks_completed: 0,
-            workspace_path: agent.lock().await.identity.workspace_path.clone(),
+            workspace_path: PathBuf::from(format!("./workspace/{}", agent.lock().await.agent.id)),
         };
 
         // Store session
@@ -260,7 +261,7 @@ impl PersistentSessionManager {
         // Update session status to active
         let agent_id = {
             let agent = session.lock().await;
-            agent.identity.agent_id.clone()
+            agent.agent.id.clone()
         };
 
         self.update_session_status(&agent_id, PersistentSessionStatus::Active)
@@ -304,7 +305,7 @@ impl PersistentSessionManager {
         // Update session status to active
         let agent_id = {
             let agent = session.lock().await;
-            agent.identity.agent_id.clone()
+            agent.agent.id.clone()
         };
 
         self.update_session_status(&agent_id, PersistentSessionStatus::Active)
@@ -368,7 +369,7 @@ impl PersistentSessionManager {
         for (agent_id, session) in sessions.iter() {
             if let Some(info) = session_info.get(agent_id) {
                 let agent = session.lock().await;
-                if agent.identity.specialization.name() == role.name() {
+                if agent.agent.role.name() == role.name() {
                     result.push(info.clone());
                 }
             }
@@ -424,12 +425,13 @@ impl PersistentSessionManager {
         session_info: &Arc<RwLock<HashMap<String, PersistentSessionInfo>>>,
         agent_id: &str,
     ) -> Result<()> {
-        // Shutdown the agent
+        // Mark agent as shutting down
         {
             let sessions_guard = sessions.read().await;
             if let Some(session) = sessions_guard.get(agent_id) {
                 let mut agent = session.lock().await;
-                agent.shutdown().await?;
+                agent.agent.status = crate::agent::AgentStatus::ShuttingDown;
+                // Agent will be cleaned up when dropped
             }
         }
 
@@ -452,7 +454,7 @@ impl PersistentSessionManager {
         tracing::info!("Shutting down persistent session manager");
 
         // Cancel cleanup task
-        if let Some(handle) = self.cleanup_handle.take() {
+        if let Some(handle) = self._cleanup_handle.take() {
             handle.abort();
         }
 
@@ -577,7 +579,7 @@ mod tests {
         assert_eq!(manager.sessions.read().await.len(), 1);
 
         let agent = session.lock().await;
-        assert!(agent.identity.agent_id.contains("frontend"));
+        assert!(agent.agent.id.contains("frontend"));
     }
 
     #[tokio::test]
@@ -599,7 +601,7 @@ mod tests {
         // Mark as idle - extract agent_id first then update
         let agent_id = {
             let agent = session1.lock().await;
-            agent.identity.agent_id.clone()
+            agent.agent.id.clone()
         };
 
         manager

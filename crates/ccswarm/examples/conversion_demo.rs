@@ -7,7 +7,7 @@ use ai_session::coordination::{
 /// This example demonstrates how to use the conversion module to translate
 /// messages between ccswarm and ai-session coordination systems.
 use anyhow::Result;
-use ccswarm::agent::{AgentStatus, Priority, TaskResult};
+use ccswarm::agent::{AgentStatus, TaskResult};
 use ccswarm::coordination::conversion::{
     convert_from_ai_session, convert_to_ai_session, AgentMappingRegistry, UnifiedAgentInfo,
 };
@@ -93,14 +93,15 @@ async fn main() -> Result<()> {
         agent_id: "backend-engineer".to_string(),
         task_id: "task-123".to_string(),
         result: TaskResult {
+            task_id: "task-123".to_string(),
             success: true,
-            output: json!({
+            output: Some(json!({
                 "message": "API endpoint created successfully",
                 "endpoints": ["/api/v2/users", "/api/v2/auth"],
                 "documentation": "https://docs.example.com/api/v2",
-            }),
+            }).to_string()),
             error: None,
-            duration: Duration::from_secs(45),
+            duration: Some(Duration::from_secs(45)),
         },
     };
 

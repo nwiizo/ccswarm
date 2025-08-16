@@ -504,7 +504,7 @@ impl SessionPool {
             pool_id: Uuid::new_v4().to_string(),
             agent_id: {
                 let agent_guard = agent.lock().await;
-                agent_guard.identity.agent_id.clone()
+                agent_guard.agent.id.clone()
             },
             role: role.clone(),
             created_at: Utc::now(),
@@ -595,8 +595,9 @@ impl SessionPool {
         let agent = session.agent.lock().await;
         let stats = agent.get_session_stats().await;
 
-        if !stats.is_active {
-            return Err(anyhow::anyhow!("Session is not active"));
+        // Check if session has processed any messages
+        if stats.messages.is_empty() && stats.token_count == 0 {
+            return Err(anyhow::anyhow!("Session appears inactive"));
         }
 
         // Additional health checks could be added here

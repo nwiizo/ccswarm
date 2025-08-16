@@ -12,7 +12,7 @@ where
     // Use tokio spawn to isolate panics
     let name = name.to_string();
     let handle = tokio::task::spawn(future);
-    
+
     match handle.await {
         Ok(result) => result,
         Err(join_error) => {
@@ -23,11 +23,7 @@ where
 }
 
 /// Boundary with fallback
-pub async fn boundary_with_fallback<F, T, FB>(
-    future: F,
-    name: &str,
-    fallback: FB,
-) -> Result<T>
+pub async fn boundary_with_fallback<F, T, FB>(future: F, name: &str, fallback: FB) -> Result<T>
 where
     F: Future<Output = Result<T>> + Send + 'static,
     T: Send + 'static,
@@ -35,7 +31,7 @@ where
 {
     let name = name.to_string();
     let handle = tokio::task::spawn(future);
-    
+
     match handle.await {
         Ok(Ok(value)) => Ok(value),
         Ok(Err(e)) => {

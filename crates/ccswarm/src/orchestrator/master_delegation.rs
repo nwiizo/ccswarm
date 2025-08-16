@@ -246,9 +246,10 @@ impl MasterDelegationEngine {
             if let Some(confidence) = Self::evaluate_condition(&rule.condition, task, &task_lower) {
                 let total_confidence = confidence + rule.confidence_boost;
 
-                if best_match.as_ref().is_none_or(|(_, prev_confidence)| {
-                    total_confidence > *prev_confidence
-                }) {
+                if best_match
+                    .as_ref()
+                    .is_none_or(|(_, prev_confidence)| total_confidence > *prev_confidence)
+                {
                     best_match = Some((rule.clone(), total_confidence.min(1.0)));
                 }
             }

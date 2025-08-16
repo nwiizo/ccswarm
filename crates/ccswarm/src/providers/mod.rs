@@ -15,6 +15,21 @@ use crate::agent::{Task, TaskResult};
 use crate::identity::AgentIdentity;
 use std::path::Path;
 
+/// Result from provider execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionResult {
+    pub output: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+/// Trait that all AI providers must implement
+#[async_trait]
+pub trait ProviderTrait: Send + Sync {
+    async fn execute(&self, prompt: &str) -> Result<ExecutionResult>;
+    fn name(&self) -> &str;
+}
+
 /// Supported AI providers for ccswarm agents
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -607,18 +622,12 @@ impl ProviderFactory {
                 }
             }
             AIProvider::Aider => {
-                if let Some(aider_config) = &config.aider {
-                    Ok(Box::new(aider::AiderExecutor::new(aider_config.clone())))
-                } else {
-                    Err(anyhow::anyhow!("Aider configuration missing"))
-                }
+                // TODO: Implement ProviderExecutor for AiderExecutor
+                Err(anyhow::anyhow!("Aider provider not yet implemented"))
             }
             AIProvider::Codex => {
-                if let Some(codex_config) = &config.codex {
-                    Ok(Box::new(codex::CodexExecutor::new(codex_config.clone())))
-                } else {
-                    Err(anyhow::anyhow!("Codex configuration missing"))
-                }
+                // TODO: Implement ProviderExecutor for CodexExecutor
+                Err(anyhow::anyhow!("Codex provider not yet implemented"))
             }
             AIProvider::Custom => {
                 if let Some(custom_config) = &config.custom {

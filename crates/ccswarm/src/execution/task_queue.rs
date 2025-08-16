@@ -288,7 +288,7 @@ impl TaskQueue {
         if let Some(mut task) = active.remove(task_id) {
             task.status = TaskStatus::Cancelled {
                 cancelled_at: now,
-                reason,
+                reason: reason.clone(),
             };
             task.updated_at = now;
             completed.push_back(task);
@@ -298,13 +298,14 @@ impl TaskQueue {
         // Check pending tasks
         for (_, queue) in pending.iter_mut() {
             if let Some(pos) = queue.iter().position(|t| t.task.id == task_id) {
-                let mut task = queue.remove(pos).unwrap();
-                task.status = TaskStatus::Cancelled {
-                    cancelled_at: now,
-                    reason,
-                };
-                task.updated_at = now;
-                completed.push_back(task);
+                if let Some(mut task) = queue.remove(pos) {
+                    task.status = TaskStatus::Cancelled {
+                        cancelled_at: now,
+                        reason: reason.clone(),
+                    };
+                    task.updated_at = now;
+                    completed.push_back(task);
+                }
                 tasks.remove(task_id);
                 return Ok(());
             }

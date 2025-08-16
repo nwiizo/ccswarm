@@ -396,7 +396,7 @@ mod tests {
     #[tokio::test]
     async fn test_frontend_accepts_ui_task() {
         let checker = TaskBoundaryChecker::new(default_frontend_role());
-        let task = Task::new(
+        let task = Task::new_with_id(
             "1".to_string(),
             "Create a React component for user profile".to_string(),
             Priority::Medium,
@@ -415,7 +415,7 @@ mod tests {
     #[tokio::test]
     async fn test_frontend_delegates_backend_task() {
         let checker = TaskBoundaryChecker::new(default_frontend_role());
-        let task = Task::new(
+        let task = Task::new_with_id(
             "2".to_string(),
             "Create REST API endpoint for authentication".to_string(),
             Priority::High,
@@ -435,7 +435,7 @@ mod tests {
     #[tokio::test]
     async fn test_unclear_task_triggers_clarification() {
         let checker = TaskBoundaryChecker::new(default_backend_role());
-        let task = Task::new(
+        let task = Task::new_with_id(
             "3".to_string(),
             "Update the user system".to_string(),
             Priority::Medium,

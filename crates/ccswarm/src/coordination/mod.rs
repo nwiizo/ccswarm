@@ -36,7 +36,7 @@ pub enum CoordinationType {
 
 pub mod ai_message_bus;
 pub mod conversion;
-pub mod dialogue;
+// pub mod dialogue; // Module not found
 
 // Re-export key conversion utilities
 pub use conversion::{
@@ -454,7 +454,7 @@ mod tests {
             .await
             .unwrap();
 
-        let task = crate::agent::Task::new(
+        let task = crate::agent::Task::new_with_id(
             "test-task".to_string(),
             "Test task".to_string(),
             crate::agent::Priority::High,

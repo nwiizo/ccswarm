@@ -1,7 +1,7 @@
 use super::task_plan::{
     ParallelTask, ParallelTaskResult, StepResult, StepType, TaskPlan, TaskStep,
 };
-use crate::agent::task::{Task, TaskResult};
+use crate::agent::{Task, TaskResult};
 use anyhow::Result;
 use async_trait::async_trait;
 use futures::future::join_all;
@@ -249,16 +249,16 @@ mod tests {
             let all_success = results.iter().all(|r| r.is_success());
             if all_success {
                 Ok(TaskResult::success(
+                    task.id.clone(),
                     serde_json::json!({
                         "task_id": task.id.clone(),
                         "message": "Orchestration complete"
-                    }),
-                    std::time::Duration::from_secs(0),
+                    }).to_string(),
                 ))
             } else {
                 Ok(TaskResult::failure(
+                    task.id.clone(),
                     "Orchestration failed".to_string(),
-                    std::time::Duration::from_secs(0),
                 ))
             }
         }

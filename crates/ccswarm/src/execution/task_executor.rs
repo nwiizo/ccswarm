@@ -6,9 +6,8 @@ use tokio::time::{interval, sleep};
 use tracing::{error, info};
 
 use super::task_queue::{QueuedTask, TaskQueue};
-use crate::agent::orchestrator::AgentOrchestrator;
 use crate::agent::pool::AgentPool;
-use crate::agent::{Task, TaskResult};
+use crate::agent::{AgentRole, Task, TaskResult};
 use crate::config::CcswarmConfig;
 use crate::orchestrator::master_delegation::MasterDelegationEngine;
 
@@ -58,9 +57,18 @@ impl TaskExecutor {
         let task_queue = Arc::new(TaskQueue::new());
 
         // Create agent pool and spawn configured agents
-        let mut agent_pool = AgentPool::new().await?;
+        let agent_pool = AgentPool::new().await?;
         for agent_type in config.agents.keys() {
-            if let Err(e) = agent_pool.spawn_agent(agent_type, config).await {
+            let role = match agent_type.as_str() {
+                "frontend" => AgentRole::Frontend,
+                "backend" => AgentRole::Backend,
+                "devops" => AgentRole::DevOps,
+                "qa" => AgentRole::QA,
+                "search" => AgentRole::Search,
+                "refactoring" => AgentRole::Refactoring,
+                _ => AgentRole::Custom(agent_type.clone()),
+            };
+            if let Err(e) = agent_pool.spawn_agent(role, None).await {
                 error!("Failed to spawn {} agent: {}", agent_type, e);
                 // Continue with other agents rather than failing completely
             } else {
@@ -310,7 +318,7 @@ impl TaskExecutor {
         let pool = agent_pool.lock().await;
 
         // Use the orchestrator interface
-        match pool.orchestrate_task(task).await {
+        match pool.orchestrate_task(task.clone()).await {
             Ok(result) => Ok(result),
             Err(e) => Err(anyhow::anyhow!("Orchestration failed: {}", e)),
         }
@@ -324,7 +332,7 @@ impl TaskExecutor {
     ) -> anyhow::Result<TaskResult> {
         let pool = agent_pool.lock().await;
 
-        match pool.execute_task_with_agent(agent_id, task).await {
+        match pool.execute_task_with_agent(agent_id, task.clone()).await {
             Ok(result) => Ok(result),
             Err(e) => Err(anyhow::anyhow!("Direct execution failed: {}", e)),
         }

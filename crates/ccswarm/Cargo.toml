@@ -64,6 +64,7 @@ walkdir = "2.5"
 
 # Regular expressions
 regex = "1.10"
+serde_yaml = "0.9.34"
 
 
 # Process management

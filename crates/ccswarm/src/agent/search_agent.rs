@@ -129,7 +129,6 @@ impl SearchAgent {
     pub fn enable_sangha_participation(&mut self) {
         let participant = crate::sangha::search_agent_participant::create_search_agent_participant(
             self.agent_id.clone(),
-            self.coordination_bus.clone(),
         );
         self.sangha_participant = Some(Arc::new(tokio::sync::Mutex::new(participant)));
     }
@@ -477,14 +476,18 @@ impl SearchAgent {
 
         // Send task completion
         let task_result = TaskResult {
+            task_id: task_id.clone(),
             success: true,
-            output: serde_json::json!({
-                "results": results,
-                "total_found": results.len(),
-                "query": query,
-            }),
+            output: Some(
+                serde_json::json!({
+                    "results": results,
+                    "total_found": results.len(),
+                    "query": query,
+                })
+                .to_string(),
+            ),
             error: None,
-            duration: std::time::Duration::from_secs(1), // Placeholder
+            duration: Some(std::time::Duration::from_secs(1)), // Placeholder
         };
 
         let completion = AgentMessage::TaskCompleted {

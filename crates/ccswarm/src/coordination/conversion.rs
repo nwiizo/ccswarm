@@ -100,9 +100,9 @@ impl UnifiedAgentInfo {
         let capabilities = vec![agent.identity.specialization.name().to_string()];
 
         let metadata = serde_json::json!({
-            "worktree_path": agent.worktree_path.to_string_lossy(),
-            "branch_name": agent.branch_name,
-            "isolation_mode": format!("{:?}", agent.isolation_mode),
+            "workspace_path": agent.identity.workspace_path.to_string_lossy(),
+            "agent_id": agent.identity.agent_id.clone(),
+            "session_id": agent.identity.session_id.clone(),
             "created_at": Utc::now().to_rfc3339(),
         });
 
@@ -229,7 +229,7 @@ fn task_result_to_json(result: &TaskResult) -> serde_json::Value {
         "success": result.success,
         "output": result.output,
         "error": result.error,
-        "duration_secs": result.duration.as_secs(),
+        "duration_secs": result.duration.map(|d| d.as_secs()).unwrap_or(0),
     })
 }
 
@@ -241,28 +241,34 @@ fn json_to_task_result(value: serde_json::Value) -> Result<TaskResult, Conversio
         .unwrap_or(0);
 
     Ok(TaskResult {
+        task_id: value
+            .get("task_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
         success: value
             .get("success")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
         output: value
             .get("output")
-            .cloned()
-            .unwrap_or_else(|| serde_json::json!({})),
+            .and_then(|v| serde_json::to_string(v).ok()),
         error: value
             .get("error")
             .and_then(|v| v.as_str())
             .map(String::from),
-        duration: std::time::Duration::from_secs(duration_secs),
+        duration: Some(std::time::Duration::from_secs(duration_secs)),
     })
 }
 
 /// Convert ccswarm AgentStatus to string representation
 fn agent_status_to_string(status: &AgentStatus) -> String {
     match status {
+        AgentStatus::Idle => "idle".to_string(),
         AgentStatus::Initializing => "initializing".to_string(),
         AgentStatus::Available => "available".to_string(),
         AgentStatus::Working => "working".to_string(),
+        AgentStatus::Suspended => "suspended".to_string(),
         AgentStatus::WaitingForReview => "waiting_for_review".to_string(),
         AgentStatus::Error(e) => format!("error: {}", e),
         AgentStatus::ShuttingDown => "shutting_down".to_string(),
