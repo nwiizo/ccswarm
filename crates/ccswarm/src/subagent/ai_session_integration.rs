@@ -231,9 +231,9 @@ impl SubagentSessionManager {
             .await
             .map_err(|e| SubagentError::Delegation(format!("Failed to get AI context: {}", e)))?;
         
-        Ok(format!("Session context: {} messages, status: {:?}", 
-            context.messages.len(), 
-            context.status))
+        Ok(format!("Session context: {} messages, agent state: {:?}", 
+            context.conversation_history.messages.len(), 
+            context.agent_state))
     }
     
     /// Compress the context of a subagent's session
@@ -340,7 +340,7 @@ impl SubagentSessionManager {
         
         // Set working directory if persistence is enabled
         if let Some(ref dir) = self.config.persistence_dir {
-            config.working_directory = Some(std::path::PathBuf::from(dir));
+            config.working_directory = std::path::PathBuf::from(dir);
         }
         
         config

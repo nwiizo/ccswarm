@@ -13,7 +13,7 @@ use ratatui::{
 use std::sync::Arc;
 
 /// Unified TUI application state
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct AppState {
     pub selected_tab: usize,
     pub selected_item: usize,

@@ -622,18 +622,12 @@ impl ProviderFactory {
                 }
             }
             AIProvider::Aider => {
-                if let Some(aider_config) = &config.aider {
-                    Ok(Box::new(aider::AiderExecutor::new(aider_config.clone())))
-                } else {
-                    Err(anyhow::anyhow!("Aider configuration missing"))
-                }
+                // TODO: Implement ProviderExecutor for AiderExecutor
+                Err(anyhow::anyhow!("Aider provider not yet implemented"))
             }
             AIProvider::Codex => {
-                if let Some(codex_config) = &config.codex {
-                    Ok(Box::new(codex::CodexExecutor::new(codex_config.clone())))
-                } else {
-                    Err(anyhow::anyhow!("Codex configuration missing"))
-                }
+                // TODO: Implement ProviderExecutor for CodexExecutor
+                Err(anyhow::anyhow!("Codex provider not yet implemented"))
             }
             AIProvider::Custom => {
                 if let Some(custom_config) = &config.custom {

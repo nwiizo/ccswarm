@@ -266,7 +266,8 @@ impl WorktreeSessionManager {
         };
 
         // Create persistent agent with worktree workspace
-        let agent = PersistentClaudeAgent::new(identity, claude_config).await?;
+        let agent_role = crate::agent::AgentRole::from_identity_role(&identity.specialization);
+        let agent = PersistentClaudeAgent::new(identity.agent_id.clone(), agent_role);
         let agent = Arc::new(Mutex::new(agent));
 
         // Generate minimal CLAUDE.md in worktree
@@ -275,8 +276,8 @@ impl WorktreeSessionManager {
 
         // Step 3: Establish identity once
         {
-            let agent_guard = agent.lock().await;
-            agent_guard.establish_identity_once().await?;
+            let mut agent_guard = agent.lock().await;
+            // Identity establishment no longer needed with simplified structure
         }
 
         session_info.status = WorktreeSessionStatus::Active;
@@ -311,16 +312,16 @@ Always include:
 📁 WORKSPACE: {}
 🎯 SCOPE: [Task assessment]
 "#,
-            agent_guard.identity.specialization.name(),
-            agent_guard.identity.agent_id,
+            agent_guard.agent.role.name(),
+            agent_guard.agent.id,
             session_info
                 .worktree_path
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy(),
-            agent_guard.identity.specialization.name(),
-            agent_guard.identity.specialization.name(),
-            agent_guard.identity.specialization.name(),
+            agent_guard.agent.role.name(),
+            agent_guard.agent.role.name(),
+            agent_guard.agent.role.name(),
             session_info
                 .worktree_path
                 .file_name()
@@ -364,7 +365,7 @@ Always include:
         // Update session status
         let agent_id = {
             let agent = session.lock().await;
-            agent.identity.agent_id.clone()
+            agent.agent.id.clone()
         };
 
         self.update_session_status(&agent_id, WorktreeSessionStatus::Active)
@@ -414,7 +415,7 @@ Always include:
 
         let agent_id = {
             let agent = session.lock().await;
-            agent.identity.agent_id.clone()
+            agent.agent.id.clone()
         };
 
         self.update_session_status(&agent_id, WorktreeSessionStatus::Active)

@@ -129,7 +129,6 @@ impl SearchAgent {
     pub fn enable_sangha_participation(&mut self) {
         let participant = crate::sangha::search_agent_participant::create_search_agent_participant(
             self.agent_id.clone(),
-            self.coordination_bus.clone(),
         );
         self.sangha_participant = Some(Arc::new(tokio::sync::Mutex::new(participant)));
     }

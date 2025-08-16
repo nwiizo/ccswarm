@@ -245,7 +245,7 @@ impl AutoCreateEngine {
 
     /// Convert template to actual task
     fn template_to_task(&self, template: TaskTemplate) -> Task {
-        Task::new(
+        Task::new_with_id(
             Uuid::new_v4().to_string(),
             template.description,
             template.priority,

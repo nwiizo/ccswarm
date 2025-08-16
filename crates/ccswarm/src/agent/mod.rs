@@ -37,6 +37,53 @@ pub enum AgentRole {
     Custom(String),
 }
 
+impl AgentRole {
+    pub fn name(&self) -> &str {
+        match self {
+            AgentRole::Frontend => "Frontend",
+            AgentRole::Backend => "Backend",
+            AgentRole::DevOps => "DevOps",
+            AgentRole::QA => "QA",
+            AgentRole::Search => "Search",
+            AgentRole::Refactoring => "Refactoring",
+            AgentRole::Custom(name) => name,
+        }
+    }
+    
+    /// Convert from identity::AgentRole to agent::AgentRole
+    pub fn from_identity_role(identity_role: &crate::identity::AgentRole) -> Self {
+        match identity_role {
+            crate::identity::AgentRole::Frontend { .. } => AgentRole::Frontend,
+            crate::identity::AgentRole::Backend { .. } => AgentRole::Backend,
+            crate::identity::AgentRole::DevOps { .. } => AgentRole::DevOps,
+            crate::identity::AgentRole::QA { .. } => AgentRole::QA,
+            crate::identity::AgentRole::Search { .. } => AgentRole::Search,
+            crate::identity::AgentRole::Master { .. } => AgentRole::Custom("Master".to_string()),
+        }
+    }
+    
+    /// Convert to identity::AgentRole with default configurations
+    pub fn to_identity_role(&self) -> crate::identity::AgentRole {
+        match self {
+            AgentRole::Frontend => crate::identity::default_frontend_role(),
+            AgentRole::Backend => crate::identity::default_backend_role(),
+            AgentRole::DevOps => crate::identity::default_devops_role(),
+            AgentRole::QA => crate::identity::default_qa_role(),
+            AgentRole::Search => crate::identity::default_search_role(),
+            AgentRole::Refactoring => crate::identity::AgentRole::Frontend {
+                technologies: vec!["Rust".to_string(), "AST".to_string()],
+                responsibilities: vec!["Code Refactoring".to_string()],
+                boundaries: vec!["No functional changes".to_string()],
+            },
+            AgentRole::Custom(name) if name == "Master" => crate::identity::AgentRole::Master {
+                oversight_roles: vec!["Frontend".to_string(), "Backend".to_string(), "DevOps".to_string(), "QA".to_string()],
+                quality_standards: crate::identity::QualityStandards::default(),
+            },
+            AgentRole::Custom(_) => crate::identity::default_frontend_role(), // Default fallback
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AgentStatus {
     Idle,
@@ -131,7 +178,7 @@ pub enum TaskStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaskResult {
     pub task_id: String,
     pub success: bool,
@@ -171,10 +218,12 @@ impl TaskBuilder {
         Self {
             task: Task {
                 id: uuid::Uuid::new_v4().to_string(),
-                description,
+                description: description.clone(),
                 task_type: TaskType::Feature,
                 priority: Priority::Medium,
                 status: TaskStatus::Pending,
+                details: Some(description),
+                estimated_duration: None,
             },
         }
     }

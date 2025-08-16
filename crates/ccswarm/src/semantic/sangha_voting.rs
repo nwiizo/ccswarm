@@ -104,11 +104,18 @@ impl VotingHandler {
     
     fn calculate_vote_weight(&self, role: &AgentRole, proposal_type: &ProposalType) -> f64 {
         // Unified weight calculation
-        match (role, proposal_type) {
-            (AgentRole::Frontend, ProposalType::ArchitectureChange) => 0.8,
-            (AgentRole::Backend, ProposalType::ArchitectureChange) => 0.9,
+        // Convert identity::AgentRole to simplified match
+        let weight = match proposal_type {
+            ProposalType::ArchitectureChange => {
+                match role {
+                    AgentRole::Frontend { .. } => 0.8,
+                    AgentRole::Backend { .. } => 0.9,
+                    _ => 1.0,
+                }
+            },
             _ => 1.0,
-        }
+        };
+        weight
     }
     
     async fn store_result(&self, proposal: &Proposal, result: &VotingResult) -> Result<()> {

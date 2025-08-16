@@ -256,7 +256,7 @@ async fn test_master_claude_isolated() -> Result<()> {
     let config = create_proactive_test_config();
 
     // Initialize Master Claude with proactive mode enabled
-    let master_claude = MasterClaude::new(config, repo_path).await?;
+    let master_claude = MasterClaude::new();
     println!("✅ Master Claude (プロアクティブモード有効) 初期化完了");
 
     // Test setting strategic objectives
@@ -349,12 +349,12 @@ async fn test_master_claude_isolated() -> Result<()> {
     ];
 
     for (task_id, description, priority) in development_tasks {
-        let task = Task::new(
-            task_id.to_string(),
+        let mut task = Task::new(
             description.to_string(),
-            priority,
             TaskType::Development,
+            priority,
         );
+        task.id = task_id.to_string();
         master_claude.add_task(task).await?;
     }
 

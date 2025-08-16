@@ -178,16 +178,17 @@ impl CustomExecutor {
             // Try to parse as JSON
             if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&output) {
                 return TaskResult {
+                    task_id: task.id.clone(),
                     success: true,
-                    output: serde_json::json!({
+                    output: Some(serde_json::to_string(&serde_json::json!({
                         "result": json_value,
                         "task_id": task.id,
                         "provider": "custom",
                         "command": self.config.command,
                         "format": "json"
-                    }),
+                    })).unwrap_or_else(|_| "JSON conversion failed".to_string())),
                     error: None,
-                    duration,
+                    duration: Some(duration),
                 };
             }
         }
@@ -201,17 +202,18 @@ impl CustomExecutor {
         };
 
         TaskResult {
+            task_id: task.id.clone(),
             success,
-            output: serde_json::json!({
+            output: Some(serde_json::to_string(&serde_json::json!({
                 "response": output,
                 "task_id": task.id,
                 "provider": "custom",
                 "command": self.config.command,
                 "format": "text",
                 "working_directory": self.config.working_directory,
-            }),
+            })).unwrap_or_else(|_| "JSON conversion failed".to_string())),
             error,
-            duration,
+            duration: Some(duration),
         }
     }
 
@@ -309,7 +311,7 @@ impl ProviderExecutor for CustomExecutor {
         working_dir: &Path,
     ) -> Result<String> {
         // Create a mock task for prompt execution
-        let mock_task = Task::new(
+        let mock_task = Task::new_with_id(
             format!("prompt-{}", uuid::Uuid::new_v4()),
             "Direct prompt execution".to_string(),
             crate::agent::Priority::Medium,
@@ -377,13 +379,14 @@ impl ProviderExecutor for CustomExecutor {
                 );
 
                 Ok(TaskResult {
+                    task_id: task.id.clone(),
                     success: false,
-                    output: serde_json::json!({
+                    output: Some(serde_json::to_string(&serde_json::json!({
                         "provider": "custom",
                         "command": self.config.command,
-                    }),
+                    })).unwrap_or_else(|_| "JSON conversion failed".to_string())),
                     error: Some(e.to_string()),
-                    duration,
+                    duration: Some(duration),
                 })
             }
         }

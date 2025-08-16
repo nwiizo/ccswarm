@@ -319,7 +319,7 @@ impl TaskExecutor {
         let pool = agent_pool.lock().await;
 
         // Use the orchestrator interface
-        match pool.orchestrate_task(task).await {
+        match pool.orchestrate_task(task.clone()).await {
             Ok(result) => Ok(result),
             Err(e) => Err(anyhow::anyhow!("Orchestration failed: {}", e)),
         }
@@ -333,7 +333,7 @@ impl TaskExecutor {
     ) -> anyhow::Result<TaskResult> {
         let pool = agent_pool.lock().await;
 
-        match pool.execute_task_with_agent(agent_id, task).await {
+        match pool.execute_task_with_agent(agent_id, task.clone()).await {
             Ok(result) => Ok(result),
             Err(e) => Err(anyhow::anyhow!("Direct execution failed: {}", e)),
         }

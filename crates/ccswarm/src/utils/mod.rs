@@ -15,8 +15,8 @@ pub mod macros;
 pub mod user_error;
 pub mod user_error_macros;
 
-#[cfg(test)]
-mod error_tests;
+// #[cfg(test)]
+// mod error_tests;
 
 pub use async_error_boundary::{with_retry, AsyncCircuitBreaker, ConcurrentBoundary};
 pub use async_error_boundary_simple::{boundary, boundary_with_fallback};

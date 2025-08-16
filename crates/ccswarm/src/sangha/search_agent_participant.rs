@@ -26,18 +26,21 @@ impl SanghaParticipant for SearchAgentParticipant {
             proposal_id: proposal.id,
             voter_id: self.agent_id.clone(),
             choice: VoteChoice::Abstain,
-            reasoning: "Automated vote".to_string(),
-            timestamp: chrono::Utc::now(),
+            reason: Some("Automated vote".to_string()),
+            cast_at: chrono::Utc::now(),
+            weight: 1.0,
         })
     }
 
     async fn propose(&self, title: String, description: String) -> Result<Proposal> {
-        Ok(Proposal::new(
-            title,
-            description,
-            crate::sangha::ProposalType::Feature,
+        use crate::sangha::proposal::ProposalBuilder;
+        Ok(ProposalBuilder::new(
+            title.clone(),
             self.agent_id.clone(),
-        ))
+            crate::sangha::ProposalType::AgentExtension,
+        )
+        .description(description)
+        .build())
     }
     
     async fn monitor_proposals(&mut self, _sangha: std::sync::Arc<crate::sangha::Sangha>) -> Result<()> {

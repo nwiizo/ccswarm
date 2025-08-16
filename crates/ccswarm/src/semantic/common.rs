@@ -134,14 +134,8 @@ impl ProposalGenerator {
         use crate::semantic::refactoring_system::{
             RefactoringPriority, EffortEstimate
         };
-        // RefactoringKind is now defined locally
-        #[derive(Debug)]
-        enum RefactoringKind {
-            ExtractFunction,
-            SimplifyLogic,
-            RemoveDuplication,
-            ImproveNaming,
-        }
+        // Use the refactoring_system module's RefactoringKind
+        use crate::semantic::refactoring_system::RefactoringKind;
         
         let (priority, effort, automated) = match kind {
             ProposalKind::LongFunction => (RefactoringPriority::Medium, EffortEstimate::Small, true),
@@ -155,7 +149,7 @@ impl ProposalGenerator {
             id: uuid::Uuid::new_v4().to_string(),
             title,
             description,
-            kind: RefactoringKind::ExtractFunction,
+            kind: crate::semantic::refactoring_system::RefactoringKind::ExtractFunction,
             targets,
             benefits: vec!["Improved code quality".to_string()],
             risks: vec![],
