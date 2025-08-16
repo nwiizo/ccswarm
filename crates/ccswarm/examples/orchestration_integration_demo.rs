@@ -21,12 +21,12 @@ async fn main() -> Result<()> {
     ccswarm::git::WorktreeManager::init_if_needed(&workspace_path).await?;
 
     // Create a complex task that will trigger agent orchestration
-    let complex_task = Task::new(
+    let mut complex_task = Task::new(
         "Implement user authentication system with JWT tokens and refresh mechanism".to_string(),
         TaskType::Feature,
         Priority::High,
-    )
-    .with_details(
+    );
+    complex_task.details = Some(
         "Create a comprehensive authentication system including:\n\
          1. User registration endpoint\n\
          2. Login endpoint with JWT generation\n\
@@ -35,17 +35,17 @@ async fn main() -> Result<()> {
          5. User profile management\n\
          This requires multiple steps and careful planning."
             .to_string(),
-    )
-    .with_duration(7200); // 2 hours
+    );
+    complex_task.estimated_duration = Some(7200); // 2 hours in seconds
 
     // Create a simple task for comparison
-    let simple_task = Task::new(
+    let mut simple_task = Task::new(
         "Fix typo in README".to_string(),
         TaskType::Documentation,
         Priority::Low,
-    )
-    .with_details("Fix spelling error in the installation section".to_string())
-    .with_duration(300); // 5 minutes
+    );
+    simple_task.details = Some("Fix spelling error in the installation section".to_string());
+    simple_task.estimated_duration = Some(300); // 5 minutes in seconds
 
     // Create configuration
     let config = create_test_config();
@@ -95,13 +95,10 @@ async fn main() -> Result<()> {
 
     // Check if complex task was orchestrated
     let state = master.state.read().await;
-    for (task, result) in &state.review_history {
-        info!("Task {} processing details:", task);
-        if let Some(output) = result
-            .get(0)
-            .and_then(|r| r.review_passed.then(|| "orchestrated"))
-        {
-            info!("  - Used orchestration: {}", output);
+    for (task_id, result) in &state.review_history {
+        info!("Task {} processing details:", task_id);
+        if let Some(output) = result {
+            info!("  - Status: {}", output);
         }
     }
 

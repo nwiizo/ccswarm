@@ -283,12 +283,12 @@ mod tests {
 
         agent.initialize(&workspace_manager).await.unwrap();
 
-        let task = Task::new(
-            "test-1".to_string(),
+        let mut task = Task::new(
             "Create React component".to_string(),
-            Priority::Medium,
             TaskType::Development,
+            Priority::Medium,
         );
+        task.id = "test-1".to_string();
 
         let result = agent.execute_task(task).await.unwrap();
         assert!(result.success);
