@@ -45,6 +45,66 @@ This project uses a Cargo workspace with the following structure:
 - Mock external dependencies with `mockall` or similar
 - Run workspace-wide tests with `cargo test --workspace`
 
+## Compilation Error and Warning Resolution
+
+### Quick Fix Commands
+```bash
+# Automatically fix most warnings (saves ~70% of manual work)
+cargo clippy --fix --allow-dirty --allow-staged
+
+# Check for compilation errors
+cargo build --lib 2>&1 | grep "error\[E"
+
+# Count warnings
+cargo build --lib 2>&1 | grep "warning:" | wc -l
+
+# Show specific error types
+cargo build --lib 2>&1 | grep "E0609"  # field access errors
+```
+
+### Common Error Patterns and Fixes
+
+#### 1. Struct Field Simplification
+```rust
+// After refactoring reduces struct complexity
+// Old: agent.identity.agent_id
+// New: agent.agent.id
+```
+
+#### 2. Constructor Signature Changes
+```rust
+// Maintain backward compatibility
+pub fn new_with_id(id: String, description: String, priority: Priority, task_type: TaskType) -> Self
+```
+
+#### 3. Unused Items Resolution
+```rust
+// Variables: prefix with _
+let _config = Config::new();
+
+// Fields: prefix and update all usages
+struct Handler {
+    _analyzer: Arc<SemanticAnalyzer>,  // was: analyzer
+}
+
+// Imports: remove or prefix
+use crate::module::Type as _Type;  // if might be needed later
+```
+
+### Systematic Resolution Workflow
+1. **Run clippy auto-fix first** - Fixes Default impls, redundant code, etc.
+2. **Fix compilation errors** - Focus on one error type at a time
+3. **Fix warnings by category** - Not by file, for consistency
+4. **Verify after each step** - `cargo check --lib`
+5. **Test coverage** - `cargo test --lib` to ensure fixes don't break tests
+
+### Field Renaming Checklist
+When adding `_` prefix to unused fields:
+- [ ] Update field declaration
+- [ ] Update all struct initializations  
+- [ ] Update all field accesses
+- [ ] Update pattern matching
+
 ## Frequently Used Commands
 
 ### Workspace Management
@@ -189,6 +249,8 @@ cargo run -p ccswarm -- doctor --error "E001"
 @docs/commands/workspace-commands.md
 @.claude/settings.json
 @.claude/commands/project-rules.md
+@.claude/commands/rust-compilation-fixes.md
+@.claude/commands/efficient-warning-resolution.md
 
 ## Workspace File Structure
 ```
@@ -218,7 +280,9 @@ ccswarm/
 │       ├── src/                 # Library source code
 │       └── Cargo.toml           # Crate configuration
 └── .claude/
-    ├── settings.json            # Claude Code settings
+    ├── settings.json                        # Claude Code settings
     └── commands/
-        └── project-rules.md     # Development rules
+        ├── project-rules.md                 # Development rules
+        ├── rust-compilation-fixes.md        # Error resolution patterns
+        └── efficient-warning-resolution.md  # Warning fix strategies
 ```
