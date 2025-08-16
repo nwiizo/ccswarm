@@ -232,10 +232,10 @@ impl SessionManagerAdapter {
     pub async fn enable_auto_accept(
         &self,
         session_id: &str,
-        config: AutoAcceptConfig,
+        _config: AutoAcceptConfig,
     ) -> Result<()> {
         if let Some(agent_session) = self.get_session(session_id).await {
-            let session = agent_session.lock().await;
+            let _session = agent_session.lock().await;
             // Auto-accept configuration is handled at ai-session level
             // session.enable_auto_accept(config);  // Method doesn't exist
         }
