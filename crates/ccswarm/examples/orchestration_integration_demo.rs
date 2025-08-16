@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
     simple_task.estimated_duration = Some(300); // 5 minutes in seconds
 
     // Create configuration
-    let config = create_test_config();
+    let _config = create_test_config();
 
     // Initialize Master Claude orchestrator
     let master = MasterClaude::new();

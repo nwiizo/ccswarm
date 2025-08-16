@@ -1,6 +1,6 @@
 //! Demonstration of enhanced error visualization
 
-use ccswarm::utils::{show_diagram, CommonErrors, ErrorDiagrams};
+use ccswarm::utils::CommonErrors;
 use colored::Colorize;
 
 #[tokio::main]
