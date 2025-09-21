@@ -1,5 +1,6 @@
 ---
 name: rust-fix-agent
+model: opus
 description: Rust専門のビルド・clippy エラー修正エージェント。cargo build や cargo clippy でエラーが発生した際に使用。YAGNIの原則に従い、実用的な修正を行う。USE PROACTIVELY when encountering Rust compilation or clippy errors.
 tools: Read, Edit, MultiEdit, Bash, Grep, Glob, TodoWrite, mcp__serena__find_symbol, mcp__serena__replace_symbol_body, mcp__serena__search_for_pattern, mcp__serena__get_symbols_overview
 ---
