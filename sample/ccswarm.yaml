@@ -1,0 +1,179 @@
+# CCSwarm Sample Configuration
+# This is a comprehensive example configuration file
+
+# プロジェクト設定
+project:
+  name: "sample-project"
+  description: "Sample project demonstrating ccswarm capabilities"
+  repository: "https://github.com/user/sample-project"
+
+# Claude ACP設定（デフォルトで有効）
+claude_acp:
+  url: "ws://localhost:9100"
+  auto_connect: true
+  timeout: 30
+  max_retries: 3
+  retry_delay: 2
+  prefer_claude: true
+  debug: false
+
+# エージェント設定
+agents:
+  frontend:
+    enabled: true
+    role: "Frontend"
+    provider: "claude"  # Claude Code via ACP
+    model: "claude-3-opus-20240229"
+    skills:
+      - "React"
+      - "TypeScript"
+      - "CSS/Tailwind"
+      - "UI/UX Design"
+    working_directory: "./frontend"
+
+  backend:
+    enabled: true
+    role: "Backend"
+    provider: "claude"
+    model: "claude-3-opus-20240229"
+    skills:
+      - "Node.js"
+      - "Python"
+      - "PostgreSQL"
+      - "API Design"
+    working_directory: "./backend"
+
+  devops:
+    enabled: true
+    role: "DevOps"
+    provider: "claude"
+    model: "claude-3-opus-20240229"
+    skills:
+      - "Docker"
+      - "Kubernetes"
+      - "CI/CD"
+      - "AWS/GCP"
+    working_directory: "./infrastructure"
+
+  qa:
+    enabled: true
+    role: "QA"
+    provider: "claude"
+    model: "claude-3-opus-20240229"
+    skills:
+      - "Test Automation"
+      - "E2E Testing"
+      - "Performance Testing"
+      - "Security Testing"
+    working_directory: "./tests"
+
+  search:
+    enabled: true
+    role: "Search"
+    provider: "gemini"  # For web search capabilities
+    api_key_env: "GEMINI_API_KEY"
+    skills:
+      - "Web Research"
+      - "Documentation Search"
+      - "Code Examples"
+      - "Best Practices"
+
+# Master Claude設定（オーケストレーター）
+master:
+  enabled: true
+  proactive_mode: true  # デフォルトで有効
+  analysis_interval: 30  # 秒
+  auto_generate_tasks: true
+  decision_strategy: "intelligent"  # intelligent, democratic, priority-based
+  max_concurrent_tasks: 5
+
+# タスク管理設定
+task_management:
+  auto_assign: true
+  priority_levels:
+    - "critical"
+    - "high"
+    - "medium"
+    - "low"
+  timeout_defaults:
+    critical: 3600    # 1 hour
+    high: 7200       # 2 hours
+    medium: 14400    # 4 hours
+    low: 28800       # 8 hours
+
+# Sangha（集合知）設定
+sangha:
+  enabled: true
+  voting_timeout: 60  # 秒
+  minimum_voters: 2
+  consensus_threshold: 0.6  # 60%の同意で決定
+
+# セッション管理
+session:
+  auto_save: true
+  save_interval: 300  # 5分ごと
+  max_history: 1000
+  compression: true
+  crash_recovery: true
+
+# リソース管理
+resources:
+  monitoring: true
+  limits:
+    cpu_percent: 80
+    memory_mb: 4096
+    disk_gb: 50
+  alerts:
+    enabled: true
+    threshold: 0.8  # 80%使用で警告
+
+# ロギング設定
+logging:
+  level: "info"  # debug, info, warn, error
+  file: "./logs/ccswarm.log"
+  max_size_mb: 100
+  max_files: 10
+  format: "json"  # json or text
+
+# セキュリティ設定
+security:
+  agent:
+    enabled: true
+    scan_interval: 3600  # 1時間ごと
+    vulnerability_checks:
+      - "owasp_top_10"
+      - "dependency_scan"
+      - "secret_detection"
+    auto_fix: false  # 自動修正は無効（安全のため）
+
+# 品質管理
+quality:
+  auto_review: true
+  review_threshold: 0.8
+  linting: true
+  formatting: true
+  test_coverage_target: 80
+
+# プロアクティブ機能
+proactive:
+  enabled: true  # デフォルトで有効
+  features:
+    bottleneck_detection: true
+    optimization_suggestions: true
+    dependency_updates: true
+    security_monitoring: true
+    performance_analysis: true
+
+# 拡張機能
+extensions:
+  enabled: []  # 必要に応じて拡張を追加
+  # - "github-integration"
+  # - "slack-notifications"
+  # - "custom-metrics"
+
+# 環境変数
+environment:
+  NODE_ENV: "development"
+  RUST_LOG: "ccswarm=info"
+  CCSWARM_CLAUDE_ACP_URL: "ws://localhost:9100"
+  CCSWARM_CLAUDE_ACP_AUTO_CONNECT: "true"

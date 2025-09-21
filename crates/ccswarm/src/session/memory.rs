@@ -588,6 +588,11 @@ impl SessionMemory {
         result
     }
 
+    /// Get memory summary
+    pub fn get_summary(&self) -> MemorySummary {
+        self.generate_memory_summary()
+    }
+
     /// Generate memory summary for reporting
     pub fn generate_memory_summary(&self) -> MemorySummary {
         MemorySummary {

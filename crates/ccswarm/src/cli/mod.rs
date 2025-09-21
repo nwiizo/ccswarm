@@ -148,6 +148,14 @@ pub enum Commands {
         action: WorktreeAction,
     },
 
+    /// Claude Code ACP integration commands
+    #[cfg(feature = "claude-acp")]
+    #[command(name = "claude-acp")]
+    ClaudeACP {
+        #[command(subcommand)]
+        command: ClaudeACPCommands,
+    },
+
     /// Show logs
     Logs {
         /// Follow logs
@@ -4322,6 +4330,249 @@ impl CliRunner {
         Ok(())
     }
 
+    #[cfg(feature = "claude-acp")]
+    async fn handle_claude_acp(&self, command: &ClaudeACPCommands) -> Result<()> {
+        use crate::acp_claude::{ClaudeACPConfig, SimplifiedClaudeAdapter};
+
+        match command {
+            ClaudeACPCommands::Start { url } => {
+                let mut config = ClaudeACPConfig::default();
+                config.url = url.clone();
+
+                let mut adapter = SimplifiedClaudeAdapter::new(config);
+
+                if self.json_output {
+                    match adapter.connect_with_retry().await {
+                        Ok(_) => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "success",
+                                    "message": "Connected to Claude Code",
+                                    "url": url,
+                                    "session_id": adapter.session_id()
+                                }))?
+                            );
+                        }
+                        Err(e) => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": format!("Failed to connect: {}", e)
+                                }))?
+                            );
+                            return Err(e.into());
+                        }
+                    }
+                } else {
+                    println!("🚀 Starting Claude Code ACP adapter...");
+                    println!("   URL: {}", url);
+
+                    match adapter.connect_with_retry().await {
+                        Ok(_) => {
+                            println!("✅ Successfully connected to Claude Code!");
+                            if let Some(session_id) = adapter.session_id() {
+                                println!("   Session ID: {}", session_id);
+                            }
+                        }
+                        Err(e) => {
+                            println!("❌ Failed to connect: {}", e);
+                            return Err(e.into());
+                        }
+                    }
+                }
+            }
+            ClaudeACPCommands::Test => {
+                let config = ClaudeACPConfig::default();
+                let mut adapter = SimplifiedClaudeAdapter::new(config);
+
+                if self.json_output {
+                    match adapter.test_connection().await {
+                        Ok(result) => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "success",
+                                    "message": result
+                                }))?
+                            );
+                        }
+                        Err(e) => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": format!("Connection test failed: {}", e)
+                                }))?
+                            );
+                            return Err(e.into());
+                        }
+                    }
+                } else {
+                    println!("🧪 Testing connection to Claude Code...");
+                    match adapter.test_connection().await {
+                        Ok(result) => {
+                            println!("✅ {}", result);
+                        }
+                        Err(e) => {
+                            println!("❌ Connection test failed: {}", e);
+                            return Err(e.into());
+                        }
+                    }
+                }
+            }
+            ClaudeACPCommands::Send { task } => {
+                let config = ClaudeACPConfig::default();
+                let mut adapter = SimplifiedClaudeAdapter::new(config);
+
+                // Connect first
+                adapter.connect_with_retry().await?;
+
+                if self.json_output {
+                    match adapter.send_task(task).await {
+                        Ok(response) => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "success",
+                                    "response": response
+                                }))?
+                            );
+                        }
+                        Err(e) => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&serde_json::json!({
+                                    "status": "error",
+                                    "message": format!("Failed to send task: {}", e)
+                                }))?
+                            );
+                            return Err(e.into());
+                        }
+                    }
+                } else {
+                    println!("📤 Sending task to Claude Code: {}", task);
+                    match adapter.send_task(task).await {
+                        Ok(response) => {
+                            println!("📥 Response: {}", response);
+                        }
+                        Err(e) => {
+                            println!("❌ Failed to send task: {}", e);
+                            return Err(e.into());
+                        }
+                    }
+                }
+
+                // Disconnect after sending
+                adapter.disconnect().await;
+            }
+            ClaudeACPCommands::Stop => {
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Claude ACP adapter stopped"
+                        }))?
+                    );
+                } else {
+                    println!("🛑 Stopping Claude Code ACP adapter...");
+                    println!("✅ Claude ACP adapter stopped");
+                }
+            }
+            ClaudeACPCommands::Status => {
+                let config = ClaudeACPConfig::default();
+
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "config": {
+                                "url": config.url,
+                                "auto_connect": config.auto_connect,
+                                "timeout": config.timeout,
+                                "max_retries": config.max_retries,
+                                "prefer_claude": config.prefer_claude
+                            }
+                        }))?
+                    );
+                } else {
+                    println!("📊 Claude ACP Status:");
+                    println!("   URL: {}", config.url);
+                    println!("   Auto-connect: {}", config.auto_connect);
+                    println!("   Timeout: {}s", config.timeout);
+                    println!("   Max retries: {}", config.max_retries);
+                    println!("   Prefer Claude: {}", config.prefer_claude);
+                }
+            }
+            ClaudeACPCommands::Diagnose => {
+                let config = ClaudeACPConfig::from_env();
+                let mut adapter = SimplifiedClaudeAdapter::new(config.clone());
+
+                if self.json_output {
+                    let mut diagnostics = serde_json::json!({
+                        "environment": {
+                            "url_env": std::env::var("CCSWARM_CLAUDE_ACP_URL").ok(),
+                            "auto_connect_env": std::env::var("CCSWARM_CLAUDE_ACP_AUTO_CONNECT").ok(),
+                            "timeout_env": std::env::var("CCSWARM_CLAUDE_ACP_TIMEOUT").ok(),
+                        },
+                        "config": config
+                    });
+
+                    // Test connection
+                    if let Ok(_) = adapter.connect().await {
+                        diagnostics["connection"] = serde_json::json!({
+                            "status": "connected",
+                            "session_id": adapter.session_id()
+                        });
+                        adapter.disconnect().await;
+                    } else {
+                        diagnostics["connection"] = serde_json::json!({
+                            "status": "failed"
+                        });
+                    }
+
+                    println!("{}", serde_json::to_string_pretty(&diagnostics)?);
+                } else {
+                    println!("🔍 Claude ACP Diagnostics:");
+                    println!("\n📋 Environment Variables:");
+                    if let Ok(url) = std::env::var("CCSWARM_CLAUDE_ACP_URL") {
+                        println!("   CCSWARM_CLAUDE_ACP_URL: {}", url);
+                    } else {
+                        println!("   CCSWARM_CLAUDE_ACP_URL: <not set>");
+                    }
+                    if let Ok(auto) = std::env::var("CCSWARM_CLAUDE_ACP_AUTO_CONNECT") {
+                        println!("   CCSWARM_CLAUDE_ACP_AUTO_CONNECT: {}", auto);
+                    } else {
+                        println!("   CCSWARM_CLAUDE_ACP_AUTO_CONNECT: <not set>");
+                    }
+
+                    println!("\n⚙️  Configuration:");
+                    println!("   URL: {}", config.url);
+                    println!("   Auto-connect: {}", config.auto_connect);
+                    println!("   Timeout: {}s", config.timeout);
+                    println!("   Max retries: {}", config.max_retries);
+
+                    println!("\n🧪 Connection Test:");
+                    print!("   Attempting to connect... ");
+                    if let Ok(_) = adapter.connect().await {
+                        println!("✅ Success!");
+                        if let Some(session_id) = adapter.session_id() {
+                            println!("   Session ID: {}", session_id);
+                        }
+                        adapter.disconnect().await;
+                    } else {
+                        println!("❌ Failed!");
+                        println!("   Claude Code may not be running or accessible");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn handle_evolution(&self, action: &EvolutionAction) -> Result<()> {
         match action {
             EvolutionAction::Metrics { agent, all, period } => {
@@ -5555,5 +5806,36 @@ impl CliRunner {
         .await
     }
 }
+
+/// Claude Code ACP Commands
+#[cfg(feature = "claude-acp")]
+#[derive(Subcommand)]
+pub enum ClaudeACPCommands {
+    /// Start Claude Code ACP adapter
+    Start {
+        /// Custom URL for Claude Code
+        #[arg(long, default_value = "ws://localhost:9100")]
+        url: String,
+    },
+
+    /// Test connection to Claude Code
+    Test,
+
+    /// Send a task to Claude Code
+    Send {
+        /// Task description
+        task: String,
+    },
+
+    /// Stop ACP adapter
+    Stop,
+
+    /// Show connection status
+    Status,
+
+    /// Run diagnostics
+    Diagnose,
+}
+
 #[cfg(test)]
 mod tests;
