@@ -139,31 +139,33 @@ impl AppContext {
 }
 ```
 
-### 4. Layered Architecture Implementation
+### 4. Rust Best Practices Architecture
 
-#### Decision: Enforce Clean Architecture Principles
+#### Decision: Embrace Rust-Native Patterns (No Layered Architecture)
 
-```
-┌──────────────────────────────────────────┐
-│        Presentation Layer                 │
-│    (CLI, TUI, HTTP API, WebSocket)       │
-├──────────────────────────────────────────┤
-│        Application Layer                  │
-│    (Use Cases, Command Handlers)         │
-├──────────────────────────────────────────┤
-│          Domain Layer                     │
-│    (Orchestrator, Agents, Tasks)         │
-├──────────────────────────────────────────┤
-│       Infrastructure Layer                │
-│    (Sessions, Storage, Network)          │
-└──────────────────────────────────────────┘
-```
+Based on user feedback and Rust philosophy, we've eliminated the layered architecture in favor of Rust-native patterns that provide better performance and maintainability.
 
-**Dependency Rules:**
-- Dependencies point inward only
-- Domain layer has no external dependencies
-- Infrastructure implements domain interfaces
-- Application orchestrates domain operations
+**Implemented Patterns:**
+
+1. **Type-State Pattern for Agents**
+   - Compile-time state machine validation
+   - Zero runtime cost using PhantomData
+   - Prevents invalid state transitions
+
+2. **Channel-Based Orchestration**
+   - Message-passing concurrency without locks
+   - No shared state (follows Rust's ownership model)
+   - Predictable performance without contention
+
+3. **Iterator-Based Task Processing**
+   - Zero-cost abstractions with iterator chains
+   - Lazy evaluation for efficiency
+   - Composable transformations
+
+4. **Command Pattern with Traits**
+   - Type-safe command execution
+   - Compile-time validation
+   - No runtime dispatch overhead
 
 ### 5. Event-Driven Architecture
 
