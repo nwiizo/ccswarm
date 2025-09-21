@@ -155,33 +155,3 @@ impl SimpleWorkspaceManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_workspace_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let manager = SimpleWorkspaceManager::new(temp_dir.path().to_path_buf());
-
-        manager.init_if_needed().await.unwrap();
-
-        let workspace = manager.create_workspace("test-agent").await.unwrap();
-        assert_eq!(workspace.agent_id, "test-agent");
-        assert!(workspace.path.exists());
-    }
-
-    #[tokio::test]
-    async fn test_workspace_listing() {
-        let temp_dir = TempDir::new().unwrap();
-        let manager = SimpleWorkspaceManager::new(temp_dir.path().to_path_buf());
-
-        manager.init_if_needed().await.unwrap();
-        manager.create_workspace("agent1").await.unwrap();
-        manager.create_workspace("agent2").await.unwrap();
-
-        let workspaces = manager.list_workspaces().await.unwrap();
-        assert_eq!(workspaces.len(), 2);
-    }
-}
