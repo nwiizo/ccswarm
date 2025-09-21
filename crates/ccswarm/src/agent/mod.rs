@@ -11,6 +11,7 @@ pub mod search_agent;
 pub mod simple;
 pub mod task;
 pub mod task_builder;
+pub mod type_state;
 pub mod whiteboard;
 
 use anyhow::{Context, Result};

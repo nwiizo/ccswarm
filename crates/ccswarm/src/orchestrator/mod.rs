@@ -1,5 +1,6 @@
 pub mod agent_access;
 pub mod auto_create;
+pub mod channel_based;
 pub mod llm_quality_judge;
 pub mod master_delegation;
 pub mod proactive_master;
