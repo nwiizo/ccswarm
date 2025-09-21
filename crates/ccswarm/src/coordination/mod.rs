@@ -26,6 +26,7 @@ pub enum CoordinationType {
     StatusUpdate,
     Information,
     TaskDelegation,
+    TaskCompletion,
     InformationRequest,
     InformationResponse,
     ReviewRequest,
@@ -40,8 +41,7 @@ pub mod dialogue;
 
 // Re-export key conversion utilities
 pub use conversion::{
-    convert_from_ai_session, convert_to_ai_session, AgentMappingRegistry, FromAISessionMessage,
-    IntoAISessionMessage, UnifiedAgentInfo,
+    convert_from_ai_session, convert_to_ai_session, AgentMappingRegistry, UnifiedAgentInfo,
 };
 
 /// Messages sent between agents and the orchestrator

@@ -1,0 +1,10 @@
+{
+  "name": "sample-frontend",
+  "version": "1.0.0",
+  "description": "Sample frontend for ccswarm demo",
+  "scripts": {
+    "dev": "echo 'Starting development server...'",
+    "build": "echo 'Building production bundle...'",
+    "test": "echo 'Running tests...'"
+  }
+}

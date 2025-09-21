@@ -186,15 +186,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_execute() {
-        use std::pin::Pin;
         use futures::Future;
-        
+        use std::pin::Pin;
+
         let futures: Vec<Pin<Box<dyn Future<Output = Result<i32>>>>> = vec![
             Box::pin(async { Ok::<_, anyhow::Error>(1) }),
             Box::pin(async { Ok::<_, anyhow::Error>(2) }),
             Box::pin(async { Ok::<_, anyhow::Error>(3) }),
         ];
-        
+
         let results = futures::future::join_all(futures).await;
 
         assert_eq!(results.len(), 3);
@@ -217,7 +217,8 @@ mod tests {
     async fn test_parallel_map() {
         let numbers = vec![1, 2, 3, 4, 5];
 
-        let futures: Vec<_> = numbers.into_iter()
+        let futures: Vec<_> = numbers
+            .into_iter()
             .map(|n| async move { Ok::<_, anyhow::Error>(n * 2) })
             .collect();
         let results: Vec<Result<i32>> = futures::future::join_all(futures).await;

@@ -2,13 +2,21 @@
 
 ## Project Overview
 
-ccswarm - AI Multi-Agent Orchestration System that coordinates specialized AI agents (Frontend, Backend, DevOps, QA) using a Master Claude coordinator. Built in Rust for performance and reliability with native ai-session management.
+ccswarm - AI Multi-Agent Orchestration System that coordinates specialized AI agents (Frontend, Backend, DevOps, QA) using Claude Code via Agent Client Protocol (ACP) as the **default integration method**. Built in Rust for performance and reliability with zero external dependencies.
+
+## Claude Code Integration (Default)
+
+ccswarm now uses **Claude Code via ACP** as the primary communication method:
+- **Auto-Connect**: Automatically connects to Claude Code on startup (ws://localhost:9100)
+- **WebSocket Protocol**: Real-time bidirectional communication
+- **Session Management**: Persistent sessions with UUID tracking
+- **Task Delegation**: Direct task routing to Claude Code
 
 ## Workspace Structure
 
 This project uses a Cargo workspace with the following structure:
-- `crates/ccswarm/` - Main ccswarm application and orchestration system
-- `crates/ai-session/` - Native AI session management library
+- `crates/ccswarm/` - Main ccswarm application with Claude ACP integration
+- `sample/` - Sample scripts demonstrating Claude Code integration
 
 ## Development Standards
 
@@ -19,7 +27,7 @@ This project uses a Cargo workspace with the following structure:
 - Cyclomatic complexity must be <10 per function
 
 ### Architecture Patterns
-- **Session Management**: Always use ai-session adapter for agent terminals
+- **Claude ACP Integration**: Primary communication via WebSocket protocol
 - **Agent Boundaries**: Strictly enforce role isolation (Frontend/Backend/DevOps/QA)
 - **Async First**: Use tokio async/await, never block the runtime
 - **Error Handling**: Use Result<T, E> with custom error types, no .unwrap() in production
@@ -87,12 +95,30 @@ cd ../..
 cargo test --workspace
 ```
 
+### Claude ACP Commands (Default Integration)
+```bash
+# Test Claude Code connection
+cargo run -p ccswarm -- claude-acp test
+
+# Start ACP adapter
+cargo run -p ccswarm -- claude-acp start
+
+# Send task to Claude Code
+cargo run -p ccswarm -- claude-acp send --task "Analyze code for improvements"
+
+# Check connection status
+cargo run -p ccswarm -- claude-acp status
+
+# Run diagnostics
+cargo run -p ccswarm -- claude-acp diagnose
+```
+
 ### Development Workflow
 ```bash
 # Initial setup (from workspace root)
 cargo run -p ccswarm -- init --name "MyProject" --agents frontend,backend
 
-# Start system
+# Start system (auto-connects to Claude Code)
 cargo run -p ccswarm -- start
 cargo run -p ccswarm -- tui  # Monitor in terminal UI
 
@@ -195,28 +221,35 @@ cargo run -p ccswarm -- doctor --error "E001"
 ccswarm/
 ├── Cargo.toml                   # Workspace configuration
 ├── CLAUDE.md                    # This file
+├── README.md                    # Main project documentation
 ├── docs/
 │   ├── ARCHITECTURE.md          # System architecture
 │   ├── APPLICATION_SPEC.md      # Application specifications
+│   ├── CLAUDE_ACP.md           # Claude ACP integration guide
 │   └── commands/
 │       ├── README.md            # Commands documentation index
 │       └── workspace-commands.md # Workspace development guide
 ├── crates/
-│   ├── ccswarm/                 # Main application crate
-│   │   ├── src/                 # Source code
-│   │   │   ├── cli/             # CLI module with command registry
-│   │   │   │   ├── command_registry.rs  # Command dispatch system
-│   │   │   │   ├── command_handler.rs   # Command execution logic
-│   │   │   │   ├── commands/            # Individual command modules
-│   │   │   │   └── ...                  # Other CLI utilities
-│   │   │   └── utils/           # Utility modules
-│   │   │       ├── error_template.rs    # Error diagram templates
-│   │   │       └── ...                  # Other utilities
-│   │   ├── tests/               # Integration tests
-│   │   └── Cargo.toml           # Crate configuration
-│   └── ai-session/              # AI session library crate
-│       ├── src/                 # Library source code
+│   └── ccswarm/                 # Main application crate
+│       ├── src/                 # Source code
+│       │   ├── acp_claude/      # Claude ACP integration module
+│       │   │   ├── adapter.rs   # WebSocket adapter
+│       │   │   ├── config.rs    # Configuration management
+│       │   │   └── error.rs     # Error handling
+│       │   ├── cli/             # CLI module with command registry
+│       │   │   ├── command_registry.rs  # Command dispatch system
+│       │   │   ├── command_handler.rs   # Command execution logic
+│       │   │   └── commands/            # Individual command modules
+│       │   └── utils/           # Utility modules
+│       │       └── error_template.rs    # Error diagram templates
+│       ├── tests/               # Integration tests
 │       └── Cargo.toml           # Crate configuration
+├── sample/                      # Sample scripts and demos
+│   ├── claude_acp_demo.sh      # Claude ACP demonstration
+│   ├── task_management_demo.sh # Task management demo
+│   ├── multi_agent_demo.sh     # Multi-agent collaboration
+│   ├── setup.sh                # Setup script
+│   └── ccswarm.yaml            # Sample configuration
 └── .claude/
     ├── settings.json            # Claude Code settings
     └── commands/
