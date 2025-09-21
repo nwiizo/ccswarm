@@ -1,0 +1,13 @@
+{
+  "id": "test_memory_1",
+  "name": "Test Architecture Decision",
+  "content": "We decided to use semantic analysis for better code understanding",
+  "memory_type": "Architecture",
+  "related_symbols": [
+    "module::function"
+  ],
+  "metadata": {},
+  "created_at": "2025-08-04T04:30:51.984120Z",
+  "updated_at": "2025-08-04T04:30:51.984759Z",
+  "access_count": 1
+}

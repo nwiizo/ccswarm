@@ -1,0 +1,19 @@
+[workspace]
+members = ["crates/ccswarm", "crates/ai-session"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+authors = ["nwiizo"]
+license = "MIT"
+repository = "https://github.com/nwiizo/ccswarm"
+homepage = "https://github.com/nwiizo/ccswarm"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.bench]
+debug = true
