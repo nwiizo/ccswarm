@@ -1,5 +1,4 @@
 /// User-facing error macros for better error messages
-
 /// Create a user-friendly error message
 #[macro_export]
 macro_rules! user_error {

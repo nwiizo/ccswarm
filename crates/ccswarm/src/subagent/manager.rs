@@ -111,7 +111,7 @@ impl SubagentManager {
         let id_clone = instance_id.clone();
         tokio::spawn(async move {
             if let Err(e) = self_clone.initialize_subagent(&id_clone).await {
-                log::error!("Failed to initialize subagent {}: {}", id_clone, e);
+                crate::utils::logging::log_init_failure("subagent", &id_clone, &e);
             }
         });
 

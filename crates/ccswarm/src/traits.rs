@@ -3,12 +3,10 @@
 /// This module defines reusable traits that provide common functionality
 /// across different components of the system, promoting code reuse and
 /// consistent interfaces.
-
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-// use uuid::Uuid; // Commented out unused import
 
 use crate::error::{CCSwarmError, Result};
 
@@ -400,7 +398,7 @@ macro_rules! with_timestamp {
 #[macro_export]
 macro_rules! impl_entity_traits {
     ($type:ty, $id_field:ident, $name_field:ident) => {
-        impl crate::traits::Identifiable for $type {
+        impl $crate::traits::Identifiable for $type {
             fn id(&self) -> &str {
                 &self.$id_field
             }
@@ -411,7 +409,7 @@ macro_rules! impl_entity_traits {
         }
     };
     ($type:ty, $id_field:ident) => {
-        impl crate::traits::Identifiable for $type {
+        impl $crate::traits::Identifiable for $type {
             fn id(&self) -> &str {
                 &self.$id_field
             }
