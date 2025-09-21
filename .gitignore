@@ -85,3 +85,13 @@ COMPILATION_FIX_SUMMARY.md
 blog_post*.md
 *.draft.md
 .vibe-ticket/
+
+# Git operation scripts (keep in scripts/ but don't track)
+scripts/*.sh
+!scripts/README.md
+
+# Keep sample demo scripts
+!sample/*.sh
+
+# Root level temporary scripts
+/*.sh
