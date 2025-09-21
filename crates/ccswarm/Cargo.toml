@@ -42,6 +42,7 @@ thiserror = "2.0"
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9"
 
 # UUID generation
 uuid = { version = "1.10", features = ["v4", "serde"] }
@@ -114,8 +115,15 @@ rand = "0.9"
 # System information for resource monitoring
 sysinfo = "0.33"
 
-# AI Session Management (local crate)
-ai-session = { version = "0.3.4", path = "../ai-session", features = ["mcp"] }
+# AI Session Management removed - no longer needed
+
+# ACP (Agent Client Protocol) support - for Claude Code integration
+agent-client-protocol = { version = "0.4.0", optional = true }
+jsonrpc-core = { version = "18.0", optional = true }
+tokio-tungstenite = { version = "0.20", optional = true }
+
+# Directory paths
+dirs = "5.0"
 
 [dev-dependencies]
 # Testing
@@ -124,5 +132,6 @@ tempfile = "3.12"
 pretty_assertions = "1.4"
 
 [features]
-default = ["urlencoding"]
+default = ["urlencoding", "claude-acp"]
 container = ["bollard", "futures-util", "tar", "urlencoding"]
+claude-acp = ["agent-client-protocol", "jsonrpc-core", "tokio-tungstenite", "futures-util"]

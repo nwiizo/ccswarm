@@ -54,7 +54,7 @@ async fn create_agent(
     role: ccswarm::identity::AgentRole,
     workspace: &Path,
 ) -> Result<SimpleClaudeAgent> {
-    let config = ClaudeConfig::for_agent(&role.name());
+    let config = ClaudeConfig::for_agent(role.name());
 
     SimpleClaudeAgent::new(role, workspace, config).await
 }

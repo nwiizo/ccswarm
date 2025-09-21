@@ -1,4 +1,3 @@
-pub mod ai_session_adapter;
 pub mod base_session;
 pub mod claude_session;
 pub mod context_bridge;
@@ -22,7 +21,6 @@ use self::error::{LockResultExt, SessionError, SessionResult};
 use crate::auto_accept::AutoAcceptConfig;
 use crate::identity::AgentRole;
 use crate::resource::{ResourceMonitor, SessionResourceIntegration};
-use ai_session::native::NativeSessionManager;
 use memory::{
     EpisodeOutcome, EpisodeType, MemorySummary, RetrievalResult, SessionMemory, WorkingMemoryType,
 };
@@ -228,8 +226,6 @@ impl AgentSession {
 pub struct SessionManager {
     /// Map of session ID to agent session
     sessions: Arc<Mutex<HashMap<String, AgentSession>>>,
-    /// Native session manager for session operations
-    session_manager: NativeSessionManager,
     /// Resource monitor for tracking agent resources
     resource_monitor: Option<Arc<ResourceMonitor>>,
     /// Resource integration handler
@@ -241,7 +237,6 @@ impl SessionManager {
     pub async fn new() -> SessionResult<Self> {
         Ok(Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            session_manager: NativeSessionManager::new(),
             resource_monitor: None,
             resource_integration: None,
         })
@@ -263,7 +258,6 @@ impl SessionManager {
 
         Ok(Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            session_manager: NativeSessionManager::new(),
             resource_monitor: Some(resource_monitor),
             resource_integration: Some(resource_integration),
         })
@@ -292,13 +286,7 @@ impl SessionManager {
             AgentSession::new(agent_id, agent_role, working_directory.clone(), description);
 
         // Create the native session
-        let _native_session = self
-            .session_manager
-            .create_session(&session.tmux_session)
-            .await
-            .map_err(|e| SessionError::CreationFailed {
-                reason: e.to_string(),
-            })?;
+        // TODO: Create native session when available
 
         // Set up the session environment
         self.setup_session_environment(&session).await?;
@@ -484,15 +472,7 @@ impl SessionManager {
             }
         }
 
-        // Terminate the native session
-        if self.session_manager.has_session(&tmux_session).await {
-            self.session_manager
-                .delete_session(&tmux_session)
-                .await
-                .map_err(|e| SessionError::TerminationFailed {
-                    reason: e.to_string(),
-                })?;
-        }
+        // TODO: Terminate the native session when available
 
         // Update session status
         {
@@ -767,24 +747,7 @@ impl SessionManager {
 
     /// Sets up the environment for a new session
     async fn setup_session_environment(&self, session: &AgentSession) -> SessionResult<()> {
-        // For native sessions, environment setup would be handled during session creation
-        // We can set environment variables if the native session supports it
-        if let Some(native_session) = self
-            .session_manager
-            .get_session(&session.tmux_session)
-            .await
-        {
-            let env_commands = vec![
-                format!("export CCSWARM_SESSION_ID={}", session.id),
-                format!("export CCSWARM_AGENT_ID={}", session.agent_id),
-                format!("export CCSWARM_AGENT_ROLE={}", session.agent_role.name()),
-            ];
-
-            let session_lock = native_session.lock().await;
-            for cmd in env_commands {
-                session_lock.send_input(&format!("{}\n", cmd)).await?;
-            }
-        }
+        // TODO: Set environment variables when native session is available
 
         Ok(())
     }
@@ -800,15 +763,7 @@ impl SessionManager {
             session.working_directory
         );
 
-        // Send the command to the native session
-        if let Some(native_session) = self
-            .session_manager
-            .get_session(&session.tmux_session)
-            .await
-        {
-            let session_lock = native_session.lock().await;
-            session_lock.send_input(&format!("{}\n", command)).await?;
-        }
+        // TODO: Send command to native session when available
 
         Ok(())
     }

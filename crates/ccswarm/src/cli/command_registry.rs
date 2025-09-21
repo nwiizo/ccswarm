@@ -227,6 +227,17 @@ impl CommandRegistry {
             })
         });
 
+        #[cfg(feature = "claude-acp")]
+        self.register("claude-acp", |runner, cmd| {
+            Box::pin(async move {
+                if let Commands::ClaudeACP { command } = cmd {
+                    runner.handle_claude_acp(command).await
+                } else {
+                    anyhow::bail!("Command type mismatch in registry handler")
+                }
+            })
+        });
+
         self.register("evolution", |runner, cmd| {
             Box::pin(async move {
                 if let Commands::Evolution { action } = cmd {
@@ -399,6 +410,8 @@ impl CommandRegistry {
             Commands::Sangha { .. } => "sangha",
             Commands::Extend { .. } => "extend",
             Commands::Search { .. } => "search",
+            #[cfg(feature = "claude-acp")]
+            Commands::ClaudeACP { .. } => "claude-acp",
             Commands::Evolution { .. } => "evolution",
             Commands::Quality { .. } => "quality",
             Commands::Template { .. } => "template",

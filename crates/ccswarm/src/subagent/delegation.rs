@@ -36,18 +36,15 @@ pub struct DelegatedTask {
 
 /// Priority levels for tasks
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum TaskPriority {
     Low,
+    #[default]
     Medium,
     High,
     Critical,
 }
 
-impl Default for TaskPriority {
-    fn default() -> Self {
-        TaskPriority::Medium
-    }
-}
 
 /// Result from a delegated task
 #[derive(Debug, Clone, Serialize, Deserialize)]

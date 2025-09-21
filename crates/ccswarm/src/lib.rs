@@ -4,6 +4,8 @@
 #![allow(clippy::module_inception)]
 #![allow(clippy::needless_borrows_for_generic_args)]
 
+#[cfg(feature = "claude-acp")]
+pub mod acp_claude;
 pub mod agent;
 pub mod auto_accept;
 pub mod cli;
@@ -28,8 +30,7 @@ pub mod session;
 pub mod streaming;
 pub mod subagent;
 pub mod template;
-// Use ai-session's tmux bridge instead of our own tmux module
-pub use ai_session::tmux_bridge as tmux;
+pub mod tmux;
 pub mod tui;
 pub mod utils;
 pub mod workspace;

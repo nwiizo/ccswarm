@@ -1,7 +1,7 @@
 /// Integration test for resource monitoring functionality
 use anyhow::Result;
 use ccswarm::identity::default_frontend_role;
-use ccswarm::resource::{ResourceLimits, ResourceMonitor};
+use ccswarm::resource::ResourceLimits;
 use ccswarm::session::SessionManager;
 use chrono::Duration;
 use std::sync::Arc;
