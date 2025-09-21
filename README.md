@@ -1,14 +1,12 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.3.7** - AI Multi-Agent Orchestration with Search Agent and Enhanced Communication
+> 🚀 **Version 0.3.7** - Rust-Native Multi-Agent Orchestration with Minimal Testing
 
 [![CI](https://github.com/nwiizo/ccswarm/workflows/CI/badge.svg)](https://github.com/nwiizo/ccswarm/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/ccswarm.svg)](https://crates.io/crates/ccswarm)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Downloads](https://img.shields.io/crates/d/ccswarm.svg)](https://crates.io/crates/ccswarm)
 
-**ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code (via ACP - default), Aider, and other providers. Built in Rust for performance and reliability, it features autonomous task prediction, real-time security monitoring, and intelligent delegation.
+**ccswarm** is a high-performance multi-agent orchestration system built with Rust-native patterns. It coordinates specialized AI agents using zero-cost abstractions, type-state patterns, and channel-based communication for efficient task delegation without runtime overhead.
 
 > **🚀 Default Integration**: ccswarm now uses **Claude Code via ACP (Agent Client Protocol)** as the default communication method. Simply start Claude Code and ccswarm automatically connects!
 
@@ -313,16 +311,30 @@ struct Agent {
 }
 ```
 
+## 🏗️ Architecture Decisions
+
+### Rust-Native Patterns (No Layered Architecture)
+Based on real-world experience, ccswarm uses **Rust-native patterns** instead of traditional layered architecture:
+
+- **Type-State Pattern**: Compile-time state validation with zero runtime cost
+- **Channel-Based Orchestration**: Message-passing without shared state or locks
+- **Iterator Pipelines**: Zero-cost abstractions for task processing
+- **Minimal Testing**: Only 8 essential tests covering core functionality
+- **No Arc<Mutex>**: Replaced with actor model and channels
+
+### Why These Choices?
+- **Performance**: Zero runtime overhead from abstractions
+- **Safety**: Compile-time guarantees prevent invalid states
+- **Simplicity**: Direct patterns without abstraction layers
+- **Maintainability**: Clear ownership and message flow
+
 ## 🤔 When to Use ccswarm?
 
 ### 🚀 Use ccswarm when you want:
-- **Full AI orchestration** with Master Claude making intelligent decisions
-- **Multi-agent workflows** with specialized roles (Frontend, Backend, DevOps, QA)
-- **Autonomous task generation** and proactive intelligence
-- **Quality review systems** with automatic remediation
-- **Sangha collective intelligence** for democratic decision-making
-- **Auto-create functionality** to generate complete applications
-- **Enterprise AI development** with comprehensive governance
+- **High-performance orchestration** with minimal overhead
+- **Type-safe agent state management** with compile-time validation
+- **Lock-free concurrency** using channels and actors
+- **Multi-agent workflows** with specialized roles
 - **Claude Code Integration** through native ACP support
 
 ---
