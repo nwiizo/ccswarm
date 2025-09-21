@@ -1,14 +1,15 @@
 # ccswarm Documentation Hub
 
-Welcome to the comprehensive ccswarm documentation. This serves as the master index for both ccswarm orchestration and ai-session management documentation.
+Welcome to ccswarm documentation - a high-performance multi-agent orchestration system built with Rust-native patterns.
 
-## 🏗️ Workspace Structure
+## 🏗️ Project Structure
 
-ccswarm is a Cargo workspace with two primary crates:
-- **`crates/ccswarm/`** - Main AI multi-agent orchestration application
-- **`crates/ai-session/`** - Native AI session management library (93% token savings)
+ccswarm is a single Rust application using efficient patterns:
+- **Type-state patterns** for compile-time state validation
+- **Channel-based concurrency** without shared state
+- **Zero-cost abstractions** for maximum performance
 
-See [commands/workspace-commands.md](commands/workspace-commands.md) for workspace-specific commands.
+See [commands/workspace-commands.md](commands/workspace-commands.md) for build commands.
 
 ## 📚 Documentation Structure
 
@@ -19,13 +20,6 @@ See [commands/workspace-commands.md](commands/workspace-commands.md) for workspa
 - **[CONFIGURATION.md](CONFIGURATION.md)** - Configuration options and examples
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
 
-### 🧠 AI-Session Documentation
-- **[../crates/ai-session/README.md](../crates/ai-session/README.md)** - AI-Session overview and features
-- **[../crates/ai-session/docs/README.md](../crates/ai-session/docs/README.md)** - AI-Session documentation index
-- **[../crates/ai-session/docs/API_GUIDE.md](../crates/ai-session/docs/API_GUIDE.md)** - Complete API reference
-- **[../crates/ai-session/docs/CLI_GUIDE.md](../crates/ai-session/docs/CLI_GUIDE.md)** - Command-line interface
-- **[../crates/ai-session/docs/ARCHITECTURE.md](../crates/ai-session/docs/ARCHITECTURE.md)** - AI-Session architecture
-- **[../crates/ai-session/docs/ccswarm-integration-api.md](../crates/ai-session/docs/ccswarm-integration-api.md)** - ccswarm integration details
 
 ### 🔧 Technical Specifications
 - **[MCP_IMPLEMENTATION_PLAN.md](MCP_IMPLEMENTATION_PLAN.md)** - Model Context Protocol integration

@@ -2,35 +2,45 @@
 
 ## Project Overview
 
-ccswarm - AI Multi-Agent Orchestration System that coordinates specialized AI agents (Frontend, Backend, DevOps, QA) using Claude Code via Agent Client Protocol (ACP) as the **default integration method**. Built in Rust for performance and reliability with zero external dependencies.
+ccswarm - High-performance AI Multi-Agent Orchestration System built with **Rust-native patterns**. No layered architecture - uses direct, efficient patterns for maximum performance and compile-time safety.
+
+## Key Architectural Learnings
+
+### ✅ What Works (Rust Best Practices)
+- **Type-State Pattern**: Compile-time state validation with zero runtime cost
+- **Channel-Based Orchestration**: Message-passing without Arc<Mutex> or shared state
+- **Iterator Pipelines**: Zero-cost abstractions for efficient task processing
+- **Actor Model**: Replace locks with message-passing actors
+- **Minimal Testing**: Only 8 essential tests - focus on core functionality
+
+### ❌ What Doesn't Work
+- **Layered Architecture**: Unnecessary abstraction in Rust
+- **Excessive Arc<Mutex>**: Causes contention, use channels instead
+- **Over-testing**: 300+ tests create maintenance burden without value
+- **Complex Abstractions**: Direct patterns are clearer and more efficient
 
 ## Claude Code Integration (Default)
 
-ccswarm now uses **Claude Code via ACP** as the primary communication method:
-- **Auto-Connect**: Automatically connects to Claude Code on startup (ws://localhost:9100)
-- **WebSocket Protocol**: Real-time bidirectional communication
-- **Session Management**: Persistent sessions with UUID tracking
-- **Task Delegation**: Direct task routing to Claude Code
-
-## Workspace Structure
-
-This project uses a Cargo workspace with the following structure:
-- `crates/ccswarm/` - Main ccswarm application with Claude ACP integration
-- `sample/` - Sample scripts demonstrating Claude Code integration
+ccswarm uses **Claude Code via ACP** with efficient patterns:
+- **Auto-Connect**: WebSocket connection to ws://localhost:9100
+- **Channel-Based Communication**: No shared state between agents
+- **Type-Safe Messages**: Compile-time validation of message types
+- **Actor Pattern**: Each agent as an independent actor
 
 ## Development Standards
 
 ### Code Quality Requirements
-- Run `cargo fmt && cargo clippy -- -D warnings && cargo test` before all commits (from workspace root)
-- Maintain test coverage >85% (check with `cargo tarpaulin`)
-- Document all public APIs with rustdoc comments
-- Cyclomatic complexity must be <10 per function
+- Run `cargo fmt && cargo clippy -- -D warnings && cargo test` before commits
+- **Minimal tests only**: ~10 tests maximum covering core functionality
+- Document public APIs with rustdoc
+- Keep cyclomatic complexity <10
 
-### Architecture Patterns
-- **Claude ACP Integration**: Primary communication via WebSocket protocol
-- **Agent Boundaries**: Strictly enforce role isolation (Frontend/Backend/DevOps/QA)
-- **Async First**: Use tokio async/await, never block the runtime
-- **Error Handling**: Use Result<T, E> with custom error types, no .unwrap() in production
+### Rust-Native Architecture Patterns
+- **Type-State Pattern**: Agent state transitions validated at compile time
+- **Channel-Based Concurrency**: No Arc<Mutex>, use tokio channels
+- **Iterator Chains**: Use iterator methods for collection processing
+- **Error Handling**: Result<T, E> with thiserror, no .unwrap()
+- **Zero-Cost Abstractions**: Compile-time optimizations, no runtime overhead
 
 #### Command Registry Pattern
 - **Purpose**: Eliminates massive match statements in CLI handling
