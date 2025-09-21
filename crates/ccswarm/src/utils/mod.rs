@@ -20,8 +20,9 @@ mod error_tests;
 pub use async_error_boundary::{with_retry, AsyncCircuitBreaker, ConcurrentBoundary};
 pub use async_error_boundary_simple::{boundary, boundary_with_fallback};
 pub use command::CommandExecutor;
+pub use crate::error::CCSwarmError;
 pub use consolidated_error_handling::{
-    AgentError, CCSwarmError, ConfigError, ErrorContext, ErrorContextExt, GlobalErrorHandler,
+    AgentError, ConfigError, ErrorContext, ErrorContextExt, GlobalErrorHandler,
     NetworkError, OrchestrationError, SessionError, TaskError,
 };
 pub use error::ResultExt;

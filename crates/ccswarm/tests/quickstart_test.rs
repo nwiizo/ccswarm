@@ -1,7 +1,5 @@
 use ccswarm::cli::{Cli, Commands};
 use clap::Parser;
-use std::path::PathBuf;
-use tempfile::TempDir;
 
 #[test]
 fn test_quickstart_command_parsing() {

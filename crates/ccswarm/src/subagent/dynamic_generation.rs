@@ -451,7 +451,7 @@ impl DynamicSubagentGenerator {
     }
 
     /// Analyze project to build context
-    async fn analyze_project(&self, project_path: &Path) -> SubagentResult<ProjectContext> {
+    async fn analyze_project(&self, _project_path: &Path) -> SubagentResult<ProjectContext> {
         // This would integrate with semantic analyzer in real implementation
         // For now, return mock data
         Ok(ProjectContext {

@@ -418,6 +418,7 @@ impl MasterClaude {
             let search_request = crate::agent::search_agent::SearchRequest {
                 requesting_agent: "master-claude".to_string(),
                 query: task.description.clone(),
+                scope: crate::agent::search_agent::SearchScope::All,
                 max_results: Some(10),
                 filters: None,
                 context: Some(format!("Supporting task: {}", task.id)),

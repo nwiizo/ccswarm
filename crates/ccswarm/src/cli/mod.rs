@@ -1557,8 +1557,7 @@ impl CliRunner {
         if description.trim().is_empty() {
             CommonErrors::invalid_task_format()
                 .with_details("Task description cannot be empty")
-                .suggest("Provide a clear, actionable task description")
-                .suggest("Example: ccswarm task \"Create user authentication system\"")
+                .with_suggestion("Provide a clear, actionable task description")
                 .display();
             return Err(anyhow!("Invalid task description"));
         }
@@ -3812,7 +3811,7 @@ impl CliRunner {
         use chrono::Utc;
 
         // Create extension manager instance
-        let extension_manager = ExtensionManager::new(());
+        let mut extension_manager = ExtensionManager::new();
         let _meta_learning = MetaLearningSystem::new();
 
         match action {
@@ -3837,9 +3836,12 @@ impl CliRunner {
 
                 // Create extension proposal
                 let proposal = ExtensionProposal {
-                    id: uuid::Uuid::new_v4(),
+                    id: uuid::Uuid::new_v4().to_string(),
+                    agent_id: agent.clone(),
                     proposer: agent.clone(),
                     extension_type: ext_type,
+                    status: ExtensionStatus::Proposed,
+                    specification: spec_content.clone(),
                     title: format!("{} extension for {}", extension_type, agent),
                     description: spec_content.lines().take(3).collect::<Vec<_>>().join(" "),
                     current_state: crate::extension_stub::CurrentState {
@@ -3849,10 +3851,16 @@ impl CliRunner {
                     },
                     proposed_state: crate::extension_stub::ProposedState {
                         new_capabilities: vec!["enhanced functionality".to_string()],
-                        expected_improvements: vec!["improved performance".to_string()],
+                        removed_limitations: vec!["slow processing".to_string()],
+                        expected_improvements: {
+                            let mut map = std::collections::HashMap::new();
+                            map.insert("performance".to_string(), 25.0);
+                            map
+                        },
                         performance_targets: std::collections::HashMap::new(),
                     },
                     implementation_plan: crate::extension_stub::ImplementationPlan {
+                        total_duration: std::time::Duration::from_secs(2419200), // 4 weeks
                         phases: vec![
                             crate::extension_stub::ImplementationPhase {
                                 name: "Analysis & Design".to_string(),
@@ -3862,22 +3870,18 @@ impl CliRunner {
                                     "Design document".to_string(),
                                     "Technical specification".to_string(),
                                 ],
-                                duration_estimate: "1 week".to_string(),
                                 validation_method: "Code review".to_string(),
-                                phase_name: "Analysis & Design".to_string(),
                                 estimated_duration: std::time::Duration::from_secs(604800), // 1 week
-                                complexity: "Medium".to_string(),
+                                complexity: crate::extension_stub::ComplexityLevel::Medium,
                                 dependencies: Vec::new(),
                             },
                             crate::extension_stub::ImplementationPhase {
                                 name: "Implementation".to_string(),
                                 description: "Implement the extension functionality".to_string(),
                                 tasks: vec!["Working code".to_string(), "Unit tests".to_string()],
-                                duration_estimate: "2 weeks".to_string(),
                                 validation_method: "Testing".to_string(),
-                                phase_name: "Implementation".to_string(),
                                 estimated_duration: std::time::Duration::from_secs(1209600), // 2 weeks
-                                complexity: "High".to_string(),
+                                complexity: crate::extension_stub::ComplexityLevel::High,
                                 dependencies: vec!["Analysis & Design".to_string()],
                             },
                             crate::extension_stub::ImplementationPhase {
@@ -3887,11 +3891,9 @@ impl CliRunner {
                                     "Test results".to_string(),
                                     "Deployed extension".to_string(),
                                 ],
-                                duration_estimate: "1 week".to_string(),
                                 validation_method: "Production testing".to_string(),
-                                phase_name: "Testing & Deployment".to_string(),
                                 estimated_duration: std::time::Duration::from_secs(604800), // 1 week
-                                complexity: "Medium".to_string(),
+                                complexity: crate::extension_stub::ComplexityLevel::Medium,
                                 dependencies: vec!["Implementation".to_string()],
                             },
                         ],
@@ -3900,33 +3902,30 @@ impl CliRunner {
                         dependencies: vec![],
                     },
                     risk_assessment: crate::extension_stub::RiskAssessment {
-                        risks: vec![],
+                        risk_level: crate::extension_stub::RiskLevel::Low,
+                        potential_issues: vec!["Minor performance impact".to_string()],
                         mitigation_strategies: vec![],
                         rollback_plan: "Revert to previous version".to_string(),
                         overall_risk_score: 0.3,
-                        overall_risk: 0.3,
-                        categories: vec!["Low".to_string()],
+                        categories: vec![crate::extension_stub::RiskCategory::Performance],
                     },
                     success_criteria: vec![
                         crate::extension_stub::SuccessCriterion {
+                            name: "Functionality".to_string(),
                             description: "Extension functionality working correctly".to_string(),
-                            metric: "Functional tests passed".to_string(),
-                            target_value: "100%".to_string(),
+                            target_value: 100.0,
                             measurement_method: "Automated testing".to_string(),
-                            criterion: "Functionality".to_string(),
                             measurable: true,
                         },
                         crate::extension_stub::SuccessCriterion {
+                            name: "Performance".to_string(),
                             description: "No performance degradation".to_string(),
-                            metric: "Response time".to_string(),
-                            target_value: "< 100ms increase".to_string(),
+                            target_value: 100.0, // milliseconds
                             measurement_method: "Performance benchmarks".to_string(),
-                            criterion: "Performance".to_string(),
                             measurable: true,
                         },
                     ],
                     created_at: Utc::now(),
-                    status: ExtensionStatus::Proposed,
                 };
 
                 // Submit proposal to extension manager
@@ -4187,14 +4186,17 @@ impl CliRunner {
                     keywords: query.split_whitespace().map(|s| s.to_string()).collect(),
                     context: Some(SearchContext::CapabilityGap {
                         current: vec![],
-                        desired: query.split_whitespace().map(|s| s.to_string()).collect(),
+                        required: query.split_whitespace().map(|s| s.to_string()).collect(),
+                        desired: vec![],
                     }),
                     filters: Some(SearchFilters {
+                        language: Some("rust".to_string()),
+                        framework: Some("general".to_string()),
+                        date_range: None,
                         min_relevance: 0.5,
                         max_complexity: 0.8,
                         preferred_sources: vec![source.clone()],
                         relevance_threshold: 0.5,
-                        date_range: None,
                     }),
                 };
 
@@ -4279,9 +4281,12 @@ impl CliRunner {
                     keywords: query.split_whitespace().map(|s| s.to_string()).collect(),
                     context: Some(SearchContext::CapabilityGap {
                         current: vec![],
-                        desired: query.split_whitespace().map(|s| s.to_string()).collect(),
+                        required: query.split_whitespace().map(|s| s.to_string()).collect(),
+                        desired: vec![],
                     }),
                     filters: Some(SearchFilters {
+                        language: None,
+                        framework: None,
                         min_relevance: 0.5,
                         max_complexity: 0.8,
                         preferred_sources: vec!["all".to_string()],
@@ -5595,10 +5600,24 @@ impl CliRunner {
 
             let recovery_db = ErrorRecoveryDB::new();
             if let Some(recovery) = recovery_db.get_recovery(code) {
-                println!("📋 {}", recovery.description.bright_white());
+                match &recovery {
+                    crate::utils::error_recovery::RecoveryStep::UserAction { description } => {
+                        println!("📋 {}", description.bright_white());
+                    },
+                    crate::utils::error_recovery::RecoveryStep::Command { description, .. } => {
+                        println!("📋 {}", description.bright_white());
+                    },
+                    crate::utils::error_recovery::RecoveryStep::FileCreate { path, .. } => {
+                        println!("📋 Create file: {}", path.bright_white());
+                    },
+                    crate::utils::error_recovery::RecoveryStep::EnvVar { name, .. } => {
+                        println!("📋 Set environment variable: {}", name.bright_white());
+                    },
+                }
                 println!();
                 println!("Recovery steps:");
-                for (i, step) in recovery.steps.iter().enumerate() {
+                let steps = [recovery.clone()]; // Treat the single recovery step as the step list
+                for (i, step) in steps.iter().enumerate() {
                     match step {
                         crate::utils::error_recovery::RecoveryStep::Command {
                             cmd,
@@ -5636,9 +5655,10 @@ impl CliRunner {
                     println!();
                 }
 
-                if recovery.can_auto_fix && fix {
-                    recovery_db.auto_fix(code, true).await?;
-                } else if recovery.can_auto_fix {
+                let can_auto_fix = matches!(recovery, crate::utils::error_recovery::RecoveryStep::Command { .. });
+                if can_auto_fix && fix {
+                    recovery_db.auto_fix(code).await?;
+                } else if can_auto_fix {
                     println!(
                         "💡 This error can be auto-fixed! Run: ccswarm doctor --error {} --fix",
                         code
