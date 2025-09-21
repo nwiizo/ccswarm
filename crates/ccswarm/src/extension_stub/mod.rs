@@ -757,6 +757,11 @@ mod tests {
             let proposal_id = manager.propose_extension(proposal).await.unwrap();
             assert!(manager.get_proposal(&proposal_id).is_some());
 
+            // Set proposal to UnderReview before approving
+            if let Some(p) = manager.proposals.get_mut(&proposal_id) {
+                p.status = ExtensionStatus::UnderReview;
+            }
+
             manager.approve_proposal(&proposal_id).await.unwrap();
             let approved_proposal = manager.get_proposal(&proposal_id).unwrap();
             assert_eq!(approved_proposal.status, ExtensionStatus::Approved);

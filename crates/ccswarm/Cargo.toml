@@ -15,9 +15,9 @@ categories = ["development-tools", "command-line-utilities"]
 name = "ccswarm"
 path = "src/main.rs"
 
-[[example]]
-name = "search_agent_sangha_demo"
-path = "examples/search_agent_sangha_demo.rs"
+# [[example]]
+# name = "search_agent_sangha_demo"
+# path = "examples/search_agent_sangha_demo.rs"
 
 [[example]]
 name = "backend_status_demo"
