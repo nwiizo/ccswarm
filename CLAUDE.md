@@ -209,6 +209,65 @@ cargo run -p ccswarm -- doctor --error "E001"
 - Use session pooling for similar operations
 - Enable context compression for long-running sessions
 
+## Development Workflow with Git Worktree
+
+### Why Use Git Worktree?
+Git worktree allows working on multiple branches simultaneously without switching contexts. Each worktree is an independent working directory with its own branch, enabling parallel development and reducing context switching overhead.
+
+### Setting Up Worktrees for ccswarm Development
+```bash
+# Create worktree for feature development
+git worktree add ../ccswarm-feature-auth feature/user-authentication
+
+# Create worktree for bug fixes
+git worktree add ../ccswarm-bugfix-api hotfix/api-validation
+
+# Create worktree for experiments
+git worktree add ../ccswarm-experiment-ai experiment/new-ai-model
+```
+
+### Recommended Worktree Structure
+```
+github.com/nwiizo/
+├── ccswarm/                 # Main repository (master branch)
+├── ccswarm-feature-*/        # Feature development worktrees
+├── ccswarm-bugfix-*/         # Bug fix worktrees
+├── ccswarm-hotfix-*/         # Hotfix worktrees
+└── ccswarm-experiment-*/     # Experimental worktrees
+```
+
+### Managing Worktrees
+```bash
+# List all worktrees
+git worktree list
+
+# Remove worktree after merging
+git worktree remove ../ccswarm-feature-auth
+
+# Prune stale worktree information
+git worktree prune
+```
+
+### Best Practices for ccswarm Development
+1. **One worktree per feature/bug**: Keep changes isolated
+2. **Naming convention**: Use descriptive names like `ccswarm-feature-<description>`
+3. **Clean up after merging**: Remove worktrees once branches are merged
+4. **Regular pruning**: Run `git worktree prune` periodically
+5. **Parallel testing**: Run tests in different worktrees simultaneously
+
+### Integration with ccswarm Agents
+Each agent can work in its own worktree for true parallel development:
+```bash
+# Frontend agent worktree
+git worktree add ../ccswarm-frontend feature/ui-redesign
+
+# Backend agent worktree
+git worktree add ../ccswarm-backend feature/api-enhancement
+
+# DevOps agent worktree
+git worktree add ../ccswarm-devops feature/ci-cd-improvement
+```
+
 ## Import Additional Documentation
 @docs/ARCHITECTURE.md
 @docs/APPLICATION_SPEC.md
