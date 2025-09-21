@@ -243,7 +243,7 @@ impl OptimizedSessionManager {
             .validate_session(session_guard.as_ref())
             .await?;
         drop(session_guard);
-        
+
         if !is_valid {
             return Ok(false);
         }
@@ -440,16 +440,16 @@ impl OptimizedSessionManager {
         // Execute in batches
         let mut results = Vec::new();
         let batch_size = self.config.performance_settings.batch_size;
-        
+
         // Convert operations into an iterator to handle chunks properly
         let mut ops_iter = operations.into_iter();
-        
+
         loop {
             let batch: Vec<_> = ops_iter.by_ref().take(batch_size).collect();
             if batch.is_empty() {
                 break;
             }
-            
+
             for op in batch {
                 let session_clone = session.clone();
                 results.push(self.execute_on_session(&session_clone, op).await);
@@ -567,7 +567,10 @@ mod tests {
 
         #[async_trait]
         impl SessionFactory for MockSessionFactory {
-            async fn create_session(&self, _role: &AgentRole) -> Result<Box<dyn SimpleSession + Send>> {
+            async fn create_session(
+                &self,
+                _role: &AgentRole,
+            ) -> Result<Box<dyn SimpleSession + Send>> {
                 // Return mock session
                 Ok(Box::new(MockSession))
             }
@@ -583,7 +586,7 @@ mod tests {
             fn get_stats(&self) -> SessionStats {
                 SessionStats::default()
             }
-            
+
             fn is_alive(&self) -> bool {
                 true
             }

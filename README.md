@@ -8,7 +8,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Downloads](https://img.shields.io/crates/d/ccswarm.svg)](https://crates.io/crates/ccswarm)
 
-**ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code, Aider, and other providers. Built in Rust for performance and reliability, it features autonomous task prediction, real-time security monitoring, and intelligent delegation.
+**ccswarm** is an AI-powered multi-agent orchestration system that manages specialized AI agents using Claude Code (via ACP - default), Aider, and other providers. Built in Rust for performance and reliability, it features autonomous task prediction, real-time security monitoring, and intelligent delegation.
+
+> **🚀 Default Integration**: ccswarm now uses **Claude Code via ACP (Agent Client Protocol)** as the default communication method. Simply start Claude Code and ccswarm automatically connects!
 
 ## 📚 Documentation
 
@@ -21,6 +23,7 @@
 | **[Architecture Overview](docs/ARCHITECTURE.md)** | Technical architecture and design decisions |
 | **[Application Specification](docs/APPLICATION_SPEC.md)** | Detailed feature specifications and API reference |
 | **[Search Agent Guide](docs/SEARCH_AGENT.md)** | Web search integration and research capabilities |
+| **[Claude ACP Guide](docs/CLAUDE_ACP.md)** | Claude Code integration via Agent Client Protocol |
 
 ## 🎯 Quick Navigation
 
@@ -36,39 +39,33 @@ ccswarm is organized as a Rust workspace with two main crates:
 
 - **`crates/ccswarm`**: The main orchestration system and CLI
   - Multi-agent orchestration with Master Claude
-  - Provider integrations (Claude Code, Aider, etc.)
+  - Provider integrations (Claude Code via ACP, Aider, etc.)
   - Task management and delegation
   - Sangha collective intelligence
   - Auto-create application generator
-  - **Integrates with**: ai-session for terminal management
-
-- **`crates/ai-session`**: Advanced AI-optimized terminal session management (standalone crate)
-  - **Intelligent context compression** for efficient session management
-  - Native cross-platform PTY implementation (no tmux dependency)
-  - Multi-agent coordination with message bus architecture
-  - Session persistence and crash recovery
-  - MCP (Model Context Protocol) HTTP API server
-  - Semantic output parsing and analysis
-  - **Can be used independently** of ccswarm or integrated with it
-  - **Documentation**: [AI-Session README](crates/ai-session/README.md) | [Architecture](crates/ai-session/docs/ARCHITECTURE.md)
+  - Native session management with no external dependencies
 
 ### Directory Structure
 ```
 ccswarm/
 ├── Cargo.toml              # Workspace definition
 ├── crates/
-│   ├── ccswarm/           # Main orchestration crate
-│   │   ├── Cargo.toml
-│   │   ├── src/
-│   │   └── tests/
-│   └── ai-session/        # Terminal session crate
+│   └── ccswarm/           # Main orchestration crate
 │       ├── Cargo.toml
 │       ├── src/
-│       └── examples/
+│       └── tests/
 ├── docs/                  # Shared documentation
 └── demos/                 # Example applications
 
 ## 🌟 Key Features
+
+### 🤖 Claude Code Integration via ACP (Default)
+- **Native Claude Code Support**: Direct integration with Claude Code through Agent Client Protocol (ACP)
+- **WebSocket Communication**: Real-time bidirectional communication with Claude Code
+- **Auto-Connect**: Automatically connects to Claude Code on startup (default: ws://localhost:9100)
+- **Task Delegation**: Send tasks directly to Claude Code for execution
+- **Session Management**: Persistent session IDs for continuous interaction
+- **Diagnostics**: Built-in connection testing and troubleshooting tools
 
 ### 🎯 Developer Experience First
 - **Interactive Setup Wizard**: Guided configuration for new users
@@ -94,15 +91,12 @@ ccswarm/
 - **Dependency Security**: Scan npm, cargo, pip, and composer packages
 - **Security Reporting**: Detailed reports with remediation suggestions
 
-### 🖥️ AI-Session Integration: Revolutionary Terminal Management
-- **Native Session Management**: Powered by ai-session crate with zero external dependencies (no tmux required)
+### 🖥️ Session Management
+- **Native Session Management**: Zero external dependencies (no tmux required)
 - **Intelligent Context Management**: Advanced conversation history compression and session reuse
-- **Cross-Platform PTY**: Native terminal emulation on Linux, macOS (Windows support in ai-session)
-- **MCP Protocol Support**: Model Context Protocol HTTP API server for seamless AI integration
+- **Cross-Platform Support**: Works on Linux, macOS, and Windows
 - **Multi-Agent Coordination**: Enhanced message bus architecture with agent-specific sessions
-- **Semantic Output Analysis**: Intelligent parsing of build results, test outputs, and error messages
 - **Session Persistence**: Automatic crash recovery and state restoration
-- **Standalone Capability**: ai-session can be used independently for any AI terminal workflows
 
 ### 🔍 Search Agent Capabilities
 - **Web Search Integration**: Powered by Gemini CLI for intelligent web searches
@@ -146,9 +140,21 @@ git clone https://github.com/nwiizo/ccswarm.git
 cd ccswarm
 cargo build --release
 cargo install --path crates/ccswarm
+```
 
-# Optional: Install ai-session CLI separately
-cargo install --path crates/ai-session
+### 🎯 Try Sample Demos
+
+```bash
+# Navigate to sample directory
+cd sample/
+
+# Run setup (builds ccswarm and prepares environment)
+./setup.sh
+
+# Try the demos
+./claude_acp_demo.sh      # Claude Code integration demo
+./task_management_demo.sh  # Task management features
+./multi_agent_demo.sh     # Multi-agent collaboration
 ```
 
 ### 2. Initialize Project
@@ -159,6 +165,15 @@ ccswarm setup
 
 # Or use quick initialization
 ccswarm init --name "MyProject" --agents frontend,backend,devops
+
+# Test Claude Code connection (runs automatically on startup)
+ccswarm claude-acp test
+
+# Send task directly to Claude Code
+ccswarm claude-acp send --task "Review this codebase and suggest improvements"
+
+# Check Claude Code connection status
+ccswarm claude-acp status
 
 # With specific template
 ccswarm init --name "AiderProject" --template aider-focused
@@ -259,54 +274,37 @@ ccswarm v0.3.5 features a comprehensive multi-layer architecture designed for au
 └─────────────────────────────────────────┘
 ```
 
-### 🎆 Key Benefits of the Two-Crate Architecture
+### 🎆 Key Benefits
 
 #### 🚀 For ccswarm Users (Full AI Orchestration)
-- **Zero Setup Complexity**: ai-session integration is automatic and transparent
-- **Intelligent Delegation**: Master Claude uses ai-session's semantic parsing for better decisions
-- **Efficient Session Management**: ai-session's context compression optimizes resource usage
-- **Multi-Agent Coordination**: Seamless agent communication through ai-session's message bus
-- **Quality Assurance**: ai-session's output analysis powers the LLM quality judge
-
-#### 🧠 For ai-session Users (Terminal Management)
-- **Universal Compatibility**: Works with any AI application, not just ccswarm
-- **Zero External Dependencies**: No tmux, screen, or other session managers required
-- **Native Performance**: Optimized PTY implementation for each platform
-- **Standalone Operation**: Complete functionality without ccswarm
-- **Easy Integration**: Simple library API for embedding in other projects
-
-#### 🔗 For Both (Integrated Benefits)
-- **Shared Innovation**: Improvements in ai-session automatically benefit ccswarm
-- **Consistent Experience**: Same session management across manual and automated workflows
-- **Flexible Deployment**: Use ai-session for development, ccswarm for production
-- **Learning Path**: Start with ai-session, graduate to full ccswarm orchestration
+- **Zero Setup Complexity**: Integration is automatic and transparent
+- **Intelligent Delegation**: Master Claude uses semantic parsing for better decisions
+- **Efficient Session Management**: Context compression optimizes resource usage
+- **Multi-Agent Coordination**: Seamless agent communication through message bus
+- **Quality Assurance**: Output analysis powers the LLM quality judge
+- **Claude Code Integration**: Native support via Agent Client Protocol (ACP)
 
 ### Integration Architecture
 ```rust
-// ccswarm uses ai-session for all agent interactions
+// ccswarm manages all agent interactions
 pub enum AgentRole {
-    Frontend,  // UI development (via ai-session)
-    Backend,   // API development (via ai-session)
-    DevOps,    // Infrastructure (via ai-session)
-    QA,        // Testing (via ai-session)
-    Search,    // Web search & research (via Gemini CLI)
-    Master,    // Orchestration only (coordinates ai-sessions)
+    Frontend,  // UI development
+    Backend,   // API development
+    DevOps,    // Infrastructure
+    QA,        // Testing
+    Search,    // Web search & research
+    Master,    // Orchestration only
 }
 
-// Each agent gets its own ai-session instance
+// Each agent gets its own session
 struct Agent {
     role: AgentRole,
-    session: ai_session::AISession,  // Managed by ai-session crate
+    session: SessionManager,
     config: AgentConfig,
 }
-
-// ai-session can also be used independently:
-use ai_session::{SessionManager, SessionConfig};
-let session = SessionManager::new()
-    .create_session_with_ai_features().await?;
 ```
 
-## 🤔 When to Use Which Crate?
+## 🤔 When to Use ccswarm?
 
 ### 🚀 Use ccswarm when you want:
 - **Full AI orchestration** with Master Claude making intelligent decisions
@@ -316,22 +314,7 @@ let session = SessionManager::new()
 - **Sangha collective intelligence** for democratic decision-making
 - **Auto-create functionality** to generate complete applications
 - **Enterprise AI development** with comprehensive governance
-
-### 🧠 Use ai-session when you want:
-- **AI-optimized terminal sessions** for any application (not just ccswarm)
-- **93% token savings** through intelligent context compression
-- **Native PTY management** without tmux dependencies
-- **Multi-agent coordination** in your own AI systems
-- **Session persistence** and crash recovery
-- **MCP protocol server** for AI tool integration
-- **Semantic output parsing** for builds, tests, and logs
-- **Building your own AI tools** that need terminal management
-
-### 🔗 Use both when you want:
-- **The complete AI development experience** (recommended)
-- **Gradual adoption**: Start with ai-session, add ccswarm orchestration later
-- **Hybrid workflows**: Manual ai-session for experimentation, ccswarm for production
-- **Team scenarios**: Different team members using different levels of automation
+- **Claude Code Integration** through native ACP support
 
 ---
 
@@ -555,23 +538,6 @@ my_app/
 └── .gitignore      # Git config
 ```
 
-## 🔧 AI-Session Integration
-
-### Advanced Session Features (powered by ai-session crate)
-- **Intelligent context compression** for efficient session management
-- **Persistent conversation history** with crash recovery
-- **Session pooling and reuse** for efficient resource utilization
-- **Multi-agent message bus** for coordinated AI workflows
-- **Semantic output parsing** for build results, tests, and logs
-- **MCP protocol HTTP server** for external tool integration
-- **Cross-platform PTY** implementation (Linux, macOS, Windows)
-- **Standalone operation** - ai-session can be used without ccswarm
-
-### AI-Session Crate Benefits
-- **Zero external dependencies** - no tmux server required
-- **Native performance** - optimized PTY implementation per OS
-- **Memory efficient** - ~70% reduction through zstd compression
-- **Developer friendly** - comprehensive API and CLI tools
 
 ### Proactive & Security Commands
 ```bash
@@ -716,7 +682,7 @@ RUST_LOG=debug ccswarm start
 # Session debugging
 RUST_LOG=ccswarm::session=trace ccswarm start
 
-# View ai-sessions
+# View sessions
 ccswarm session list
 ```
 

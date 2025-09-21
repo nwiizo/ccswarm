@@ -254,8 +254,7 @@ impl AgentConverter {
 
         // Serialize the definition to YAML frontmatter
         let frontmatter = serde_yaml::to_string(definition).map_err(|e| {
-            SubagentError::Serialization(serde_json::Error::io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            SubagentError::Serialization(serde_json::Error::io(std::io::Error::other(
                 e.to_string(),
             )))
         })?;
@@ -301,8 +300,8 @@ impl AgentConverter {
 }
 
 mod tests {
-    use super::*;
-    use crate::config::ClaudeConfig;
+    
+    
 
     #[test]
     fn test_convert_frontend_agent() {
