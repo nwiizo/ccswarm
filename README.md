@@ -33,17 +33,17 @@
 
 ## 📦 Workspace Structure
 
-ccswarm is organized as a Rust workspace with two main crates:
+ccswarm is a Rust application with comprehensive multi-agent orchestration capabilities.
 
 ### Crates Overview
 
 - **`crates/ccswarm`**: The main orchestration system and CLI
+  - Claude Code integration via ACP (Agent Client Protocol) - **Default**
   - Multi-agent orchestration with Master Claude
-  - Provider integrations (Claude Code via ACP, Aider, etc.)
-  - Task management and delegation
-  - Sangha collective intelligence
+  - Task management and intelligent delegation
+  - Sangha collective intelligence system
   - Auto-create application generator
-  - Native session management with no external dependencies
+  - Zero external dependencies (no tmux/ai-session required)
 
 ### Directory Structure
 ```
@@ -53,9 +53,16 @@ ccswarm/
 │   └── ccswarm/           # Main orchestration crate
 │       ├── Cargo.toml
 │       ├── src/
+│       │   ├── acp_claude/  # Claude ACP integration
+│       │   ├── cli/         # CLI commands
+│       │   └── ...
 │       └── tests/
-├── docs/                  # Shared documentation
-└── demos/                 # Example applications
+├── docs/                  # Comprehensive documentation
+├── sample/                # Demo scripts and examples
+│   ├── claude_acp_demo.sh
+│   ├── task_management_demo.sh
+│   └── multi_agent_demo.sh
+└── ccswarm-todo-app/      # Generated sample application
 
 ## 🌟 Key Features
 
@@ -92,11 +99,11 @@ ccswarm/
 - **Security Reporting**: Detailed reports with remediation suggestions
 
 ### 🖥️ Session Management
-- **Native Session Management**: Zero external dependencies (no tmux required)
-- **Intelligent Context Management**: Advanced conversation history compression and session reuse
+- **Zero Dependencies**: No external tools required (no tmux/ai-session needed)
+- **WebSocket Sessions**: Persistent connections via Claude ACP
 - **Cross-Platform Support**: Works on Linux, macOS, and Windows
-- **Multi-Agent Coordination**: Enhanced message bus architecture with agent-specific sessions
-- **Session Persistence**: Automatic crash recovery and state restoration
+- **Multi-Agent Coordination**: Enhanced message bus architecture
+- **Auto-Recovery**: Automatic reconnection and state persistence
 
 ### 🔍 Search Agent Capabilities
 - **Web Search Integration**: Powered by Gemini CLI for intelligent web searches
@@ -132,13 +139,15 @@ ccswarm/
 ### 1. Installation
 
 ```bash
-# Install from crates.io
-cargo install ccswarm
-
-# Or build from source (workspace-aware)
+# Build from source
 git clone https://github.com/nwiizo/ccswarm.git
 cd ccswarm
 cargo build --release
+
+# Run directly
+./target/release/ccswarm --help
+
+# Or install locally
 cargo install --path crates/ccswarm
 ```
 
@@ -250,12 +259,12 @@ ccswarm v0.3.5 features a comprehensive multi-layer architecture designed for au
 │     ├─ Real-time Risk Assessment        │
 │     └─ Security Score Calculation       │
 ├─────────────────────────────────────────┤
-│        AI-Session Manager               │ ← Native Terminal Management
-│     ├─ Cross-Platform PTY Support      │
-│     ├─ MCP Protocol Integration         │
-│     ├─ Session Persistence & Compression │
-│     ├─ Multi-Agent Message Bus          │
-│     └─ Conversation History (50 msgs)   │
+│     Claude ACP Integration              │ ← WebSocket Communication
+│     ├─ Agent Client Protocol Support   │
+│     ├─ Real-time Task Delegation       │
+│     ├─ Session Persistence via UUID    │
+│     ├─ Auto-reconnect with Retry       │
+│     └─ JSON-RPC 2.0 Messaging          │
 ├─────────────────────────────────────────┤
 │     Sangha Collective Intelligence      │ ← Democratic Decision Making
 │     ├─ Proposal System                 │
@@ -296,10 +305,10 @@ pub enum AgentRole {
     Master,    // Orchestration only
 }
 
-// Each agent gets its own session
+// Each agent connects via Claude ACP
 struct Agent {
     role: AgentRole,
-    session: SessionManager,
+    acp_client: ClaudeACPAdapter,
     config: AgentConfig,
 }
 ```
@@ -320,8 +329,8 @@ struct Agent {
 
 ## 📋 Core Commands
 
-> 📖 **ccswarm commands**: Full documentation in `.claude/commands/`  
-> 🧠 **ai-session commands**: See [AI-Session CLI Guide](crates/ai-session/docs/CLI_GUIDE.md)
+> 📖 **ccswarm commands**: Full documentation in `.claude/commands/`
+> 🤖 **Claude ACP commands**: See [Claude ACP Guide](docs/CLAUDE_ACP.md)
 
 ### Basic Operations
 ```bash
@@ -1014,17 +1023,18 @@ All operations show live progress:
   • List all tasks: ccswarm task list
 ```
 
-## 🚀 What's New in v0.3.5
+## 🚀 What's New in v0.3.7
 
-ccswarm v0.3.5 introduces **autonomous orchestration** as the default mode:
+ccswarm v0.3.7 introduces **Claude Code ACP integration** as the default communication method:
 
+- **🤖 Claude Code Integration**: Default connection via Agent Client Protocol (ACP)
+- **🚀 Zero Dependencies**: Removed ai-session and tmux requirements completely
 - **🧠 Proactive Master Claude**: Enabled by default with 30s analysis intervals
-- **🔒 Security Agent**: OWASP Top 10 scanning with real-time monitoring  
-- **📊 Dependency Resolution**: Automatic task ordering and bottleneck detection
-- **🎯 Goal Tracking**: OKR integration with milestone management
-- **⚡ Native Sessions**: Efficient context management with cross-platform PTY support
+- **🔒 Security Agent**: OWASP Top 10 scanning with real-time monitoring
+- **📊 WebSocket Sessions**: Real-time bidirectional communication
+- **🎯 Auto-Connect**: Automatically connects to Claude Code on startup
 - **🏛️ Collective Intelligence**: Sangha democratic decision-making
-- **🤖 Self-Extension**: Autonomous agent improvement and learning
+- **📝 Sample System**: Comprehensive demo scripts in sample/ directory
 
 ### Contributing
 
@@ -1070,4 +1080,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Experience autonomous AI orchestration with proactive intelligence and security monitoring in ccswarm v0.3.5** 🧠🔒🚀
+**Experience Claude Code integration with autonomous AI orchestration in ccswarm v0.3.7** 🤖🧠🚀
