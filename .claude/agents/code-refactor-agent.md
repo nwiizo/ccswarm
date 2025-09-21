@@ -1,5 +1,6 @@
 ---
 name: code-refactor-agent
+model: opus
 description: コードの重複検出とリファクタリング専門エージェント。similarity-rsを使用してセマンティックな類似性を検出し、DRY原則に基づいたリファクタリングを実施。USE PROACTIVELY after fixing build/clippy errors or when code duplication is suspected.
 tools: Read, Edit, MultiEdit, Write, Bash, Grep, Glob, TodoWrite, mcp__serena__find_symbol, mcp__serena__replace_symbol_body, mcp__serena__search_for_pattern, mcp__serena__get_symbols_overview, mcp__serena__insert_after_symbol, mcp__serena__insert_before_symbol
 ---

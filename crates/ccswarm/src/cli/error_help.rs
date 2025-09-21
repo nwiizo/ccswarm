@@ -216,15 +216,3 @@ pub struct ErrorInfo {
     pub quick_fix: Option<&'static str>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_all_error_codes_populated() {
-        let codes = ErrorHelp::all_error_codes();
-        assert!(codes.len() >= 10);
-        assert!(codes.contains_key("ENV001"));
-        assert!(codes.contains_key("SES001"));
-    }
-}

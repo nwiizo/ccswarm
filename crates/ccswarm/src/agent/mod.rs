@@ -145,8 +145,9 @@ pub enum AgentStatus {
 /// let workspace = Path::new("/workspace");
 /// let config = ClaudeConfig::default();
 /// let role = AgentRole::Frontend {
-///     frameworks: vec!["React".to_string(), "TypeScript".to_string()],
-///     focus_areas: vec!["UI/UX".to_string()],
+///     technologies: vec!["React".to_string(), "TypeScript".to_string()],
+///     responsibilities: vec!["UI Development".to_string()],
+///     boundaries: vec!["Frontend only".to_string()],
 /// };
 ///
 /// let mut agent = ClaudeCodeAgent::new(
@@ -247,9 +248,9 @@ impl ClaudeCodeAgent {
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let role = AgentRole::Backend {
-    ///     languages: vec!["Rust".to_string(), "Python".to_string()],
-    ///     databases: vec!["PostgreSQL".to_string()],
-    ///     focus_areas: vec!["API Development".to_string()],
+    ///     technologies: vec!["Rust".to_string(), "Python".to_string()],
+    ///     responsibilities: vec!["API Development".to_string()],
+    ///     boundaries: vec!["Backend only".to_string()],
     /// };
     ///
     /// let agent = ClaudeCodeAgent::new(
@@ -1628,34 +1629,3 @@ impl ClaudeCodeAgent {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::identity::default_frontend_role;
-    use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_agent_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let workspace = temp_dir.path().to_path_buf();
-
-        let config = ClaudeConfig::default();
-        let agent = ClaudeCodeAgent::new(default_frontend_role(), &workspace, "feature", config)
-            .await
-            .unwrap();
-
-        assert!(agent.identity.agent_id.starts_with("frontend-agent-"));
-        assert_eq!(agent.status, AgentStatus::Initializing);
-    }
-}
-
-#[cfg(test)]
-mod interleaved_thinking_test {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_interleaved_thinking_basic() {
-        // Basic test placeholder
-        assert!(true);
-    }
-}

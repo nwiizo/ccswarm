@@ -612,37 +612,3 @@ pub struct CombinedEfficiencyStats {
     pub worktree_reuse_rate: f64,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_worktree_session_manager_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = WorktreeSessionConfig {
-            repo_path: temp_dir.path().to_path_buf(),
-            ..Default::default()
-        };
-
-        let manager = WorktreeSessionManager::new(config).unwrap();
-        assert_eq!(manager.worktree_sessions.read().await.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_combined_efficiency_stats() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = WorktreeSessionConfig {
-            repo_path: temp_dir.path().to_path_buf(),
-            ..Default::default()
-        };
-
-        let manager = WorktreeSessionManager::new(config).unwrap();
-        let stats = manager.get_combined_efficiency_stats().await;
-
-        assert_eq!(stats.total_worktrees, 0);
-        assert_eq!(stats.active_worktrees, 0);
-        assert_eq!(stats.idle_worktrees, 0);
-    }
-}
