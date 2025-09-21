@@ -1,0 +1,18 @@
+{
+  "id": "proposal_1754281859",
+  "name": "Sangha Proposal: Refactor authentication system",
+  "content": "{\"id\":\"proposal_1754281859\",\"title\":\"Refactor authentication system\",\"description\":\"Improve security of authentication\",\"proposal_type\":{\"Refactoring\":{\"id\":\"refactor_auth\",\"title\":\"Improve authentication\",\"description\":\"Refactor authentication for better security\",\"kind\":\"ExtractFunction\",\"targets\":[],\"benefits\":[\"Better security\"],\"risks\":[],\"estimated_effort\":\"Medium\",\"priority\":\"High\",\"automated\":false,\"implementation_steps\":[],\"created_at\":\"2025-08-04T04:30:59.000105Z\"}},\"semantic_context\":{\"affected_symbols\":[{\"name\":\"authenticate\",\"path\":\"auth::authenticate\",\"kind\":\"Function\",\"file_path\":\"src/auth.rs\",\"line\":50,\"body\":\"fn authenticate() {}\",\"references\":[],\"metadata\":{}}],\"code_metrics\":{\"complexity\":0,\"coupling\":0.5,\"cohesion\":0.7,\"test_coverage\":0.8,\"technical_debt_hours\":0.0,\"maintainability_index\":100.0},\"historical_changes\":[{\"date\":\"2025-07-05T04:30:59.000735Z\",\"description\":\"Previous refactoring\",\"impact\":\"Improved performance by 20%\",\"success\":true}],\"similar_past_proposals\":[],\"expert_analysis\":{}},\"impact_analysis\":{\"change\":{\"symbol\":{\"name\":\"authenticate\",\"path\":\"auth::authenticate\",\"kind\":\"Function\",\"file_path\":\"src/auth.rs\",\"line\":50,\"body\":\"fn authenticate() {}\",\"references\":[],\"metadata\":{}},\"change_type\":\"Modified\",\"old_value\":null,\"new_value\":null},\"affected_symbols\":[{\"name\":\"authenticate\",\"path\":\"auth::authenticate\",\"kind\":\"Function\",\"file_path\":\"src/auth.rs\",\"line\":50,\"body\":\"fn authenticate() {}\",\"references\":[],\"metadata\":{}}],\"severity\":\"Low\",\"suggested_actions\":[\"Review all affected code\",\"Run comprehensive tests\",\"Update documentation\"]},\"votes\":{},\"status\":\"Draft\",\"created_at\":\"2025-08-04T04:30:59.000764Z\",\"voting_deadline\":\"2025-08-07T04:30:59.000764Z\",\"quorum_required\":3,\"approval_threshold\":0.66}",
+  "memory_type": {
+    "Other": "SanghaProposal"
+  },
+  "related_symbols": [
+    "auth::authenticate"
+  ],
+  "metadata": {
+    "status": "Draft",
+    "type": "Refactoring(RefactoringProposal { id: \"refactor_auth\", title: \"Improve authentication\", description: \"Refactor authentication for better security\", kind: ExtractFunction, targets: [], benefits: [\"Better security\"], risks: [], estimated_effort: Medium, priority: High, automated: false, implementation_steps: [], created_at: 2025-08-04T04:30:59.000105Z })"
+  },
+  "created_at": "2025-08-04T04:30:59.001149Z",
+  "updated_at": "2025-08-04T04:30:59.001150Z",
+  "access_count": 0
+}

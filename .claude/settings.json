@@ -1,0 +1,53 @@
+{
+  "name": "ccswarm",
+  "version": "0.3.6",
+  "description": "AI Multi-Agent Orchestration System with Native AI-Session",
+  "permissions": {
+    "file_write": true,
+    "file_read": true,
+    "bash": true,
+    "web_fetch": true,
+    "todo_write": true
+  },
+  "build_commands": {
+    "test": "cargo test --workspace",
+    "test_lib": "cargo test --lib -p ccswarm",
+    "test_ai_session": "cargo test --lib -p ai-session",
+    "build": "cargo build --release --workspace",
+    "build_ccswarm": "cargo build --release -p ccswarm",
+    "build_ai_session": "cargo build --release -p ai-session",
+    "check": "cargo fmt --all && cargo clippy --workspace -- -D warnings && cargo test --workspace",
+    "format": "cargo fmt --all",
+    "lint": "cargo clippy --workspace -- -D warnings"
+  },
+  "run_commands": {
+    "init": "cargo run -p ccswarm -- init --name",
+    "start": "cargo run -p ccswarm -- start",
+    "tui": "cargo run -p ccswarm -- tui",
+    "task": "cargo run -p ccswarm -- task",
+    "session_list": "cargo run -p ccswarm -- session list",
+    "auto_create": "cargo run -p ccswarm -- auto-create",
+    "ai_session": "cargo run -p ai-session",
+    "ai_session_server": "cargo run --bin ai-session-server"
+  },
+  "environment": {
+    "required": ["ANTHROPIC_API_KEY"],
+    "optional": ["OPENAI_API_KEY", "RUST_LOG", "CCSWARM_HOME"]
+  },
+  "project_structure": {
+    "workspace_root": ".",
+    "crates": ["crates/ccswarm", "crates/ai-session"],
+    "source_directories": ["crates/ccswarm/src", "crates/ai-session/src"],
+    "test_directories": ["crates/ccswarm/tests", "crates/ai-session/tests"],
+    "documentation": "docs",
+    "examples": "crates/ai-session/examples",
+    "demos": "demos",
+    "binaries": ["ccswarm", "ai-session", "ai-session-server", "test_isolated_proactive", "demo_proactive_workflow"]
+  },
+  "development_guidelines": {
+    "test_coverage_threshold": 85,
+    "complexity_threshold": 10,
+    "enforce_documentation": true,
+    "enforce_error_handling": true
+  }
+}

@@ -1,0 +1,128 @@
+[package]
+name = "ccswarm"
+version = "0.3.7"
+edition = "2021"
+authors = ["nwiizo"]
+description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
+license = "MIT"
+readme = "../../README.md"
+repository = "https://github.com/nwiizo/ccswarm"
+homepage = "https://github.com/nwiizo/ccswarm"
+keywords = ["ai", "claude", "agents", "orchestration", "automation"]
+categories = ["development-tools", "command-line-utilities"]
+
+[[bin]]
+name = "ccswarm"
+path = "src/main.rs"
+
+[[bin]]
+name = "test_isolated_proactive"
+path = "test_isolated_proactive.rs"
+
+[[bin]]
+name = "demo_proactive_workflow"
+path = "demo_proactive_workflow.rs"
+
+[[example]]
+name = "search_agent_sangha_demo"
+path = "examples/search_agent_sangha_demo.rs"
+
+[[example]]
+name = "backend_status_demo"
+path = "examples/backend_status_demo.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# UUID generation
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Macro utilities
+paste = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# File system
+walkdir = "2.5"
+
+# Regular expressions
+regex = "1.10"
+
+
+# Process management
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", features = ["process"] }
+
+# Configuration
+config = "0.15"
+
+# Async channels
+async-channel = "2.3"
+
+# State management
+dashmap = "6.1"
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.29"
+tokio-util = "0.7"
+
+# HTTP client for API providers
+reqwest = { version = "0.12", features = ["json"] }
+
+# Testing utilities
+tempfile = "3.8"
+
+# Async traits
+async-trait = "0.1"
+
+# Async utilities
+futures = "0.3"
+
+# Logging bridge for legacy code
+log = "0.4"
+
+# Docker integration (optional for container feature)
+bollard = { version = "0.19", optional = true }
+futures-util = { version = "0.3", optional = true }
+tar = { version = "0.4", optional = true }
+
+# URL encoding
+urlencoding = { version = "2.1", optional = true }
+
+# Additional utilities
+colored = "3.0"
+rand = "0.9"
+
+# System information for resource monitoring
+sysinfo = "0.33"
+
+# AI Session Management (local crate)
+ai-session = { version = "0.3.4", path = "../ai-session", features = ["mcp"] }
+
+[dev-dependencies]
+# Testing
+mockall = "0.13"
+tempfile = "3.12"
+pretty_assertions = "1.4"
+
+[features]
+default = ["urlencoding"]
+container = ["bollard", "futures-util", "tar", "urlencoding"]

@@ -1,0 +1,87 @@
+# Rust
+target/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Runtime coordination files (generated)
+coordination/agent-status/*
+coordination/messages/*
+coordination/task-queue/*
+crates/ccswarm/coordination/agent-status/*
+crates/ccswarm/coordination/messages/*
+crates/ccswarm/coordination/task-queue/*
+
+# Node.js (for examples)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+
+# Demo files and directories
+demos/*
+!demos/README.md
+!demos/.gitkeep
+!demos/*/.gitkeep
+
+# Demo-specific exclusions
+demos/*/node_modules/
+demos/*/target/
+demos/*/dist/
+demos/*/build/
+demos/*/.env
+demos/*/.env.*
+demos/*/package-lock.json
+demos/*/yarn.lock
+demos/*/Cargo.lock
+demos/*/*.log
+demos/*/*.pid
+demos/*/*.db
+demos/*/*.sqlite
+demos/*/coverage/
+demos/*/.cache/
+demos/*/.next/
+demos/*/.nuxt/
+demos/*/.vuepress/dist/
+demos/*/.serverless/
+demos/*/.fusebox/
+demos/*/.dynamodb/
+demos/*/.tern-port
+demos/*/.vscode-test/
+demos/*/.yarn/cache/
+demos/*/.yarn/unplugged/
+demos/*/.yarn/build-state.yml
+demos/*/.yarn/install-state.gz
+demos/*/.pnp.*
+
+# Test projects
+test-project/
+test_todo_project/
+demo-project*/
+crates/ccswarm/test-projects/
+
+# Temporary documentation files
+COMPILATION_FIX_SUMMARY.md
+blog_post*.md
+*.draft.md
+.vibe-ticket/
