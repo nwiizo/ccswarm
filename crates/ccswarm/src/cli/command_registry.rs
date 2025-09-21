@@ -7,6 +7,26 @@ use std::pin::Pin;
 
 use super::{CliRunner, Commands};
 
+/// Macro to register commands with automatic type checking and error handling
+macro_rules! register_command {
+    ($self:expr, $name:expr, $runner:ident, $cmd:ident, $pattern:pat => $handler:expr) => {
+        $self.register($name, |$runner, $cmd| {
+            Box::pin(async move {
+                if let $pattern = $cmd {
+                    $handler.await
+                } else {
+                    anyhow::bail!("Command type mismatch for {}", $name)
+                }
+            })
+        });
+    };
+
+    // For simple commands without parameters
+    ($self:expr, $name:expr, $runner:ident, $handler:expr) => {
+        $self.register($name, |$runner, _| Box::pin($handler));
+    };
+}
+
 type CommandHandler = Box<
     dyn for<'a> Fn(
             &'a CliRunner,
@@ -36,166 +56,75 @@ impl CommandRegistry {
     /// Register all command handlers
     fn register_commands(&mut self) {
         // Simple commands without parameters
-        self.register("tui", |runner, _| Box::pin(runner.start_tui()));
-        self.register("stop", |runner, _| Box::pin(runner.stop_orchestrator()));
-        self.register("setup", |runner, _| Box::pin(runner.handle_setup()));
+        register_command!(self, "tui", runner, runner.start_tui());
+        register_command!(self, "stop", runner, runner.stop_orchestrator());
+        register_command!(self, "setup", runner, runner.handle_setup());
 
-        // Commands with parameters - use closures to extract parameters
-        self.register("init", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Init {
-                    name,
-                    repo_url,
-                    agents,
-                } = cmd
-                {
-                    runner.init_project(name, repo_url.as_deref(), agents).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        // Commands with parameters - use macro for cleaner registration
+        register_command!(self, "init", runner, cmd,
+            Commands::Init { name, repo_url, agents } =>
+            runner.init_project(name, repo_url.as_deref(), agents)
+        );
 
-        self.register("start", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Start {
-                    daemon,
-                    port,
-                    isolation,
-                    use_real_api,
-                } = cmd
-                {
-                    runner
-                        .start_orchestrator(*daemon, *port, isolation, *use_real_api)
-                        .await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "start", runner, cmd,
+            Commands::Start { daemon, port, isolation, use_real_api } =>
+            runner.start_orchestrator(*daemon, *port, isolation, *use_real_api)
+        );
 
-        self.register("status", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Status { detailed, agent } = cmd {
-                    runner.show_status(*detailed, agent.as_deref()).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "status", runner, cmd,
+            Commands::Status { detailed, agent } =>
+            runner.show_status(*detailed, agent.as_deref())
+        );
 
-        self.register("task", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Task { action } = cmd {
-                    runner.handle_task(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "task", runner, cmd,
+            Commands::Task { action } =>
+            runner.handle_task(action)
+        );
 
-        self.register("agents", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Agents { all } = cmd {
-                    runner.list_agents(*all).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "agents", runner, cmd,
+            Commands::Agents { all } =>
+            runner.list_agents(*all)
+        );
 
-        self.register("review", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Review { agent, strict } = cmd {
-                    runner.run_review(agent.as_deref(), *strict).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "review", runner, cmd,
+            Commands::Review { agent, strict } =>
+            runner.run_review(agent.as_deref(), *strict)
+        );
 
-        self.register("worktree", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Worktree { action } = cmd {
-                    runner.handle_worktree(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "worktree", runner, cmd,
+            Commands::Worktree { action } =>
+            runner.handle_worktree(action)
+        );
 
-        self.register("logs", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Logs {
-                    follow,
-                    agent,
-                    lines,
-                } = cmd
-                {
-                    runner.show_logs(*follow, agent.as_deref(), *lines).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "logs", runner, cmd,
+            Commands::Logs { follow, agent, lines } =>
+            runner.show_logs(*follow, agent.as_deref(), *lines)
+        );
 
-        self.register("config", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Config { action } = cmd {
-                    runner.handle_config(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "config", runner, cmd,
+            Commands::Config { action } =>
+            runner.handle_config(action)
+        );
 
-        self.register("delegate", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Delegate { action } = cmd {
-                    runner.handle_delegate(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "delegate", runner, cmd,
+            Commands::Delegate { action } =>
+            runner.handle_delegate(action)
+        );
 
-        self.register("session", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Session { action } = cmd {
-                    runner.handle_session(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "session", runner, cmd,
+            Commands::Session { action } =>
+            runner.handle_session(action)
+        );
 
-        self.register("resource", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Resource { action } = cmd {
-                    runner.handle_resource(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "resource", runner, cmd,
+            Commands::Resource { action } =>
+            runner.handle_resource(action)
+        );
 
-        self.register("auto-create", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::AutoCreate {
-                    description,
-                    template: _,
-                    auto_deploy,
-                    output,
-                } = cmd
-                {
-                    runner
-                        .handle_auto_create(description, None, *auto_deploy, output)
-                        .await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "auto-create", runner, cmd,
+            Commands::AutoCreate { description, template: _, auto_deploy, output } =>
+            runner.handle_auto_create(description, None, *auto_deploy, output)
+        );
 
         self.register("sangha", |runner, cmd| {
             Box::pin(async move {
@@ -228,139 +157,55 @@ impl CommandRegistry {
         });
 
         #[cfg(feature = "claude-acp")]
-        self.register("claude-acp", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::ClaudeACP { command } = cmd {
-                    runner.handle_claude_acp(command).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "claude-acp", runner, cmd,
+            Commands::ClaudeACP { command } =>
+            runner.handle_claude_acp(command)
+        );
 
-        self.register("evolution", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Evolution { action } = cmd {
-                    runner.handle_evolution(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "evolution", runner, cmd,
+            Commands::Evolution { action } =>
+            runner.handle_evolution(action)
+        );
 
-        self.register("quality", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Quality { action } = cmd {
-                    runner.handle_quality(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "quality", runner, cmd,
+            Commands::Quality { action } =>
+            runner.handle_quality(action)
+        );
 
-        self.register("template", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Template { action } = cmd {
-                    runner.handle_template(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "template", runner, cmd,
+            Commands::Template { action } =>
+            runner.handle_template(action)
+        );
 
-        self.register("subagent", |_runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Subagent { command } = cmd {
-                    crate::cli::subagent_commands::execute_subagent_command(command.clone()).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "subagent", _runner, cmd,
+            Commands::Subagent { command } =>
+            crate::cli::subagent_commands::execute_subagent_command(command.clone())
+        );
 
-        self.register("tutorial", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Tutorial { chapter } = cmd {
-                    runner.handle_tutorial(*chapter).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "tutorial", runner, cmd,
+            Commands::Tutorial { chapter } =>
+            runner.handle_tutorial(*chapter)
+        );
 
-        self.register("help", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::HelpTopic { topic, search } = cmd {
-                    runner
-                        .handle_help(topic.as_deref(), search.as_deref())
-                        .await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "help", runner, cmd,
+            Commands::HelpTopic { topic, search } =>
+            runner.handle_help(topic.as_deref(), search.as_deref())
+        );
 
-        self.register("health", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Health {
-                    check_agents,
-                    check_sessions,
-                    resources,
-                    diagnose,
-                    detailed,
-                    format,
-                } = cmd
-                {
-                    runner
-                        .handle_health(
-                            *check_agents,
-                            *check_sessions,
-                            *resources,
-                            *diagnose,
-                            *detailed,
-                            format,
-                        )
-                        .await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "health", runner, cmd,
+            Commands::Health { check_agents, check_sessions, resources, diagnose, detailed, format } =>
+            runner.handle_health(*check_agents, *check_sessions, *resources, *diagnose, *detailed, format)
+        );
 
-        self.register("doctor", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Doctor {
-                    fix,
-                    error,
-                    check_api,
-                } = cmd
-                {
-                    runner
-                        .handle_doctor(*fix, error.as_deref(), *check_api)
-                        .await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "doctor", runner, cmd,
+            Commands::Doctor { fix, error, check_api } =>
+            runner.handle_doctor(*fix, error.as_deref(), *check_api)
+        );
 
-        self.register("quickstart", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Quickstart {
-                    name,
-                    no_prompt,
-                    all_agents,
-                    with_tests,
-                } = cmd
-                {
-                    runner
-                        .handle_quickstart(name.as_deref(), *no_prompt, *all_agents, *with_tests)
-                        .await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
+        register_command!(self, "quickstart", runner, cmd,
+            Commands::Quickstart { name, no_prompt, all_agents, with_tests } =>
+            runner.handle_quickstart(name.as_deref(), *no_prompt, *all_agents, *with_tests)
+        );
     }
 
     /// Register a command handler

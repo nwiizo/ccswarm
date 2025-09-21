@@ -147,7 +147,7 @@ pub trait SessionEnvironment: Send + Sync {
 
     /// Create standard environment variables for a session
     fn create_env_vars(agent_id: &str, session_id: &str) -> HashMap<String, String> {
-        let mut env_vars = HashMap::new();
+        let mut env_vars = crate::utils::collections::new_hashmap();
         env_vars.insert("CCSWARM_AGENT_ID".to_string(), agent_id.to_string());
         env_vars.insert("CCSWARM_SESSION_ID".to_string(), session_id.to_string());
         env_vars.insert("CCSWARM_SESSION_TYPE".to_string(), "generic".to_string());

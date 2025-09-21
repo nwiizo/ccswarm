@@ -56,7 +56,7 @@ impl SubagentParser {
                 match Self::parse_file(&path) {
                     Ok(agent) => agents.push(agent),
                     Err(e) => {
-                        log::warn!("Failed to parse agent file {:?}: {}", path, e);
+                        crate::utils::logging::log_parse_warning(&path.display().to_string(), &e);
                     }
                 }
             }

@@ -6,6 +6,19 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::agent::{Priority, Task, TaskResult};
+use crate::utils::{errors, time};
+
+/// Common trait for updating task status with timestamp
+trait TaskStatusUpdate {
+    fn update_status_with_timestamp(&mut self, status: TaskStatus);
+}
+
+impl TaskStatusUpdate for QueuedTask {
+    fn update_status_with_timestamp(&mut self, status: TaskStatus) {
+        self.status = status;
+        self.updated_at = time::now();
+    }
+}
 
 /// Status of a task in the queue
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -98,10 +111,46 @@ impl TaskQueue {
         }
     }
 
+    /// Common helper for completing or failing tasks
+    async fn finish_task(
+        &self,
+        task_id: &str,
+        status: TaskStatus,
+        update_attempt: impl FnOnce(&mut TaskExecutionAttempt),
+    ) -> anyhow::Result<()> {
+        let mut active = self.active_tasks.write().await;
+        let mut completed = self.completed_tasks.write().await;
+
+        if let Some(mut task) = active.remove(task_id) {
+            // Validate task is in progress
+            if !matches!(task.status, TaskStatus::InProgress { .. }) {
+                return Err(errors::invalid_state_error("in_progress", &format!("{:?}", task.status)));
+            }
+
+            task.update_status_with_timestamp(status);
+
+            // Update last execution attempt
+            if let Some(attempt) = task.execution_history.last_mut() {
+                attempt.completed_at = Some(time::now());
+                update_attempt(attempt);
+            }
+
+            // Add to completed queue (maintain size limit)
+            completed.push_back(task);
+            if completed.len() > self.max_history {
+                completed.pop_front();
+            }
+
+            Ok(())
+        } else {
+            Err(errors::not_found_error("Active task", task_id))
+        }
+    }
+
     /// Add a new task to the queue
     pub async fn add_task(&self, task: Task) -> String {
         let task_id = task.id.clone();
-        let now = Utc::now();
+        let now = time::now();
 
         let queued_task = QueuedTask {
             task: task.clone(),
@@ -159,16 +208,16 @@ impl TaskQueue {
                 agent_id: agent_id.to_string(),
             };
             task.assigned_agent = Some(agent_id.to_string());
-            task.updated_at = Utc::now();
+            task.updated_at = time::now();
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Task not found: {}", task_id))
+            Err(errors::not_found_error("Task", task_id))
         }
     }
 
     /// Mark task as in progress
     pub async fn start_task_execution(&self, task_id: &str, agent_id: &str) -> anyhow::Result<()> {
-        let now = Utc::now();
+        let now = time::now();
 
         // Move from tasks_by_id to active_tasks
         let mut tasks = self.tasks_by_id.write().await;
@@ -195,88 +244,67 @@ impl TaskQueue {
             active.insert(task_id.to_string(), task);
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Task not found: {}", task_id))
+            Err(errors::not_found_error("Task", task_id))
         }
     }
 
     /// Complete task execution
     pub async fn complete_task(&self, task_id: &str, result: TaskResult) -> anyhow::Result<()> {
-        let now = Utc::now();
+        let now = time::now();
 
-        let mut active = self.active_tasks.write().await;
-        let mut completed = self.completed_tasks.write().await;
-
-        if let Some(mut task) = active.remove(task_id) {
-            let agent_id = match &task.status {
-                TaskStatus::InProgress { agent_id, .. } => agent_id.clone(),
-                _ => return Err(anyhow::anyhow!("Task is not in progress")),
-            };
-
-            task.status = TaskStatus::Completed {
-                agent_id: agent_id.clone(),
-                completed_at: now,
-                result: result.clone(),
-            };
-            task.updated_at = now;
-
-            // Update last execution attempt
-            if let Some(attempt) = task.execution_history.last_mut() {
-                attempt.completed_at = Some(now);
-                attempt.result = Some(result);
+        // Extract agent_id from current status before finishing
+        let agent_id = {
+            let active = self.active_tasks.read().await;
+            match active.get(task_id) {
+                Some(task) => match &task.status {
+                    TaskStatus::InProgress { agent_id, .. } => agent_id.clone(),
+                    _ => return Err(errors::invalid_state_error("in_progress", &format!("{:?}", task.status))),
+                },
+                None => return Err(errors::not_found_error("Active task", task_id)),
             }
+        };
 
-            // Add to completed queue (maintain size limit)
-            completed.push_back(task);
-            if completed.len() > self.max_history {
-                completed.pop_front();
-            }
+        let status = TaskStatus::Completed {
+            agent_id,
+            completed_at: now,
+            result: result.clone(),
+        };
 
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Active task not found: {}", task_id))
-        }
+        self.finish_task(task_id, status, |attempt| {
+            attempt.result = Some(result);
+        }).await
     }
 
     /// Mark task as failed
     pub async fn fail_task(&self, task_id: &str, error: String) -> anyhow::Result<()> {
-        let now = Utc::now();
+        let now = time::now();
 
-        let mut active = self.active_tasks.write().await;
-        let mut completed = self.completed_tasks.write().await;
-
-        if let Some(mut task) = active.remove(task_id) {
-            let agent_id = match &task.status {
-                TaskStatus::InProgress { agent_id, .. } => agent_id.clone(),
-                _ => return Err(anyhow::anyhow!("Task is not in progress")),
-            };
-
-            task.status = TaskStatus::Failed {
-                agent_id: agent_id.clone(),
-                failed_at: now,
-                error: error.clone(),
-            };
-            task.updated_at = now;
-
-            // Update last execution attempt
-            if let Some(attempt) = task.execution_history.last_mut() {
-                attempt.completed_at = Some(now);
-                attempt.error = Some(error);
+        // Extract agent_id from current status before finishing
+        let agent_id = {
+            let active = self.active_tasks.read().await;
+            match active.get(task_id) {
+                Some(task) => match &task.status {
+                    TaskStatus::InProgress { agent_id, .. } => agent_id.clone(),
+                    _ => return Err(errors::invalid_state_error("in_progress", &format!("{:?}", task.status))),
+                },
+                None => return Err(errors::not_found_error("Active task", task_id)),
             }
+        };
 
-            completed.push_back(task);
-            if completed.len() > self.max_history {
-                completed.pop_front();
-            }
+        let status = TaskStatus::Failed {
+            agent_id,
+            failed_at: now,
+            error: error.clone(),
+        };
 
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Active task not found: {}", task_id))
-        }
+        self.finish_task(task_id, status, |attempt| {
+            attempt.error = Some(error);
+        }).await
     }
 
     /// Cancel a task
     pub async fn cancel_task(&self, task_id: &str, reason: Option<String>) -> anyhow::Result<()> {
-        let now = Utc::now();
+        let now = time::now();
 
         // Try to find task in pending, active, or lookup table
         let mut pending = self.pending_tasks.write().await;

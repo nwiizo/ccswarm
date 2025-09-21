@@ -5,6 +5,7 @@ pub mod async_error_boundary_simple;
 pub mod async_macros;
 pub mod command;
 pub mod command_macros;
+pub mod common;
 pub mod consolidated_error_handling;
 pub mod error;
 pub mod error_diagrams;
@@ -28,6 +29,7 @@ mod error_tests {
 pub use async_error_boundary::{with_retry, AsyncCircuitBreaker, ConcurrentBoundary};
 pub use async_error_boundary_simple::{boundary, boundary_with_fallback};
 pub use command::CommandExecutor;
+pub use common::{async_utils, collections, errors, logging, time};
 pub use crate::error::CCSwarmError;
 pub use consolidated_error_handling::{
     AgentError, ConfigError, ErrorContext, ErrorContextExt, GlobalErrorHandler,

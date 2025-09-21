@@ -1,5 +1,4 @@
 /// Enhanced error handling macros
-
 /// Log and continue on error
 #[macro_export]
 macro_rules! log_error {
@@ -78,7 +77,7 @@ macro_rules! test_task {
         $crate::utils::TestSetup::create_test_task($id, $desc, $crate::agent::Priority::Medium)
     };
     ($id:expr, $desc:expr, $priority:expr) => {
-        crate::utils::TestSetup::create_test_task($id, $desc, $priority)
+        $crate::utils::TestSetup::create_test_task($id, $desc, $priority)
     };
 }
 
@@ -111,10 +110,10 @@ macro_rules! fs_op {
         $crate::utils::FsUtils::load_json($path, $name).await
     };
     (write_file: $path:expr, $content:expr, $name:expr) => {
-        crate::utils::FsUtils::write_file($path, $content, $name).await
+        $crate::utils::FsUtils::write_file($path, $content, $name).await
     };
     (remove_dir: $path:expr, $name:expr) => {
-        crate::utils::FsUtils::remove_dir_all($path, $name).await
+        $crate::utils::FsUtils::remove_dir_all($path, $name).await
     };
 }
 
