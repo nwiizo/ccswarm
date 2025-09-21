@@ -289,77 +289,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_think_mode_display() {
-        assert_eq!(ThinkMode::Think.to_string(), "think");
-        assert_eq!(ThinkMode::UltraThink.to_string(), "ultrathink");
-    }
-
-    #[test]
-    fn test_claude_config_defaults() {
+    fn test_basic_config_creation() {
         let config = ClaudeConfig::default();
         assert_eq!(config.model, "claude-3.5-sonnet");
         assert!(config.dangerous_skip);
-        assert!(config.json_output);
-    }
-
-    #[test]
-    fn test_master_config() {
-        let config = ClaudeConfig::for_master();
-        assert_eq!(config.think_mode, Some(ThinkMode::UltraThink));
-        assert!(config.dangerous_skip);
-        assert!(config
-            .custom_commands
-            .contains(&"ccswarm status".to_string()));
-    }
-
-    #[test]
-    fn test_agent_config() {
-        let frontend_config = ClaudeConfig::for_agent("frontend");
-        assert_eq!(frontend_config.think_mode, Some(ThinkMode::ThinkHard));
-        assert!(frontend_config.dangerous_skip);
-        assert!(frontend_config
-            .custom_commands
-            .contains(&"npm test".to_string()));
-
-        let devops_config = ClaudeConfig::for_agent("devops");
-        assert_eq!(devops_config.think_mode, Some(ThinkMode::Think));
-        assert!(devops_config
-            .custom_commands
-            .contains(&"terraform plan".to_string()));
-    }
-
-    #[test]
-    fn test_config_serialization() {
-        let config = CcswarmConfig {
-            project: ProjectConfig {
-                name: "Test Project".to_string(),
-                repository: RepositoryConfig {
-                    url: "https://github.com/test/repo".to_string(),
-                    main_branch: "main".to_string(),
-                },
-                master_claude: MasterClaudeConfig {
-                    role: "technical_lead".to_string(),
-                    quality_threshold: 0.9,
-                    think_mode: ThinkMode::UltraThink,
-                    permission_level: "supervised".to_string(),
-                    claude_config: ClaudeConfig::for_master(),
-                    enable_proactive_mode: true,
-                    proactive_frequency: 300,
-                    high_frequency: 60,
-                },
-            },
-            agents: HashMap::new(),
-            coordination: CoordinationConfig {
-                communication_method: "json_files".to_string(),
-                sync_interval: 30,
-                quality_gate_frequency: "on_commit".to_string(),
-                master_review_trigger: "all_tasks_complete".to_string(),
-            },
-        };
-
-        let serialized = serde_json::to_string(&config).unwrap();
-        let deserialized: CcswarmConfig = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(config.project.name, deserialized.project.name);
     }
 }

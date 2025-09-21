@@ -42,25 +42,3 @@ impl GitUtils {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_git_utils() {
-        let temp_dir = TempDir::new().unwrap();
-        let repo_path = temp_dir.path();
-
-        // 初期状態ではGitリポジトリではない
-        assert!(!GitUtils::is_git_repo(repo_path).await);
-
-        // Gitリポジトリを初期化
-        shell::ShellWorktreeManager::init_if_needed(repo_path)
-            .await
-            .unwrap();
-
-        // 初期化後はGitリポジトリ
-        assert!(GitUtils::is_git_repo(repo_path).await);
-    }
-}

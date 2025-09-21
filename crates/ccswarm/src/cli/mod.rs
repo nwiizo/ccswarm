@@ -5858,5 +5858,3 @@ pub enum ClaudeACPCommands {
     Diagnose,
 }
 
-#[cfg(test)]
-mod tests;

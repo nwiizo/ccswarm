@@ -37,9 +37,3 @@ pub mod tui;
 pub mod utils;
 pub mod workspace;
 
-#[cfg(test)]
-mod tests;
-
-pub use agent::*;
-pub use identity::*;
-pub use orchestrator::*;

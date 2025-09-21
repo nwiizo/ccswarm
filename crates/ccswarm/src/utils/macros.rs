@@ -397,13 +397,3 @@ macro_rules! define_errors {
     };
 }
 
-#[cfg(test)]
-mod tests {
-    // Test macros require full crate context
-    #[test]
-    fn test_macro_syntax() {
-        // Macros are tested through their usage in the codebase
-        // This test ensures the module compiles
-        assert!(true);
-    }
-}

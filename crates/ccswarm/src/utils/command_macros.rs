@@ -243,12 +243,3 @@ macro_rules! validate_command {
     }};
 }
 
-#[cfg(test)]
-mod tests {
-    // Test the command_registry macro separately
-    #[test]
-    fn test_command_registry_macro_compiles() {
-        // Just test that the macro syntax is valid
-        // Real functionality requires the full crate context
-    }
-}

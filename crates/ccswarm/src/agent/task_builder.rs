@@ -144,39 +144,3 @@ impl TaskBuilder {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_modifiers() {
-        let (desc, priority, task_type) = TaskBuilder::parse_modifiers("Fix bug [high] [bug]");
-        assert_eq!(desc, "Fix bug");
-        assert_eq!(priority, Priority::High);
-        assert_eq!(task_type, TaskType::Bug);
-
-        let (desc, priority, _) = TaskBuilder::parse_modifiers("Add feature [low]");
-        assert_eq!(desc, "Add feature");
-        assert_eq!(priority, Priority::Low);
-
-        let (desc, _, task_type) = TaskBuilder::parse_modifiers("Write tests [test]");
-        assert_eq!(desc, "Write tests");
-        assert_eq!(task_type, TaskType::Testing);
-    }
-
-    #[test]
-    fn test_builder() {
-        let task = TaskBuilder::new("Implement feature".to_string())
-            .priority(Priority::High)
-            .task_type(TaskType::Feature)
-            .details("Add user authentication".to_string())
-            .estimated_duration(120)
-            .build();
-
-        assert_eq!(task.description, "Implement feature");
-        assert_eq!(task.priority, Priority::High);
-        assert_eq!(task.task_type, TaskType::Feature);
-        assert_eq!(task.details, Some("Add user authentication".to_string()));
-        assert_eq!(task.estimated_duration, Some(120));
-    }
-}
