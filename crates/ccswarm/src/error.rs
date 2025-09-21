@@ -69,6 +69,15 @@ pub enum CCSwarmError {
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
+    /// Orchestrator coordination error
+    #[error("Orchestrator error: {message}")]
+    Orchestrator {
+        message: String,
+        task_id: Option<String>,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+
     /// Git operation error
     #[error("Git error: {message}")]
     Git {
@@ -219,6 +228,15 @@ impl CCSwarmError {
         }
     }
 
+    /// Create an orchestrator error
+    pub fn orchestrator<S: Into<String>>(message: S, task_id: Option<String>) -> Self {
+        Self::Orchestrator {
+            message: message.into(),
+            task_id,
+            source: None,
+        }
+    }
+
     /// Create a task error
     pub fn task<S: Into<String>, I: Into<String>>(task_id: I, message: S) -> Self {
         Self::Task {
@@ -357,7 +375,7 @@ impl CCSwarmError {
     pub fn severity(&self) -> ErrorSeverity {
         match self {
             Self::Auth { .. } | Self::Configuration { .. } => ErrorSeverity::Critical,
-            Self::Agent { .. } | Self::Session { .. } | Self::Extension { .. } => ErrorSeverity::High,
+            Self::Agent { .. } | Self::Session { .. } | Self::Extension { .. } | Self::Orchestrator { .. } => ErrorSeverity::High,
             Self::Task { .. } | Self::Git { .. } | Self::Template { .. } => ErrorSeverity::Medium,
             Self::Network { .. } | Self::Resource { .. } => ErrorSeverity::Low,
             Self::Io(_) | Self::SerdeJson(_) => ErrorSeverity::Medium,
