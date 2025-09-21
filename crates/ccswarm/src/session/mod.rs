@@ -452,7 +452,7 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found
     pub async fn terminate_session(&self, session_id: &str) -> SessionResult<()> {
-        let (tmux_session, agent_id) = {
+        let (_tmux_session, agent_id) = {
             let sessions = self.sessions.lock().map_lock_error()?;
             let session = sessions
                 .get(session_id)
@@ -746,7 +746,7 @@ impl SessionManager {
     }
 
     /// Sets up the environment for a new session
-    async fn setup_session_environment(&self, session: &AgentSession) -> SessionResult<()> {
+    async fn setup_session_environment(&self, _session: &AgentSession) -> SessionResult<()> {
         // TODO: Set environment variables when native session is available
 
         Ok(())
@@ -755,7 +755,7 @@ impl SessionManager {
     /// Starts the agent in the session
     async fn start_agent_in_session(&self, session: &AgentSession) -> SessionResult<()> {
         // Build the command to start the agent
-        let command = format!(
+        let _command = format!(
             "ccswarm agent start --id {} --role {} --session {} --working-dir {}",
             session.agent_id,
             session.agent_role.name(),

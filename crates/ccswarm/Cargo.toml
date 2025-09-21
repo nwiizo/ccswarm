@@ -15,14 +15,6 @@ categories = ["development-tools", "command-line-utilities"]
 name = "ccswarm"
 path = "src/main.rs"
 
-[[bin]]
-name = "test_isolated_proactive"
-path = "test_isolated_proactive.rs"
-
-[[bin]]
-name = "demo_proactive_workflow"
-path = "demo_proactive_workflow.rs"
-
 [[example]]
 name = "search_agent_sangha_demo"
 path = "examples/search_agent_sangha_demo.rs"

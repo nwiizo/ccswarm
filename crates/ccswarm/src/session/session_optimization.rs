@@ -299,10 +299,12 @@ impl OptimizedSessionManager {
             move || {
                 let factory = factory.clone();
                 let role = role_clone.clone();
-                Box::pin(async move { factory.create_session(&role).await })
+                Box::pin(async move {
+                    factory.create_session(&role).await
+                        .map_err(|e| crate::error::CCSwarmError::session("unknown", e.to_string()))
+                })
             },
             3,
-            "create_base_session",
         )
         .await?;
 
@@ -369,12 +371,7 @@ impl OptimizedSessionManager {
         breakers
             .entry(role_key.to_string())
             .or_insert_with(|| {
-                Arc::new(AsyncCircuitBreaker::new(
-                    format!("{}_session_breaker", role_key),
-                    3, // failure threshold
-                    2, // success threshold
-                    Duration::from_secs(30),
-                ))
+                Arc::new(AsyncCircuitBreaker::new(3))
             })
             .clone()
     }

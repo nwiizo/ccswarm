@@ -1094,6 +1094,7 @@ impl ProactiveMaster {
         let search_request = SearchRequest {
             requesting_agent: "master-claude".to_string(),
             query: query.to_string(),
+            scope: crate::agent::search_agent::SearchScope::All,
             max_results: Some(10),
             filters: None,
             context: Some(context.to_string()),

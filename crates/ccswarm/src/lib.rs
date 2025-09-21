@@ -13,6 +13,7 @@ pub mod config;
 // Temporarily disabled due to Docker dependency issues
 // pub mod container;
 pub mod coordination;
+pub mod error;
 pub mod execution;
 pub mod extension;
 pub mod extension_stub;
@@ -31,6 +32,7 @@ pub mod streaming;
 pub mod subagent;
 pub mod template;
 pub mod tmux;
+pub mod traits;
 pub mod tui;
 pub mod utils;
 pub mod workspace;
