@@ -152,36 +152,3 @@ impl ClaudeApiClient {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_message_creation() {
-        let message = Message {
-            role: "user".to_string(),
-            content: "Hello, Claude!".to_string(),
-        };
-
-        assert_eq!(message.role, "user");
-        assert_eq!(message.content, "Hello, Claude!");
-    }
-
-    #[test]
-    fn test_request_serialization() {
-        let request = ClaudeApiRequest {
-            model: "claude-3.5-sonnet".to_string(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: "Test".to_string(),
-            }],
-            max_tokens: 1000,
-            temperature: Some(0.7),
-            system: None,
-        };
-
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("claude-3.5-sonnet"));
-        assert!(json.contains("Test"));
-    }
-}

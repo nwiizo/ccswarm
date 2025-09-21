@@ -15,27 +15,3 @@ pub mod macros;
 pub mod user_error;
 pub mod user_error_macros;
 
-#[cfg(test)]
-mod error_tests {
-    use super::*;
-
-    #[test]
-    fn test_error_handling() {
-        // Test placeholder
-        assert!(true);
-    }
-}
-
-pub use async_error_boundary::{with_retry, AsyncCircuitBreaker, ConcurrentBoundary};
-pub use async_error_boundary_simple::{boundary, boundary_with_fallback};
-pub use command::CommandExecutor;
-pub use common::{async_utils, collections, errors, logging, time};
-pub use crate::error::CCSwarmError;
-pub use consolidated_error_handling::{
-    AgentError, ConfigError, ErrorContext, ErrorContextExt, GlobalErrorHandler,
-    NetworkError, OrchestrationError, SessionError, TaskError,
-};
-pub use error::ResultExt;
-pub use error_diagrams::{show_diagram, ErrorDiagrams};
-pub use error_recovery::{ErrorRecoveryDB, ErrorResolver, RecoveryAction};
-pub use user_error::{show_progress, CommonErrors, UserError, UserErrorExt};

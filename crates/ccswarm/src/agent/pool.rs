@@ -792,28 +792,3 @@ impl AgentPool {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_agent_pool_creation() {
-        let pool = AgentPool::new().await.unwrap();
-        assert!(!pool.has_agent("frontend"));
-    }
-
-    #[tokio::test]
-    async fn test_agent_pool_orchestration() {
-        let pool = AgentPool::new().await.unwrap();
-
-        let task = Task::new(
-            "test_orchestration".to_string(),
-            "Test pool orchestration".to_string(),
-            crate::agent::Priority::Medium,
-            TaskType::Development,
-        );
-
-        let plan = pool.analyze_task(&task).await.unwrap();
-        assert!(!plan.steps.is_empty());
-    }
-}

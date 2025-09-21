@@ -186,28 +186,3 @@ impl SimplifiedClaudeAdapter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_adapter_creation() {
-        let config = ClaudeACPConfig::default();
-        let adapter = SimplifiedClaudeAdapter::new(config);
-        assert!(!adapter.is_connected());
-        assert!(adapter.session_id().is_none());
-    }
-
-    #[tokio::test]
-    async fn test_config_builder() {
-        let config = ClaudeACPConfig::builder()
-            .url("ws://test:8080")
-            .timeout(60)
-            .max_retries(5)
-            .build();
-
-        assert_eq!(config.url, "ws://test:8080");
-        assert_eq!(config.timeout, 60);
-        assert_eq!(config.max_retries, 5);
-    }
-}

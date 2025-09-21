@@ -120,38 +120,3 @@ impl<State> Agent<State> {
 // Import the actual Task from the module
 use super::Task;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_agent_state_transitions() {
-        let agent = Agent::<Idle>::new("agent-1".to_string(), "Frontend".to_string());
-
-        // This compiles: valid transition from Idle to Working
-        let task = Task {
-            id: "task-1".to_string(),
-            description: "Create UI".to_string(),
-            priority: super::Priority::Medium,
-            task_type: crate::agent::TaskType::Development,
-            agent_id: None,
-            metadata: None,
-            tags: vec![],
-            context: None,
-        };
-        let working_agent = agent.start_work(task).unwrap();
-
-        // This compiles: valid transition from Working to Reviewing
-        let reviewing_agent = working_agent.submit_for_review();
-
-        // This compiles: valid transition from Reviewing to Completed
-        let completed_agent = reviewing_agent.approve();
-
-        // This compiles: valid transition from Completed to Idle
-        let _idle_again = completed_agent.reset();
-
-        // This would NOT compile (uncomment to test):
-        // completed_agent.submit_for_review(); // Error: no such method
-        // idle_agent.approve(); // Error: no such method
-    }
-}

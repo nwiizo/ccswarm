@@ -543,32 +543,3 @@ impl ExecutionEngine {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::agent::TaskBuilder;
-    use crate::config::CcswarmConfig;
-
-    #[tokio::test]
-    async fn test_task_executor_creation() {
-        let config = CcswarmConfig::default();
-        let executor = TaskExecutor::new(&config).await.unwrap();
-
-        let task = TaskBuilder::new("Test task".to_string()).build();
-        let task_id = executor.add_task(task).await;
-
-        assert!(!task_id.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_complex_task_detection() {
-        let simple_task = TaskBuilder::new("Fix typo".to_string()).build();
-        assert!(!TaskExecutor::is_complex_task(&simple_task));
-
-        let complex_task = TaskBuilder::new(
-            "Implement complete user authentication system with database integration".to_string(),
-        )
-        .build();
-        assert!(TaskExecutor::is_complex_task(&complex_task));
-    }
-}

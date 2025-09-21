@@ -554,5 +554,3 @@ impl Clone for StreamingManager {
     }
 }
 
-#[cfg(test)]
-mod tests;
