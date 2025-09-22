@@ -67,7 +67,7 @@ nix = { version = "0.30", features = ["process"] }
 config = "0.15"
 
 # Async channels
-async-channel = "2.3"
+async-channel = "2.5"
 
 # State management
 dashmap = "6.1"
