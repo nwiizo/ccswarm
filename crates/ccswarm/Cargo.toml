@@ -81,7 +81,7 @@ tokio-util = "0.7"
 reqwest = { version = "0.12", features = ["json"] }
 
 # Testing utilities
-tempfile = "3.8"
+tempfile = "3.22"
 
 # Async traits
 async-trait = "0.1"
@@ -120,7 +120,7 @@ dirs = "5.0"
 [dev-dependencies]
 # Testing
 mockall = "0.13"
-tempfile = "3.12"
+tempfile = "3.22"
 pretty_assertions = "1.4"
 
 [features]
