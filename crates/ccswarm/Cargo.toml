@@ -25,7 +25,7 @@ path = "examples/backend_status_demo.rs"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.40", features = ["full"] }
+tokio = { version = "1.47", features = ["full"] }
 
 # Error handling
 anyhow = "1.0"
