@@ -112,7 +112,7 @@ sysinfo = "0.33"
 # ACP (Agent Client Protocol) support - for Claude Code integration
 agent-client-protocol = { version = "0.4.0", optional = true }
 jsonrpc-core = { version = "18.0", optional = true }
-tokio-tungstenite = { version = "0.20", optional = true }
+tokio-tungstenite = { version = "0.27", optional = true }
 
 # Directory paths
 dirs = "5.0"
