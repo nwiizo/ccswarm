@@ -1,0 +1,240 @@
+name: Dual-Mac CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  health-check:
+    name: Pre-flight System Health
+    runs-on: macos-latest
+    steps:
+      - name: Check Tailscale connectivity
+        run: |
+          ping -c 5 ${{ secrets.SECONDARY_MAC_IP }} || exit 1
+
+      - name: Verify SSH access
+        run: |
+          ssh-keyscan ${{ secrets.SECONDARY_MAC_IP }} >> ~/.ssh/known_hosts
+          ssh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_MAC_IP }} 'echo "SSH OK"' || exit 1
+
+      - name: Check disk space (primary)
+        run: df -h | grep -E '/Users|Filesystem'
+
+      - name: Check disk space (secondary)
+        run: |
+          ssh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_MAC_IP }} 'df -h | grep -E "/Users|Filesystem"'
+
+  parallel-test:
+    name: Parallel Test Execution
+    runs-on: macos-latest
+    needs: health-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Sync project to secondary
+        run: |
+          rsync -avz --delete \
+            --exclude 'target/' \
+            --exclude '.git/' \
+            ./ ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_MAC_IP }}:/Users/${{ secrets.SECONDARY_USER }}/Projects/ccswarm/
+
+      - name: Run tests on primary (ai-session)
+        run: |
+          cargo test --lib -p ai-session --features mcp 2>&1 | tee /tmp/eosm3-tests.log &
+          PRIMARY_PID=$!
+          echo "PRIMARY_PID=$PRIMARY_PID" >> $GITHUB_ENV
+
+      - name: Run tests on secondary (ccswarm)
+        run: |
+          ssh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_MAC_IP }} \
+            'cd /Users/${{ secrets.SECONDARY_USER }}/Projects/ccswarm && source ~/.zshrc && cargo test --lib -p ccswarm 2>&1' \
+            | tee /tmp/eosmini-tests.log &
+          SECONDARY_PID=$!
+          echo "SECONDARY_PID=$SECONDARY_PID" >> $GITHUB_ENV
+
+      - name: Wait for completion
+        run: |
+          wait ${{ env.PRIMARY_PID }}
+          wait ${{ env.SECONDARY_PID }}
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          path: |
+            /tmp/eosm3-tests.log
+            /tmp/eosmini-tests.log
+
+  build-coordination:
+    name: Distributed Workspace Build
+    runs-on: macos-latest
+    needs: health-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Sync project to secondary
+        run: |
+          rsync -avz --delete \
+            --exclude 'target/' \
+            --exclude '.git/' \
+            ./ ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_MAC_IP }}:/Users/${{ secrets.SECONDARY_USER }}/Projects/ccswarm/
+
+      - name: Build on primary
+        run: |
+          cargo build --release -p ai-session 2>&1 | tee /tmp/eosm3-build.log &
+          PRIMARY_BUILD=$!
+
+      - name: Build on secondary
+        run: |
+          ssh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_MAC_IP }} \
+            'cd /Users/${{ secrets.SECONDARY_USER }}/Projects/ccswarm && source ~/.zshrc && cargo build --release -p ccswarm 2>&1' \
+            | tee /tmp/eosmini-build.log &
+          SECONDARY_BUILD=$!
+
+      - name: Wait for builds
+        run: |
+          wait $PRIMARY_BUILD
+          wait $SECONDARY_BUILD
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            /tmp/eosm3-build.log
+            /tmp/eosmini-build.log
+
+  performance-regression:
+    name: Performance Regression Detection
+    runs-on: macos-latest
+    needs: parallel-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download baseline metrics
+        run: |
+          if [ ! -f .performance-baseline.json ]; then
+            echo "⚠️  No baseline found. This will become the new baseline."
+          else
+            echo "📊 Baseline metrics:"
+            cat .performance-baseline.json
+          fi
+
+      - name: Capture current performance metrics
+        run: |
+          # Extract timing data from test logs
+          EOSM3_DURATION=$(grep -oP 'finished in \K[\d.]+s' /tmp/eosm3-tests.log | sed 's/s//' || echo "0")
+          EOSMINI_DURATION=$(grep -oP 'finished in \K[\d.]+s' /tmp/eosmini-tests.log | sed 's/s//' || echo "0")
+
+          # Count tests
+          EOSM3_TESTS=$(grep -oP '\d+ passed' /tmp/eosm3-tests.log | head -1 | grep -oP '\d+' || echo "0")
+          EOSMINI_TESTS=$(grep -oP '\d+ passed' /tmp/eosmini-tests.log | head -1 | grep -oP '\d+' || echo "0")
+
+          # Calculate total
+          TOTAL_DURATION=$(echo "$EOSM3_DURATION + $EOSMINI_DURATION" | bc)
+          TOTAL_TESTS=$(echo "$EOSM3_TESTS + $EOSMINI_TESTS" | bc)
+
+          # Create current metrics file
+          cat > .performance-current.json <<EOF
+          {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "total_duration_seconds": ${TOTAL_DURATION},
+            "eosm3": {
+              "test_count": ${EOSM3_TESTS},
+              "duration_seconds": ${EOSM3_DURATION}
+            },
+            "eosmini": {
+              "test_count": ${EOSMINI_TESTS},
+              "duration_seconds": ${EOSMINI_DURATION}
+            },
+            "total_tests": ${TOTAL_TESTS},
+            "notes": "CI run on GitHub Actions"
+          }
+          EOF
+
+          echo "📈 Current performance metrics:"
+          cat .performance-current.json
+
+      - name: Run regression detection
+        run: |
+          if [ -f .performance-baseline.json ]; then
+            chmod +x scripts/performance-regression-test.sh
+            ./scripts/performance-regression-test.sh --compare-only
+          else
+            echo "⏭️  Skipping regression test (no baseline). Creating initial baseline."
+          fi
+
+      - name: Update baseline on main branch
+        if: github.ref == 'refs/heads/main' && success()
+        run: |
+          cp .performance-current.json .performance-baseline.json
+          echo "✅ Baseline updated for future comparisons"
+
+      - name: Upload performance metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-metrics
+          path: |
+            .performance-baseline.json
+            .performance-current.json
+          retention-days: 90
+
+  quality-gates:
+    name: Quality Checks
+    runs-on: macos-latest
+    needs: [parallel-test, build-coordination, performance-regression]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Check test coverage
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin --workspace --out Xml --output-dir coverage
+
+      - name: Verify coverage threshold
+        run: |
+          COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' coverage/cobertura.xml | head -1)
+          THRESHOLD=0.85
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "Coverage $COVERAGE is below threshold $THRESHOLD"
+            exit 1
+          fi
+          echo "Coverage: $COVERAGE (threshold: $THRESHOLD)"
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/cobertura.xml
+          fail_ci_if_error: true

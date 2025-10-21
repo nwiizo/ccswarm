@@ -1,0 +1,16 @@
+{
+  "timestamp": "2025-10-21T01:18:30Z",
+  "total_duration_seconds": 141,
+  "eosm3": {
+    "test_count": 186,
+    "duration_seconds": 36
+  },
+  "eosmini": {
+    "test_count": 225,
+    "duration_seconds": 140
+  },
+  "total_tests": 411,
+  "sequential_estimate": 176,
+  "speedup": 1.25,
+  "notes": "Baseline from successful parallel test validation. EOSM3: 45% (186 tests in 36s), EOSmini: 55% (225 tests in 140s). Speedup: 1.25x (141s parallel vs 176s sequential)."
+}
