@@ -7,11 +7,11 @@
 /// 4. Resource efficiency statistics
 use anyhow::Result;
 use ccswarm::identity::{default_backend_role, default_frontend_role};
-use ccswarm::resource::{ResourceLimits, ResourceMonitor};
+use ccswarm::resource::ResourceLimits;
 use ccswarm::session::SessionManager;
 use chrono::Duration as ChronoDuration;
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     resource_limits.idle_cpu_threshold = 5.0;
     resource_limits.auto_suspend_enabled = true;
     resource_limits.max_cpu_percent = 50.0;
-    resource_limits.max_memory_bytes = 1 * 1024 * 1024 * 1024; // 1GB
+    resource_limits.max_memory_bytes = 1024 * 1024 * 1024; // 1GB
 
     println!("📊 Resource Limits Configuration:");
     println!("  - Max CPU: {}%", resource_limits.max_cpu_percent);

@@ -3,7 +3,7 @@
 /// This module provides functionality to manage, create, and coordinate
 /// subagents within the ccswarm system.
 use super::{
-    parser::SubagentParser, SubagentConfig, SubagentDefinition, SubagentError, SubagentResult,
+    SubagentConfig, SubagentDefinition, SubagentError, SubagentResult, parser::SubagentParser,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -111,7 +111,7 @@ impl SubagentManager {
         let id_clone = instance_id.clone();
         tokio::spawn(async move {
             if let Err(e) = self_clone.initialize_subagent(&id_clone).await {
-                crate::utils::logging::log_init_failure("subagent", &id_clone, &e);
+                crate::utils::common::logging::log_init_failure("subagent", &id_clone, &e);
             }
         });
 
@@ -251,4 +251,3 @@ impl Clone for SubagentManager {
         }
     }
 }
-

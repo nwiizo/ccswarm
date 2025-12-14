@@ -7,9 +7,9 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 use tokio_tungstenite::{
-    connect_async, tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream,
+    MaybeTlsStream, WebSocketStream, connect_async, tungstenite::protocol::Message,
 };
 use tracing::{debug, info, warn};
 
@@ -29,6 +29,7 @@ pub struct SimplifiedClaudeAdapter {
 }
 
 /// Simple ACP message structure
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 struct ACPMessage {
     #[serde(rename = "jsonrpc")]
@@ -39,6 +40,7 @@ struct ACPMessage {
 }
 
 /// Simple response structure
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 struct ACPResponse {
     #[serde(rename = "jsonrpc")]
@@ -110,10 +112,11 @@ impl SimplifiedClaudeAdapter {
         self.connected = true;
 
         // Initialize session (simplified)
-        self.session_id = Some(format!("session-{}", uuid::Uuid::new_v4()));
+        let session_id = format!("session-{}", uuid::Uuid::new_v4());
+        debug!("Session created: {}", session_id);
+        self.session_id = Some(session_id);
 
         info!("✅ Connected to Claude Code!");
-        debug!("Session created: {}", self.session_id.as_ref().unwrap());
 
         Ok(())
     }
@@ -185,4 +188,3 @@ impl SimplifiedClaudeAdapter {
         self.session_id.as_deref()
     }
 }
-

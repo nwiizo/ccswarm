@@ -1,6 +1,6 @@
 use crossterm::event::{self, Event};
 use std::time::Duration;
-use tokio::time::{interval, Interval, MissedTickBehavior};
+use tokio::time::{Interval, MissedTickBehavior, interval};
 
 /// Event handler for TUI
 pub struct EventHandler {

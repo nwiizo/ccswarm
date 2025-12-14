@@ -38,7 +38,10 @@ pub enum TaskAction {
 impl super::Command for TaskCommand {
     async fn execute(self) -> Result<()> {
         match self.action {
-            TaskAction::Create { description, priority } => {
+            TaskAction::Create {
+                description,
+                priority,
+            } => {
                 tracing::info!("Creating task: {} with priority {}", description, priority);
             }
             TaskAction::List { status } => {

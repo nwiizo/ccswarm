@@ -19,6 +19,12 @@ pub enum TemplateCategory {
     Documentation,
     /// Bug fix templates
     BugFix,
+    /// Code review templates
+    Review,
+    /// Performance optimization templates
+    Optimization,
+    /// Code refactoring templates
+    Refactoring,
     /// General development templates
     General,
     /// Custom user-defined category
@@ -36,6 +42,9 @@ impl FromStr for TemplateCategory {
             "testing" | "test" | "qa" => Ok(TemplateCategory::Testing),
             "documentation" | "docs" | "doc" => Ok(TemplateCategory::Documentation),
             "bugfix" | "bug" | "fix" => Ok(TemplateCategory::BugFix),
+            "review" | "code-review" => Ok(TemplateCategory::Review),
+            "optimization" | "optimize" | "performance" => Ok(TemplateCategory::Optimization),
+            "refactoring" | "refactor" => Ok(TemplateCategory::Refactoring),
             "general" | "misc" => Ok(TemplateCategory::General),
             _ => Ok(TemplateCategory::Custom(s.to_string())),
         }
@@ -51,6 +60,9 @@ impl std::fmt::Display for TemplateCategory {
             TemplateCategory::Testing => write!(f, "Testing"),
             TemplateCategory::Documentation => write!(f, "Documentation"),
             TemplateCategory::BugFix => write!(f, "BugFix"),
+            TemplateCategory::Review => write!(f, "Review"),
+            TemplateCategory::Optimization => write!(f, "Optimization"),
+            TemplateCategory::Refactoring => write!(f, "Refactoring"),
             TemplateCategory::General => write!(f, "General"),
             TemplateCategory::Custom(name) => write!(f, "{}", name),
         }
@@ -352,11 +364,7 @@ impl Template {
         let current_count = self.usage_count as f64;
 
         let new_rate = if current_count == 0.0 {
-            if success {
-                1.0
-            } else {
-                0.0
-            }
+            if success { 1.0 } else { 0.0 }
         } else {
             let total_successes = current_rate * current_count;
             let new_successes = if success {
@@ -403,6 +411,88 @@ pub struct TemplateQuery {
     pub sort_by_date: bool,
     /// Limit number of results
     pub limit: Option<usize>,
+}
+
+/// Template context for variable substitution
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TemplateContext {
+    /// Variables to substitute in the template
+    pub variables: HashMap<String, String>,
+    /// Additional context data
+    pub metadata: HashMap<String, String>,
+    /// Project name for templates
+    pub project_name: Option<String>,
+    /// Agent role for context-specific templates
+    pub agent_role: Option<String>,
+}
+
+impl TemplateContext {
+    /// Create a new empty context
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create context with variables
+    pub fn with_variables(variables: HashMap<String, String>) -> Self {
+        Self {
+            variables,
+            metadata: HashMap::new(),
+            project_name: None,
+            agent_role: None,
+        }
+    }
+
+    /// Add a variable to the context (builder pattern)
+    pub fn with_variable(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.variables.insert(name.into(), value.into());
+        self
+    }
+
+    /// Add a variable to the context
+    pub fn add_variable(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        self.variables.insert(name.into(), value.into());
+    }
+
+    /// Add metadata to the context
+    pub fn add_metadata(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.metadata.insert(key.into(), value.into());
+    }
+}
+
+/// Template-specific error types
+#[derive(Debug, thiserror::Error)]
+pub enum TemplateError {
+    /// Template not found
+    #[error("Template not found: {id}")]
+    NotFound { id: String },
+
+    /// Template already exists
+    #[error("Template already exists: {id}")]
+    AlreadyExists { id: String },
+
+    /// Template validation failed
+    #[error("Template validation failed: {reason}")]
+    ValidationFailed { reason: String },
+
+    /// Template storage error
+    #[error("Template storage error: {0}")]
+    StorageError(#[from] std::io::Error),
+
+    /// Template parsing error
+    #[error("Template parsing error: {0}")]
+    ParseError(String),
+
+    /// Variable substitution error
+    #[error("Variable substitution error: missing variable '{name}'")]
+    MissingVariable { name: String },
+
+    /// Substitution failed
+    #[error("Template substitution failed: {reason}")]
+    SubstitutionFailed { reason: String },
+
+    /// Other errors
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 impl TemplateQuery {

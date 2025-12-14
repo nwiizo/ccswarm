@@ -242,4 +242,3 @@ macro_rules! validate_command {
         Ok(())
     }};
 }
-

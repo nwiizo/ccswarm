@@ -136,6 +136,9 @@ pub struct App {
     /// Last update time
     pub last_update: Instant,
     pub update_interval: Duration,
+
+    /// Should quit flag
+    pub should_quit: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -185,6 +188,7 @@ impl App {
             terminal_height: 24,
             last_update: Instant::now(),
             update_interval: Duration::from_millis(500), // More frequent updates for real-time feel
+            should_quit: false,
         })
     }
 
@@ -1311,6 +1315,267 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    /// Handle keyboard input
+    pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
+        use crossterm::event::{KeyCode, KeyModifiers};
+
+        match self.input_mode {
+            InputMode::Normal => {
+                match key.code {
+                    KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        self.should_quit = true;
+                    }
+                    KeyCode::Tab => self.next_tab(),
+                    KeyCode::BackTab => self.previous_tab(),
+                    KeyCode::Up | KeyCode::Char('k') => self.previous_item(),
+                    KeyCode::Down | KeyCode::Char('j') => self.next_item(),
+                    KeyCode::Enter => {
+                        // Handle enter based on current tab
+                        tokio::spawn({
+                            let mut app_clone = self.clone_for_async();
+                            async move {
+                                let _ = app_clone.activate_selected().await;
+                            }
+                        });
+                    }
+                    KeyCode::Char('n') => {
+                        tokio::spawn({
+                            let mut app_clone = self.clone_for_async();
+                            async move {
+                                let _ = app_clone.create_new_session().await;
+                            }
+                        });
+                    }
+                    KeyCode::Char('t') => {
+                        tokio::spawn({
+                            let mut app_clone = self.clone_for_async();
+                            async move {
+                                let _ = app_clone.add_task_prompt().await;
+                            }
+                        });
+                    }
+                    KeyCode::Char(':') => {
+                        self.input_mode = InputMode::Command;
+                        self.input_buffer.clear();
+                    }
+                    _ => {}
+                }
+            }
+            InputMode::AddingTask
+            | InputMode::CreatingAgent
+            | InputMode::Command
+            | InputMode::DelegationInput => {
+                match key.code {
+                    KeyCode::Esc => {
+                        self.input_mode = InputMode::Normal;
+                        self.input_buffer.clear();
+                    }
+                    KeyCode::Enter => {
+                        let input = self.input_buffer.clone();
+                        let mode = self.input_mode.clone();
+                        self.input_mode = InputMode::Normal;
+                        self.input_buffer.clear();
+
+                        // Process the input based on mode
+                        tokio::spawn({
+                            let mut app_clone = self.clone_for_async();
+                            async move {
+                                match mode {
+                                    InputMode::AddingTask => {
+                                        let _ = app_clone.add_task(&input).await;
+                                    }
+                                    InputMode::CreatingAgent => {
+                                        let _ = app_clone.create_agent(&input).await;
+                                    }
+                                    InputMode::Command => {
+                                        let _ = app_clone.execute_command(&input).await;
+                                    }
+                                    InputMode::DelegationInput => {
+                                        let _ = app_clone.handle_delegation_input(&input).await;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        });
+                    }
+                    KeyCode::Char(c) => {
+                        self.input_buffer.push(c);
+                    }
+                    KeyCode::Backspace => {
+                        self.input_buffer.pop();
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle mouse events
+    pub fn handle_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> Result<()> {
+        use crossterm::event::{MouseButton, MouseEventKind};
+
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Handle tab clicks based on mouse position
+                if mouse.row == 0 {
+                    // Tab bar is at row 0
+                    let tab_width = self.terminal_width / 5; // 5 tabs
+                    let tab_index = mouse.column / tab_width;
+
+                    self.current_tab = match tab_index {
+                        0 => Tab::Overview,
+                        1 => Tab::Agents,
+                        2 => Tab::Tasks,
+                        3 => Tab::Logs,
+                        4 => Tab::Delegation,
+                        _ => self.current_tab.clone(),
+                    };
+                    self.reset_selection();
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                self.next_item();
+            }
+            MouseEventKind::ScrollUp => {
+                self.previous_item();
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Handle terminal resize
+    pub fn handle_resize(&mut self, width: u16, height: u16) -> Result<()> {
+        self.terminal_width = width;
+        self.terminal_height = height;
+        Ok(())
+    }
+
+    /// Add a task from input
+    pub async fn add_task(&mut self, description: &str) -> Result<()> {
+        let task = TaskInfo {
+            id: format!("task-{}", uuid::Uuid::new_v4()),
+            description: description.to_string(),
+            priority: "Medium".to_string(),
+            task_type: "Development".to_string(),
+            status: "Pending".to_string(),
+            assigned_agent: None,
+            created_at: Utc::now(),
+        };
+
+        self.tasks.push(task);
+        self.pending_tasks += 1;
+        self.add_log("System", &format!("Task added: {}", description))
+            .await;
+
+        Ok(())
+    }
+
+    /// Create a new agent from input
+    pub async fn create_agent(&mut self, agent_type: &str) -> Result<()> {
+        let agent = AgentInfo {
+            id: format!("agent-{}", uuid::Uuid::new_v4()),
+            name: format!("{}-specialist", agent_type),
+            specialization: agent_type.to_string(),
+            provider_type: "Claude Code".to_string(),
+            provider_icon: "🤖".to_string(),
+            provider_color: "#4CAF50".to_string(),
+            status: AgentStatus::Available,
+            current_task: None,
+            tasks_completed: 0,
+            last_activity: Utc::now(),
+            workspace: format!("./workspace/{}", agent_type),
+        };
+
+        self.agents.push(agent);
+        self.total_agents += 1;
+        self.add_log(
+            "System",
+            &format!("Agent created: {}-specialist", agent_type),
+        )
+        .await;
+
+        Ok(())
+    }
+
+    /// Handle delegation input
+    pub async fn handle_delegation_input(&mut self, input: &str) -> Result<()> {
+        match self.delegation_mode {
+            DelegationMode::Analyze => {
+                self.add_log("Delegation", &format!("Analyzing: {}", input))
+                    .await;
+
+                // Create a delegation decision
+                let decision = DelegationInfo {
+                    task_description: input.to_string(),
+                    recommended_agent: "frontend-specialist".to_string(),
+                    confidence: 0.85,
+                    reasoning: "Task requires frontend expertise".to_string(),
+                    created_at: Utc::now(),
+                };
+
+                self.delegation_decisions.push(decision);
+            }
+            DelegationMode::Delegate => {
+                self.add_log("Delegation", &format!("Delegating: {}", input))
+                    .await;
+                // Actually delegate the task
+                if let Some(task) = self.tasks.iter_mut().find(|t| t.status == "Pending") {
+                    task.assigned_agent = Some("frontend-specialist".to_string());
+                    task.status = "Assigned".to_string();
+                }
+            }
+            DelegationMode::ViewStats => {
+                self.add_log("Delegation", "Viewing delegation statistics")
+                    .await;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Clone for async operations (simplified clone without Arc fields)
+    fn clone_for_async(&self) -> Self {
+        // This is a simplified clone for async operations
+        // In a real implementation, you'd want to share state properly
+        Self {
+            current_tab: self.current_tab.clone(),
+            selected_agent: self.selected_agent,
+            selected_task: self.selected_task,
+            selected_log: self.selected_log,
+            selected_delegation: self.selected_delegation,
+            agents: self.agents.clone(),
+            tasks: self.tasks.clone(),
+            logs: self.logs.clone(),
+            delegation_decisions: self.delegation_decisions.clone(),
+            system_status: self.system_status.clone(),
+            total_agents: self.total_agents,
+            active_agents: self.active_agents,
+            pending_tasks: self.pending_tasks,
+            completed_tasks: self.completed_tasks,
+            tasks_executed: self.tasks_executed,
+            tasks_failed: self.tasks_failed,
+            success_rate: self.success_rate,
+            orchestration_usage: self.orchestration_usage,
+            input_mode: self.input_mode.clone(),
+            input_buffer: self.input_buffer.clone(),
+            delegation_mode: self.delegation_mode.clone(),
+            delegation_input: self.delegation_input.clone(),
+            coordination_bus: self.coordination_bus.clone(),
+            status_tracker: self.status_tracker.clone(),
+            task_queue: self.task_queue.clone(),
+            execution_engine: self.execution_engine.clone(),
+            terminal_width: self.terminal_width,
+            terminal_height: self.terminal_height,
+            last_update: self.last_update,
+            update_interval: self.update_interval,
+            should_quit: self.should_quit,
+        }
     }
 }
 

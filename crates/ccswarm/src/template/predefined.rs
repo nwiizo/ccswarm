@@ -373,7 +373,7 @@ impl PredefinedTemplates {
             TemplateVariable::boolean("performance", "Include performance tests"),
         ])
         .with_target_files(vec![
-            "tests/{{test_target}}.test.{{file_extension}}".to_string()
+            "tests/{{test_target}}.test.{{file_extension}}".to_string(),
         ])
     }
 
@@ -702,7 +702,7 @@ impl PredefinedTemplates {
 
     /// Rust module template
     pub fn rust_module() -> Template {
-        let template = Template::new(
+        Template::new(
             "rust-module",
             "Rust Module",
             "Create a new Rust module with proper structure and documentation",
@@ -727,8 +727,155 @@ impl PredefinedTemplates {
             - Add comprehensive rustdoc comments\n\
             - Implement proper error handling with Result<T, E>\n\
             - Use appropriate visibility modifiers",
-        );
+        )
+    }
 
-        template
+    /// Rust CLI command template
+    pub fn rust_cli_command() -> Template {
+        Template::new(
+            "rust-cli-command",
+            "Rust CLI Command",
+            "Create a new CLI command with clap for the Rust application",
+            TemplateCategory::Backend,
+        )
+        .with_author("ccswarm")
+        .with_tags(vec![
+            "rust".to_string(),
+            "cli".to_string(),
+            "command".to_string(),
+            "clap".to_string(),
+        ])
+        .with_task_description("Create CLI command {{command_name}} to {{command_purpose}}")
+        .with_task_details(
+            "## CLI Command Specification\n\n\
+            - **Command**: {{command_name}}\n\
+            - **Purpose**: {{command_purpose}}\n\
+            {{#if subcommands}}- **Subcommands**: {{subcommands}}\n{{/if}}\
+            {{#if arguments}}- **Arguments**: {{arguments}}\n{{/if}}\
+            {{#if options}}- **Options**: {{options}}\n{{/if}}\n\n\
+            ## Implementation Requirements\n\n\
+            - Use clap for argument parsing\n\
+            - Implement proper error handling\n\
+            - Add comprehensive help text\n\
+            - Follow CLI best practices\n\
+            - Include command examples in documentation",
+        )
+        .with_priority(Priority::Medium)
+        .with_task_type(TaskType::Development)
+        .with_duration(45)
+    }
+
+    /// Security review template
+    pub fn security_review() -> Template {
+        Template::new(
+            "security-review",
+            "Security Review",
+            "Conduct a security review of the codebase or component",
+            TemplateCategory::Review,
+        )
+        .with_author("ccswarm")
+        .with_tags(vec![
+            "security".to_string(),
+            "review".to_string(),
+            "audit".to_string(),
+            "vulnerability".to_string(),
+        ])
+        .with_task_description(
+            "Perform security review of {{review_target}} focusing on {{security_aspects}}",
+        )
+        .with_task_details(
+            "## Security Review Scope\n\n\
+            - **Target**: {{review_target}}\n\
+            - **Security Aspects**: {{security_aspects}}\n\
+            {{#if threat_model}}- **Threat Model**: {{threat_model}}\n{{/if}}\n\n\
+            ## Review Checklist\n\n\
+            - Authentication and authorization checks\n\
+            - Input validation and sanitization\n\
+            - SQL injection and XSS prevention\n\
+            - Secure data storage and transmission\n\
+            - Error handling and information disclosure\n\
+            - Dependencies vulnerability scan\n\
+            - Access control and privilege escalation\n\
+            {{#if penetration_test}}- Basic penetration testing\n{{/if}}\
+            {{#if compliance}}- Compliance requirements check\n{{/if}}",
+        )
+        .with_priority(Priority::High)
+        .with_task_type(TaskType::Review)
+        .with_duration(120)
+    }
+
+    /// Performance optimization template
+    pub fn performance_optimization() -> Template {
+        Template::new(
+            "performance-optimization",
+            "Performance Optimization",
+            "Optimize code or system performance based on profiling results",
+            TemplateCategory::Optimization,
+        )
+        .with_author("ccswarm")
+        .with_tags(vec![
+            "performance".to_string(),
+            "optimization".to_string(),
+            "profiling".to_string(),
+            "speed".to_string(),
+        ])
+        .with_task_description("Optimize {{optimization_target}} to improve {{performance_metric}}")
+        .with_task_details(
+            "## Optimization Specification\n\n\
+            - **Target**: {{optimization_target}}\n\
+            - **Performance Metric**: {{performance_metric}}\n\
+            - **Current Performance**: {{current_performance}}\n\
+            - **Target Performance**: {{target_performance}}\n\
+            {{#if bottlenecks}}- **Known Bottlenecks**: {{bottlenecks}}\n{{/if}}\n\n\
+            ## Optimization Strategy\n\n\
+            - Profile and measure current performance\n\
+            - Identify performance bottlenecks\n\
+            - Implement targeted optimizations\n\
+            - Measure improvement after each change\n\
+            - Document performance gains\n\
+            {{#if caching}}- Implement caching strategies\n{{/if}}\
+            {{#if database}}- Optimize database queries and indexes\n{{/if}}\
+            {{#if algorithm}}- Improve algorithmic complexity\n{{/if}}",
+        )
+        .with_priority(Priority::Medium)
+        .with_task_type(TaskType::Development)
+        .with_duration(90)
+    }
+
+    /// Code refactor template
+    pub fn code_refactor() -> Template {
+        Template::new(
+            "code-refactor",
+            "Code Refactoring",
+            "Refactor code to improve maintainability and readability",
+            TemplateCategory::Refactoring,
+        )
+        .with_author("ccswarm")
+        .with_tags(vec![
+            "refactor".to_string(),
+            "clean-code".to_string(),
+            "maintenance".to_string(),
+            "technical-debt".to_string(),
+        ])
+        .with_task_description("Refactor {{refactor_target}} to {{refactor_goal}}")
+        .with_task_details(
+            "## Refactoring Specification\n\n\
+            - **Target**: {{refactor_target}}\n\
+            - **Goal**: {{refactor_goal}}\n\
+            {{#if code_smells}}- **Code Smells**: {{code_smells}}\n{{/if}}\
+            {{#if design_patterns}}- **Design Patterns**: {{design_patterns}}\n{{/if}}\n\n\
+            ## Refactoring Requirements\n\n\
+            - Maintain existing functionality (no behavior changes)\n\
+            - Improve code readability and structure\n\
+            - Reduce complexity and duplication\n\
+            - Add or improve documentation\n\
+            - Ensure all tests pass after refactoring\n\
+            {{#if extract_methods}}- Extract methods for complex logic\n{{/if}}\
+            {{#if rename_variables}}- Rename variables for clarity\n{{/if}}\
+            {{#if split_modules}}- Split large modules into smaller ones\n{{/if}}",
+        )
+        .with_priority(Priority::Low)
+        .with_task_type(TaskType::Development)
+        .with_duration(60)
     }
 }

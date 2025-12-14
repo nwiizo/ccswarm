@@ -3,7 +3,7 @@ use ccswarm::config::{
     ProjectConfig, RepositoryConfig, ThinkMode,
 };
 use ccswarm::coordination::{AgentMessage, CoordinationBus};
-use ccswarm::orchestrator::MasterClaude;
+use ccswarm::orchestrator::{MasterClaude, ProactiveMaster};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;

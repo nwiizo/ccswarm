@@ -41,7 +41,7 @@ pub mod dialogue;
 
 // Re-export key conversion utilities
 pub use conversion::{
-    convert_from_ai_session, convert_to_ai_session, AgentMappingRegistry, UnifiedAgentInfo,
+    AgentMappingRegistry, UnifiedAgentInfo, convert_from_ai_session, convert_to_ai_session,
 };
 
 /// Messages sent between agents and the orchestrator
@@ -350,6 +350,7 @@ impl TaskQueue {
 }
 
 /// Agent status tracking
+#[derive(Clone)]
 pub struct StatusTracker {
     /// Directory for status files
     status_dir: PathBuf,
@@ -418,4 +419,3 @@ impl StatusTracker {
         Ok(statuses)
     }
 }
-

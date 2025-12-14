@@ -298,4 +298,3 @@ impl AgentConverter {
         Ok(converted)
     }
 }
-

@@ -1,14 +1,20 @@
 use std::future::Future;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 use crate::error::CCSwarmError;
 
 /// Error recovery strategies
 #[derive(Debug, Clone)]
 pub enum RecoveryStrategy {
-    Retry { max_attempts: u32, delay_ms: u64 },
+    Retry {
+        max_attempts: u32,
+        delay_ms: u64,
+    },
     Fallback,
-    CircuitBreaker { threshold: u32, reset_time: Duration },
+    CircuitBreaker {
+        threshold: u32,
+        reset_time: Duration,
+    },
     Ignore,
 }
 
@@ -36,7 +42,10 @@ impl ErrorRecovery {
         Fut: Future<Output = Result<T, CCSwarmError>>,
     {
         match &self.strategy {
-            RecoveryStrategy::Retry { max_attempts, delay_ms } => {
+            RecoveryStrategy::Retry {
+                max_attempts,
+                delay_ms,
+            } => {
                 for attempt in 0..*max_attempts {
                     match operation().await {
                         Ok(result) => {
@@ -55,14 +64,17 @@ impl ErrorRecovery {
                     source: None,
                 })
             }
-            RecoveryStrategy::Fallback => {
-                match operation().await {
-                    Ok(result) => Ok(result),
-                    Err(_) if fallback.is_some() => Ok(fallback.unwrap()),
-                    Err(e) => Err(e),
-                }
-            }
-            RecoveryStrategy::CircuitBreaker { threshold, reset_time: _ } => {
+            RecoveryStrategy::Fallback => match operation().await {
+                Ok(result) => Ok(result),
+                Err(e) => match fallback {
+                    Some(fb) => Ok(fb),
+                    None => Err(e),
+                },
+            },
+            RecoveryStrategy::CircuitBreaker {
+                threshold,
+                reset_time: _,
+            } => {
                 if self.failure_count >= *threshold {
                     return Err(CCSwarmError::Other {
                         message: "Circuit breaker open".to_string(),
@@ -81,9 +93,7 @@ impl ErrorRecovery {
                     }
                 }
             }
-            RecoveryStrategy::Ignore => {
-                operation().await
-            }
+            RecoveryStrategy::Ignore => operation().await,
         }
     }
 }
@@ -121,7 +131,10 @@ impl Default for ErrorResolver {
 impl ErrorResolver {
     pub fn new() -> Self {
         Self {
-            strategies: vec![RecoveryStrategy::Retry { max_attempts: 3, delay_ms: 1000 }],
+            strategies: vec![RecoveryStrategy::Retry {
+                max_attempts: 3,
+                delay_ms: 1000,
+            }],
         }
     }
 
@@ -157,9 +170,8 @@ impl ErrorRecoveryDB {
     }
 
     pub fn get_recovery(&self, error_type: &str) -> Option<RecoveryStep> {
-        self.get_action(error_type).map(|action| {
-            RecoveryStep::new(action.clone(), format!("Recovery for {}", error_type))
-        })
+        self.get_action(error_type)
+            .map(|action| RecoveryStep::new(action.clone(), format!("Recovery for {}", error_type)))
     }
 
     pub async fn auto_fix(&self, error_type: &str) -> Result<(), CCSwarmError> {
@@ -169,12 +181,10 @@ impl ErrorRecoveryDB {
                     // Can potentially auto-fix commands
                     Ok(())
                 }
-                _ => {
-                    Err(CCSwarmError::Other {
-                        message: "Cannot auto-fix this error".to_string(),
-                        source: None,
-                    })
-                }
+                _ => Err(CCSwarmError::Other {
+                    message: "Cannot auto-fix this error".to_string(),
+                    source: None,
+                }),
             }
         } else {
             Err(CCSwarmError::Other {
@@ -188,21 +198,10 @@ impl ErrorRecoveryDB {
 /// Recovery step
 #[derive(Debug, Clone)]
 pub enum RecoveryStep {
-    Command {
-        cmd: String,
-        description: String,
-    },
-    FileCreate {
-        path: String,
-        content: String,
-    },
-    EnvVar {
-        name: String,
-        example: String,
-    },
-    UserAction {
-        description: String,
-    },
+    Command { cmd: String, description: String },
+    FileCreate { path: String, content: String },
+    EnvVar { name: String, example: String },
+    UserAction { description: String },
 }
 
 impl RecoveryStep {

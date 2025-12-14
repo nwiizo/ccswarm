@@ -31,6 +31,29 @@ impl std::fmt::Display for ThinkMode {
     }
 }
 
+/// Output format for Claude Code CLI
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum OutputFormat {
+    /// Plain text output
+    #[default]
+    Text,
+    /// Structured JSON output with metadata
+    Json,
+    /// Streaming JSON output (each message as separate JSON object)
+    StreamJson,
+}
+
+impl OutputFormat {
+    /// Convert to CLI argument value
+    pub fn as_cli_arg(&self) -> &'static str {
+        match self {
+            OutputFormat::Text => "text",
+            OutputFormat::Json => "json",
+            OutputFormat::StreamJson => "stream-json",
+        }
+    }
+}
+
 /// Claude Code configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeConfig {
@@ -46,6 +69,18 @@ pub struct ClaudeConfig {
 
     /// Output in JSON format
     pub json_output: bool,
+
+    /// Output format: "text", "json", or "stream-json"
+    #[serde(default)]
+    pub output_format: OutputFormat,
+
+    /// Append to system prompt (recommended over replacing)
+    #[serde(default)]
+    pub append_system_prompt: Option<String>,
+
+    /// Maximum agentic turns in non-interactive mode
+    #[serde(default)]
+    pub max_turns: Option<u32>,
 
     /// Custom commands available to this agent
     pub custom_commands: Vec<String>,
@@ -66,6 +101,9 @@ impl Default for ClaudeConfig {
             dangerous_skip: true,
             think_mode: Some(ThinkMode::Think),
             json_output: true,
+            output_format: OutputFormat::Json,
+            append_system_prompt: None,
+            max_turns: None,
             custom_commands: Vec::new(),
             mcp_servers: HashMap::new(),
             use_real_api: false,
@@ -81,6 +119,9 @@ impl ClaudeConfig {
             dangerous_skip: true,
             think_mode: Some(ThinkMode::UltraThink),
             json_output: true,
+            output_format: OutputFormat::Json,
+            append_system_prompt: None,
+            max_turns: None,
             custom_commands: vec![
                 "ccswarm status".to_string(),
                 "ccswarm review".to_string(),
@@ -130,6 +171,9 @@ impl ClaudeConfig {
             dangerous_skip: true,
             think_mode,
             json_output: true,
+            output_format: OutputFormat::Json,
+            append_system_prompt: None,
+            max_turns: None,
             custom_commands,
             mcp_servers: HashMap::new(),
             use_real_api: false,

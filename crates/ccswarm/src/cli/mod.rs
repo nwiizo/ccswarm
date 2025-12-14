@@ -17,13 +17,13 @@ mod resource_commands;
 mod setup_wizard;
 mod tutorial;
 
-pub use interactive_help::{show_quick_help, InteractiveHelp};
-use output::{create_formatter, OutputFormatter};
+pub use interactive_help::{InteractiveHelp, show_quick_help};
+use output::{OutputFormatter, create_formatter};
 pub use progress::{ProcessTracker, ProgressStyle, ProgressTracker, StatusLine};
 pub use setup_wizard::SetupWizard;
 pub use tutorial::InteractiveTutorial;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::io::Write;
@@ -34,7 +34,7 @@ use tracing::{info, warn};
 use crate::agent::{Priority, Task, TaskType};
 use crate::config::CcswarmConfig;
 use crate::execution::{ExecutionEngine, TaskStatus};
-use crate::orchestrator::MasterClaude;
+use crate::orchestrator::ProactiveMaster;
 
 /// ccswarm - Claude Code統括型マルチエージェントシステム
 #[derive(Parser)]
@@ -1332,7 +1332,7 @@ impl CliRunner {
             config.project.master_claude.claude_config.use_real_api = true;
         }
 
-        let mut master = MasterClaude::new(config, self.repo_path.clone()).await?;
+        let mut master = ProactiveMaster::new_with_config(config, self.repo_path.clone()).await?;
 
         // Set isolation mode for all agents
         master.set_isolation_mode(isolation_mode);
@@ -1380,7 +1380,7 @@ impl CliRunner {
 
         // Start TUI with execution engine if available
         if let Some(ref execution_engine) = self.execution_engine {
-            crate::tui::run_tui_with_engine(execution_engine.clone()).await?;
+            crate::tui::run_tui_with_engine(Arc::new(execution_engine.clone())).await?;
         } else {
             crate::tui::run_tui().await?;
         }
@@ -1498,7 +1498,6 @@ impl CliRunner {
                         println!("  Status: {}", status["status"]);
                         println!("  Updated: {}", status["timestamp"]);
 
-                        // Show role-specific summary for backend agents
                         if let Some(role) = status.get("role") {
                             if role.as_str() == Some("Backend") {
                                 if let Some(backend_info) = status.get("backend_specific") {
@@ -1551,10 +1550,8 @@ impl CliRunner {
         details: Option<&str>,
         duration: Option<u32>,
     ) -> Result<()> {
-        // use crate::cli::progress::{ProgressStyle, ProgressTracker};
         use crate::utils::user_error::CommonErrors;
 
-        // Validate task description
         if description.trim().is_empty() {
             CommonErrors::invalid_task_format()
                 .with_details("Task description cannot be empty")
@@ -1563,7 +1560,6 @@ impl CliRunner {
             return Err(anyhow!("Invalid task description"));
         }
 
-        // Create task (simplified progress display)
         println!(
             "Creating task: {}...",
             description.chars().take(50).collect::<String>()
@@ -1605,18 +1601,13 @@ impl CliRunner {
             task = task.with_duration(duration);
         }
 
-        // Add to task queue via execution engine
         let task_id = if let Some(ref engine) = self.execution_engine {
             let executor = engine.get_executor();
             executor.add_task(task.clone()).await
         } else {
-            // Fall back to creating task with ID but warn user
             warn!("Execution engine not available, task will not be executed");
             task.id.clone()
         };
-
-        // Complete progress indicator
-        // ProgressTracker::complete(progress, true, Some("Task created successfully".to_string())).await;
 
         if self.json_output {
             println!(
@@ -1659,14 +1650,12 @@ impl CliRunner {
                 println!("   {} {} minutes", "Est. Duration:".bright_cyan(), duration);
             }
 
-            // Show helpful next steps
             show_quick_help("task-created");
         }
 
         Ok(())
     }
 
-    /// Handle task management commands
     async fn handle_task(&self, action: &TaskAction) -> Result<()> {
         match action {
             TaskAction::Add {
@@ -1734,7 +1723,6 @@ impl CliRunner {
         }
     }
 
-    /// List tasks with filters
     async fn list_tasks(
         &self,
         all: bool,
@@ -2250,7 +2238,8 @@ impl CliRunner {
                 println!("  Specialization: {}", config.specialization);
                 println!("  Worktree: {}", config.worktree);
                 println!("  Branch: {}", config.branch);
-                println!("  Think Mode: {:?}", config.claude_config.think_mode);
+                println!("  Model: {}", config.claude_config.model);
+                println!("  Output Format: {:?}", config.claude_config.output_format);
                 println!();
             }
         }
@@ -3222,7 +3211,9 @@ impl CliRunner {
                             println!("📋 Active Sessions");
                             println!("=================");
                             println!("No tmux sessions found");
-                            println!("(Start tmux server with 'tmux new-session -d -s temp && tmux kill-session -t temp')");
+                            println!(
+                                "(Start tmux server with 'tmux new-session -d -s temp && tmux kill-session -t temp')"
+                            );
                         } else {
                             println!("❌ tmux command failed: {}", error_msg.trim());
                         }
@@ -4149,7 +4140,9 @@ impl CliRunner {
                 }
 
                 if *continuous && !self.json_output {
-                    println!("\n♾️  Continuous mode enabled - agents will autonomously propose extensions as needed");
+                    println!(
+                        "\n♾️  Continuous mode enabled - agents will autonomously propose extensions as needed"
+                    );
                     println!("   Press Ctrl+C to stop");
                 }
 
@@ -4528,7 +4521,7 @@ impl CliRunner {
                     });
 
                     // Test connection
-                    if let Ok(_) = adapter.connect().await {
+                    if adapter.connect().await.is_ok() {
                         diagnostics["connection"] = serde_json::json!({
                             "status": "connected",
                             "session_id": adapter.session_id()
@@ -4563,7 +4556,7 @@ impl CliRunner {
 
                     println!("\n🧪 Connection Test:");
                     print!("   Attempting to connect... ");
-                    if let Ok(_) = adapter.connect().await {
+                    if adapter.connect().await.is_ok() {
                         println!("✅ Success!");
                         if let Some(session_id) = adapter.session_id() {
                             println!("   Session ID: {}", session_id);
@@ -4712,7 +4705,10 @@ impl CliRunner {
                     .collect();
 
                 total_tasks = filtered_checks.len();
-                println!("🎯 Master Claude: Orchestrating {} quality checks through specialized agents...", total_tasks);
+                println!(
+                    "🎯 Master Claude: Orchestrating {} quality checks through specialized agents...",
+                    total_tasks
+                );
                 println!();
 
                 for check in filtered_checks {
@@ -4945,7 +4941,9 @@ impl CliRunner {
                             println!("✅ Backend Agent: Security audit passed");
                         }
                         _ => {
-                            println!("❌ Backend Agent: Security audit found issues (or cargo-audit not installed)");
+                            println!(
+                                "❌ Backend Agent: Security audit found issues (or cargo-audit not installed)"
+                            );
                         }
                     }
                 }
@@ -5475,7 +5473,7 @@ impl CliRunner {
         detailed: bool,
         format: &str,
     ) -> Result<()> {
-        use crate::cli::health::{run_diagnostics, HealthChecker};
+        use crate::cli::health::{HealthChecker, run_diagnostics};
         use crate::coordination::StatusTracker;
 
         // Run diagnostics if requested
@@ -5604,16 +5602,16 @@ impl CliRunner {
                 match &recovery {
                     crate::utils::error_recovery::RecoveryStep::UserAction { description } => {
                         println!("📋 {}", description.bright_white());
-                    },
+                    }
                     crate::utils::error_recovery::RecoveryStep::Command { description, .. } => {
                         println!("📋 {}", description.bright_white());
-                    },
+                    }
                     crate::utils::error_recovery::RecoveryStep::FileCreate { path, .. } => {
                         println!("📋 Create file: {}", path.bright_white());
-                    },
+                    }
                     crate::utils::error_recovery::RecoveryStep::EnvVar { name, .. } => {
                         println!("📋 Set environment variable: {}", name.bright_white());
-                    },
+                    }
                 }
                 println!();
                 println!("Recovery steps:");
@@ -5656,7 +5654,10 @@ impl CliRunner {
                     println!();
                 }
 
-                let can_auto_fix = matches!(recovery, crate::utils::error_recovery::RecoveryStep::Command { .. });
+                let can_auto_fix = matches!(
+                    recovery,
+                    crate::utils::error_recovery::RecoveryStep::Command { .. }
+                );
                 if can_auto_fix && fix {
                     recovery_db.auto_fix(code).await?;
                 } else if can_auto_fix {
@@ -5857,4 +5858,3 @@ pub enum ClaudeACPCommands {
     /// Run diagnostics
     Diagnose,
 }
-

@@ -17,7 +17,10 @@ pub struct StartCommand {
 #[async_trait]
 impl super::Command for StartCommand {
     async fn execute(self) -> Result<()> {
-        tracing::info!("Starting ccswarm orchestrator with {} workers", self.workers);
+        tracing::info!(
+            "Starting ccswarm orchestrator with {} workers",
+            self.workers
+        );
         // Implementation will use the channel-based orchestrator
         Ok(())
     }

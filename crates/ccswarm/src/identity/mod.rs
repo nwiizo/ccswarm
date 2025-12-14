@@ -237,7 +237,8 @@ impl IdentityMonitor {
         ];
 
         for pattern in violation_patterns {
-            let re = Regex::new(pattern).unwrap();
+            // These patterns are hardcoded and safe, so we use expect with a clear message
+            let re = Regex::new(pattern).expect("Hardcoded regex pattern should always be valid");
             if re.is_match(response) {
                 return false;
             }
@@ -297,9 +298,12 @@ impl Default for ResponseParser {
 impl ResponseParser {
     pub fn new() -> Self {
         Self {
-            identity_regex: Regex::new(r"🤖 AGENT: (.+)").unwrap(),
-            workspace_regex: Regex::new(r"📁 WORKSPACE: (.+)").unwrap(),
-            scope_regex: Regex::new(r"🎯 SCOPE: (.+)").unwrap(),
+            identity_regex: Regex::new(r"🤖 AGENT: (.+)")
+                .expect("Identity regex pattern should be valid"),
+            workspace_regex: Regex::new(r"📁 WORKSPACE: (.+)")
+                .expect("Workspace regex pattern should be valid"),
+            scope_regex: Regex::new(r"🎯 SCOPE: (.+)")
+                .expect("Scope regex pattern should be valid"),
         }
     }
 

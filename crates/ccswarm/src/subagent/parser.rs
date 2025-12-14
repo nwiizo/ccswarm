@@ -56,7 +56,10 @@ impl SubagentParser {
                 match Self::parse_file(&path) {
                     Ok(agent) => agents.push(agent),
                     Err(e) => {
-                        crate::utils::logging::log_parse_warning(&path.display().to_string(), &e);
+                        crate::utils::common::logging::log_parse_warning(
+                            &path.display().to_string(),
+                            &e,
+                        );
                     }
                 }
             }
@@ -100,4 +103,3 @@ impl SubagentParser {
         Ok(())
     }
 }
-

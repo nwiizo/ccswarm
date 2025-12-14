@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::agent::{Priority, Task, TaskResult};
-use crate::utils::{errors, time};
+use crate::utils::common::{errors, time};
 
 /// Common trait for updating task status with timestamp
 trait TaskStatusUpdate {
@@ -124,7 +124,10 @@ impl TaskQueue {
         if let Some(mut task) = active.remove(task_id) {
             // Validate task is in progress
             if !matches!(task.status, TaskStatus::InProgress { .. }) {
-                return Err(errors::invalid_state_error("in_progress", &format!("{:?}", task.status)));
+                return Err(errors::invalid_state_error(
+                    "in_progress",
+                    &format!("{:?}", task.status),
+                ));
             }
 
             task.update_status_with_timestamp(status);
@@ -248,21 +251,25 @@ impl TaskQueue {
         }
     }
 
+    /// Extract agent_id from active task (DRY helper)
+    async fn extract_agent_id(&self, task_id: &str) -> anyhow::Result<String> {
+        let active = self.active_tasks.read().await;
+        match active.get(task_id) {
+            Some(task) => match &task.status {
+                TaskStatus::InProgress { agent_id, .. } => Ok(agent_id.clone()),
+                _ => Err(errors::invalid_state_error(
+                    "in_progress",
+                    &format!("{:?}", task.status),
+                )),
+            },
+            None => Err(errors::not_found_error("Active task", task_id)),
+        }
+    }
+
     /// Complete task execution
     pub async fn complete_task(&self, task_id: &str, result: TaskResult) -> anyhow::Result<()> {
         let now = time::now();
-
-        // Extract agent_id from current status before finishing
-        let agent_id = {
-            let active = self.active_tasks.read().await;
-            match active.get(task_id) {
-                Some(task) => match &task.status {
-                    TaskStatus::InProgress { agent_id, .. } => agent_id.clone(),
-                    _ => return Err(errors::invalid_state_error("in_progress", &format!("{:?}", task.status))),
-                },
-                None => return Err(errors::not_found_error("Active task", task_id)),
-            }
-        };
+        let agent_id = self.extract_agent_id(task_id).await?;
 
         let status = TaskStatus::Completed {
             agent_id,
@@ -272,24 +279,14 @@ impl TaskQueue {
 
         self.finish_task(task_id, status, |attempt| {
             attempt.result = Some(result);
-        }).await
+        })
+        .await
     }
 
     /// Mark task as failed
     pub async fn fail_task(&self, task_id: &str, error: String) -> anyhow::Result<()> {
         let now = time::now();
-
-        // Extract agent_id from current status before finishing
-        let agent_id = {
-            let active = self.active_tasks.read().await;
-            match active.get(task_id) {
-                Some(task) => match &task.status {
-                    TaskStatus::InProgress { agent_id, .. } => agent_id.clone(),
-                    _ => return Err(errors::invalid_state_error("in_progress", &format!("{:?}", task.status))),
-                },
-                None => return Err(errors::not_found_error("Active task", task_id)),
-            }
-        };
+        let agent_id = self.extract_agent_id(task_id).await?;
 
         let status = TaskStatus::Failed {
             agent_id,
@@ -299,7 +296,8 @@ impl TaskQueue {
 
         self.finish_task(task_id, status, |attempt| {
             attempt.error = Some(error);
-        }).await
+        })
+        .await
     }
 
     /// Cancel a task
@@ -326,15 +324,17 @@ impl TaskQueue {
         // Check pending tasks
         for (_, queue) in pending.iter_mut() {
             if let Some(pos) = queue.iter().position(|t| t.task.id == task_id) {
-                let mut task = queue.remove(pos).unwrap();
-                task.status = TaskStatus::Cancelled {
-                    cancelled_at: now,
-                    reason,
-                };
-                task.updated_at = now;
-                completed.push_back(task);
-                tasks.remove(task_id);
-                return Ok(());
+                // Safe to remove since we just found the position
+                if let Some(mut task) = queue.remove(pos) {
+                    task.status = TaskStatus::Cancelled {
+                        cancelled_at: now,
+                        reason,
+                    };
+                    task.updated_at = now;
+                    completed.push_back(task);
+                    tasks.remove(task_id);
+                    return Ok(());
+                }
             }
         }
 
@@ -470,4 +470,3 @@ pub struct TaskQueueStats {
     pub failed_count: usize,
     pub total_count: usize,
 }
-

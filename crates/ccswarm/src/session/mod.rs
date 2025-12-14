@@ -7,6 +7,7 @@ pub mod memory;
 pub mod persistent_session;
 pub mod session_optimization;
 pub mod session_pool;
+pub mod session_typestate;
 pub mod traits;
 pub mod worktree_session;
 
@@ -93,7 +94,6 @@ pub struct AgentSession {
 }
 
 impl AgentSession {
-    /// Creates a new agent session
     pub fn new(
         agent_id: String,
         agent_role: AgentRole,
@@ -161,7 +161,6 @@ impl AgentSession {
         self.touch();
     }
 
-    /// Updates auto-accept configuration
     pub fn update_auto_accept_config(&mut self, config: AutoAcceptConfig) {
         if self.auto_accept {
             self.auto_accept_config = Some(config);
@@ -233,7 +232,6 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
-    /// Creates a new session manager
     pub async fn new() -> SessionResult<Self> {
         Ok(Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -263,7 +261,6 @@ impl SessionManager {
         })
     }
 
-    /// Creates a new agent session
     ///
     /// # Arguments
     /// * `agent_id` - ID of the agent to run in this session
@@ -783,4 +780,3 @@ impl Default for SessionManager {
         })
     }
 }
-

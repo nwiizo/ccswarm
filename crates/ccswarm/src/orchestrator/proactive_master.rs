@@ -14,6 +14,12 @@ use crate::coordination::{AgentMessage, CoordinationBus, CoordinationType};
 
 /// Proactive Master Claude intelligence system
 pub struct ProactiveMaster {
+    /// Unique identifier for this master instance
+    pub id: String,
+
+    /// List of agents (compatibility field)
+    pub agents: Vec<String>,
+
     /// Project context and goals
     project_context: Arc<RwLock<ProjectContext>>,
 
@@ -254,7 +260,16 @@ pub enum RiskLevel {
 }
 
 impl ProactiveMaster {
+    /// Create a new ProactiveMaster instance
     pub async fn new() -> Result<Self> {
+        Self::new_with_config(Default::default(), std::path::PathBuf::from(".")).await
+    }
+
+    /// Create a new ProactiveMaster with config and repo path (for compatibility)
+    pub async fn new_with_config(
+        _config: crate::config::CcswarmConfig,
+        _repo_path: std::path::PathBuf,
+    ) -> Result<Self> {
         let project_context = Arc::new(RwLock::new(ProjectContext {
             project_type: "web_application".to_string(),
             tech_stack: vec![
@@ -295,6 +310,8 @@ impl ProactiveMaster {
         }));
 
         Ok(Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            agents: vec![],
             project_context,
             dependency_graph,
             progress_analyzer,
@@ -1164,6 +1181,26 @@ impl ProactiveMaster {
                 .await?;
         }
 
+        Ok(())
+    }
+
+    /// Set isolation mode for agents (compatibility method)
+    pub fn set_isolation_mode(&mut self, _mode: crate::agent::IsolationMode) {
+        // This is a compatibility method, isolation is handled differently in ProactiveMaster
+        tracing::debug!("Isolation mode set (handled internally)");
+    }
+
+    /// Initialize the ProactiveMaster (compatibility method)
+    pub async fn initialize(&mut self) -> Result<()> {
+        // ProactiveMaster initializes itself in new(), this is for compatibility
+        tracing::info!("ProactiveMaster initialized");
+        Ok(())
+    }
+
+    /// Start coordination (compatibility method)
+    pub async fn start_coordination(&mut self) -> Result<()> {
+        // ProactiveMaster is already coordinating
+        tracing::info!("ProactiveMaster coordination started");
         Ok(())
     }
 }

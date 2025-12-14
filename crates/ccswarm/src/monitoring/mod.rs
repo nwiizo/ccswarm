@@ -149,7 +149,9 @@ impl AgentOutputStream {
             .map_err(|e| format!("Failed to lock cleanup time: {}", e))?;
         if last_cleanup.elapsed() > Duration::from_secs(300) {
             // Check every 5 minutes
-            let cutoff_time = Utc::now() - chrono::Duration::from_std(MAX_OUTPUT_AGE).unwrap();
+            let cutoff_time = Utc::now()
+                - chrono::Duration::from_std(MAX_OUTPUT_AGE)
+                    .expect("MAX_OUTPUT_AGE should be a valid duration");
             buffer.retain(|entry| entry.timestamp > cutoff_time);
             *last_cleanup = Instant::now();
         }
@@ -389,7 +391,7 @@ impl MonitoringSystem {
                     entries_per_type: std::collections::HashMap::new(),
                     active_streams: 0,
                     total_subscribers: 0,
-                }
+                };
             }
         };
 
@@ -427,4 +429,3 @@ impl Default for MonitoringSystem {
         Self::new()
     }
 }
-

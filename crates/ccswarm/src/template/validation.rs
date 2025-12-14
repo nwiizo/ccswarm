@@ -1,6 +1,34 @@
 //! Template validation utilities
 
-use super::{Template, TemplateError};
+use super::Template;
+use crate::template::types::TemplateError;
+
+/// Result of applying a template with substituted values
+#[derive(Debug, Clone)]
+pub struct AppliedTemplate {
+    /// The original template that was applied
+    pub template: Template,
+    /// The substituted task description
+    pub task_description: String,
+    /// The substituted task details (if any)
+    pub task_details: Option<String>,
+    /// Applied variables
+    pub applied_variables: std::collections::HashMap<String, String>,
+
+    // Additional fields for compatibility
+    /// The description (alias for task_description)
+    pub description: String,
+    /// The details (alias for task_details)
+    pub details: Option<String>,
+    /// The priority from the template
+    pub priority: crate::agent::Priority,
+    /// The task type from the template
+    pub task_type: crate::agent::TaskType,
+    /// Estimated duration from template
+    pub estimated_duration: Option<u32>,
+    /// Target files from template
+    pub target_files: Vec<String>,
+}
 
 /// Template validator for ensuring template quality and correctness
 pub struct TemplateValidator;

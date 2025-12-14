@@ -213,12 +213,12 @@ impl CommandRegistry {
         &mut self,
         name: &'static str,
         handler: impl for<'a> Fn(
-                &'a CliRunner,
-                &'a Commands,
-            ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
-            + Send
-            + Sync
-            + 'static,
+            &'a CliRunner,
+            &'a Commands,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
+        + Send
+        + Sync
+        + 'static,
     ) {
         self.handlers.insert(name, Box::new(handler));
     }

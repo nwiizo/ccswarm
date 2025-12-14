@@ -20,7 +20,7 @@ macro_rules! concurrent_execute {
 macro_rules! resilient_async {
     ($operation:expr, timeout: $timeout:expr, retries: $retries:expr) => {{
         use anyhow::Context;
-        use tokio::time::{timeout, Duration};
+        use tokio::time::{Duration, timeout};
 
         let mut attempts = 0;
         let mut last_error = None;
@@ -179,4 +179,3 @@ macro_rules! rate_limited_async {
         $operation.await
     }};
 }
-

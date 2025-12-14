@@ -127,35 +127,88 @@ pub struct ProviderCapabilities {
     pub supported_languages: Vec<String>,
 }
 
+/// Output format for Claude Code CLI
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum OutputFormat {
+    /// Plain text output
+    #[default]
+    Text,
+    /// Structured JSON output with metadata
+    Json,
+    /// Streaming JSON output (each message as separate JSON object)
+    StreamJson,
+}
+
+impl OutputFormat {
+    /// Convert to CLI argument value
+    pub fn as_cli_arg(&self) -> &'static str {
+        match self {
+            OutputFormat::Text => "text",
+            OutputFormat::Json => "json",
+            OutputFormat::StreamJson => "stream-json",
+        }
+    }
+}
+
 /// Claude Code provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeCodeConfig {
-    /// Model to use (e.g., "claude-3.5-sonnet")
+    /// Model to use (aliases: "sonnet", "opus", "haiku", "opusplan", or full model name)
     pub model: String,
     /// Whether to skip permission prompts
     pub dangerous_skip: bool,
-    /// Think mode to use
-    pub think_mode: Option<String>,
-    /// Output in JSON format
-    pub json_output: bool,
+    /// Output format: "text", "json", or "stream-json"
+    pub output_format: OutputFormat,
+    /// Append to system prompt (recommended over replacing)
+    pub append_system_prompt: Option<String>,
     /// Custom commands available
     pub custom_commands: Vec<String>,
     /// MCP servers configuration
     pub mcp_servers: HashMap<String, serde_json::Value>,
     /// API key (optional, uses system default if not provided)
     pub api_key: Option<String>,
+    /// Session ID for resuming conversations
+    pub session_id: Option<String>,
+    /// Resume a specific session
+    pub resume_session: Option<String>,
+    /// Continue most recent conversation
+    pub continue_session: bool,
+    /// Fork session instead of reusing original
+    pub fork_session: bool,
+    /// Maximum agentic turns in non-interactive mode
+    pub max_turns: Option<u32>,
+    /// Fallback model when primary is overloaded
+    pub fallback_model: Option<String>,
+    /// Allowed tools (whitelist)
+    pub allowed_tools: Vec<String>,
+    /// Disallowed tools (blacklist)
+    pub disallowed_tools: Vec<String>,
+    /// Enable verbose logging
+    pub verbose: bool,
+    /// Enable MCP debug mode
+    pub mcp_debug: bool,
 }
 
 impl Default for ClaudeCodeConfig {
     fn default() -> Self {
         Self {
-            model: "claude-3.5-sonnet".to_string(),
+            model: "sonnet".to_string(), // Use model alias (recommended)
             dangerous_skip: false,
-            think_mode: Some("think".to_string()),
-            json_output: true,
+            output_format: OutputFormat::Json,
+            append_system_prompt: None,
             custom_commands: Vec::new(),
             mcp_servers: HashMap::new(),
             api_key: None,
+            session_id: None,
+            resume_session: None,
+            continue_session: false,
+            fork_session: false,
+            max_turns: None,
+            fallback_model: None,
+            allowed_tools: Vec::new(),
+            disallowed_tools: Vec::new(),
+            verbose: false,
+            mcp_debug: false,
         }
     }
 }
@@ -304,6 +357,10 @@ pub struct CodexConfig {
     pub api_base: Option<String>,
     /// Organization ID
     pub organization: Option<String>,
+    /// Enable JSON mode for structured output
+    pub json_mode: Option<bool>,
+    /// Enable streaming responses
+    pub stream: Option<bool>,
 }
 
 impl Default for CodexConfig {
@@ -315,6 +372,8 @@ impl Default for CodexConfig {
             temperature: Some(0.1),
             api_base: None,
             organization: None,
+            json_mode: None,
+            stream: None,
         }
     }
 }
@@ -615,7 +674,7 @@ impl ProviderFactory {
             }
             AIProvider::Codex => {
                 if let Some(codex_config) = &config.codex {
-                    Ok(Box::new(codex::CodexExecutor::new(codex_config.clone())))
+                    Ok(Box::new(codex::CodexExecutor::new(codex_config.clone())?))
                 } else {
                     Err(anyhow::anyhow!("Codex configuration missing"))
                 }
@@ -630,4 +689,3 @@ impl ProviderFactory {
         }
     }
 }
-

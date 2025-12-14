@@ -6,9 +6,9 @@
 use anyhow::Result;
 use ccswarm::{
     agent::{
+        Priority, TaskBuilder,
         orchestrator::{AgentOrchestrator, StepType, TaskPlan},
         simple::SimpleClaudeAgent,
-        Priority, TaskBuilder,
     },
     config::ClaudeConfig,
     identity::{default_backend_role, default_frontend_role},

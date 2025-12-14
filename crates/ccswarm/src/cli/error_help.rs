@@ -215,4 +215,3 @@ pub struct ErrorInfo {
     pub common_causes: Vec<&'static str>,
     pub quick_fix: Option<&'static str>,
 }
-

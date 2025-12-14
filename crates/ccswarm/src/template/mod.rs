@@ -9,7 +9,18 @@
 
 pub mod manager;
 pub mod predefined;
+pub mod predefined_refactored;
 pub mod storage;
+pub mod template_factory;
 pub mod types;
 pub mod validation;
 
+// Re-export commonly used types
+pub use manager::TemplateManager;
+pub use predefined::PredefinedTemplates;
+pub use storage::FileSystemTemplateStorage;
+pub use types::{
+    Template, TemplateCategory, TemplateContext, TemplateError, TemplateQuery, TemplateVariable,
+    VariableType,
+};
+pub use validation::AppliedTemplate;

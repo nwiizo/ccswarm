@@ -155,7 +155,9 @@ impl ShellWorktreeManager {
             args.extend(["-b", branch_name]);
         }
 
-        args.push(worktree_path.to_str().unwrap());
+        args.push(worktree_path.to_str().ok_or_else(|| {
+            anyhow::anyhow!("Invalid UTF-8 in worktree path: {:?}", worktree_path)
+        })?);
 
         if !create_new_branch && branch_exists {
             args.push(branch_name);
@@ -208,7 +210,9 @@ impl ShellWorktreeManager {
             args.push("--force");
         }
 
-        args.push(worktree_path.to_str().unwrap());
+        args.push(worktree_path.to_str().ok_or_else(|| {
+            anyhow::anyhow!("Invalid UTF-8 in worktree path: {:?}", worktree_path)
+        })?);
 
         let output = Command::new("git")
             .args(&args)
@@ -334,7 +338,10 @@ impl ShellWorktreeManager {
                 }
 
                 // 新しいワークツリーを開始
-                let path = PathBuf::from(line.strip_prefix("worktree ").unwrap());
+                let path_str = line
+                    .strip_prefix("worktree ")
+                    .ok_or_else(|| anyhow::anyhow!("Invalid worktree line format: {}", line))?;
+                let path = PathBuf::from(path_str);
                 current_worktree = Some(ShellWorktreeInfo {
                     path,
                     branch: String::new(),
@@ -344,11 +351,12 @@ impl ShellWorktreeManager {
                 });
             } else if let Some(ref mut wt) = current_worktree {
                 if line.starts_with("HEAD ") {
-                    wt.head_commit = line.strip_prefix("HEAD ").unwrap().to_string();
+                    wt.head_commit = line.strip_prefix("HEAD ").unwrap_or("unknown").to_string();
                 } else if line.starts_with("branch ") {
                     wt.branch = line
                         .strip_prefix("branch refs/heads/")
-                        .unwrap_or(line.strip_prefix("branch ").unwrap())
+                        .or_else(|| line.strip_prefix("branch "))
+                        .unwrap_or("unknown")
                         .to_string();
                 } else if line == "bare" {
                     wt.is_bare = true;
@@ -366,4 +374,3 @@ impl ShellWorktreeManager {
         Ok(worktrees)
     }
 }
-

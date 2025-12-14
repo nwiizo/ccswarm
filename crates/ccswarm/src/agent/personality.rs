@@ -43,7 +43,9 @@ impl Personality {
     pub fn composability_score(&self) -> f32 {
         // Calculate composability based on collaborative traits
         let collaborative_traits = ["cooperative", "flexible", "team-oriented"];
-        let score = self.traits.iter()
+        let score = self
+            .traits
+            .iter()
             .filter(|t| collaborative_traits.contains(&t.as_str()))
             .count() as f32;
         (score / collaborative_traits.len() as f32).min(1.0)

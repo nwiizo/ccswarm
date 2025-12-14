@@ -1,19 +1,12 @@
 /// Session-persistent Claude Code agent implementation for token efficiency
-///
-/// This module implements the Session-Persistent Agent Architecture to address
-/// the token consumption issues in multi-task workflows. Key improvements:
-/// - Efficient context management through session reuse
-/// - One-time identity establishment per agent lifecycle
-/// - Conversation history preservation for context continuity
-/// - Batch task processing to amortize overhead
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -60,7 +53,6 @@ pub struct ClaudeCodeSession {
     /// Claude configuration
     claude_config: ClaudeConfig,
 
-    /// Last activity timestamp
     last_activity: Instant,
 
     /// Whether session is currently active
@@ -104,17 +96,25 @@ impl ClaudeCodeSession {
         // Add Claude arguments
         cmd.arg("-p").arg(prompt);
 
-        if self.claude_config.json_output {
-            cmd.arg("--json");
-        }
+        // Add output format
+        cmd.arg("--output-format")
+            .arg(self.claude_config.output_format.as_cli_arg());
 
         if self.claude_config.dangerous_skip {
             cmd.arg("--dangerously-skip-permissions");
         }
 
-        // Add think mode if specified
-        if let Some(think_mode) = &self.claude_config.think_mode {
-            cmd.arg("--think").arg(think_mode.to_string());
+        // Add model
+        cmd.arg("--model").arg(&self.claude_config.model);
+
+        // Add append system prompt if specified
+        if let Some(system_prompt) = &self.claude_config.append_system_prompt {
+            cmd.arg("--append-system-prompt").arg(system_prompt);
+        }
+
+        // Add max turns if specified
+        if let Some(max_turns) = self.claude_config.max_turns {
+            cmd.arg("--max-turns").arg(max_turns.to_string());
         }
 
         let output = cmd
@@ -151,7 +151,10 @@ impl ClaudeCodeSession {
             return format!(
                 "🤖 AGENT: {}\n📁 WORKSPACE: {}\n🎯 SCOPE: Task within agent boundaries\n\nTask completed successfully in simulation mode.",
                 self.session_id,
-                self.working_dir.file_name().unwrap_or_default().to_string_lossy()
+                self.working_dir
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
             );
         }
 
@@ -159,7 +162,10 @@ impl ClaudeCodeSession {
         format!(
             "🤖 AGENT: {}\n📁 WORKSPACE: {}\n🎯 SCOPE: General response\n\nMock response generated for testing.",
             self.session_id,
-            self.working_dir.file_name().unwrap_or_default().to_string_lossy()
+            self.working_dir
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
         )
     }
 
@@ -278,7 +284,6 @@ pub struct PersistentClaudeAgent {
     /// Task history
     pub task_history: Vec<(Task, TaskResult)>,
 
-    /// Last activity timestamp
     pub last_activity: DateTime<Utc>,
 
     /// Session creation timestamp
@@ -537,7 +542,11 @@ You are a specialized {} agent. Maintain strict boundaries and provide concise, 
         let reminder_prompt = format!(
             "🤖 IDENTITY REMINDER: You are a {} agent working in {}. Maintain specialization boundaries.",
             self.identity.specialization.name(),
-            self.identity.workspace_path.file_name().unwrap_or_default().to_string_lossy()
+            self.identity
+                .workspace_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
         );
 
         let mut session = self.session.lock().await;
@@ -1175,4 +1184,3 @@ impl PersistentClaudeAgent {
         patterns.join(",")
     }
 }
-

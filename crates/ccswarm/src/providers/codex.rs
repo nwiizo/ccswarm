@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use reqwest::{header, Client};
+use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Instant;
@@ -83,11 +83,12 @@ pub struct CodexExecutor {
 
 impl CodexExecutor {
     /// Create a new Codex executor
-    pub fn new(config: CodexConfig) -> Self {
+    pub fn new(config: CodexConfig) -> Result<Self> {
         let mut headers = header::HeaderMap::new();
         headers.insert(
             header::AUTHORIZATION,
-            header::HeaderValue::from_str(&format!("Bearer {}", config.api_key)).unwrap(),
+            header::HeaderValue::from_str(&format!("Bearer {}", config.api_key))
+                .context("Invalid API key format for Authorization header")?,
         );
         headers.insert(
             header::CONTENT_TYPE,
@@ -97,7 +98,8 @@ impl CodexExecutor {
         if let Some(org) = &config.organization {
             headers.insert(
                 header::HeaderName::from_static("openai-organization"),
-                header::HeaderValue::from_str(org).unwrap(),
+                header::HeaderValue::from_str(org)
+                    .context("Invalid organization ID format for OpenAI-Organization header")?,
             );
         }
 
@@ -105,9 +107,9 @@ impl CodexExecutor {
             .default_headers(headers)
             .timeout(std::time::Duration::from_secs(120))
             .build()
-            .unwrap();
+            .context("Failed to build HTTP client")?;
 
-        Self { config, client }
+        Ok(Self { config, client })
     }
 
     /// Generate system prompt for Codex based on agent identity
@@ -215,7 +217,11 @@ impl CodexExecutor {
                     oversight_roles.join(", "),
                     quality_standards.min_test_coverage,
                     quality_standards.max_complexity,
-                    if quality_standards.security_scan_required { "Required" } else { "Optional" }
+                    if quality_standards.security_scan_required {
+                        "Required"
+                    } else {
+                        "Optional"
+                    }
                 )
             }
             crate::identity::AgentRole::Search {
@@ -392,6 +398,186 @@ impl CodexExecutor {
             .unwrap_or_else(|| "https://api.openai.com/v1".to_string())
     }
 
+    /// Call OpenAI API with request
+    async fn call_api(&self, request: &OpenAIRequest) -> Result<OpenAIResponse> {
+        let url = format!("{}/chat/completions", self.get_api_base());
+
+        let response = self
+            .client
+            .post(&url)
+            .json(request)
+            .send()
+            .await
+            .context("Failed to send request to OpenAI API")?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            if let Ok(error) = serde_json::from_str::<OpenAIError>(&error_text) {
+                return Err(anyhow::anyhow!(
+                    "OpenAI API error: {} ({})",
+                    error.error.message,
+                    error.error.error_type
+                ));
+            }
+            return Err(anyhow::anyhow!("OpenAI API error: {}", error_text));
+        }
+
+        response
+            .json::<OpenAIResponse>()
+            .await
+            .context("Failed to parse OpenAI API response")
+    }
+}
+
+#[async_trait]
+impl ProviderExecutor for CodexExecutor {
+    /// Execute a prompt with the provider
+    async fn execute_prompt(
+        &self,
+        prompt: &str,
+        identity: &AgentIdentity,
+        _working_dir: &Path,
+    ) -> Result<String> {
+        let system_prompt = self.generate_system_prompt(identity);
+
+        let request = OpenAIRequest {
+            model: self.config.model.clone(),
+            messages: vec![
+                OpenAIMessage {
+                    role: "system".to_string(),
+                    content: system_prompt,
+                },
+                OpenAIMessage {
+                    role: "user".to_string(),
+                    content: prompt.to_string(),
+                },
+            ],
+            max_tokens: self.config.max_tokens,
+            temperature: self.config.temperature,
+            stream: false,
+        };
+
+        let response = self.call_api(&request).await?;
+
+        if let Some(choice) = response.choices.first() {
+            Ok(choice.message.content.clone())
+        } else {
+            Err(anyhow::anyhow!("No response from OpenAI API"))
+        }
+    }
+
+    /// Execute a task with full context
+    async fn execute_task(
+        &self,
+        task: &Task,
+        identity: &AgentIdentity,
+        _working_dir: &Path,
+    ) -> Result<TaskResult> {
+        let start_time = Instant::now();
+
+        let system_prompt = self.generate_system_prompt(identity);
+        let task_prompt = self.generate_task_prompt(identity, task);
+
+        let request = OpenAIRequest {
+            model: self.config.model.clone(),
+            messages: vec![
+                OpenAIMessage {
+                    role: "system".to_string(),
+                    content: system_prompt,
+                },
+                OpenAIMessage {
+                    role: "user".to_string(),
+                    content: task_prompt,
+                },
+            ],
+            max_tokens: self.config.max_tokens,
+            temperature: self.config.temperature,
+            stream: false,
+        };
+
+        let response = self.call_api(&request).await?;
+
+        let output = if let Some(choice) = response.choices.first() {
+            choice.message.content.clone()
+        } else {
+            return Err(anyhow::anyhow!("No response from OpenAI API"));
+        };
+
+        let duration = start_time.elapsed();
+
+        Ok(TaskResult {
+            success: true,
+            output: serde_json::json!({
+                "response": output,
+                "model": response.model,
+                "provider": "codex"
+            }),
+            error: None,
+            duration,
+        })
+    }
+
+    /// Test provider connectivity and functionality
+    async fn health_check(&self, _working_dir: &Path) -> Result<ProviderHealthStatus> {
+        let start_time = Instant::now();
+
+        let request = OpenAIRequest {
+            model: self.config.model.clone(),
+            messages: vec![OpenAIMessage {
+                role: "user".to_string(),
+                content: "Say 'ok' if you can receive this message.".to_string(),
+            }],
+            max_tokens: Some(10),
+            temperature: Some(0.1),
+            stream: false,
+        };
+
+        let result = self.call_api(&request).await;
+        let response_time = start_time.elapsed().as_millis() as u64;
+
+        match result {
+            Ok(response) => Ok(ProviderHealthStatus {
+                is_healthy: true,
+                version: Some(response.model),
+                last_check: chrono::Utc::now(),
+                error_message: None,
+                response_time_ms: Some(response_time),
+            }),
+            Err(e) => Ok(ProviderHealthStatus {
+                is_healthy: false,
+                version: None,
+                last_check: chrono::Utc::now(),
+                error_message: Some(e.to_string()),
+                response_time_ms: Some(response_time),
+            }),
+        }
+    }
+
+    /// Get provider-specific capabilities
+    fn get_capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            supports_json_output: self.config.json_mode.unwrap_or(false),
+            supports_streaming: self.config.stream.unwrap_or(false),
+            supports_file_operations: false,
+            supports_git_operations: false,
+            supports_code_execution: false,
+            max_context_length: Some(128000), // GPT-4 max context
+            supported_languages: vec![
+                "python".to_string(),
+                "javascript".to_string(),
+                "typescript".to_string(),
+                "rust".to_string(),
+                "go".to_string(),
+                "java".to_string(),
+                "c++".to_string(),
+                "c#".to_string(),
+                "ruby".to_string(),
+                "php".to_string(),
+                "swift".to_string(),
+                "kotlin".to_string(),
+            ],
+        }
+    }
 }
 
 // Tests removed to minimize test suite

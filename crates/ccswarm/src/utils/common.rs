@@ -124,7 +124,11 @@ pub mod logging {
 
     /// Log subagent operation
     pub fn log_subagent_created(name: &str, instance_id: &str) {
-        log::info!("Created subagent '{}' with instance ID: {}", name, instance_id);
+        log::info!(
+            "Created subagent '{}' with instance ID: {}",
+            name,
+            instance_id
+        );
     }
 
     /// Log task delegation

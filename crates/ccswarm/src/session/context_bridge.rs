@@ -87,6 +87,7 @@ impl ContextBridge {
     }
 
     /// Estimate tokens in a string (simple approximation)
+    #[allow(dead_code)]
     fn estimate_tokens(content: &str) -> usize {
         // Simple approximation: ~4 characters per token
         content.len() / 4

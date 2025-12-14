@@ -18,6 +18,38 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use tokio::time::{sleep, Duration};
 use std::sync::Arc;
 
+// ============================================================================
+// Helper functions for consistent CLI output
+// ============================================================================
+
+/// Create a spinner progress bar with standard styling
+fn create_spinner(message: &str) -> Result<ProgressBar> {
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.blue} {msg}")
+            .map_err(|e| anyhow::anyhow!("Failed to set progress bar style: {}", e))?
+    );
+    pb.set_message(message.to_string());
+    Ok(pb)
+}
+
+/// Create a spinner progress bar for MultiProgress with custom template
+fn create_multi_spinner(multi_pb: &MultiProgress, template: &str) -> Result<ProgressBar> {
+    let pb = multi_pb.add(ProgressBar::new_spinner());
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .template(template)
+            .map_err(|e| anyhow::anyhow!("Failed to set progress bar style: {}", e))?
+    );
+    Ok(pb)
+}
+
+/// Print a styled header with emoji
+fn print_header(emoji: &str, message: &str) {
+    println!("{}", format!("{} {}", emoji, message).bright_blue().bold());
+}
+
 /// Semantic feature commands
 #[derive(Parser, Debug)]
 #[command(name = "semantic")]
@@ -164,26 +196,20 @@ pub async fn execute(cmd: SemanticCommands) -> Result<()> {
 /// Analyze codebase
 async fn analyze_codebase(
     manager: Arc<SemanticManager>,
-    path: PathBuf,
+    _path: PathBuf,
     format: String,
     show_symbols: bool,
 ) -> Result<()> {
-    println!("{}", "🔍 Analyzing codebase...".bright_blue().bold());
-    
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.blue} {msg}")
-            .unwrap()
-    );
-    pb.set_message("Indexing symbols...");
-    
+    print_header("🔍", "Analyzing codebase...");
+
+    let pb = create_spinner("Indexing symbols...")?;
+
     // Index the codebase
     manager.symbol_index().index_codebase().await?;
-    
-    pb.set_message("Analyzing code structure...");
+
+    pb.set_message("Analyzing code structure...".to_string());
     let all_symbols = manager.symbol_index().get_all_symbols().await?;
-    
+
     pb.finish_with_message("✓ Analysis complete");
     
     // Display results based on format
@@ -224,22 +250,16 @@ async fn refactor_codebase(
     priority: String,
     max: usize,
 ) -> Result<()> {
-    println!("{}", "🔧 Scanning for refactoring opportunities...".bright_blue().bold());
-    
+    print_header("🔧", "Scanning for refactoring opportunities...");
+
     let mut refactoring_system = AutomaticRefactoringSystem::new(
         manager.analyzer(),
         manager.symbol_index(),
         manager.memory(),
     );
-    
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.blue} {msg}")
-            .unwrap()
-    );
-    pb.set_message("Analyzing code quality...");
-    
+
+    let pb = create_spinner("Analyzing code quality...")?;
+
     let proposals = refactoring_system.scan_codebase().await?;
     pb.finish_with_message("✓ Scan complete");
     
@@ -300,22 +320,16 @@ async fn generate_agents(
     force: bool,
     deploy: bool,
 ) -> Result<()> {
-    println!("{}", "🤖 Analyzing project for agent generation...".bright_blue().bold());
-    
+    print_header("🤖", "Analyzing project for agent generation...");
+
     let generator = DynamicAgentGenerator::new(
         manager.analyzer(),
         manager.symbol_index(),
         manager.memory(),
     );
-    
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.blue} {msg}")
-            .unwrap()
-    );
-    pb.set_message("Analyzing project characteristics...");
-    
+
+    let pb = create_spinner("Analyzing project characteristics...")?;
+
     let needs = generator.analyze_agent_needs().await?;
     pb.finish_with_message("✓ Analysis complete");
     
@@ -353,12 +367,12 @@ async fn optimize_cross_codebase(
     detailed: bool,
     output: Option<PathBuf>,
 ) -> Result<()> {
-    println!("{}", "🚀 Cross-codebase optimization analysis...".bright_blue().bold());
-    
+    print_header("🚀", "Cross-codebase optimization analysis...");
+
     let mut optimizer = CrossCodebaseOptimizer::new(manager.memory());
-    
+
     let multi_pb = MultiProgress::new();
-    
+
     // Parse and add repositories
     for repo_spec in repos {
         let parts: Vec<&str> = repo_spec.split(':').collect();
@@ -366,32 +380,22 @@ async fn optimize_cross_codebase(
             eprintln!("Invalid repo format: {} (expected name:path:language)", repo_spec);
             continue;
         }
-        
+
         let name = parts[0].to_string();
         let path = PathBuf::from(parts[1]);
         let language = parse_language(parts[2]);
-        
-        let pb = multi_pb.add(ProgressBar::new_spinner());
-        pb.set_style(
-            ProgressStyle::default_spinner()
-                .template("{spinner:.blue} Adding repository: {msg}")
-                .unwrap()
-        );
+
+        let pb = create_multi_spinner(&multi_pb, "{spinner:.blue} Adding repository: {msg}")?;
         pb.set_message(name.clone());
-        
+
         optimizer.add_repository(name, path, language).await?;
         pb.finish_with_message("✓");
     }
-    
+
     // Perform analysis
-    let pb = multi_pb.add(ProgressBar::new_spinner());
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.blue} {msg}")
-            .unwrap()
-    );
-    pb.set_message("Performing comprehensive analysis...");
-    
+    let pb = create_multi_spinner(&multi_pb, "{spinner:.blue} {msg}")?;
+    pb.set_message("Performing comprehensive analysis...".to_string());
+
     let analysis = optimizer.analyze_all().await?;
     pb.finish_with_message("✓ Analysis complete");
     

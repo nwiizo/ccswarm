@@ -137,8 +137,6 @@ pub enum CCSwarmError {
     },
 }
 
-
-
 impl From<String> for CCSwarmError {
     fn from(error: String) -> Self {
         Self::Other {
@@ -272,7 +270,10 @@ impl CCSwarmError {
     }
 
     /// Create a template error with template name
-    pub fn template_with_name<S: Into<String>, N: Into<String>>(message: S, template_name: N) -> Self {
+    pub fn template_with_name<S: Into<String>, N: Into<String>>(
+        message: S,
+        template_name: N,
+    ) -> Self {
         Self::Template {
             message: message.into(),
             template_name: Some(template_name.into()),
@@ -299,7 +300,10 @@ impl CCSwarmError {
     }
 
     /// Create a resource error with type
-    pub fn resource_with_type<S: Into<String>, T: Into<String>>(message: S, resource_type: T) -> Self {
+    pub fn resource_with_type<S: Into<String>, T: Into<String>>(
+        message: S,
+        resource_type: T,
+    ) -> Self {
         Self::Resource {
             message: message.into(),
             resource_type: Some(resource_type.into()),
@@ -324,7 +328,10 @@ impl CCSwarmError {
     }
 
     /// Create a user-friendly error with suggestion
-    pub fn user_error_with_suggestion<S: Into<String>, T: Into<String>>(message: S, suggestion: T) -> Self {
+    pub fn user_error_with_suggestion<S: Into<String>, T: Into<String>>(
+        message: S,
+        suggestion: T,
+    ) -> Self {
         Self::UserError {
             message: message.into(),
             suggestion: Some(suggestion.into()),
@@ -359,10 +366,7 @@ impl CCSwarmError {
     pub fn is_recoverable(&self) -> bool {
         matches!(
             self,
-            Self::Network { .. }
-                | Self::Io(_)
-                | Self::Task { .. }
-                | Self::Resource { .. }
+            Self::Network { .. } | Self::Io(_) | Self::Task { .. } | Self::Resource { .. }
         )
     }
 
@@ -375,7 +379,10 @@ impl CCSwarmError {
     pub fn severity(&self) -> ErrorSeverity {
         match self {
             Self::Auth { .. } | Self::Configuration { .. } => ErrorSeverity::Critical,
-            Self::Agent { .. } | Self::Session { .. } | Self::Extension { .. } | Self::Orchestrator { .. } => ErrorSeverity::High,
+            Self::Agent { .. }
+            | Self::Session { .. }
+            | Self::Extension { .. }
+            | Self::Orchestrator { .. } => ErrorSeverity::High,
             Self::Task { .. } | Self::Git { .. } | Self::Template { .. } => ErrorSeverity::Medium,
             Self::Network { .. } | Self::Resource { .. } => ErrorSeverity::Low,
             Self::Io(_) | Self::SerdeJson(_) => ErrorSeverity::Medium,

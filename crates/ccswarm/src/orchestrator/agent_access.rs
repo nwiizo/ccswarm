@@ -78,4 +78,3 @@ pub fn specialization_from_role(role: &AgentRole) -> String {
         _ => role.name().to_lowercase(),
     }
 }
-

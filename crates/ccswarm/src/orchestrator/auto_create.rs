@@ -390,13 +390,23 @@ impl AutoCreateEngine {
 
             // Create Claude config with proper settings
             let claude_config = ClaudeCodeConfig {
-                model: "claude-3.5-sonnet".to_string(), // Use default model name
+                model: "sonnet".to_string(), // Use model alias (recommended)
                 dangerous_skip: true,
-                think_mode: None, // Disable think mode for now
-                json_output: false,
+                output_format: crate::providers::OutputFormat::Text,
+                append_system_prompt: None,
                 api_key: None,
                 custom_commands: vec![],
                 mcp_servers: HashMap::new(),
+                session_id: None,
+                resume_session: None,
+                continue_session: false,
+                fork_session: false,
+                max_turns: None,
+                fallback_model: None,
+                allowed_tools: vec![],
+                disallowed_tools: vec![],
+                verbose: false,
+                mcp_debug: false,
             };
 
             // Create executor
@@ -485,19 +495,31 @@ impl AutoCreateEngine {
 
         // Create Master Claude config
         let claude_config = ClaudeCodeConfig {
-            model: "claude-3.5-sonnet".to_string(),
+            model: "sonnet".to_string(), // Use model alias (recommended)
             dangerous_skip: true,
-            think_mode: None,
-            json_output: false,
+            output_format: crate::providers::OutputFormat::Text,
+            append_system_prompt: None,
             api_key: None,
             custom_commands: vec![],
             mcp_servers: HashMap::new(),
+            session_id: None,
+            resume_session: None,
+            continue_session: false,
+            fork_session: false,
+            max_turns: None,
+            fallback_model: None,
+            allowed_tools: vec![],
+            disallowed_tools: vec![],
+            verbose: false,
+            mcp_debug: false,
         };
 
         let executor = ClaudeCodeExecutor::new(claude_config);
 
         // Build review prompt
-        let mut review_prompt = String::from("You are the Master orchestrator reviewing the work of specialized agents. Please review the following outputs and provide:\n\n");
+        let mut review_prompt = String::from(
+            "You are the Master orchestrator reviewing the work of specialized agents. Please review the following outputs and provide:\n\n",
+        );
         review_prompt.push_str("1. Quality assessment (1-10 scale)\n");
         review_prompt.push_str("2. Completeness check\n");
         review_prompt.push_str("3. Suggestions for improvement\n");

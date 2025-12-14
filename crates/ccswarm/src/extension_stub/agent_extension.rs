@@ -1,5 +1,5 @@
+use crate::error::CCSwarmError;
 use async_trait::async_trait;
-use crate::utils::CCSwarmError;
 
 // Define SearchResult structure needed for this module
 #[derive(Debug, Clone)]
@@ -77,16 +77,14 @@ impl SearchStrategy for DocumentationSearchStrategy {
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>, CCSwarmError> {
         // Stub implementation - returns mock results
         let keywords = query.keywords.join(" ");
-        Ok(vec![
-            SearchResult {
-                title: format!("MDN: {} Documentation", keywords),
-                url: format!("https://developer.mozilla.org/search?q={}", keywords),
-                snippet: format!("Documentation for {} from MDN Web Docs", keywords),
-                source: "MDN".to_string(),
-                score: 0.95,
-                relevance_score: 0.95,
-            },
-        ])
+        Ok(vec![SearchResult {
+            title: format!("MDN: {} Documentation", keywords),
+            url: format!("https://developer.mozilla.org/search?q={}", keywords),
+            snippet: format!("Documentation for {} from MDN Web Docs", keywords),
+            source: "MDN".to_string(),
+            score: 0.95,
+            relevance_score: 0.95,
+        }])
     }
 
     fn name(&self) -> &str {
@@ -114,16 +112,14 @@ impl SearchStrategy for GitHubSearchStrategy {
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>, CCSwarmError> {
         // Stub implementation
         let keywords = query.keywords.join(" ");
-        Ok(vec![
-            SearchResult {
-                title: format!("GitHub: {} Examples", keywords),
-                url: format!("https://github.com/search?q={}", keywords),
-                snippet: format!("Code examples for {} from GitHub repositories", keywords),
-                source: "GitHub".to_string(),
-                score: 0.85,
-                relevance_score: 0.85,
-            },
-        ])
+        Ok(vec![SearchResult {
+            title: format!("GitHub: {} Examples", keywords),
+            url: format!("https://github.com/search?q={}", keywords),
+            snippet: format!("Code examples for {} from GitHub repositories", keywords),
+            source: "GitHub".to_string(),
+            score: 0.85,
+            relevance_score: 0.85,
+        }])
     }
 
     fn name(&self) -> &str {
@@ -139,16 +135,17 @@ impl SearchStrategy for StackOverflowSearchStrategy {
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>, CCSwarmError> {
         // Stub implementation
         let keywords = query.keywords.join(" ");
-        Ok(vec![
-            SearchResult {
-                title: format!("StackOverflow: {} Questions", keywords),
-                url: format!("https://stackoverflow.com/search?q={}", keywords),
-                snippet: format!("Questions and answers about {} from StackOverflow", keywords),
-                source: "StackOverflow".to_string(),
-                score: 0.90,
-                relevance_score: 0.90,
-            },
-        ])
+        Ok(vec![SearchResult {
+            title: format!("StackOverflow: {} Questions", keywords),
+            url: format!("https://stackoverflow.com/search?q={}", keywords),
+            snippet: format!(
+                "Questions and answers about {} from StackOverflow",
+                keywords
+            ),
+            source: "StackOverflow".to_string(),
+            score: 0.90,
+            relevance_score: 0.90,
+        }])
     }
 
     fn name(&self) -> &str {

@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use serde_json::json;
 use std::path::Path;
 use std::time::Instant;
 use tokio::process::Command;
@@ -174,34 +175,82 @@ impl ClaudeCodeExecutor {
         }
     }
 
-    /// Build Claude Code command arguments
+    /// Build Claude Code command arguments based on current CLI options
     fn build_command_args(&self, prompt: &str) -> Vec<String> {
         let mut args = Vec::new();
 
-        // Add prompt
+        // Add prompt (print mode)
         args.push("-p".to_string());
         args.push(prompt.to_string());
 
-        // Add JSON output if enabled
-        if self.config.json_output {
-            args.push("--json".to_string());
-        }
+        // Add output format (replaces deprecated --json flag)
+        args.push("--output-format".to_string());
+        args.push(self.config.output_format.as_cli_arg().to_string());
 
         // Add dangerous skip if enabled
         if self.config.dangerous_skip {
             args.push("--dangerously-skip-permissions".to_string());
         }
 
-        // Add think mode if specified
-        if let Some(think_mode) = &self.config.think_mode {
-            args.push("--think".to_string());
-            args.push(think_mode.clone());
+        // Add model (using aliases like "sonnet", "opus", "haiku", "opusplan")
+        args.push("--model".to_string());
+        args.push(self.config.model.clone());
+
+        // Add append system prompt if specified
+        if let Some(system_prompt) = &self.config.append_system_prompt {
+            args.push("--append-system-prompt".to_string());
+            args.push(system_prompt.clone());
         }
 
-        // Add model if not default
-        if self.config.model != "claude-3.5-sonnet" {
-            args.push("--model".to_string());
-            args.push(self.config.model.clone());
+        // Session management options
+        if let Some(session_id) = &self.config.session_id {
+            args.push("--session-id".to_string());
+            args.push(session_id.clone());
+        }
+
+        if let Some(resume) = &self.config.resume_session {
+            args.push("--resume".to_string());
+            args.push(resume.clone());
+        }
+
+        if self.config.continue_session {
+            args.push("--continue".to_string());
+        }
+
+        if self.config.fork_session {
+            args.push("--fork-session".to_string());
+        }
+
+        // Add max turns if specified
+        if let Some(max_turns) = self.config.max_turns {
+            args.push("--max-turns".to_string());
+            args.push(max_turns.to_string());
+        }
+
+        // Add fallback model if specified
+        if let Some(fallback) = &self.config.fallback_model {
+            args.push("--fallback-model".to_string());
+            args.push(fallback.clone());
+        }
+
+        // Tool restrictions
+        for tool in &self.config.allowed_tools {
+            args.push("--allowedTools".to_string());
+            args.push(tool.clone());
+        }
+
+        for tool in &self.config.disallowed_tools {
+            args.push("--disallowedTools".to_string());
+            args.push(tool.clone());
+        }
+
+        // Logging options
+        if self.config.verbose {
+            args.push("--verbose".to_string());
+        }
+
+        if self.config.mcp_debug {
+            args.push("--mcp-debug".to_string());
         }
 
         args
@@ -214,12 +263,31 @@ impl ClaudeCodeExecutor {
         task: &Task,
         duration: std::time::Duration,
     ) -> TaskResult {
-        // Try to parse as JSON if JSON output is enabled
-        if self.config.json_output {
+        use crate::providers::OutputFormat;
+
+        // Try to parse as JSON if JSON output format is used
+        if self.config.output_format == OutputFormat::Json
+            || self.config.output_format == OutputFormat::StreamJson
+        {
             if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&output) {
+                // Extract the result field if present (new JSON format)
+                let result_output = if let Some(result) = json_value.get("result") {
+                    json!({
+                        "response": result,
+                        "task_id": task.id,
+                        "format": "json",
+                        "cost_usd": json_value.get("total_cost_usd"),
+                        "duration_ms": json_value.get("duration_ms"),
+                        "session_id": json_value.get("session_id"),
+                        "num_turns": json_value.get("num_turns")
+                    })
+                } else {
+                    json_value
+                };
+
                 return TaskResult {
                     success: true,
-                    output: json_value,
+                    output: result_output,
                     error: None,
                     duration,
                 };
@@ -378,4 +446,3 @@ impl ProviderExecutor for ClaudeCodeExecutor {
         }
     }
 }
-

@@ -308,4 +308,3 @@ impl BackendStatusExt for BackendStatus {
             && self.server_metrics.error_rate < 0.05
     }
 }
-

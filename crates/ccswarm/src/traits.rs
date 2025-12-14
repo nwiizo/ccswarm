@@ -86,7 +86,10 @@ pub trait Monitorable {
     async fn metrics(&self) -> Result<Self::Metrics>;
 
     /// Get historical metrics if available
-    async fn historical_metrics(&self, since: chrono::DateTime<chrono::Utc>) -> Result<Vec<(chrono::DateTime<chrono::Utc>, Self::Metrics)>> {
+    async fn historical_metrics(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<(chrono::DateTime<chrono::Utc>, Self::Metrics)>> {
         let _ = since;
         Ok(Vec::new())
     }
@@ -100,7 +103,8 @@ pub trait Executable {
     type Context: Send + Sync;
 
     /// Execute a task with the given input and context
-    async fn execute(&mut self, input: Self::Input, context: Self::Context) -> Result<Self::Output>;
+    async fn execute(&mut self, input: Self::Input, context: Self::Context)
+    -> Result<Self::Output>;
 
     /// Check if this executor can handle the given input
     fn can_execute(&self, input: &Self::Input) -> bool;
@@ -339,6 +343,7 @@ impl Default for CleanupReport {
 }
 
 /// Trait for serializable entities
+#[allow(async_fn_in_trait)]
 pub trait Persistable: Serialize + for<'de> Deserialize<'de> {
     /// Serialize to bytes
     fn to_bytes(&self) -> Result<Vec<u8>> {
@@ -356,7 +361,9 @@ pub trait Persistable: Serialize + for<'de> Deserialize<'de> {
     /// Save to file
     async fn save_to_file<P: AsRef<std::path::Path> + Send>(&self, path: P) -> Result<()> {
         let bytes = self.to_bytes()?;
-        tokio::fs::write(path, bytes).await.map_err(CCSwarmError::from)
+        tokio::fs::write(path, bytes)
+            .await
+            .map_err(CCSwarmError::from)
     }
 
     /// Load from file
@@ -416,4 +423,3 @@ macro_rules! impl_entity_traits {
         }
     };
 }
-

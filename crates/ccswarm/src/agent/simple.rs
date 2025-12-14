@@ -250,4 +250,3 @@ struct SimulatedResult {
     output: String,
     notes: Vec<String>,
 }
-

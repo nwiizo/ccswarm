@@ -2,8 +2,7 @@
 ///
 /// This module implements efficient task processing using
 /// zero-cost abstractions and functional programming patterns.
-
-use crate::agent::{Task, Priority, TaskResult};
+use crate::agent::{Priority, Task, TaskResult};
 use crate::error::Result;
 use std::collections::HashMap;
 
@@ -36,7 +35,11 @@ impl TaskPipeline {
     }
 
     /// Process tasks in parallel batches
-    pub async fn process_batch<F, Fut>(self, batch_size: usize, processor: F) -> Vec<Result<TaskResult>>
+    pub async fn process_batch<F, Fut>(
+        self,
+        batch_size: usize,
+        processor: F,
+    ) -> Vec<Result<TaskResult>>
     where
         F: Fn(Task) -> Fut + Clone,
         Fut: std::future::Future<Output = Result<TaskResult>>,
@@ -190,11 +193,7 @@ where
             }
         }
 
-        if page.is_empty() {
-            None
-        } else {
-            Some(page)
-        }
+        if page.is_empty() { None } else { Some(page) }
     }
 }
 
@@ -209,11 +208,8 @@ pub trait TaskIteratorExt: Iterator<Item = Task> + Sized {
     }
 
     fn with_metadata(self, key: String) -> impl Iterator<Item = Task> {
-        self.filter(move |task| {
-            task.metadata.as_ref().map_or(false, |m| m.get(&key).is_some())
-        })
+        self.filter(move |task| task.metadata.as_ref().is_some_and(|m| m.contains_key(&key)))
     }
 }
 
 impl<I: Iterator<Item = Task> + Sized> TaskIteratorExt for I {}
-

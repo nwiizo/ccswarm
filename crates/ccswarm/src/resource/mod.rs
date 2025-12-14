@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use sysinfo::{Pid, System};
 use tokio::sync::broadcast;
-use tokio::time::{interval, Duration as TokioDuration};
+use tokio::time::{Duration as TokioDuration, interval};
 
 /// Resource usage snapshot for an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -674,4 +674,3 @@ impl SessionResourceIntegration {
         self.monitor.resume_agent(agent_id).await
     }
 }
-

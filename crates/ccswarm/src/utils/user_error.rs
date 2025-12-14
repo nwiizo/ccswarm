@@ -100,11 +100,8 @@ impl CommonErrors {
     }
 
     pub fn invalid_task_format() -> UserError {
-        UserError::new(
-            "Invalid task format",
-            "The task format is not valid",
-        )
-        .with_suggestion("Use format: 'task description [priority] [type]'")
+        UserError::new("Invalid task format", "The task format is not valid")
+            .with_suggestion("Use format: 'task description [priority] [type]'")
     }
 
     pub fn api_key_missing(provider: &str) -> UserError {
@@ -112,7 +109,10 @@ impl CommonErrors {
             format!("API key missing for {}", provider),
             format!("The {} API key is required but not found", provider),
         )
-        .with_suggestion(format!("Set the environment variable for {} API key", provider))
+        .with_suggestion(format!(
+            "Set the environment variable for {} API key",
+            provider
+        ))
     }
 }
 

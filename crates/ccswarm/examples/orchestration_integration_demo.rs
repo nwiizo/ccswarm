@@ -1,9 +1,9 @@
 use anyhow::Result;
 use ccswarm::agent::{Priority, Task, TaskType};
 use ccswarm::config::{CcswarmConfig, ClaudeConfig};
-use ccswarm::orchestrator::MasterClaude;
+use ccswarm::orchestrator::{MasterClaude, ProactiveMaster};
 use tempfile::TempDir;
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 /// Demonstrates the integration between agent-level and master-level orchestration
 #[tokio::main]

@@ -3,7 +3,7 @@ members = ["crates/ccswarm"]
 resolver = "2"
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 authors = ["nwiizo"]
 license = "MIT"
 repository = "https://github.com/nwiizo/ccswarm"
