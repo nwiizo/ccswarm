@@ -2,7 +2,7 @@
 
 use crate::config::{AgentConfig, CcswarmConfig, ClaudeConfig, MasterClaudeConfig, ProjectConfig};
 use crate::utils::user_error::CommonErrors;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use colored::Colorize;
 use std::collections::HashMap;
 use std::io::Write;
@@ -55,7 +55,11 @@ pub async fn handle_quickstart_simple(
             std::io::stdout().flush()?;
             let mut key = String::new();
             std::io::stdin().read_line(&mut key)?;
-            std::env::set_var("ANTHROPIC_API_KEY", key.trim());
+            // SAFETY: This is run at application startup before any threads are spawned,
+            // so setting environment variables is safe.
+            unsafe {
+                std::env::set_var("ANTHROPIC_API_KEY", key.trim());
+            }
         }
     }
     println!();

@@ -1,11 +1,10 @@
+use crate::error::Result;
 /// Type-state pattern for Agent lifecycle management
 ///
 /// This module implements compile-time state machine validation
 /// using Rust's type system, ensuring agents can only perform
 /// valid state transitions.
-
 use std::marker::PhantomData;
-use crate::error::Result;
 
 /// Agent states as zero-sized types (zero runtime cost)
 pub struct Idle;
@@ -31,7 +30,7 @@ impl Agent<Idle> {
     }
 
     /// Transition from Idle to Working
-    pub fn start_work(self, task: Task) -> Result<Agent<Working>> {
+    pub fn start_work(self, _task: Task) -> Result<Agent<Working>> {
         tracing::info!("Agent {} starting work on task", self.id);
 
         Ok(Agent {
@@ -119,4 +118,3 @@ impl<State> Agent<State> {
 
 // Import the actual Task from the module
 use super::Task;
-

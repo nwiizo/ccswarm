@@ -194,25 +194,26 @@ async fn update_resource_limits(
     idle_timeout_min: Option<u64>,
     auto_suspend: Option<bool>,
 ) -> Result<()> {
-    let mut limits = ResourceLimits::default();
+    #[allow(unused_mut, unused_assignments)]
+    let mut _limits = ResourceLimits::default();
 
     if let Some(cpu) = max_cpu {
-        limits.max_cpu_percent = cpu;
+        _limits.max_cpu_percent = cpu;
         println!("✓ Max CPU set to {}%", cpu);
     }
 
     if let Some(mem_gb) = max_memory_gb {
-        limits.max_memory_bytes = (mem_gb * 1024.0 * 1024.0 * 1024.0) as u64;
+        _limits.max_memory_bytes = (mem_gb * 1024.0 * 1024.0 * 1024.0) as u64;
         println!("✓ Max memory set to {} GB", mem_gb);
     }
 
     if let Some(timeout_min) = idle_timeout_min {
-        limits.idle_timeout = chrono::Duration::minutes(timeout_min as i64);
+        _limits.idle_timeout = chrono::Duration::minutes(timeout_min as i64);
         println!("✓ Idle timeout set to {} minutes", timeout_min);
     }
 
     if let Some(suspend) = auto_suspend {
-        limits.auto_suspend_enabled = suspend;
+        _limits.auto_suspend_enabled = suspend;
         println!(
             "✓ Auto-suspend {}",
             if suspend { "enabled" } else { "disabled" }

@@ -478,4 +478,3 @@ pub struct DelegationStats {
     pub agent_distribution: HashMap<String, usize>,
     pub strategy: DelegationStrategy,
 }
-

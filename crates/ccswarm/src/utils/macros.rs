@@ -314,7 +314,7 @@ macro_rules! async_operation {
         retries: $retries:expr,
         $body:block
     ) => {{
-        use tokio::time::{timeout, Duration};
+        use tokio::time::{Duration, timeout};
         use tracing::{debug, error, instrument};
 
         #[instrument(name = $name, skip_all)]
@@ -396,4 +396,3 @@ macro_rules! define_errors {
         )*
     };
 }
-

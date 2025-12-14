@@ -611,4 +611,3 @@ pub struct CombinedEfficiencyStats {
     pub idle_worktrees: usize,
     pub worktree_reuse_rate: f64,
 }
-

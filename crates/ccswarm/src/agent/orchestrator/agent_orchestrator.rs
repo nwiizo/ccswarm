@@ -136,7 +136,7 @@ pub trait AgentOrchestrator: Send + Sync {
 
     /// Synthesize all step results into final task result
     async fn synthesize_results(&self, task: &Task, results: Vec<StepResult>)
-        -> Result<TaskResult>;
+    -> Result<TaskResult>;
 
     /// Generate summary for a completed step
     async fn generate_step_summary(&self, step: &TaskStep, result: &StepResult) -> Result<String> {
@@ -189,4 +189,3 @@ impl OrchestrationBuilder {
         }
     }
 }
-

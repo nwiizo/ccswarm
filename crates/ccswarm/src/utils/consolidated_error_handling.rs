@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::error::CCSwarmError;
+use std::fmt;
 
 /// Consolidated error handling utilities
 pub struct ErrorContext {

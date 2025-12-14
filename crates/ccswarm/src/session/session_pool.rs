@@ -796,4 +796,3 @@ pub struct GlobalPerformanceStats {
     pub total_execution_time: Duration,
     pub average_execution_time: Duration,
 }
-

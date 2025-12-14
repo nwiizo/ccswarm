@@ -8,4 +8,3 @@ pub mod proactive_master;
 // Re-export commonly used types
 pub use master_delegation::{DelegationDecision, DelegationStrategy, MasterDelegationEngine};
 pub use proactive_master::{DecisionType, ProactiveDecision, ProactiveMaster};
-

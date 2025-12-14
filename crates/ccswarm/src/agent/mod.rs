@@ -11,6 +11,7 @@ pub mod search_agent;
 pub mod simple;
 pub mod task;
 pub mod task_builder;
+pub mod task_builder_typestate;
 pub mod type_state;
 pub mod whiteboard;
 
@@ -27,161 +28,29 @@ pub use personality::{AgentPersonality, PersonalityTraits, Skill, TaskApproach, 
 pub use phronesis::{LearningEventType, PhronesisManager, PracticalWisdom, WisdomCategory};
 pub use task::{Priority, Task, TaskResult, TaskType};
 pub use task_builder::TaskBuilder;
+pub use task_builder_typestate::{
+    Complete as TaskComplete, HasDescription, HasPriority, NoDescription, TypedTaskBuilder,
+};
 pub use whiteboard::{AnnotationMarker, EntryType, Whiteboard, WhiteboardEntry};
 
-use self::interleaved_thinking::{DecisionType, ThinkingStep, InterleavedThinkingEngine};
+use self::interleaved_thinking::{DecisionType, InterleavedThinkingEngine, ThinkingStep};
 use crate::config::ClaudeConfig;
 use crate::identity::boundary::TaskBoundaryChecker;
 use crate::identity::boundary::TaskEvaluation;
 use crate::identity::{AgentIdentity, AgentRole, IdentityMonitor, IdentityStatus};
 
 /// Current status of an agent in its operational lifecycle
-///
-/// The agent status represents the current operational state and determines
-/// what operations are available. Status transitions follow a defined state machine:
-///
-/// ```text
-/// Initializing ──┐
-///                ├─► Available ◄─┬─► Working ──► WaitingForReview
-///                │               │                      │
-///                ▼               │                      ▼
-///              Error ◄───────────┴──────────────────► Available
-///                │
-///                ▼
-///         ShuttingDown
-/// ```
-///
-/// # State Descriptions
-///
-/// - **Initializing**: Agent is setting up resources and establishing identity
-/// - **Available**: Agent is ready to accept new tasks
-/// - **Working**: Agent is actively executing a task
-/// - **WaitingForReview**: Task completed, waiting for quality review
-/// - **Error**: Agent encountered an error and may need intervention
-/// - **ShuttingDown**: Agent is performing cleanup and shutting down
-///
-/// # Examples
-///
-/// ```rust
-/// use ccswarm::agent::AgentStatus;
-///
-/// let status = AgentStatus::Available;
-/// match status {
-///     AgentStatus::Available => println!("Agent ready for tasks"),
-///     AgentStatus::Working => println!("Agent busy"),
-///     AgentStatus::Error(msg) => println!("Agent error: {}", msg),
-///     _ => println!("Agent in transition"),
-/// }
-/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AgentStatus {
-    /// Agent is being initialized
     Initializing,
-    /// Agent is available for tasks
     Available,
-    /// Agent is currently working on a task
     Working,
-    /// Agent has completed work and is waiting for review
     WaitingForReview,
-    /// Agent encountered an error
     Error(String),
-    /// Agent is shutting down
     ShuttingDown,
 }
 
-/// Core Claude Code agent structure
-///
-/// This is the primary agent implementation that interfaces with Claude Code
-/// via the ACP (Agent Client Protocol). Each agent has its own identity,
-/// workspace isolation, and specialized capabilities.
-///
-/// # Agent Lifecycle
-///
-/// 1. **Creation**: Agent is created with a specific role and workspace
-/// 2. **Initialization**: Git worktree is set up, identity is established
-/// 3. **Operation**: Agent executes tasks within its boundaries
-/// 4. **Monitoring**: Continuous health and performance monitoring
-/// 5. **Shutdown**: Graceful cleanup of resources
-///
-/// # Architecture
-///
-/// ```text
-/// ┌─────────────────────────────────────┐
-/// │           Claude Agent              │
-/// ├─────────────────────────────────────┤
-/// │  Identity & Boundary Management     │
-/// │  ├─ Agent ID & Role                 │
-/// │  ├─ Task Boundary Checking          │
-/// │  └─ Identity Drift Monitoring       │
-/// ├─────────────────────────────────────┤
-/// │  Workspace Isolation                │
-/// │  ├─ Git Worktree Management         │
-/// │  ├─ Container Isolation (optional)  │
-/// │  └─ Environment Variables           │
-/// ├─────────────────────────────────────┤
-/// │  Task Execution Engine              │
-/// │  ├─ Interleaved Thinking            │
-/// │  ├─ Agent Orchestration             │
-/// │  └─ Claude Code Integration         │
-/// ├─────────────────────────────────────┤
-/// │  Learning & Adaptation              │
-/// │  ├─ Personality Development         │
-/// │  ├─ Phronesis (Practical Wisdom)    │
-/// │  └─ Whiteboard Visualization        │
-/// └─────────────────────────────────────┘
-/// ```
-///
-/// # Examples
-///
-/// ## Creating a Frontend Agent
-///
-/// ```rust
-/// use ccswarm::agent::ClaudeCodeAgent;
-/// use ccswarm::identity::AgentRole;
-/// use ccswarm::config::ClaudeConfig;
-/// use std::path::Path;
-///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let workspace = Path::new("/workspace");
-/// let config = ClaudeConfig::default();
-/// let role = AgentRole::Frontend {
-///     technologies: vec!["React".to_string(), "TypeScript".to_string()],
-///     responsibilities: vec!["UI Development".to_string()],
-///     boundaries: vec!["Frontend only".to_string()],
-/// };
-///
-/// let mut agent = ClaudeCodeAgent::new(
-///     role,
-///     workspace,
-///     "feature",
-///     config,
-/// ).await?;
-///
-/// agent.initialize().await?;
-/// # Ok(())
-/// # }
-/// ```
-///
-/// ## Task Execution with Boundary Checking
-///
-/// ```rust
-/// use ccswarm::agent::{Task, Priority, TaskType};
-///
-/// # async fn example(mut agent: ccswarm::agent::ClaudeCodeAgent) -> Result<(), Box<dyn std::error::Error>> {
-/// let task = Task::new(
-///     "task-1".to_string(),
-///     "Create a React component for user authentication".to_string(),
-///     Priority::High,
-///     TaskType::Development,
-/// );
-///
-/// let result = agent.execute_task(task).await?;
-/// if result.success {
-///     println!("Task completed successfully");
-/// }
-/// # Ok(())
-/// # }
-/// ```
+/// Core Claude Code agent structure that interfaces with Claude Code via ACP
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeCodeAgent {
     /// Agent identity information
@@ -226,42 +95,6 @@ pub struct ClaudeCodeAgent {
 
 impl ClaudeCodeAgent {
     /// Create a new agent with the given configuration
-    ///
-    /// # Arguments
-    ///
-    /// * `role` - The specialized role for this agent (Frontend, Backend, DevOps, etc.)
-    /// * `workspace_root` - Root directory for agent workspaces
-    /// * `branch_prefix` - Prefix for git branches created by this agent
-    /// * `claude_config` - Configuration for Claude Code integration
-    ///
-    /// # Returns
-    ///
-    /// Returns a new `ClaudeCodeAgent` instance ready for initialization.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use ccswarm::agent::ClaudeCodeAgent;
-    /// use ccswarm::identity::AgentRole;
-    /// use ccswarm::config::ClaudeConfig;
-    /// use std::path::Path;
-    ///
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let role = AgentRole::Backend {
-    ///     technologies: vec!["Rust".to_string(), "Python".to_string()],
-    ///     responsibilities: vec!["API Development".to_string()],
-    ///     boundaries: vec!["Backend only".to_string()],
-    /// };
-    ///
-    /// let agent = ClaudeCodeAgent::new(
-    ///     role,
-    ///     Path::new("/workspace"),
-    ///     "feature",
-    ///     ClaudeConfig::default(),
-    /// ).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub async fn new(
         role: AgentRole,
         workspace_root: &std::path::Path,
@@ -340,36 +173,7 @@ impl ClaudeCodeAgent {
         env_vars
     }
 
-    /// Initialize the agent (setup worktree, identity, etc.)
-    ///
-    /// This method performs the complete initialization sequence for the agent:
-    ///
-    /// 1. **Git Worktree Setup**: Creates an isolated git worktree for the agent
-    /// 2. **Container Setup**: Optionally sets up container isolation
-    /// 3. **Claude Configuration**: Generates CLAUDE.md and .claude.json files
-    /// 4. **Identity Establishment**: Establishes agent identity with Claude Code
-    /// 5. **Boundary Verification**: Tests that agent boundaries are working
-    ///
-    /// # Error Handling
-    ///
-    /// The initialization process can fail at several points:
-    /// - Git operations (worktree creation, branch management)
-    /// - File system operations (directory creation, file writing)
-    /// - Claude Code communication (identity establishment)
-    /// - Container setup (if using container isolation)
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # async fn example(mut agent: ccswarm::agent::ClaudeCodeAgent) -> Result<(), Box<dyn std::error::Error>> {
-    /// // Initialize the agent - this must be called before executing tasks
-    /// agent.initialize().await?;
-    ///
-    /// // Agent is now ready to execute tasks
-    /// println!("Agent {} is ready", agent.identity.agent_id);
-    /// # Ok(())
-    /// # }
-    /// ```
+    /// Initialize the agent by setting up worktree, identity, and boundaries
     pub async fn initialize(&mut self) -> Result<()> {
         tracing::info!(
             "Initializing agent: {} with isolation mode: {:?}",
@@ -377,24 +181,18 @@ impl ClaudeCodeAgent {
             self.isolation_mode
         );
 
-        // Setup Git worktree (always needed for code synchronization)
         self.setup_worktree().await?;
 
-        // If using container isolation, create and configure container
         if self.isolation_mode.requires_docker() {
             self.setup_container().await?;
         }
 
-        // Generate and write CLAUDE.md
         self.generate_claude_md().await?;
 
-        // Setup Claude configuration
         self.setup_claude_config().await?;
 
-        // Establish identity
         self.establish_identity().await?;
 
-        // Run boundary verification
         self.verify_boundaries().await?;
 
         self.status = AgentStatus::Available;
@@ -404,16 +202,13 @@ impl ClaudeCodeAgent {
         Ok(())
     }
 
-    /// Setup Git worktree for this agent
     async fn setup_worktree(&self) -> Result<()> {
-        // Create parent directory if needed
         if let Some(parent) = self.worktree_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
                 .context("Failed to create parent directory")?;
         }
 
-        // Create branch
         let output = Command::new("git")
             .args(["checkout", "-b", &self.branch_name])
             .output()
@@ -429,7 +224,6 @@ impl ClaudeCodeAgent {
             ));
         }
 
-        // Create worktree
         let output = Command::new("git")
             .args([
                 "worktree",
@@ -454,7 +248,6 @@ impl ClaudeCodeAgent {
         Ok(())
     }
 
-    /// Generate CLAUDE.md for this agent
     async fn generate_claude_md(&self) -> Result<()> {
         let content = claude::generate_claude_md_content(&self.identity);
         let claude_md_path = self.worktree_path.join("CLAUDE.md");
@@ -467,7 +260,6 @@ impl ClaudeCodeAgent {
         Ok(())
     }
 
-    /// Setup Claude configuration (.claude.json)
     async fn setup_claude_config(&self) -> Result<()> {
         let config_path = self.worktree_path.join(".claude.json");
         let config_json = serde_json::to_string_pretty(&self.claude_config)?;
@@ -484,10 +276,8 @@ impl ClaudeCodeAgent {
     pub async fn establish_identity(&mut self) -> Result<()> {
         let prompt = claude::generate_identity_establishment_prompt(&self.identity);
 
-        // Execute identity establishment
         let response = self.execute_claude_command(&prompt).await?;
 
-        // Verify response contains required identity markers
         if !claude::verify_identity_response(&response, &self.identity) {
             return Err(anyhow::anyhow!("Failed to establish agent identity"));
         }
@@ -722,10 +512,8 @@ impl ClaudeCodeAgent {
                 tracing::warn!("Task rejected by {}: {}", self.identity.agent_id, reason);
 
                 // Record rejection as a learning event
-                self.phronesis.record_learning_event(
-                    format!("Task rejected: {}", reason),
-                    false
-                );
+                self.phronesis
+                    .record_learning_event(format!("Task rejected: {}", reason), false);
 
                 TaskResult {
                     success: false,
@@ -736,7 +524,6 @@ impl ClaudeCodeAgent {
             }
         };
 
-        // Update status and history
         self.status = if result.success {
             AgentStatus::WaitingForReview
         } else {
@@ -745,28 +532,26 @@ impl ClaudeCodeAgent {
         self.current_task = None;
         self.task_history.push((task, result.clone()));
 
-        // Report status
         self.report_status(&result).await?;
 
         Ok(result)
     }
 
-    /// Execute task with identity monitoring and interleaved thinking
     async fn execute_task_with_monitoring(&mut self, task: Task) -> Result<TaskResult> {
         let start_time = std::time::Instant::now();
         let mut monitor = IdentityMonitor::new(&self.identity.agent_id);
-        let mut thinking_engine = InterleavedThinkingEngine::new().with_config(crate::agent::interleaved_thinking::ThinkingConfig {
-            max_depth: 15,
-            timeout_ms: 5000,
-            parallel_thoughts: false,
-        }); // Max 15 steps thinking configuration
+        let mut thinking_engine = InterleavedThinkingEngine::new().with_config(
+            crate::agent::interleaved_thinking::ThinkingConfig {
+                max_depth: 15,
+                timeout_ms: 5000,
+                parallel_thoughts: false,
+            },
+        );
 
-        // Create whiteboard section for this task
         let task_section_id = self
             .whiteboard
             .create_section(&format!("Task: {}", task.description));
 
-        // Record initial task analysis on whiteboard
         let initial_note = self.whiteboard.add_note(
             &format!(
                 "タスク開始: {}. タイプ: {:?}, 優先度: {:?}",
@@ -777,23 +562,22 @@ impl ClaudeCodeAgent {
         self.whiteboard
             .add_to_section(&task_section_id, &initial_note);
 
-        // Initial thinking step - analyze the task
         let initial_observation = format!(
             "Starting task: {}. Type: {:?}, Priority: {:?}",
             task.description, task.task_type, task.priority
         );
-        thinking_engine
-            .process_observation(format!("{} ({})", initial_observation, self.identity.specialization.name()));
+        thinking_engine.process_observation(format!(
+            "{} ({})",
+            initial_observation,
+            self.identity.specialization.name()
+        ));
 
-        // Prepare task prompt with identity header
         let mut prompt = claude::generate_task_prompt(&self.identity, &task);
 
-        // Execute Claude Code with progressive refinement
         let mut final_output = String::new();
         let mut execution_count = 0;
         let max_executions = 3;
 
-        // Start a thought trace on whiteboard
         let thought_trace_id = self.whiteboard.start_thought_trace();
         self.whiteboard
             .add_to_section(&task_section_id, &thought_trace_id);
@@ -802,7 +586,6 @@ impl ClaudeCodeAgent {
             execution_count += 1;
             let output = self.execute_claude_command(&prompt).await?;
 
-            // Record execution attempt on whiteboard
             let exec_note = self.whiteboard.add_note(
                 &format!(
                     "実行試行 #{}: 出力長 {} 文字",
@@ -813,25 +596,26 @@ impl ClaudeCodeAgent {
             );
             self.whiteboard.add_to_section(&task_section_id, &exec_note);
 
-            // Process the output through thinking engine
             let observation = self.extract_execution_observation(&output);
-            thinking_engine
-                .process_observation(format!("{} ({})", observation, self.identity.specialization.name()));
+            thinking_engine.process_observation(format!(
+                "{} ({})",
+                observation,
+                self.identity.specialization.name()
+            ));
 
-            // Record thinking on whiteboard
             self.whiteboard
                 .add_thought(&thought_trace_id, &format!("観察: {}", observation));
 
-            // Monitor the response for identity
             let identity_status = monitor.monitor_response(&output).await?;
             self.handle_identity_status(identity_status, &mut monitor)
                 .await?;
 
-            // Handle thinking decision
             let thinking_step = ThinkingStep::new(
                 observation.clone(),
                 "Analysis".to_string(),
-                DecisionType::Continue { reason: "Processing".to_string() }
+                DecisionType::Continue {
+                    reason: "Processing".to_string(),
+                },
             );
 
             match thinking_step.decision {
@@ -857,7 +641,7 @@ impl ClaudeCodeAgent {
                         .add_to_section(&task_section_id, &hypothesis_id);
 
                     prompt = self.refine_prompt(&prompt, &refinement, &task);
-                    final_output = output; // Keep last output
+                    final_output = output;
                 }
                 DecisionType::Complete { summary } => {
                     tracing::info!("Task completed: {}", summary);
@@ -887,8 +671,6 @@ impl ClaudeCodeAgent {
                     tracing::info!("Additional context needed: {:?}", questions);
                     self.whiteboard
                         .add_thought(&thought_trace_id, &format!("追加情報必要: {:?}", questions));
-                    // In a real implementation, this would request from orchestrator
-                    // For now, we'll add questions to prompt and continue
                     prompt.push_str(&format!("\n\nPlease address: {}", questions.join(", ")));
                 }
                 DecisionType::Abort { reason } => {
@@ -908,20 +690,15 @@ impl ClaudeCodeAgent {
             }
         }
 
-        // Generate thinking summary
         let thinking_summary = thinking_engine.get_thinking_summary();
 
-        // Update agent's experience based on task completion
         self.update_agent_experience(&task);
 
-        // Record success in phronesis system
-        let _lesson = format!(
-            "Task completed with thinking summary: {}",
-            thinking_summary
-        );
-        self.phronesis.record_success(
-            format!("Task {} completed successfully with interleaved thinking", task.id)
-        );
+        let _lesson = format!("Task completed with thinking summary: {}", thinking_summary);
+        self.phronesis.record_success(format!(
+            "Task {} completed successfully with interleaved thinking",
+            task.id
+        ));
 
         Ok(TaskResult {
             success: true,
@@ -937,19 +714,11 @@ impl ClaudeCodeAgent {
         })
     }
 
-    /// Check if a task is complex and needs orchestration
     fn is_complex_task(&self, task: &Task) -> bool {
-        // A task is complex if it:
-        // 1. Has multiple explicit steps in the description
-        // 2. Contains keywords indicating multi-step work
-        // 3. Has high priority and involves multiple components
-        // 4. Is a feature or infrastructure task (typically multi-step)
-
         let description_lower = task.description.to_lowercase();
         let details_lower = task.details.as_deref().unwrap_or("").to_lowercase();
         let combined_text = format!("{} {}", description_lower, details_lower);
 
-        // Check for multi-step indicators
         let multi_step_keywords = [
             "implement",
             "create",
@@ -972,23 +741,19 @@ impl ClaudeCodeAgent {
             .iter()
             .any(|keyword| combined_text.contains(keyword));
 
-        // Check for complexity indicators
         let complexity_indicators = combined_text.contains("multiple")
             || combined_text.contains("several")
             || combined_text.contains("comprehensive")
             || combined_text.contains("full")
             || combined_text.contains("complete");
 
-        // Task type based complexity
         let complex_task_types = matches!(
             task.task_type,
             TaskType::Feature | TaskType::Infrastructure | TaskType::Development
         );
 
-        // High priority tasks often need careful orchestration
         let high_priority = matches!(task.priority, Priority::High | Priority::Critical);
 
-        // Decision logic
         (has_multi_step_keywords && complexity_indicators)
             || (complex_task_types && high_priority)
             || (complexity_indicators && complex_task_types)
@@ -1005,7 +770,6 @@ impl ClaudeCodeAgent {
             task.description
         );
 
-        // Create an orchestrator instance for this agent
         struct AgentTaskOrchestrator<'a> {
             agent: &'a mut ClaudeCodeAgent,
         }
@@ -1015,7 +779,6 @@ impl ClaudeCodeAgent {
             async fn analyze_task(&self, task: &Task) -> Result<TaskPlan> {
                 let mut plan = TaskPlan::new(task.id.clone());
 
-                // Add context from master orchestration
                 if let Some(parent_task_id) = &task.parent_task_id {
                     plan.update_context("parent_task".to_string(), parent_task_id.clone());
                 }
@@ -1025,7 +788,6 @@ impl ClaudeCodeAgent {
                 );
                 plan.update_context("task_type".to_string(), format!("{:?}", task.task_type));
 
-                // Create analysis step based on agent specialization
                 let analysis_tasks = match &self.agent.identity.specialization {
                     crate::identity::AgentRole::Frontend { .. } => vec![
                         OrchestrationBuilder::parallel_task(
@@ -1257,25 +1019,21 @@ impl ClaudeCodeAgent {
                 tracing::warn!("Identity drift detected: {}", msg);
 
                 // Record drift as learning event
-                self.phronesis.record_learning_event(
-                    format!("Identity drift detected: {}", msg),
-                    false
-                );
+                self.phronesis
+                    .record_learning_event(format!("Identity drift detected: {}", msg), false);
 
                 self.correct_identity_drift(monitor).await
             }
             IdentityStatus::BoundaryViolation(msg) => {
                 // Record boundary violation
-                self.phronesis.record_failure(
-                    format!("Boundary violation: {}", msg)
-                );
+                self.phronesis
+                    .record_failure(format!("Boundary violation: {}", msg));
                 Err(anyhow::anyhow!("Boundary violation detected: {}", msg))
             }
             IdentityStatus::CriticalFailure(msg) => {
                 // Record critical failure
-                self.phronesis.record_failure(
-                    format!("Critical identity failure: {}", msg)
-                );
+                self.phronesis
+                    .record_failure(format!("Critical identity failure: {}", msg));
                 Err(anyhow::anyhow!("Critical identity failure: {}", msg))
             }
         }
@@ -1342,17 +1100,25 @@ impl ClaudeCodeAgent {
         // Add Claude arguments
         cmd.arg("-p").arg(prompt);
 
-        if self.claude_config.json_output {
-            cmd.arg("--json");
-        }
+        // Add output format
+        cmd.arg("--output-format")
+            .arg(self.claude_config.output_format.as_cli_arg());
 
         if self.claude_config.dangerous_skip {
             cmd.arg("--dangerously-skip-permissions");
         }
 
-        // Add think mode if specified
-        if let Some(think_mode) = &self.claude_config.think_mode {
-            cmd.arg("--think").arg(think_mode.to_string());
+        // Add model
+        cmd.arg("--model").arg(&self.claude_config.model);
+
+        // Add append system prompt if specified
+        if let Some(system_prompt) = &self.claude_config.append_system_prompt {
+            cmd.arg("--append-system-prompt").arg(system_prompt);
+        }
+
+        // Add max turns if specified
+        if let Some(max_turns) = self.claude_config.max_turns {
+            cmd.arg("--max-turns").arg(max_turns.to_string());
         }
 
         // Execute command
@@ -1400,7 +1166,10 @@ impl ClaudeCodeAgent {
             .await?;
 
         // Format response to match expected output format
-        if self.claude_config.json_output {
+        use crate::config::OutputFormat;
+        if self.claude_config.output_format == OutputFormat::Json
+            || self.claude_config.output_format == OutputFormat::StreamJson
+        {
             // Wrap response in JSON format similar to CLI output
             let json_response = serde_json::json!({
                 "response": response,
@@ -1628,4 +1397,3 @@ impl ClaudeCodeAgent {
         Ok(())
     }
 }
-

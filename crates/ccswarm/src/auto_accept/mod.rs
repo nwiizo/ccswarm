@@ -599,4 +599,3 @@ pub enum ValidationResult {
     /// Changes are invalid with list of issues
     Invalid(Vec<String>),
 }
-

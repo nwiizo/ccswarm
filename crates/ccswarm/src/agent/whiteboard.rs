@@ -161,7 +161,7 @@ impl Whiteboard {
 
         if let EntryType::Calculation {
             expression,
-            result: ref mut res,
+            result: res,
         } = &mut entry.entry_type
         {
             entry.revisions.push(Revision {
@@ -197,11 +197,7 @@ impl Whiteboard {
     pub fn add_evidence(&mut self, entry_id: &str, evidence: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
 
-        if let EntryType::Hypothesis {
-            evidence: ref mut ev,
-            ..
-        } = &mut entry.entry_type
-        {
+        if let EntryType::Hypothesis { evidence: ev, .. } = &mut entry.entry_type {
             ev.push(evidence.to_string());
             entry.revisions.push(Revision {
                 timestamp: Utc::now(),
@@ -239,8 +235,7 @@ impl Whiteboard {
         let entry = self.entries.get_mut(entry_id)?;
 
         if let EntryType::ThoughtTrace {
-            conclusion: ref mut conc,
-            ..
+            conclusion: conc, ..
         } = &mut entry.entry_type
         {
             *conc = Some(conclusion.to_string());
@@ -367,4 +362,3 @@ pub struct WhiteboardSummary {
     pub total_revisions: usize,
     pub section_count: usize,
 }
-

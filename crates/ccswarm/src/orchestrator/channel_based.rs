@@ -1,12 +1,11 @@
+use crate::agent::Task;
+use crate::error::{CCSwarmError, Result};
+use std::collections::HashMap;
 /// Channel-based orchestration using Rust best practices
 ///
 /// This module implements efficient message-passing concurrency
 /// without shared state, leveraging Rust's ownership system.
-
 use tokio::sync::{mpsc, oneshot};
-use std::collections::HashMap;
-use crate::error::{Result, CCSwarmError};
-use crate::agent::{Task, Priority};
 
 /// Messages for the orchestrator
 #[derive(Debug)]
@@ -54,7 +53,8 @@ impl OrchestratorHandle {
             .await
             .map_err(|_| CCSwarmError::orchestrator("Orchestrator channel closed", None))?;
 
-        rx.await.map_err(|_| CCSwarmError::orchestrator("Failed to receive reply", None))?
+        rx.await
+            .map_err(|_| CCSwarmError::orchestrator("Failed to receive reply", None))?
     }
 
     /// Assign a task to an agent
@@ -69,7 +69,8 @@ impl OrchestratorHandle {
             .await
             .map_err(|_| CCSwarmError::orchestrator("Orchestrator channel closed", None))?;
 
-        rx.await.map_err(|_| CCSwarmError::orchestrator("Failed to receive reply", None))?
+        rx.await
+            .map_err(|_| CCSwarmError::orchestrator("Failed to receive reply", None))?
     }
 
     /// Get current orchestrator status
@@ -80,7 +81,8 @@ impl OrchestratorHandle {
             .await
             .map_err(|_| CCSwarmError::orchestrator("Orchestrator channel closed", None))?;
 
-        Ok(rx.await.map_err(|_| CCSwarmError::orchestrator("Failed to receive status", None))?)
+        rx.await
+            .map_err(|_| CCSwarmError::orchestrator("Failed to receive status", None))
     }
 
     /// Graceful shutdown
@@ -175,8 +177,10 @@ impl Orchestrator {
         }
 
         // Assign the task
-        self.active_tasks.insert(task_id.clone(), (task, agent_id.clone()));
-        self.active_agents.insert(agent_id.clone(), Some(task_id.clone()));
+        self.active_tasks
+            .insert(task_id.clone(), (task, agent_id.clone()));
+        self.active_agents
+            .insert(agent_id.clone(), Some(task_id.clone()));
 
         tracing::info!("Task {} assigned to agent {}", task_id, agent_id);
         Ok(())
@@ -207,4 +211,3 @@ pub fn spawn_orchestrator() -> OrchestratorHandle {
 
     handle
 }
-

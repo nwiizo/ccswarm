@@ -1,7 +1,6 @@
 //! Template storage implementations
 
-use super::types::TemplateQuery;
-use super::{Template, TemplateError};
+use super::types::{Template, TemplateError, TemplateQuery};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -26,7 +25,7 @@ pub trait TemplateStorage: Send + Sync {
 
     /// Search templates by query
     async fn search_templates(&self, query: &TemplateQuery)
-        -> Result<Vec<Template>, TemplateError>;
+    -> Result<Vec<Template>, TemplateError>;
 
     /// Check if template exists
     async fn exists(&self, id: &str) -> Result<bool, TemplateError>;
@@ -270,7 +269,7 @@ impl TemplateStorage for FileSystemTemplateStorage {
         // Check if template already exists
         if self.exists(&template.id).await? {
             return Err(TemplateError::AlreadyExists {
-                name: template.id.clone(),
+                id: template.id.clone(),
             });
         }
 
@@ -295,9 +294,7 @@ impl TemplateStorage for FileSystemTemplateStorage {
         // Load from file
         let path = self.template_path(id);
         if !path.exists() {
-            return Err(TemplateError::NotFound {
-                name: id.to_string(),
-            });
+            return Err(TemplateError::NotFound { id: id.to_string() });
         }
 
         self.load_template_from_file(&path).await
@@ -306,9 +303,7 @@ impl TemplateStorage for FileSystemTemplateStorage {
     async fn delete_template(&mut self, id: &str) -> Result<(), TemplateError> {
         let path = self.template_path(id);
         if !path.exists() {
-            return Err(TemplateError::NotFound {
-                name: id.to_string(),
-            });
+            return Err(TemplateError::NotFound { id: id.to_string() });
         }
 
         // Delete file
@@ -440,7 +435,7 @@ impl TemplateStorage for InMemoryTemplateStorage {
 
         if self.templates.contains_key(&template.id) {
             return Err(TemplateError::AlreadyExists {
-                name: template.id.clone(),
+                id: template.id.clone(),
             });
         }
 
@@ -452,16 +447,12 @@ impl TemplateStorage for InMemoryTemplateStorage {
         self.templates
             .get(id)
             .cloned()
-            .ok_or_else(|| TemplateError::NotFound {
-                name: id.to_string(),
-            })
+            .ok_or_else(|| TemplateError::NotFound { id: id.to_string() })
     }
 
     async fn delete_template(&mut self, id: &str) -> Result<(), TemplateError> {
         if self.templates.remove(id).is_none() {
-            return Err(TemplateError::NotFound {
-                name: id.to_string(),
-            });
+            return Err(TemplateError::NotFound { id: id.to_string() });
         }
         Ok(())
     }
@@ -533,9 +524,7 @@ impl TemplateStorage for InMemoryTemplateStorage {
         let template = self
             .templates
             .get_mut(id)
-            .ok_or_else(|| TemplateError::NotFound {
-                name: id.to_string(),
-            })?;
+            .ok_or_else(|| TemplateError::NotFound { id: id.to_string() })?;
 
         template.increment_usage();
         template.update_success_rate(success);

@@ -154,4 +154,3 @@ impl SimpleWorkspaceManager {
         Ok(())
     }
 }
-

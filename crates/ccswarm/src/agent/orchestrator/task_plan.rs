@@ -158,4 +158,3 @@ impl StepResult {
         self.success && self.parallel_results.iter().all(|r| r.success)
     }
 }
-

@@ -35,8 +35,7 @@ pub struct DelegatedTask {
 }
 
 /// Priority levels for tasks
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum TaskPriority {
     Low,
     #[default]
@@ -44,7 +43,6 @@ pub enum TaskPriority {
     High,
     Critical,
 }
-
 
 /// Result from a delegated task
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -401,4 +399,3 @@ impl Default for DelegationManager {
         Self::new()
     }
 }
-

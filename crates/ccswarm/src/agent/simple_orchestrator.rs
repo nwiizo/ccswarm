@@ -4,14 +4,38 @@ use log::{debug, info};
 use std::collections::HashMap;
 
 use crate::agent::{
+    Task, TaskResult,
     orchestrator::{
+        AgentOrchestrator,
         agent_orchestrator::OrchestrationBuilder,
         task_plan::{ParallelTask, ParallelTaskResult, StepResult, StepType, TaskPlan, TaskStep},
-        AgentOrchestrator,
     },
     simple::SimpleClaudeAgent,
-    Task, TaskResult,
 };
+
+/// Configuration for unified plan creation (DRY pattern)
+struct PlanConfig<'a> {
+    /// Analysis step name
+    analysis_name: &'a str,
+    /// Analysis step description
+    analysis_desc: &'a str,
+    /// Analysis parallel tasks
+    analysis_tasks: Vec<ParallelTask>,
+    /// Main step name
+    main_step_name: &'a str,
+    /// Main step description
+    main_step_desc: &'a str,
+    /// Main step type
+    main_step_type: StepType,
+    /// Main step description content (optional)
+    main_step_content: Option<String>,
+    /// Validation step name
+    validation_name: &'a str,
+    /// Validation step description
+    validation_desc: &'a str,
+    /// Validation parallel tasks
+    validation_tasks: Vec<ParallelTask>,
+}
 
 /// Orchestrator implementation for SimpleClaudeAgent
 #[async_trait]
@@ -77,7 +101,9 @@ impl AgentOrchestrator for SimpleClaudeAgent {
         current_plan: &mut TaskPlan,
     ) -> Result<TaskPlan> {
         // Analyze results to determine if adaptation is needed
-        let last_result = results.last().unwrap();
+        let last_result = results
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("No results available for adaptation"))?;
 
         // If tests failed, add a fix step
         if last_result.outputs.contains_key("test_failures") {
@@ -149,192 +175,194 @@ impl AgentOrchestrator for SimpleClaudeAgent {
 }
 
 impl SimpleClaudeAgent {
-    /// Create a quality check plan (test, lint, build)
-    fn create_quality_check_plan(&self, task: &Task) -> Result<TaskPlan> {
+    /// Unified plan creation from configuration (DRY pattern)
+    fn create_plan_from_config(&self, task: &Task, config: PlanConfig) -> Result<TaskPlan> {
         let mut plan = TaskPlan::new(task.id.clone());
 
-        // Step 1: Initial Analysis
+        // Step 1: Analysis
         let analysis = OrchestrationBuilder::analysis_step(
-            "analysis",
-            "Analyze Project Structure",
-            vec![
-                OrchestrationBuilder::parallel_task(
-                    "check_cargo",
-                    "Check Cargo.toml",
-                    "cat Cargo.toml",
-                    true,
-                ),
-                OrchestrationBuilder::parallel_task(
-                    "check_src",
-                    "Check source structure",
-                    "ls -la src/",
-                    false,
-                ),
-                OrchestrationBuilder::parallel_task(
-                    "check_tests",
-                    "Check test structure",
-                    "ls -la tests/",
-                    false,
-                ),
-            ],
+            config.analysis_name,
+            config.analysis_desc,
+            config.analysis_tasks,
         );
         plan.add_step(analysis);
 
-        // Step 2: Run Quality Checks
-        let mut quality_checks = TaskStep::new(
-            "quality_checks".to_string(),
-            "Run Quality Checks".to_string(),
+        // Step 2: Main step (execution or validation)
+        let mut main_step = TaskStep::new(
+            config.main_step_name.to_string(),
+            config.main_step_desc.to_string(),
+            config.main_step_type,
+        )
+        .depends_on(config.analysis_name.to_string());
+
+        if let Some(desc) = config.main_step_content {
+            main_step = main_step.with_description(desc);
+        }
+        plan.add_step(main_step);
+
+        // Step 3: Validation
+        let mut validation = TaskStep::new(
+            config.validation_name.to_string(),
+            config.validation_desc.to_string(),
             StepType::Validation,
         )
-        .depends_on("analysis".to_string());
+        .depends_on(config.main_step_name.to_string());
 
-        quality_checks.add_parallel_task(OrchestrationBuilder::parallel_task(
-            "run_tests",
-            "Run tests",
-            "cargo test",
-            true,
-        ));
-        quality_checks.add_parallel_task(OrchestrationBuilder::parallel_task(
-            "run_lint",
-            "Run clippy",
-            "cargo clippy -- -D warnings",
-            true,
-        ));
-        quality_checks.add_parallel_task(OrchestrationBuilder::parallel_task(
-            "check_fmt",
-            "Check formatting",
-            "cargo fmt -- --check",
-            false,
-        ));
-        plan.add_step(quality_checks);
-
-        // Step 3: Fix Issues (will be added adaptively if needed)
-
-        // Step 4: Final Validation
-        let validation =
-            OrchestrationBuilder::validation_step("final_validation", "Final Validation")
-                .depends_on("quality_checks".to_string());
+        for task in config.validation_tasks {
+            validation.add_parallel_task(task);
+        }
         plan.add_step(validation);
 
         Ok(plan)
     }
 
+    /// Create a quality check plan (test, lint, build)
+    fn create_quality_check_plan(&self, task: &Task) -> Result<TaskPlan> {
+        self.create_plan_from_config(
+            task,
+            PlanConfig {
+                analysis_name: "analysis",
+                analysis_desc: "Analyze Project Structure",
+                analysis_tasks: vec![
+                    OrchestrationBuilder::parallel_task(
+                        "check_cargo",
+                        "Check Cargo.toml",
+                        "cat Cargo.toml",
+                        true,
+                    ),
+                    OrchestrationBuilder::parallel_task(
+                        "check_src",
+                        "Check source structure",
+                        "ls -la src/",
+                        false,
+                    ),
+                    OrchestrationBuilder::parallel_task(
+                        "check_tests",
+                        "Check test structure",
+                        "ls -la tests/",
+                        false,
+                    ),
+                ],
+                main_step_name: "quality_checks",
+                main_step_desc: "Run Quality Checks",
+                main_step_type: StepType::Validation,
+                main_step_content: None,
+                validation_name: "final_validation",
+                validation_desc: "Final Validation",
+                validation_tasks: vec![
+                    OrchestrationBuilder::parallel_task(
+                        "run_tests",
+                        "Run tests",
+                        "cargo test",
+                        true,
+                    ),
+                    OrchestrationBuilder::parallel_task(
+                        "run_lint",
+                        "Run clippy",
+                        "cargo clippy -- -D warnings",
+                        true,
+                    ),
+                    OrchestrationBuilder::parallel_task(
+                        "check_fmt",
+                        "Check formatting",
+                        "cargo fmt -- --check",
+                        false,
+                    ),
+                ],
+            },
+        )
+    }
+
     /// Create an implementation plan
     fn create_implementation_plan(&self, task: &Task) -> Result<TaskPlan> {
-        let mut plan = TaskPlan::new(task.id.clone());
-
-        // Step 1: Analysis and Planning
-        let analysis = OrchestrationBuilder::analysis_step(
-            "analysis",
-            "Analyze Requirements",
-            vec![
-                OrchestrationBuilder::parallel_task(
-                    "analyze_existing",
-                    "Analyze existing code",
-                    "grep -r 'impl' src/",
-                    false,
-                ),
-                OrchestrationBuilder::parallel_task(
-                    "check_deps",
-                    "Check dependencies",
-                    "cargo tree",
-                    false,
-                ),
-            ],
-        );
-        plan.add_step(analysis);
-
-        // Step 2: Implementation
-        let implementation = OrchestrationBuilder::execution_step(
-            "implementation",
-            "Implement Feature",
-            vec!["analysis"],
+        self.create_plan_from_config(
+            task,
+            PlanConfig {
+                analysis_name: "analysis",
+                analysis_desc: "Analyze Requirements",
+                analysis_tasks: vec![
+                    OrchestrationBuilder::parallel_task(
+                        "analyze_existing",
+                        "Analyze existing code",
+                        "grep -r 'impl' src/",
+                        false,
+                    ),
+                    OrchestrationBuilder::parallel_task(
+                        "check_deps",
+                        "Check dependencies",
+                        "cargo tree",
+                        false,
+                    ),
+                ],
+                main_step_name: "implementation",
+                main_step_desc: "Implement Feature",
+                main_step_type: StepType::Execution,
+                main_step_content: Some(format!("Implement: {}", task.description)),
+                validation_name: "testing",
+                validation_desc: "Test Implementation",
+                validation_tasks: vec![
+                    OrchestrationBuilder::parallel_task(
+                        "unit_tests",
+                        "Write unit tests",
+                        "cargo test",
+                        true,
+                    ),
+                    OrchestrationBuilder::parallel_task(
+                        "integration_tests",
+                        "Run integration tests",
+                        "cargo test --test '*'",
+                        false,
+                    ),
+                ],
+            },
         )
-        .with_description(format!("Implement: {}", task.description));
-        plan.add_step(implementation);
-
-        // Step 3: Testing
-        let mut testing = TaskStep::new(
-            "testing".to_string(),
-            "Test Implementation".to_string(),
-            StepType::Validation,
-        )
-        .depends_on("implementation".to_string());
-
-        testing.add_parallel_task(OrchestrationBuilder::parallel_task(
-            "unit_tests",
-            "Write unit tests",
-            "cargo test",
-            true,
-        ));
-        testing.add_parallel_task(OrchestrationBuilder::parallel_task(
-            "integration_tests",
-            "Run integration tests",
-            "cargo test --test '*'",
-            false,
-        ));
-        plan.add_step(testing);
-
-        Ok(plan)
     }
 
     /// Create a refactoring plan
     fn create_refactoring_plan(&self, task: &Task) -> Result<TaskPlan> {
-        let mut plan = TaskPlan::new(task.id.clone());
-
-        // Step 1: Analysis
-        let analysis = OrchestrationBuilder::analysis_step(
-            "analysis",
-            "Analyze Code Structure",
-            vec![
-                OrchestrationBuilder::parallel_task(
-                    "complexity",
-                    "Check complexity",
-                    "cargo clippy -- -W clippy::cognitive_complexity",
-                    false,
+        self.create_plan_from_config(
+            task,
+            PlanConfig {
+                analysis_name: "analysis",
+                analysis_desc: "Analyze Code Structure",
+                analysis_tasks: vec![
+                    OrchestrationBuilder::parallel_task(
+                        "complexity",
+                        "Check complexity",
+                        "cargo clippy -- -W clippy::cognitive_complexity",
+                        false,
+                    ),
+                    OrchestrationBuilder::parallel_task(
+                        "coverage",
+                        "Check test coverage",
+                        "cargo tarpaulin --print-summary",
+                        false,
+                    ),
+                ],
+                main_step_name: "refactor",
+                main_step_desc: "Perform Refactoring",
+                main_step_type: StepType::Execution,
+                main_step_content: Some(
+                    "Refactor code while maintaining functionality".to_string(),
                 ),
-                OrchestrationBuilder::parallel_task(
-                    "coverage",
-                    "Check test coverage",
-                    "cargo tarpaulin --print-summary",
-                    false,
-                ),
-            ],
-        );
-        plan.add_step(analysis);
-
-        // Step 2: Refactor
-        let refactor = OrchestrationBuilder::execution_step(
-            "refactor",
-            "Perform Refactoring",
-            vec!["analysis"],
+                validation_name: "validate",
+                validation_desc: "Validate Refactoring",
+                validation_tasks: vec![
+                    OrchestrationBuilder::parallel_task(
+                        "test_all",
+                        "Run all tests",
+                        "cargo test --all",
+                        true,
+                    ),
+                    OrchestrationBuilder::parallel_task(
+                        "bench",
+                        "Run benchmarks",
+                        "cargo bench",
+                        false,
+                    ),
+                ],
+            },
         )
-        .with_description("Refactor code while maintaining functionality".to_string());
-        plan.add_step(refactor);
-
-        // Step 3: Validate
-        let mut validate = TaskStep::new(
-            "validate".to_string(),
-            "Validate Refactoring".to_string(),
-            StepType::Validation,
-        )
-        .depends_on("refactor".to_string());
-
-        validate.add_parallel_task(OrchestrationBuilder::parallel_task(
-            "test_all",
-            "Run all tests",
-            "cargo test --all",
-            true,
-        ));
-        validate.add_parallel_task(OrchestrationBuilder::parallel_task(
-            "bench",
-            "Run benchmarks",
-            "cargo bench",
-            false,
-        ));
-        plan.add_step(validate);
-
-        Ok(plan)
     }
 
     /// Create a default plan for simple tasks
@@ -354,4 +382,3 @@ impl SimpleClaudeAgent {
         Ok(plan)
     }
 }
-

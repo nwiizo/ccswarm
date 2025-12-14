@@ -483,4 +483,3 @@ impl Clone for ProjectContext {
         }
     }
 }
-

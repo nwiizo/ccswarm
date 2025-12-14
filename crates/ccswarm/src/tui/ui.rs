@@ -1,4 +1,5 @@
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -6,7 +7,6 @@ use ratatui::{
         Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, ListState, Paragraph, Row,
         Table, Tabs, Wrap,
     },
-    Frame,
 };
 
 use super::app::{App, DelegationMode, InputMode, Tab};

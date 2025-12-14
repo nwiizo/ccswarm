@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{broadcast, mpsc};
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 
 use crate::monitoring::{MonitoringSystem, OutputEntry, OutputFilter, OutputType};
 
@@ -29,53 +29,91 @@ impl Default for StreamConfig {
     }
 }
 
+/// Options for creating a subscription
+#[derive(Debug, Default, Clone)]
+pub struct SubscriptionOptions {
+    pub agent_id: Option<String>,
+    pub filter: Option<OutputFilter>,
+}
+
+impl SubscriptionOptions {
+    /// Create options for a specific agent
+    pub fn for_agent(agent_id: String) -> Self {
+        Self {
+            agent_id: Some(agent_id),
+            filter: None,
+        }
+    }
+
+    /// Create options with a filter
+    pub fn with_filter(filter: OutputFilter) -> Self {
+        Self {
+            agent_id: None,
+            filter: Some(filter),
+        }
+    }
+
+    /// Add agent filter to existing options
+    pub fn and_agent(mut self, agent_id: String) -> Self {
+        self.agent_id = Some(agent_id);
+        self
+    }
+
+    /// Add output filter to existing options
+    pub fn and_filter(mut self, filter: OutputFilter) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+}
+
 /// Stream subscription handle
 #[derive(Debug, Clone)]
 pub struct StreamSubscription {
     pub id: String,
-    pub agent_id: Option<String>,
-    pub filter: Option<OutputFilter>,
+    pub options: SubscriptionOptions,
     pub created_at: DateTime<Utc>,
     tx: mpsc::UnboundedSender<OutputEntry>,
 }
 
 impl StreamSubscription {
-    pub fn new(id: String, tx: mpsc::UnboundedSender<OutputEntry>) -> Self {
+    /// Create a new subscription with options
+    pub fn new(
+        id: String,
+        tx: mpsc::UnboundedSender<OutputEntry>,
+        options: SubscriptionOptions,
+    ) -> Self {
         Self {
             id,
-            agent_id: None,
-            filter: None,
+            options,
             created_at: Utc::now(),
             tx,
         }
     }
 
-    pub fn with_agent(mut self, agent_id: String) -> Self {
-        self.agent_id = Some(agent_id);
-        self
-    }
-
-    pub fn with_filter(mut self, filter: OutputFilter) -> Self {
-        self.filter = Some(filter);
-        self
-    }
-
-    pub fn send(&self, entry: OutputEntry) -> Result<(), String> {
+    /// Send an entry to this subscriber
+    pub fn send(&self, entry: &OutputEntry) -> Result<(), String> {
         self.tx
-            .send(entry)
+            .send(entry.clone())
             .map_err(|e| format!("Failed to send to subscriber: {}", e))
     }
 
+    /// Check if this subscription should receive an entry
     pub fn should_receive(&self, entry: &OutputEntry) -> bool {
+        // Use a single filtering function for all checks
+        Self::entry_matches_options(entry, &self.options)
+    }
+
+    /// Unified filtering logic
+    fn entry_matches_options(entry: &OutputEntry, options: &SubscriptionOptions) -> bool {
         // Check agent filter
-        if let Some(ref agent_id) = self.agent_id {
-            if entry.agent_id != *agent_id {
+        if let Some(ref agent_id) = options.agent_id {
+            if &entry.agent_id != agent_id {
                 return false;
             }
         }
 
         // Check output filter
-        if let Some(ref filter) = self.filter {
+        if let Some(ref filter) = options.filter {
             if !entry.matches_filter(filter) {
                 return false;
             }
@@ -117,14 +155,92 @@ pub enum HighlightStyle {
     Code,
 }
 
+/// Pattern matcher for highlighting
+struct PatternMatcher {
+    patterns: Vec<(&'static str, HighlightStyle)>,
+}
+
+impl PatternMatcher {
+    fn new() -> Self {
+        Self {
+            patterns: vec![
+                ("error", HighlightStyle::Error),
+                ("ERROR", HighlightStyle::Error),
+                ("Error", HighlightStyle::Error),
+                ("failed", HighlightStyle::Error),
+                ("FAILED", HighlightStyle::Error),
+                ("Failed", HighlightStyle::Error),
+                ("panic", HighlightStyle::Error),
+                ("PANIC", HighlightStyle::Error),
+                ("Panic", HighlightStyle::Error),
+                ("exception", HighlightStyle::Error),
+                ("Exception", HighlightStyle::Error),
+                ("warning", HighlightStyle::Warning),
+                ("WARNING", HighlightStyle::Warning),
+                ("Warning", HighlightStyle::Warning),
+                ("warn", HighlightStyle::Warning),
+                ("WARN", HighlightStyle::Warning),
+                ("Warn", HighlightStyle::Warning),
+                ("success", HighlightStyle::Success),
+                ("SUCCESS", HighlightStyle::Success),
+                ("Success", HighlightStyle::Success),
+                ("completed", HighlightStyle::Success),
+                ("COMPLETED", HighlightStyle::Success),
+                ("Completed", HighlightStyle::Success),
+                ("done", HighlightStyle::Success),
+                ("DONE", HighlightStyle::Success),
+                ("Done", HighlightStyle::Success),
+                ("finished", HighlightStyle::Success),
+                ("FINISHED", HighlightStyle::Success),
+                ("Finished", HighlightStyle::Success),
+            ],
+        }
+    }
+
+    fn find_matches(&self, content: &str) -> Vec<HighlightSpan> {
+        let mut spans = Vec::new();
+
+        // Group patterns by style and find first match for each style
+        let mut matched_styles = Vec::new();
+
+        for (pattern, style) in &self.patterns {
+            // Skip if we already have a match for this style
+            if matched_styles
+                .iter()
+                .any(|(_, s)| std::mem::discriminant(s) == std::mem::discriminant(style))
+            {
+                continue;
+            }
+
+            if let Some(pos) = content.find(pattern) {
+                spans.push(HighlightSpan {
+                    start: pos,
+                    end: pos + pattern.len(),
+                    style: style.clone(),
+                });
+                matched_styles.push((pos, style.clone()));
+            }
+        }
+
+        spans
+    }
+}
+
 /// Output formatter for different display contexts
 pub struct OutputFormatter {
     config: StreamConfig,
+    pattern_matcher: PatternMatcher,
+    path_regex: regex::Regex,
 }
 
 impl OutputFormatter {
     pub fn new(config: StreamConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            pattern_matcher: PatternMatcher::new(),
+            path_regex: regex::Regex::new(r"[/\\]?[\w.-]+(?:[/\\][\w.-]+)*\.[a-zA-Z0-9]+")
+                .expect("Failed to compile path regex"),
+        }
     }
 
     /// Format an output entry for display
@@ -132,7 +248,7 @@ impl OutputFormatter {
         let display_prefix = self.create_display_prefix(entry);
         let formatted_content = self.format_content(&entry.content);
         let highlight_spans = if self.config.enable_highlighting {
-            self.generate_highlights(entry, &formatted_content)
+            self.generate_highlights(&formatted_content)
         } else {
             vec![]
         };
@@ -146,41 +262,27 @@ impl OutputFormatter {
     }
 
     fn create_display_prefix(&self, entry: &OutputEntry) -> String {
-        let time_str = entry.timestamp.format("%H:%M:%S").to_string();
-        let type_icon = match entry.output_type {
-            OutputType::Error => "❌",
-            OutputType::Warning => "⚠️",
-            OutputType::Info => "ℹ️",
-            OutputType::Debug => "🔍",
-            OutputType::System => "⚙️",
-            OutputType::Stdout => "📤",
-            OutputType::Stderr => "📥",
-        };
-
+        let time_str = entry.timestamp.format("%H:%M:%S");
+        let type_icon = Self::output_type_icon(&entry.output_type);
+        let agent_id_short = Self::truncate_string(&entry.agent_id, 8);
         let task_suffix = entry
             .task_id
             .as_ref()
-            .map(|t| format!(" [{}]", &t[..8.min(t.len())]))
+            .map(|t| format!(" [{}]", Self::truncate_string(t, 8)))
             .unwrap_or_default();
 
         format!(
             "[{}] {} {} {}{}",
-            time_str,
-            type_icon,
-            entry.agent_type,
-            &entry.agent_id[..8.min(entry.agent_id.len())],
-            task_suffix
+            time_str, type_icon, entry.agent_type, agent_id_short, task_suffix
         )
     }
 
     fn format_content(&self, content: &str) -> String {
-        let mut formatted = content.to_string();
-
-        // Truncate if too long
-        if formatted.len() > self.config.max_line_length {
-            formatted.truncate(self.config.max_line_length - 3);
-            formatted.push_str("...");
-        }
+        let mut formatted = if content.len() > self.config.max_line_length {
+            format!("{}...", &content[..self.config.max_line_length - 3])
+        } else {
+            content.to_string()
+        };
 
         // Replace tabs with spaces for consistent display
         formatted = formatted.replace('\t', "    ");
@@ -197,75 +299,14 @@ impl OutputFormatter {
         formatted
     }
 
-    fn generate_highlights(&self, _entry: &OutputEntry, content: &str) -> Vec<HighlightSpan> {
-        let mut spans = Vec::new();
-
-        // Highlight error patterns
-        if let Some(error_match) = self.find_pattern(
-            content,
-            &[
-                "error",
-                "ERROR",
-                "Error",
-                "failed",
-                "FAILED",
-                "Failed",
-                "panic",
-                "PANIC",
-                "Panic",
-                "exception",
-                "Exception",
-            ],
-        ) {
-            spans.push(HighlightSpan {
-                start: error_match.0,
-                end: error_match.1,
-                style: HighlightStyle::Error,
-            });
-        }
-
-        // Highlight warning patterns
-        if let Some(warning_match) = self.find_pattern(
-            content,
-            &["warning", "WARNING", "Warning", "warn", "WARN", "Warn"],
-        ) {
-            spans.push(HighlightSpan {
-                start: warning_match.0,
-                end: warning_match.1,
-                style: HighlightStyle::Warning,
-            });
-        }
-
-        // Highlight success patterns
-        if let Some(success_match) = self.find_pattern(
-            content,
-            &[
-                "success",
-                "SUCCESS",
-                "Success",
-                "completed",
-                "COMPLETED",
-                "Completed",
-                "done",
-                "DONE",
-                "Done",
-                "finished",
-                "FINISHED",
-                "Finished",
-            ],
-        ) {
-            spans.push(HighlightSpan {
-                start: success_match.0,
-                end: success_match.1,
-                style: HighlightStyle::Success,
-            });
-        }
+    fn generate_highlights(&self, content: &str) -> Vec<HighlightSpan> {
+        let mut spans = self.pattern_matcher.find_matches(content);
 
         // Highlight file paths
-        for path_match in self.find_all_paths(content) {
+        for mat in self.path_regex.find_iter(content) {
             spans.push(HighlightSpan {
-                start: path_match.0,
-                end: path_match.1,
+                start: mat.start(),
+                end: mat.end(),
                 style: HighlightStyle::Path,
             });
         }
@@ -282,25 +323,26 @@ impl OutputFormatter {
         spans
     }
 
-    fn find_pattern(&self, content: &str, patterns: &[&str]) -> Option<(usize, usize)> {
-        for pattern in patterns {
-            if let Some(pos) = content.find(pattern) {
-                return Some((pos, pos + pattern.len()));
-            }
+    /// Get icon for output type
+    fn output_type_icon(output_type: &OutputType) -> &'static str {
+        match output_type {
+            OutputType::Error => "❌",
+            OutputType::Warning => "⚠️",
+            OutputType::Info => "ℹ️",
+            OutputType::Debug => "🔍",
+            OutputType::System => "⚙️",
+            OutputType::Stdout => "📤",
+            OutputType::Stderr => "📥",
         }
-        None
     }
 
-    fn find_all_paths(&self, content: &str) -> Vec<(usize, usize)> {
-        let mut paths = Vec::new();
-        let path_regex =
-            regex::Regex::new(r"[/\\]?[\w.-]+(?:[/\\][\w.-]+)*\.[a-zA-Z0-9]+").unwrap();
-
-        for mat in path_regex.find_iter(content) {
-            paths.push((mat.start(), mat.end()));
+    /// Truncate string to specified length
+    fn truncate_string(s: &str, max_len: usize) -> &str {
+        if s.len() <= max_len {
+            s
+        } else {
+            &s[..max_len.min(s.len())]
         }
-
-        paths
     }
 }
 
@@ -358,13 +400,7 @@ impl StreamingManager {
     /// Start the streaming manager
     pub async fn start(&self) -> Result<(), String> {
         // Initialize global receiver
-        {
-            let mut receiver = self
-                .global_receiver
-                .write()
-                .map_err(|e| format!("Failed to lock global receiver: {}", e))?;
-            *receiver = Some(self.monitoring.subscribe_global());
-        }
+        self.init_global_receiver()?;
 
         // Start the main streaming loop
         let streaming_manager = self.clone();
@@ -381,18 +417,32 @@ impl StreamingManager {
         Ok(())
     }
 
-    /// Subscribe to output stream
-    pub fn subscribe(&self, id: String) -> Result<mpsc::UnboundedReceiver<OutputEntry>, String> {
-        let (tx, rx) = mpsc::unbounded_channel();
-        let subscription = StreamSubscription::new(id.clone(), tx);
-
-        let mut subscriptions = self
-            .subscriptions
+    /// Initialize the global receiver
+    fn init_global_receiver(&self) -> Result<(), String> {
+        let mut receiver = self
+            .global_receiver
             .write()
-            .map_err(|e| format!("Failed to lock subscriptions: {}", e))?;
-        subscriptions.insert(id, subscription);
+            .map_err(|e| format!("Failed to lock global receiver: {}", e))?;
+        *receiver = Some(self.monitoring.subscribe_global());
+        Ok(())
+    }
 
+    /// Subscribe to output stream with options
+    pub fn subscribe_with_options(
+        &self,
+        id: String,
+        options: SubscriptionOptions,
+    ) -> Result<mpsc::UnboundedReceiver<OutputEntry>, String> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let subscription = StreamSubscription::new(id.clone(), tx, options);
+
+        self.add_subscription(id, subscription)?;
         Ok(rx)
+    }
+
+    /// Subscribe to all output
+    pub fn subscribe(&self, id: String) -> Result<mpsc::UnboundedReceiver<OutputEntry>, String> {
+        self.subscribe_with_options(id, SubscriptionOptions::default())
     }
 
     /// Subscribe to a specific agent's output
@@ -401,16 +451,7 @@ impl StreamingManager {
         id: String,
         agent_id: String,
     ) -> Result<mpsc::UnboundedReceiver<OutputEntry>, String> {
-        let (tx, rx) = mpsc::unbounded_channel();
-        let subscription = StreamSubscription::new(id.clone(), tx).with_agent(agent_id);
-
-        let mut subscriptions = self
-            .subscriptions
-            .write()
-            .map_err(|e| format!("Failed to lock subscriptions: {}", e))?;
-        subscriptions.insert(id, subscription);
-
-        Ok(rx)
+        self.subscribe_with_options(id, SubscriptionOptions::for_agent(agent_id))
     }
 
     /// Subscribe with a filter
@@ -419,25 +460,43 @@ impl StreamingManager {
         id: String,
         filter: OutputFilter,
     ) -> Result<mpsc::UnboundedReceiver<OutputEntry>, String> {
-        let (tx, rx) = mpsc::unbounded_channel();
-        let subscription = StreamSubscription::new(id.clone(), tx).with_filter(filter);
+        self.subscribe_with_options(id, SubscriptionOptions::with_filter(filter))
+    }
 
+    /// Add a subscription to the manager
+    fn add_subscription(&self, id: String, subscription: StreamSubscription) -> Result<(), String> {
         let mut subscriptions = self
             .subscriptions
             .write()
             .map_err(|e| format!("Failed to lock subscriptions: {}", e))?;
         subscriptions.insert(id, subscription);
-
-        Ok(rx)
+        Ok(())
     }
 
-    /// Unsubscribe from output stream
+    /// Remove a subscription
     pub fn unsubscribe(&self, id: &str) -> Result<(), String> {
+        self.modify_subscriptions(|subs| {
+            subs.remove(id);
+        })
+    }
+
+    /// Clear all subscriptions
+    pub fn clear_subscriptions(&self) -> Result<(), String> {
+        self.modify_subscriptions(|subs| {
+            subs.clear();
+        })
+    }
+
+    /// Modify subscriptions with a closure
+    fn modify_subscriptions<F>(&self, f: F) -> Result<(), String>
+    where
+        F: FnOnce(&mut HashMap<String, StreamSubscription>),
+    {
         let mut subscriptions = self
             .subscriptions
             .write()
             .map_err(|e| format!("Failed to lock subscriptions: {}", e))?;
-        subscriptions.remove(id);
+        f(&mut subscriptions);
         Ok(())
     }
 
@@ -454,54 +513,50 @@ impl StreamingManager {
             .map(|stats| stats.clone())
     }
 
-    /// Clear all subscriptions
-    pub fn clear_subscriptions(&self) -> Result<(), String> {
-        let mut subscriptions = self
-            .subscriptions
-            .write()
-            .map_err(|e| format!("Failed to lock subscriptions: {}", e))?;
-        subscriptions.clear();
-        Ok(())
-    }
-
     /// Main streaming loop
     async fn run_streaming_loop(&self) {
         // Get the receiver once at startup
-        let mut receiver = {
-            let global_receiver = match self.global_receiver.read() {
-                Ok(gr) => gr,
-                Err(_) => return,
-            };
-
-            match global_receiver.as_ref() {
-                Some(r) => r.resubscribe(),
-                None => return,
-            }
+        let mut receiver = match self.create_receiver() {
+            Some(r) => r,
+            None => return,
         };
 
         // Main loop to process messages
         while let Ok(entry) = receiver.recv().await {
-            self.distribute_entry(entry).await;
+            self.distribute_entry(&entry).await;
         }
     }
 
+    /// Create a receiver from the global receiver
+    fn create_receiver(&self) -> Option<broadcast::Receiver<OutputEntry>> {
+        self.global_receiver
+            .read()
+            .ok()?
+            .as_ref()
+            .map(|r| r.resubscribe())
+    }
+
     /// Distribute an entry to all matching subscriptions
-    async fn distribute_entry(&self, entry: OutputEntry) {
+    async fn distribute_entry(&self, entry: &OutputEntry) {
         let subscriptions = match self.subscriptions.read() {
             Ok(s) => s,
             Err(_) => return,
         };
 
-        let mut sent_count = 0;
-        for subscription in subscriptions.values() {
-            if subscription.should_receive(&entry) && subscription.send(entry.clone()).is_ok() {
-                sent_count += 1;
-            }
-        }
+        let sent_count = subscriptions
+            .values()
+            .filter(|sub| sub.should_receive(entry))
+            .filter_map(|sub| sub.send(entry).ok())
+            .count();
 
         // Update statistics
+        self.update_sent_count(sent_count);
+    }
+
+    /// Update the sent count in statistics
+    fn update_sent_count(&self, count: usize) {
         if let Ok(mut stats) = self.stats.write() {
-            stats.total_messages_sent += sent_count;
+            stats.total_messages_sent += count;
         }
     }
 
@@ -515,6 +570,7 @@ impl StreamingManager {
         }
     }
 
+    /// Update statistics
     fn update_stats(&self) {
         let subscriptions = match self.subscriptions.read() {
             Ok(s) => s,
@@ -525,7 +581,7 @@ impl StreamingManager {
             .values()
             .map(|sub| SubscriptionStats {
                 id: sub.id.clone(),
-                agent_id: sub.agent_id.clone(),
+                agent_id: sub.options.agent_id.clone(),
                 messages_received: 0, // This would need to be tracked separately
                 last_message_at: None, // This would need to be tracked separately
                 created_at: sub.created_at,
@@ -553,4 +609,3 @@ impl Clone for StreamingManager {
         }
     }
 }
-

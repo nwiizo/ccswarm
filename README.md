@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.3.7** - Rust-Native Multi-Agent Orchestration with Minimal Testing
+> 🚀 **Version 0.3.8** - Rust-Native Multi-Agent Orchestration with Advanced Features
 
 [![CI](https://github.com/nwiizo/ccswarm/workflows/CI/badge.svg)](https://github.com/nwiizo/ccswarm/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
@@ -15,19 +15,16 @@
 | Document | Description |
 |----------|-------------|
 | **[Getting Started Guide](docs/GETTING_STARTED.md)** | Complete tutorial for new users with step-by-step instructions |
-| **[Configuration Reference](docs/CONFIGURATION.md)** | Comprehensive guide to all configuration options |
-| **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** | Solutions for common issues and debugging tips |
-| **[Contributing Guide](CONTRIBUTING.md)** | How to contribute to the project |
 | **[Architecture Overview](docs/ARCHITECTURE.md)** | Technical architecture and design decisions |
 | **[Application Specification](docs/APPLICATION_SPEC.md)** | Detailed feature specifications and API reference |
-| **[Search Agent Guide](docs/SEARCH_AGENT.md)** | Web search integration and research capabilities |
-| **[Claude ACP Guide](docs/CLAUDE_ACP.md)** | Claude Code integration via Agent Client Protocol |
+| **[Workspace Commands](docs/commands/workspace-commands.md)** | Build and development commands reference |
+| **[Contributing Guide](CONTRIBUTING.md)** | How to contribute to the project |
 
 ## 🎯 Quick Navigation
 
 - [Installation](#-quick-start) • [Features](#-key-features) • [Architecture](#-architecture) • [Commands](#-core-commands)
-- [Tutorial](#25-learn-with-interactive-tutorial) • [Configuration](#-configuration) • [Auto-Create](#-auto-create-system) • [Monitoring](#-terminal-ui-tui)
-- [Troubleshooting](docs/TROUBLESHOOTING.md) • [Contributing](CONTRIBUTING.md) • [Documentation](docs/)
+- [Tutorial](#25-learn-with-interactive-tutorial) • [Auto-Create](#-auto-create-system) • [Monitoring](#-terminal-ui-tui)
+- [Contributing](CONTRIBUTING.md) • [Documentation](docs/)
 
 ## 📦 Workspace Structure
 
@@ -37,11 +34,11 @@ ccswarm is a Rust application with comprehensive multi-agent orchestration capab
 
 - **`crates/ccswarm`**: The main orchestration system and CLI
   - Claude Code integration via ACP (Agent Client Protocol) - **Default**
-  - Multi-agent orchestration with Master Claude
+  - Multi-agent orchestration with ProactiveMaster
   - Task management and intelligent delegation
   - Sangha collective intelligence system
   - Auto-create application generator
-  - Zero external dependencies (no tmux/ai-session required)
+  - Zero external dependencies for core orchestration
 
 ### Directory Structure
 ```
@@ -53,14 +50,17 @@ ccswarm/
 │       ├── src/
 │       │   ├── acp_claude/  # Claude ACP integration
 │       │   ├── cli/         # CLI commands
-│       │   └── ...
+│       │   ├── orchestrator/ # ProactiveMaster and delegation
+│       │   ├── agent/       # Agent types and state management
+│       │   ├── template/    # Task templates system
+│       │   └── utils/       # Common utilities
 │       └── tests/
-├── docs/                  # Comprehensive documentation
-├── sample/                # Demo scripts and examples
-│   ├── claude_acp_demo.sh
-│   ├── task_management_demo.sh
-│   └── multi_agent_demo.sh
-└── ccswarm-todo-app/      # Generated sample application
+├── docs/                  # Core documentation
+│   ├── ARCHITECTURE.md
+│   ├── APPLICATION_SPEC.md
+│   ├── GETTING_STARTED.md
+│   └── commands/
+└── sample/                # Demo scripts and examples
 
 ## 🌟 Key Features
 
@@ -81,7 +81,7 @@ ccswarm/
 - **System Doctor**: `ccswarm doctor --fix` diagnoses and fixes issues
 - **CLI Performance**: Ongoing refactoring for improved performance and maintainability
 
-### 🧠 Proactive Master Claude
+### 🧠 Proactive ProactiveMaster
 - **Autonomous Orchestration**: Intelligent task prediction and generation (enabled by default)
 - **Real-time Progress Analysis**: Continuous monitoring with bottleneck detection
 - **Dependency Resolution**: Automatic task ordering and dependency management
@@ -97,19 +97,17 @@ ccswarm/
 - **Security Reporting**: Detailed reports with remediation suggestions
 
 ### 🖥️ Session Management
-- **Zero Dependencies**: No external tools required (no tmux/ai-session needed)
 - **WebSocket Sessions**: Persistent connections via Claude ACP
 - **Cross-Platform Support**: Works on Linux, macOS, and Windows
 - **Multi-Agent Coordination**: Enhanced message bus architecture
 - **Auto-Recovery**: Automatic reconnection and state persistence
 
-### 🔍 Search Agent Capabilities
-- **Web Search Integration**: Powered by Gemini CLI for intelligent web searches
-- **Research Automation**: Agents can request searches for documentation and best practices
-- **Filtered Searches**: Domain-specific, date-ranged, and language-filtered results
-- **Sangha Research**: Automatically researches proposals and casts informed votes
-- **Knowledge Gap Detection**: Identifies areas needing research and proposes initiatives
-- **Multi-Agent Support**: All agents can request searches via coordination bus
+### 📦 Template System
+- **Predefined Templates**: Rust CLI, security review, performance optimization
+- **Variable Substitution**: Dynamic content generation with context
+- **Category-Based Organization**: Application, utility, review, optimization
+- **Custom Templates**: Create and store project-specific templates
+- **Validation System**: Type-safe template validation before application
 
 ### 🏛️ Collective Intelligence
 - **Sangha System**: Buddhist-inspired democratic decision-making
@@ -118,9 +116,44 @@ ccswarm/
 - **Smart Proposal System**: Structured proposals with consensus algorithms
 - **Safe Implementation**: Risk assessment and rollback mechanisms
 
+### 📊 Observability & Tracing (NEW in v0.3.8)
+- **OpenTelemetry Compatible**: Export traces to Jaeger, Zipkin, or custom backends
+- **Langfuse Integration**: LLM-specific observability with token tracking
+- **Span Tracking**: Trace agent execution across the entire workflow
+- **Token Usage Metrics**: Monitor and optimize LLM API costs
+- **Trace Visualization**: Hierarchical span trees for debugging
+
+### 👤 Human-in-the-Loop (HITL) (NEW in v0.3.8)
+- **Approval Workflows**: Gate critical actions with human oversight
+- **Policy-Based Rules**: Define approval requirements by risk level
+- **Multi-Channel Notifications**: CLI, Slack, Email, and custom channels
+- **Escalation Support**: Automatic escalation on timeout or rejection
+- **Audit Trail**: Complete history of all approval decisions
+
+### 🧠 Long-term Memory & RAG (NEW in v0.3.8)
+- **Vector Embeddings**: Semantic search over past experiences
+- **Short-term/Long-term Memory**: Session-aware memory consolidation
+- **Retrieval Augmented Generation**: Context-aware agent responses
+- **Importance-based Retention**: Smart memory decay and prioritization
+- **Multiple Backends**: In-memory, file-based, or vector DB storage
+
+### 📈 Graph-based Workflow Engine (NEW in v0.3.8)
+- **DAG Workflows**: Define complex task dependencies as graphs
+- **Conditional Branching**: Dynamic workflow paths based on conditions
+- **Parallel Execution**: Run independent tasks concurrently
+- **Approval Gates**: Integrate HITL at workflow checkpoints
+- **Sub-workflows**: Compose complex workflows from simpler ones
+
+### 🎯 Benchmark Integration (NEW in v0.3.8)
+- **SWE-Bench Style Evaluation**: Standardized agent performance testing
+- **Predefined Suites**: Basic coding, bug fixes, refactoring benchmarks
+- **Metrics Collection**: Track pass rates, scores, and improvements
+- **Leaderboard System**: Compare agent performance over time
+- **Custom Benchmarks**: Create project-specific evaluation suites
+
 ### 🎯 Core Capabilities
 - **Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
-- **Intelligent Delegation**: Master Claude analyzes and assigns tasks optimally
+- **Intelligent Delegation**: ProactiveMaster analyzes and assigns tasks optimally
 - **Auto-Create System**: Generate complete applications from natural language
 - **Enhanced TUI**: Real-time monitoring with task management and filtering
 - **Git Worktree Isolation**: Parallel development without conflicts
@@ -132,7 +165,7 @@ ccswarm/
 
 > **New to ccswarm?** Start with our [📖 Getting Started Guide](docs/GETTING_STARTED.md) for a comprehensive walkthrough with examples and best practices!
 
-> **Note**: Don't have Claude Code or API keys? Check out our [Standalone Deployment Guide](STANDALONE_DEPLOYMENT.md) to run ccswarm without any AI dependencies!
+> **Note**: Claude Code integration requires running Claude Code locally on ws://localhost:9100
 
 ### 1. Installation
 
@@ -222,74 +255,66 @@ ccswarm auto-create "Create TODO app" --output ./my_app
 ccswarm auto-create "Create blog with auth" --output ./blog
 ```
 
-### 5. Search Agent Usage
+### 5. Template Usage
 
 ```bash
-# Enable search agent in your project
-ccswarm init --name "MyProject" --agents frontend,backend,search
+# List available templates
+ccswarm template list
 
-# Task that triggers search
-ccswarm task "Research best practices for React Server Components"
+# Apply a template to a task
+ccswarm template apply rust-cli --output ./my-cli
 
-# Search agent automatically:
-# - Receives research tasks from Master Claude
-# - Executes web searches via Gemini CLI
-# - Returns relevant results to requesting agents
-# - Participates in Sangha with informed votes
+# Create custom template
+ccswarm template create --name "my-template" --category utility
+
+# Use template with variables
+ccswarm template apply rust-cli --var project_name=awesome-tool
 ```
 
 ## 🏗️ Architecture
 
-ccswarm v0.3.5 features a comprehensive multi-layer architecture designed for autonomous operation:
+ccswarm v0.3.7 features a streamlined Rust-native architecture with efficient patterns:
 
 ```
 ┌─────────────────────────────────────────┐
-│         Proactive Master Claude         │ ← Autonomous Orchestration
-│     ├─ Intelligent Task Prediction     │   (Enabled by Default)
-│     ├─ Real-time Progress Analysis      │   30s standard / 15s high-freq
-│     ├─ Dependency Resolution Engine     │
-│     ├─ Goal & Milestone Tracking        │
-│     └─ Bottleneck Detection & Resolution│
-├─────────────────────────────────────────┤
-│         Security Agent                  │ ← OWASP Top 10 Scanning
-│     ├─ Vulnerability Detection          │
-│     ├─ Dependency Security Scanning     │
-│     ├─ Real-time Risk Assessment        │
-│     └─ Security Score Calculation       │
+│         ProactiveMaster                 │ ← Type-State Pattern
+│     ├─ Channel-Based Orchestration     │   Zero shared state
+│     ├─ Task Analysis & Delegation      │   Pattern matching
+│     ├─ Goal-Driven Planning            │   Iterator pipelines
+│     └─ Quality Review Integration      │   Async/await
 ├─────────────────────────────────────────┤
 │     Claude ACP Integration              │ ← WebSocket Communication
-│     ├─ Agent Client Protocol Support   │
-│     ├─ Real-time Task Delegation       │
-│     ├─ Session Persistence via UUID    │
-│     ├─ Auto-reconnect with Retry       │
-│     └─ JSON-RPC 2.0 Messaging          │
+│     ├─ Agent Client Protocol           │   ws://localhost:9100
+│     ├─ Real-time Task Delegation       │   JSON-RPC 2.0
+│     ├─ Session Persistence             │   UUID-based
+│     └─ Auto-reconnect with Retry       │   Exponential backoff
 ├─────────────────────────────────────────┤
-│     Sangha Collective Intelligence      │ ← Democratic Decision Making
-│     ├─ Proposal System                 │
-│     ├─ Consensus Algorithms             │
-│     └─ Self-Extension Framework         │
+│     Specialized Agent Pool              │ ← Actor Model
+│     ├─ Frontend Agent                  │   React/Vue/UI
+│     ├─ Backend Agent                   │   APIs/Database
+│     ├─ DevOps Agent                    │   Docker/CI/CD
+│     └─ QA Agent                        │   Testing/Quality
+├─────────────────────────────────────────┤
+│     Template System                     │ ← Predefined Templates
+│     ├─ Task Templates                  │   Variable substitution
+│     ├─ Code Generation                 │   Rust patterns
+│     └─ Documentation Templates         │   Markdown generation
 ├─────────────────────────────────────────┤
 │     Git Worktree Manager                │ ← Isolated Development
 ├─────────────────────────────────────────┤
-│     Multi-Provider Agent Pool           │
-│     ├─ Claude Code (default)           │
-│     ├─ Aider                           │
-│     ├─ OpenAI Codex                    │
-│     └─ Custom Tools                    │
-├─────────────────────────────────────────┤
-│     Real-time Monitoring (TUI)          │ ← Live Status Updates
+│     Real-time Monitoring (TUI)          │ ← Crossterm-based UI
 └─────────────────────────────────────────┘
 ```
 
 ### 🎆 Key Benefits
 
-#### 🚀 For ccswarm Users (Full AI Orchestration)
-- **Zero Setup Complexity**: Integration is automatic and transparent
-- **Intelligent Delegation**: Master Claude uses semantic parsing for better decisions
-- **Efficient Session Management**: Context compression optimizes resource usage
-- **Multi-Agent Coordination**: Seamless agent communication through message bus
-- **Quality Assurance**: Output analysis powers the LLM quality judge
-- **Claude Code Integration**: Native support via Agent Client Protocol (ACP)
+#### 🚀 Performance & Efficiency
+- **Rust-Native Patterns**: Type-state, channels, iterators for maximum performance
+- **Compile-Time Safety**: Most errors caught at compilation, not runtime
+- **Zero-Cost Abstractions**: No runtime overhead from architectural patterns
+- **Channel-Based Concurrency**: Better performance without Arc<Mutex>
+- **Minimal Testing Strategy**: Focus on core functionality, not exhaustive tests
+- **Claude Code Integration**: Direct WebSocket connection via ACP
 
 ### Integration Architecture
 ```rust
@@ -584,9 +609,7 @@ ccswarm deps analyze --show-blockers
 ccswarm deps resolve --auto-order
 ```
 
-### AI-Session Management
 ```bash
-# List ai-sessions with token savings (powered by ai-session crate)
 ccswarm session list
 ccswarm session stats --show-savings
 
@@ -596,7 +619,6 @@ ccswarm session attach <session-id>
 ccswarm session pause <session-id>
 ccswarm session resume <session-id>
 
-# MCP protocol support (ai-session HTTP API server)
 ccswarm session start-mcp-server --port 3000
 ccswarm session mcp-status
 
@@ -604,10 +626,6 @@ ccswarm session mcp-status
 ccswarm session compress --threshold 0.8
 ccswarm session optimize --all
 
-# Direct ai-session CLI usage (independent of ccswarm)
-ai-session create --name dev --ai-context
-ai-session list --detailed
-ai-session exec dev "cargo build" --capture
 ```
 
 ## 🛡️ Safety Features (Enhanced)
@@ -630,7 +648,7 @@ By default, ccswarm runs with `dangerous_skip: true`, which adds the `--dangerou
 ## 🔍 LLM-as-Judge Quality Review (v0.2.2)
 
 ### Advanced Code Evaluation
-Master Claude now uses sophisticated LLM-based evaluation to assess code quality across 8 dimensions:
+ProactiveMaster now uses sophisticated LLM-based evaluation to assess code quality across 8 dimensions:
 
 1. **Multi-Dimensional Scoring (0.0-1.0)**
    - **Correctness**: Does the code implement requirements correctly?
@@ -715,7 +733,6 @@ cargo test --workspace
 
 # Tests for specific crate
 cargo test -p ccswarm
-cargo test -p ai-session
 
 # Specific module in ccswarm
 cargo test -p ccswarm session
@@ -732,17 +749,8 @@ cargo test -p ccswarm --test integration_tests
 # - demos/session-persistence/ - Session recovery demo
 # - demos/auto-create/       - Application generation demo
 
-# Run ai-session library examples
-cargo run -p ai-session --example basic_session
-cargo run -p ai-session --example multi_agent
-cargo run -p ai-session --example mcp_server
 
-# Install ai-session CLI separately
-cargo install --path crates/ai-session
 
-# Use ai-session independently of ccswarm
-ai-session create --name myproject --ai-context
-ai-session exec myproject "npm test" --capture
 ```
 
 ## 🚨 Need Help?
@@ -884,17 +892,11 @@ cargo test --workspace
 # Build only ccswarm (main orchestration)
 cargo build -p ccswarm
 
-# Build only ai-session (terminal management)
-cargo build -p ai-session
 
 # Run ccswarm from workspace root
 cargo run -p ccswarm -- init --name "MyProject"
 
-# Run ai-session independently
-cargo run -p ai-session -- create --name dev
 
-# Start ai-session MCP server
-cargo run -p ai-session --bin server -- --port 3000
 
 # Generate documentation for entire workspace
 cargo doc --workspace --no-deps --open
@@ -904,7 +906,6 @@ cargo doc --workspace --no-deps --open
 
 ```bash
 # 1. Make changes in the appropriate crate
-cd crates/ccswarm  # or crates/ai-session
 
 # 2. Run crate-specific tests
 cargo test
@@ -1035,18 +1036,22 @@ All operations show live progress:
   • List all tasks: ccswarm task list
 ```
 
-## 🚀 What's New in v0.3.7
+## 🚀 What's New in v0.3.8
 
-ccswarm v0.3.7 introduces **Claude Code ACP integration** as the default communication method:
+ccswarm v0.3.8 introduces **5 major new features**:
 
+- **📊 Observability/Tracing**: OpenTelemetry and Langfuse compatible tracing with span hierarchies
+- **👤 Human-in-the-Loop**: Policy-based approval workflows with multi-channel notifications
+- **🧠 Long-term Memory/RAG**: Vector embeddings and retrieval-augmented generation
+- **📈 Graph Workflow Engine**: DAG-based workflows with conditional branching and parallel execution
+- **🎯 Benchmark Integration**: SWE-Bench style evaluation with predefined suites and leaderboards
+
+### Previous Features (v0.3.7)
 - **🤖 Claude Code Integration**: Default connection via Agent Client Protocol (ACP)
-- **🚀 Zero Dependencies**: Removed ai-session and tmux requirements completely
-- **🧠 Proactive Master Claude**: Enabled by default with 30s analysis intervals
-- **🔒 Security Agent**: OWASP Top 10 scanning with real-time monitoring
-- **📊 WebSocket Sessions**: Real-time bidirectional communication
-- **🎯 Auto-Connect**: Automatically connects to Claude Code on startup
+- **🧠 ProactiveMaster**: Type-state pattern with channel-based orchestration
+- **⚡ Performance**: Zero-cost abstractions and compile-time optimizations
+- **📦 Template System**: Predefined templates for common tasks
 - **🏛️ Collective Intelligence**: Sangha democratic decision-making
-- **📝 Sample System**: Comprehensive demo scripts in sample/ directory
 
 ### Contributing
 

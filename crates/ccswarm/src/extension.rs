@@ -11,7 +11,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::error::{CCSwarmError, Result};
-use crate::traits::{Identifiable, Stateful, Validatable, Configurable, Monitorable};
+use crate::traits::{Configurable, Identifiable, Monitorable, Stateful, Validatable};
 
 /// Semantic version for extensions
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -79,18 +79,21 @@ impl FromStr for Version {
 
         let version_nums: Vec<&str> = version_part.split('.').collect();
         if version_nums.len() != 3 {
-            return Err(CCSwarmError::config(format!("Invalid version format: {}", s)));
+            return Err(CCSwarmError::config(format!(
+                "Invalid version format: {}",
+                s
+            )));
         }
 
-        let major = version_nums[0]
-            .parse::<u32>()
-            .map_err(|_| CCSwarmError::config(format!("Invalid major version: {}", version_nums[0])))?;
-        let minor = version_nums[1]
-            .parse::<u32>()
-            .map_err(|_| CCSwarmError::config(format!("Invalid minor version: {}", version_nums[1])))?;
-        let patch = version_nums[2]
-            .parse::<u32>()
-            .map_err(|_| CCSwarmError::config(format!("Invalid patch version: {}", version_nums[2])))?;
+        let major = version_nums[0].parse::<u32>().map_err(|_| {
+            CCSwarmError::config(format!("Invalid major version: {}", version_nums[0]))
+        })?;
+        let minor = version_nums[1].parse::<u32>().map_err(|_| {
+            CCSwarmError::config(format!("Invalid minor version: {}", version_nums[1]))
+        })?;
+        let patch = version_nums[2].parse::<u32>().map_err(|_| {
+            CCSwarmError::config(format!("Invalid patch version: {}", version_nums[2]))
+        })?;
 
         Ok(Version {
             major,
@@ -140,27 +143,20 @@ pub enum ExtensionCapability {
 }
 
 /// Extension configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ExtensionConfig {
     /// Whether the extension should auto-start
+    #[serde(default)]
     pub auto_start: bool,
     /// Extension-specific configuration
+    #[serde(default)]
     pub settings: HashMap<String, serde_json::Value>,
     /// Required permissions
+    #[serde(default)]
     pub permissions: Vec<String>,
     /// Resource limits
+    #[serde(default)]
     pub resource_limits: Option<ResourceLimits>,
-}
-
-impl Default for ExtensionConfig {
-    fn default() -> Self {
-        Self {
-            auto_start: false,
-            settings: HashMap::new(),
-            permissions: Vec::new(),
-            resource_limits: None,
-        }
-    }
 }
 
 /// Resource limits for extensions
@@ -287,7 +283,11 @@ impl Extension {
         let now = chrono::Utc::now();
 
         Self {
-            id: format!("{}-{}", name.to_lowercase().replace(' ', "-"), Uuid::new_v4()),
+            id: format!(
+                "{}-{}",
+                name.to_lowercase().replace(' ', "-"),
+                Uuid::new_v4()
+            ),
             name,
             version,
             description: description.into(),
@@ -305,7 +305,12 @@ impl Extension {
     }
 
     /// Add a dependency
-    pub fn add_dependency(&mut self, name: String, version_requirement: VersionRequirement, optional: bool) {
+    pub fn add_dependency(
+        &mut self,
+        name: String,
+        version_requirement: VersionRequirement,
+        optional: bool,
+    ) {
         self.dependencies.push(ExtensionDependency {
             name,
             version_requirement,
@@ -335,9 +340,9 @@ impl Extension {
                 continue;
             }
 
-            let satisfied = available_extensions.iter().any(|ext| {
-                ext.name == dep.name && dep.version_requirement.satisfies(&ext.version)
-            });
+            let satisfied = available_extensions
+                .iter()
+                .any(|ext| ext.name == dep.name && dep.version_requirement.satisfies(&ext.version));
 
             if !satisfied {
                 missing_deps.push(dep.name.clone());
@@ -422,7 +427,8 @@ impl Configurable for Extension {
         // Validate resource limits are reasonable
         if let Some(ref limits) = config.resource_limits {
             if let Some(max_memory) = limits.max_memory {
-                if max_memory > 1024 * 1024 * 1024 { // 1GB
+                if max_memory > 1024 * 1024 * 1024 {
+                    // 1GB
                     return Err(CCSwarmError::config("Memory limit too high"));
                 }
             }
@@ -458,8 +464,11 @@ impl Monitorable for Extension {
         Ok(ExtensionHealth {
             status,
             last_check: chrono::Utc::now(),
-            uptime: chrono::Utc::now().signed_duration_since(self.created_at).to_std().unwrap_or_default(),
-            error_count: 0, // Would be tracked by extension runtime
+            uptime: chrono::Utc::now()
+                .signed_duration_since(self.created_at)
+                .to_std()
+                .unwrap_or_default(),
+            error_count: 0,         // Would be tracked by extension runtime
             performance_score: 1.0, // Would be calculated based on metrics
         })
     }
@@ -472,7 +481,10 @@ impl Monitorable for Extension {
             requests_handled: 0,
             errors_count: 0,
             average_response_time: std::time::Duration::from_millis(0),
-            uptime: chrono::Utc::now().signed_duration_since(self.created_at).to_std().unwrap_or_default(),
+            uptime: chrono::Utc::now()
+                .signed_duration_since(self.created_at)
+                .to_std()
+                .unwrap_or_default(),
         })
     }
 }
@@ -591,4 +603,3 @@ pub struct ExtensionResponse {
     pub result: Option<serde_json::Value>,
     pub error: Option<String>,
 }
-

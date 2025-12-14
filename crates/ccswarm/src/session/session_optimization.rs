@@ -27,7 +27,7 @@ pub struct SessionStats {
     pub commands_executed: usize,
     pub last_activity: Option<std::time::Instant>,
 }
-use crate::utils::{with_retry, AsyncCircuitBreaker};
+use crate::utils::async_error_boundary::{AsyncCircuitBreaker, with_retry};
 
 /// Unified session configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -223,8 +223,13 @@ impl OptimizedSessionManager {
             for session in sessions {
                 if self.is_session_reusable(session).await? {
                     // Update last used time
-                    let mut metadata = session.metadata.clone();
-                    metadata.last_used = Utc::now();
+                    // Note: metadata is cloned but not currently persisted back
+                    // TODO: Persist metadata update to session registry
+                    let _metadata = {
+                        let mut m = session.metadata.clone();
+                        m.last_used = Utc::now();
+                        m
+                    };
 
                     return Ok(Some(session.clone()));
                 }
@@ -300,7 +305,9 @@ impl OptimizedSessionManager {
                 let factory = factory.clone();
                 let role = role_clone.clone();
                 Box::pin(async move {
-                    factory.create_session(&role).await
+                    factory
+                        .create_session(&role)
+                        .await
                         .map_err(|e| crate::error::CCSwarmError::session("unknown", e.to_string()))
                 })
             },
@@ -370,9 +377,7 @@ impl OptimizedSessionManager {
 
         breakers
             .entry(role_key.to_string())
-            .or_insert_with(|| {
-                Arc::new(AsyncCircuitBreaker::new(3))
-            })
+            .or_insert_with(|| Arc::new(AsyncCircuitBreaker::new(3)))
             .clone()
     }
 
@@ -552,4 +557,3 @@ pub struct RoleSessionStats {
     pub active_sessions: usize,
     pub compression_ratio: f64,
 }
-

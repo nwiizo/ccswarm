@@ -43,14 +43,24 @@ impl AgentMappingRegistry {
 
     /// Register an agent mapping
     pub async fn register(&self, info: UnifiedAgentInfo) -> Result<()> {
-        let mut mappings = self.mappings.write().unwrap();
+        let mut mappings = self
+            .mappings
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
         mappings.insert(info.ccswarm_id.clone(), info);
         Ok(())
     }
 
     /// Get unified agent info
     pub fn get_agent_info(&self, agent_id: &str) -> Option<UnifiedAgentInfo> {
-        let mappings = self.mappings.read().unwrap();
+        let mappings = self
+            .mappings
+            .read()
+            .map_err(|e| {
+                log::error!("Failed to acquire read lock: {}", e);
+                e
+            })
+            .ok()?;
         mappings.get(agent_id).cloned()
     }
 

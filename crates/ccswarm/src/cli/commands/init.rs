@@ -1,4 +1,4 @@
-use crate::error::{Result, CCSwarmError};
+use crate::error::Result;
 use async_trait::async_trait;
 use clap::Args;
 use std::path::PathBuf;
@@ -113,7 +113,7 @@ impl Project {
 
     async fn setup_worktrees(&self) -> Result<()> {
         for agent in &self.agents {
-            let worktree_path = self.directory.join(format!("agent-{}", agent));
+            let _worktree_path = self.directory.join(format!("agent-{}", agent));
             // Git worktree setup logic
             tracing::debug!("Creating worktree for agent: {}", agent);
         }

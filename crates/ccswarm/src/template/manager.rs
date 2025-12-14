@@ -1,8 +1,12 @@
 //! Template manager for handling template operations
 
 use super::{
-    storage::TemplateStorage, types::TemplateQuery, AppliedTemplate, Template, TemplateCategory,
-    TemplateContext, TemplateError, TemplateVariable, VariableType,
+    storage::TemplateStorage,
+    types::{
+        Template, TemplateCategory, TemplateContext, TemplateError, TemplateQuery,
+        TemplateVariable, VariableType,
+    },
+    validation::AppliedTemplate,
 };
 use anyhow::Result;
 use regex::Regex;
@@ -89,13 +93,17 @@ impl<T: TemplateStorage> TemplateManager<T> {
         self.storage.update_usage(&template.id, true).await?;
 
         Ok(AppliedTemplate {
+            template: template.clone(),
+            task_description: description.clone(),
+            task_details: details.clone(),
+            applied_variables: context.variables.clone(),
+            // Compatibility fields
             description,
             details,
             priority: template.default_priority,
             task_type: template.default_task_type,
             estimated_duration: template.estimated_duration,
             target_files,
-            metadata: template.metadata.clone(),
         })
     }
 
@@ -114,7 +122,7 @@ impl<T: TemplateStorage> TemplateManager<T> {
             .into_iter()
             .next()
             .ok_or_else(|| TemplateError::NotFound {
-                name: name.to_string(),
+                id: name.to_string(),
             })
     }
 
@@ -175,7 +183,8 @@ impl<T: TemplateStorage> TemplateManager<T> {
         text: &str,
         variables: &[TemplateVariable],
     ) -> Result<(), TemplateError> {
-        let var_regex = Regex::new(r"\{\{(\w+)\}\}").unwrap();
+        let var_regex = Regex::new(r"\{\{(\w+)\}\}")
+            .expect("Hardcoded variable regex pattern should always be valid");
         let defined_vars: std::collections::HashSet<_> =
             variables.iter().map(|v| &v.name).collect();
 
@@ -281,7 +290,7 @@ impl<T: TemplateStorage> TemplateManager<T> {
                 // Lists are comma-separated values
                 Ok(())
             }
-            VariableType::Choice(ref choices) => {
+            VariableType::Choice(choices) => {
                 if !choices.contains(&value.to_string()) {
                     Err(TemplateError::ValidationFailed {
                         reason: format!(
@@ -333,7 +342,8 @@ impl<T: TemplateStorage> TemplateManager<T> {
         let var_regex = if let Some(regex) = self.regex_cache.get("variable") {
             regex.clone()
         } else {
-            let regex = Regex::new(r"\{\{(\w+)\}\}").unwrap();
+            let regex = Regex::new(r"\{\{(\w+)\}\}")
+                .expect("Hardcoded variable regex pattern should always be valid");
             self.regex_cache
                 .insert("variable".to_string(), regex.clone());
             regex
@@ -351,7 +361,7 @@ impl<T: TemplateStorage> TemplateManager<T> {
                 .iter()
                 .find(|v| v.name == var_name)
                 .ok_or_else(|| TemplateError::SubstitutionFailed {
-                    variable: var_name.clone(),
+                    reason: format!("Missing variable: {}", var_name),
                 })?;
 
             // Get value from context or use default
@@ -360,7 +370,7 @@ impl<T: TemplateStorage> TemplateManager<T> {
                 .get(&var_name)
                 .or(variable.default_value.as_ref())
                 .ok_or_else(|| TemplateError::SubstitutionFailed {
-                    variable: var_name.clone(),
+                    reason: format!("Missing variable: {}", var_name),
                 })?;
 
             // Apply variable-specific transformations

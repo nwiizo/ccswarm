@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::utils::CCSwarmError;
+use crate::error::CCSwarmError;
 
 /// Sangha - collective intelligence system
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,9 +55,11 @@ impl Sangha {
 
     pub fn calculate_consensus(&self, proposal_id: &str) -> Option<f32> {
         self.votes.get(proposal_id).map(|votes| {
-            let total_weight: f32 = votes.iter()
+            let total_weight: f32 = votes
+                .iter()
                 .filter_map(|v| {
-                    self.members.iter()
+                    self.members
+                        .iter()
                         .find(|m| m.id == v.member_id)
                         .map(|m| match v.value {
                             VoteValue::Approve => m.weight * v.confidence,

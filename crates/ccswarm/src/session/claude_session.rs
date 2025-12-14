@@ -36,7 +36,7 @@ impl PersistentClaudeSession {
     ) -> Result<Self> {
         let session_id = format!("session-{}-{}", identity.agent_id, uuid::Uuid::new_v4());
 
-        let mut env_vars = crate::utils::collections::new_hashmap();
+        let mut env_vars = crate::utils::common::collections::new_hashmap();
         env_vars.insert("AGENT_ID".to_string(), identity.agent_id.clone());
         env_vars.insert(
             "AGENT_TYPE".to_string(),

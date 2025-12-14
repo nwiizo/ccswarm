@@ -5,12 +5,13 @@
 use serde::{Deserialize, Serialize};
 
 /// Isolation mode for agent execution
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum IsolationMode {
     /// Use git worktrees for isolation (lightweight, fast)
     /// - File system isolation via separate working directories
     /// - Shared system resources (CPU, memory, network)
     /// - Same OS environment
+    #[default]
     GitWorktree,
 
     /// Use Docker containers for isolation (full isolation)
@@ -25,13 +26,6 @@ pub enum IsolationMode {
     /// - Fall back to container for specific tasks requiring isolation
     /// - Best of both worlds
     Hybrid,
-}
-
-impl Default for IsolationMode {
-    fn default() -> Self {
-        // Default to git worktree for backward compatibility
-        Self::GitWorktree
-    }
 }
 
 impl IsolationMode {
@@ -113,4 +107,3 @@ impl Default for ContainerIsolationConfig {
         }
     }
 }
-

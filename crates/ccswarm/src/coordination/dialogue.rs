@@ -375,15 +375,13 @@ impl DialogueCoordinationBus {
             .iter()
             .position(|id| id == &speaker_id)
         {
-            let speaker = conversation
-                .conversation_state
-                .turn_order
-                .remove(pos)
-                .unwrap();
-            conversation
-                .conversation_state
-                .turn_order
-                .push_front(speaker);
+            // Safe to remove at pos since we just found it
+            if let Some(speaker) = conversation.conversation_state.turn_order.remove(pos) {
+                conversation
+                    .conversation_state
+                    .turn_order
+                    .push_front(speaker);
+            }
         }
 
         // Update conversation phase based on message type
@@ -452,15 +450,13 @@ impl DialogueCoordinationBus {
             .iter()
             .position(|id| id == speaker_id)
         {
-            let speaker = conversation
-                .conversation_state
-                .turn_order
-                .remove(pos)
-                .unwrap();
-            conversation
-                .conversation_state
-                .turn_order
-                .push_front(speaker);
+            // Safe to remove at pos since we just found it
+            if let Some(speaker) = conversation.conversation_state.turn_order.remove(pos) {
+                conversation
+                    .conversation_state
+                    .turn_order
+                    .push_front(speaker);
+            }
         }
 
         // Update conversation phase based on message type
@@ -687,7 +683,8 @@ impl DialogueCoordinationBus {
                 .into_iter()
                 .fold(Vec::new(), |mut acc, (topic, expertise)| {
                     acc.push((topic, expertise));
-                    acc.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                    // Use unwrap_or to handle potential NaN values
+                    acc.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                     acc.truncate(5);
                     acc
                 }),
@@ -725,4 +722,3 @@ pub struct AgentDialogueInsights {
     pub top_expertise_areas: Vec<(String, f32)>,
     pub preferred_partners: HashMap<String, f32>,
 }
-

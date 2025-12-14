@@ -535,4 +535,3 @@ pub struct EfficiencyStats {
     pub estimated_token_savings: usize,
     pub session_reuse_rate: f64,
 }
-

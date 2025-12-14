@@ -12,10 +12,7 @@ pub struct SanghaCommand {
 #[derive(Debug, Clone, clap::Subcommand)]
 pub enum SanghaAction {
     /// Propose a change
-    Propose {
-        title: String,
-        description: String,
-    },
+    Propose { title: String, description: String },
     /// Vote on a proposal
     Vote {
         proposal_id: String,
@@ -33,7 +30,10 @@ impl super::Command for SanghaCommand {
             SanghaAction::Propose { title, description } => {
                 tracing::info!("Creating proposal: {} - {}", title, description);
             }
-            SanghaAction::Vote { proposal_id, approve } => {
+            SanghaAction::Vote {
+                proposal_id,
+                approve,
+            } => {
                 let vote = if approve { "approve" } else { "reject" };
                 tracing::info!("Voting to {} proposal {}", vote, proposal_id);
             }

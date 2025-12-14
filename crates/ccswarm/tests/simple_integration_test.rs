@@ -1,16 +1,11 @@
 //! Essential integration tests for ccswarm core functionality
 
 use anyhow::Result;
-use std::collections::HashMap;
 
 // Import core modules
 use ccswarm::agent::personality::AgentPersonality;
 use ccswarm::coordination::{AgentMessage, CoordinationBus};
-use ccswarm::identity::default_backend_role;
-use ccswarm::session::{
-    memory::{EpisodeOutcome, EpisodeType, SessionMemory, WorkingMemoryType},
-    AgentSession,
-};
+use ccswarm::session::memory::{SessionMemory, WorkingMemoryType};
 
 #[tokio::test]
 async fn test_basic_agent_creation() -> Result<()> {

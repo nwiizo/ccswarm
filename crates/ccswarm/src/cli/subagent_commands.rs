@@ -89,4 +89,3 @@ pub async fn execute_subagent_command(command: SubagentCommand) -> Result<()> {
         }
     }
 }
-

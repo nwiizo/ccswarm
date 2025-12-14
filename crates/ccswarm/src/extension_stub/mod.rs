@@ -1,9 +1,9 @@
 pub mod agent_extension;
-pub mod sangha;
 pub mod meta_learning;
+pub mod sangha;
 
-use crate::extension::{Extension, ExtensionState};
 use crate::error::{CCSwarmError, Result};
+use crate::extension::{Extension, ExtensionState};
 use crate::traits::{Identifiable, Stateful, Validatable};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -43,15 +43,19 @@ impl ExtensionStub {
         if !validation_issues.is_empty() {
             // Try to auto-fix issues
             let fixes = extension.auto_fix()?;
-            tracing::info!("Auto-fixed {} issues for extension {}: {:?}",
-                         fixes.len(), extension.id(), fixes);
+            tracing::info!(
+                "Auto-fixed {} issues for extension {}: {:?}",
+                fixes.len(),
+                extension.id(),
+                fixes
+            );
 
             // Re-validate after fixes
             let remaining_issues = extension.validate()?;
             if !remaining_issues.is_empty() {
                 return Err(CCSwarmError::extension(
                     extension.id(),
-                    format!("Extension validation failed: {:?}", remaining_issues)
+                    format!("Extension validation failed: {:?}", remaining_issues),
                 ));
             }
         }
@@ -60,7 +64,7 @@ impl ExtensionStub {
         if self.extensions.contains_key(extension.id()) {
             return Err(CCSwarmError::extension(
                 extension.id(),
-                "Extension with this ID is already registered"
+                "Extension with this ID is already registered",
             ));
         }
 
@@ -70,7 +74,7 @@ impl ExtensionStub {
         if !missing_deps.is_empty() {
             return Err(CCSwarmError::extension(
                 extension.id(),
-                format!("Missing dependencies: {:?}", missing_deps)
+                format!("Missing dependencies: {:?}", missing_deps),
             ));
         }
 
@@ -84,10 +88,13 @@ impl ExtensionStub {
     /// Unregister an extension
     pub fn unregister(&mut self, extension_id: &str) -> Result<Extension> {
         // Check if other extensions depend on this one
-        let dependents: Vec<String> = self.extensions
+        let dependents: Vec<String> = self
+            .extensions
             .values()
             .filter(|ext| {
-                ext.dependencies.iter().any(|dep| dep.name == extension_id && !dep.optional)
+                ext.dependencies
+                    .iter()
+                    .any(|dep| dep.name == extension_id && !dep.optional)
             })
             .map(|ext| ext.id().to_string())
             .collect();
@@ -95,11 +102,12 @@ impl ExtensionStub {
         if !dependents.is_empty() {
             return Err(CCSwarmError::extension(
                 extension_id,
-                format!("Cannot unregister extension: required by {:?}", dependents)
+                format!("Cannot unregister extension: required by {:?}", dependents),
             ));
         }
 
-        self.extensions.remove(extension_id)
+        self.extensions
+            .remove(extension_id)
             .ok_or_else(|| CCSwarmError::extension(extension_id, "Extension not found"))
     }
 
@@ -138,14 +146,17 @@ impl ExtensionStub {
 
     /// Load extensions from registry file
     pub async fn load_from_registry(&mut self) -> Result<usize> {
-        let registry_path = self.registry_path.as_ref()
+        let registry_path = self
+            .registry_path
+            .as_ref()
             .ok_or_else(|| CCSwarmError::config("No registry path configured"))?;
 
         if !registry_path.exists() {
             return Ok(0);
         }
 
-        let content = tokio::fs::read_to_string(registry_path).await
+        let content = tokio::fs::read_to_string(registry_path)
+            .await
             .map_err(|e| CCSwarmError::config(format!("Failed to read registry: {}", e)))?;
 
         let extensions: Vec<Extension> = serde_json::from_str(&content)
@@ -165,20 +176,24 @@ impl ExtensionStub {
 
     /// Save extensions to registry file
     pub async fn save_to_registry(&self) -> Result<()> {
-        let registry_path = self.registry_path.as_ref()
+        let registry_path = self
+            .registry_path
+            .as_ref()
             .ok_or_else(|| CCSwarmError::config("No registry path configured"))?;
 
         // Create parent directory if it doesn't exist
         if let Some(parent) = registry_path.parent() {
-            tokio::fs::create_dir_all(parent).await
-                .map_err(|e| CCSwarmError::config(format!("Failed to create registry directory: {}", e)))?;
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                CCSwarmError::config(format!("Failed to create registry directory: {}", e))
+            })?;
         }
 
         let extensions: Vec<Extension> = self.extensions.values().cloned().collect();
         let content = serde_json::to_string_pretty(&extensions)
             .map_err(|e| CCSwarmError::config(format!("Failed to serialize extensions: {}", e)))?;
 
-        tokio::fs::write(registry_path, content).await
+        tokio::fs::write(registry_path, content)
+            .await
             .map_err(|e| CCSwarmError::config(format!("Failed to write registry: {}", e)))?;
 
         Ok(())
@@ -203,7 +218,9 @@ impl ExtensionStub {
         let total = self.extensions.len();
         let active = self.list_by_state(&ExtensionState::Active).len();
         let loaded = self.list_by_state(&ExtensionState::Loaded).len();
-        let error_count = self.extensions.values()
+        let error_count = self
+            .extensions
+            .values()
             .filter(|ext| matches!(ext.state(), ExtensionState::Error(_)))
             .count();
 
@@ -219,7 +236,10 @@ impl ExtensionStub {
     }
 
     /// Find extensions by capability
-    pub fn find_by_capability(&self, capability: &crate::extension::ExtensionCapability) -> Vec<&Extension> {
+    pub fn find_by_capability(
+        &self,
+        capability: &crate::extension::ExtensionCapability,
+    ) -> Vec<&Extension> {
         self.extensions
             .values()
             .filter(|ext| ext.has_capability(capability))
@@ -374,13 +394,15 @@ impl ExtensionManager {
 
     /// Approve a proposal
     pub async fn approve_proposal(&mut self, proposal_id: &str) -> Result<()> {
-        let proposal = self.proposals.get_mut(proposal_id)
+        let proposal = self
+            .proposals
+            .get_mut(proposal_id)
             .ok_or_else(|| CCSwarmError::extension(proposal_id, "Proposal not found"))?;
 
         if proposal.status != ExtensionStatus::UnderReview {
             return Err(CCSwarmError::extension(
                 proposal_id,
-                format!("Cannot approve proposal in status: {:?}", proposal.status)
+                format!("Cannot approve proposal in status: {:?}", proposal.status),
             ));
         }
 
@@ -393,7 +415,9 @@ impl ExtensionManager {
 
     /// Reject a proposal
     pub async fn reject_proposal(&mut self, proposal_id: &str, reason: String) -> Result<()> {
-        let proposal = self.proposals.get_mut(proposal_id)
+        let proposal = self
+            .proposals
+            .get_mut(proposal_id)
             .ok_or_else(|| CCSwarmError::extension(proposal_id, "Proposal not found"))?;
 
         proposal.status = ExtensionStatus::Rejected;
@@ -405,13 +429,15 @@ impl ExtensionManager {
 
     /// Mark proposal as implemented
     pub async fn mark_implemented(&mut self, proposal_id: &str) -> Result<()> {
-        let proposal = self.proposals.get_mut(proposal_id)
+        let proposal = self
+            .proposals
+            .get_mut(proposal_id)
             .ok_or_else(|| CCSwarmError::extension(proposal_id, "Proposal not found"))?;
 
         if proposal.status != ExtensionStatus::Approved {
             return Err(CCSwarmError::extension(
                 proposal_id,
-                format!("Cannot implement proposal in status: {:?}", proposal.status)
+                format!("Cannot implement proposal in status: {:?}", proposal.status),
             ));
         }
 
@@ -430,10 +456,18 @@ impl ExtensionManager {
     /// Update internal statistics
     fn update_stats(&mut self) {
         let total = self.proposals.len();
-        let pending = self.list_proposals_by_status(&ExtensionStatus::Proposed).len() +
-                     self.list_proposals_by_status(&ExtensionStatus::UnderReview).len();
-        let successful = self.list_proposals_by_status(&ExtensionStatus::Implemented).len();
-        let failed = self.list_proposals_by_status(&ExtensionStatus::Rejected).len();
+        let pending = self
+            .list_proposals_by_status(&ExtensionStatus::Proposed)
+            .len()
+            + self
+                .list_proposals_by_status(&ExtensionStatus::UnderReview)
+                .len();
+        let successful = self
+            .list_proposals_by_status(&ExtensionStatus::Implemented)
+            .len();
+        let failed = self
+            .list_proposals_by_status(&ExtensionStatus::Rejected)
+            .len();
 
         self.stats.total_extensions = total;
         self.stats.pending_proposals = pending;
@@ -444,20 +478,34 @@ impl ExtensionManager {
     /// Validate a proposal before submission
     fn validate_proposal(&self, proposal: &ExtensionProposal) -> Result<()> {
         if proposal.title.trim().is_empty() {
-            return Err(CCSwarmError::extension(&proposal.id, "Proposal title cannot be empty"));
+            return Err(CCSwarmError::extension(
+                &proposal.id,
+                "Proposal title cannot be empty",
+            ));
         }
 
         if proposal.description.trim().is_empty() {
-            return Err(CCSwarmError::extension(&proposal.id, "Proposal description cannot be empty"));
+            return Err(CCSwarmError::extension(
+                &proposal.id,
+                "Proposal description cannot be empty",
+            ));
         }
 
         if proposal.proposer.trim().is_empty() {
-            return Err(CCSwarmError::extension(&proposal.id, "Proposer cannot be empty"));
+            return Err(CCSwarmError::extension(
+                &proposal.id,
+                "Proposer cannot be empty",
+            ));
         }
 
         // Validate risk assessment
-        if proposal.risk_assessment.overall_risk_score < 0.0 || proposal.risk_assessment.overall_risk_score > 1.0 {
-            return Err(CCSwarmError::extension(&proposal.id, "Risk score must be between 0.0 and 1.0"));
+        if proposal.risk_assessment.overall_risk_score < 0.0
+            || proposal.risk_assessment.overall_risk_score > 1.0
+        {
+            return Err(CCSwarmError::extension(
+                &proposal.id,
+                "Risk score must be between 0.0 and 1.0",
+            ));
         }
 
         Ok(())
@@ -614,4 +662,3 @@ pub struct SuccessCriterion {
     pub measurement_method: String,
     pub measurable: bool,
 }
-
