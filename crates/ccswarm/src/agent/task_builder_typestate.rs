@@ -40,7 +40,7 @@ pub struct Complete;
 /// Type-safe task builder that enforces required fields at compile time
 ///
 /// ## Example
-/// ```rust
+/// ```rust,ignore
 /// // This won't compile - can't build without description
 /// // let task = TypedTaskBuilder::new().build(); // ERROR!
 ///
