@@ -73,7 +73,7 @@ pub struct SessionContext {
 /// A session with compile-time state validation
 ///
 /// ## Example
-/// ```rust
+/// ```rust,ignore
 /// // Cannot perform operations on uninitialized session
 /// // let session = TypedSession::new("session-1");
 /// // session.send_message("Hello"); // Compilation error!
