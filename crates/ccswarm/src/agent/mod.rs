@@ -121,7 +121,11 @@ impl ClaudeCodeAgent {
     ) -> Result<Self> {
         let agent_id = format!("{}-agent-{}", role.name().to_lowercase(), Uuid::new_v4());
         let session_id = Uuid::new_v4().to_string();
-        let worktree_path = workspace_root.join(format!("agents/{}", &agent_id));
+        // Create worktree outside repo to avoid checkout conflicts
+        let worktree_path = workspace_root
+            .parent()
+            .map(|p| p.join("worktrees").join(&agent_id))
+            .unwrap_or_else(|| workspace_root.join(".worktrees").join(&agent_id));
         let branch_name = format!("{}/{}", branch_prefix, &agent_id);
 
         let identity = AgentIdentity {
