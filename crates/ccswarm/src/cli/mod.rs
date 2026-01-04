@@ -1266,7 +1266,7 @@ impl CliRunner {
         for agent_type in agents {
             let agent_config = crate::config::AgentConfig {
                 specialization: agent_type.clone(),
-                worktree: format!("agents/{}-agent", agent_type),
+                worktree: format!("../worktrees/{}-agent", agent_type),
                 branch: format!("feature/{}", agent_type),
                 claude_config: crate::config::ClaudeConfig::for_agent(agent_type),
                 claude_md_template: format!("{}_specialist", agent_type),
@@ -2541,7 +2541,7 @@ fn create_default_config(repo_path: &Path) -> Result<CcswarmConfig> {
         "frontend".to_string(),
         crate::config::AgentConfig {
             specialization: "react_typescript".to_string(),
-            worktree: "agents/frontend-agent".to_string(),
+            worktree: "../worktrees/frontend-agent".to_string(),
             branch: "feature/frontend-ui".to_string(),
             claude_config: crate::config::ClaudeConfig::for_agent("frontend"),
             claude_md_template: "frontend_specialist".to_string(),
@@ -2552,7 +2552,7 @@ fn create_default_config(repo_path: &Path) -> Result<CcswarmConfig> {
         "backend".to_string(),
         crate::config::AgentConfig {
             specialization: "node_microservices".to_string(),
-            worktree: "agents/backend-agent".to_string(),
+            worktree: "../worktrees/backend-agent".to_string(),
             branch: "feature/backend-api".to_string(),
             claude_config: crate::config::ClaudeConfig::for_agent("backend"),
             claude_md_template: "backend_specialist".to_string(),
@@ -2563,7 +2563,7 @@ fn create_default_config(repo_path: &Path) -> Result<CcswarmConfig> {
         "devops".to_string(),
         crate::config::AgentConfig {
             specialization: "aws_kubernetes".to_string(),
-            worktree: "agents/devops-agent".to_string(),
+            worktree: "../worktrees/devops-agent".to_string(),
             branch: "feature/infrastructure".to_string(),
             claude_config: crate::config::ClaudeConfig::for_agent("devops"),
             claude_md_template: "devops_specialist".to_string(),
@@ -2613,7 +2613,7 @@ fn create_frontend_only_config(repo_path: &Path) -> Result<CcswarmConfig> {
         "frontend".to_string(),
         crate::config::AgentConfig {
             specialization: "react_typescript".to_string(),
-            worktree: "agents/frontend-agent".to_string(),
+            worktree: "../worktrees/frontend-agent".to_string(),
             branch: "feature/frontend".to_string(),
             claude_config: crate::config::ClaudeConfig::for_agent("frontend"),
             claude_md_template: "frontend_specialist".to_string(),

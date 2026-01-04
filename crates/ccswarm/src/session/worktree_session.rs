@@ -69,6 +69,9 @@ pub struct WorktreeSessionConfig {
     /// Branch prefix for agent worktrees
     pub branch_prefix: String,
 
+    /// Worktrees base path (defaults to repo_path/../worktrees to avoid checkout conflicts)
+    pub worktrees_base_path: Option<PathBuf>,
+
     /// Whether to auto-commit changes
     pub auto_commit: bool,
 
@@ -85,6 +88,7 @@ impl Default for WorktreeSessionConfig {
             persistent_config: PersistentSessionManagerConfig::default(),
             repo_path: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             branch_prefix: "feature".to_string(),
+            worktrees_base_path: None,
             auto_commit: false,
             cleanup_worktrees: true,
             max_worktrees_per_role: 3,
@@ -111,8 +115,17 @@ pub struct WorktreeSessionManager {
 impl WorktreeSessionManager {
     /// Create a new worktree session manager
     pub fn new(config: WorktreeSessionConfig) -> Result<Self> {
+        // Determine worktrees base path: use configured path, or default to ../worktrees
+        let worktrees_base = config.worktrees_base_path
+            .clone()
+            .unwrap_or_else(|| {
+                config.repo_path.parent()
+                    .map(|p| p.join("worktrees"))
+                    .unwrap_or_else(|| config.repo_path.join(".worktrees"))
+            });
+
         let persistent_manager = PersistentSessionManager::new(
-            config.repo_path.join("agents"),
+            worktrees_base.clone(),
             config.persistent_config.clone(),
         );
 
@@ -213,12 +226,21 @@ impl WorktreeSessionManager {
 
         tracing::info!("Creating new worktree session for agent: {}", agent_id);
 
+        // Determine worktree path: use configured base path or default to ../worktrees
+        let worktrees_base = self.config.worktrees_base_path
+            .clone()
+            .unwrap_or_else(|| {
+                self.config.repo_path.parent()
+                    .map(|p| p.join("worktrees"))
+                    .unwrap_or_else(|| self.config.repo_path.join(".worktrees"))
+            });
+
         // Create worktree session info
         let mut session_info = WorktreeSessionInfo {
             session_id: Uuid::new_v4().to_string(),
             agent_id: agent_id.clone(),
             agent_role: role.clone(),
-            worktree_path: self.config.repo_path.join("agents").join(&agent_id),
+            worktree_path: worktrees_base.join(&agent_id),
             branch_name: branch_name.clone(),
             created_at: Utc::now(),
             last_activity: Utc::now(),

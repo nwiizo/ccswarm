@@ -108,7 +108,7 @@ impl SetupWizard {
                 "frontend".to_string(),
                 AgentConfig {
                     specialization: "frontend".to_string(),
-                    worktree: "agents/frontend".to_string(),
+                    worktree: "../worktrees/frontend".to_string(),
                     branch: "feature/frontend".to_string(),
                     claude_config: ClaudeConfig::for_agent("frontend"),
                     claude_md_template: "frontend_specialist".to_string(),
@@ -121,7 +121,7 @@ impl SetupWizard {
                 "backend".to_string(),
                 AgentConfig {
                     specialization: "backend".to_string(),
-                    worktree: "agents/backend".to_string(),
+                    worktree: "../worktrees/backend".to_string(),
                     branch: "feature/backend".to_string(),
                     claude_config: ClaudeConfig::for_agent("backend"),
                     claude_md_template: "backend_specialist".to_string(),
@@ -134,7 +134,7 @@ impl SetupWizard {
                 "devops".to_string(),
                 AgentConfig {
                     specialization: "devops".to_string(),
-                    worktree: "agents/devops".to_string(),
+                    worktree: "../worktrees/devops".to_string(),
                     branch: "feature/devops".to_string(),
                     claude_config: ClaudeConfig::for_agent("devops"),
                     claude_md_template: "devops_specialist".to_string(),
@@ -147,7 +147,7 @@ impl SetupWizard {
                 "qa".to_string(),
                 AgentConfig {
                     specialization: "qa".to_string(),
-                    worktree: "agents/qa".to_string(),
+                    worktree: "../worktrees/qa".to_string(),
                     branch: "feature/qa".to_string(),
                     claude_config: ClaudeConfig::for_agent("qa"),
                     claude_md_template: "qa_specialist".to_string(),

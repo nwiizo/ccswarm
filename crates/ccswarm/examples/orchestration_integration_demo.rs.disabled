@@ -129,7 +129,7 @@ fn create_test_config() -> CcswarmConfig {
         "backend".to_string(),
         AgentConfig {
             specialization: "backend".to_string(),
-            worktree: "agents/backend".to_string(),
+            worktree: "../worktrees/backend".to_string(),
             branch: "feature/backend".to_string(),
             claude_config: ClaudeConfig::for_agent("backend"),
             claude_md_template: "backend_specialist".to_string(),
