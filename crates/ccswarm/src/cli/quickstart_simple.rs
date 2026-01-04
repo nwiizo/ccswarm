@@ -184,7 +184,7 @@ pub async fn handle_quickstart_simple(
             agent_name.to_string(),
             AgentConfig {
                 specialization: agent_name.to_string(),
-                worktree: format!("agents/{}-agent", agent_name),
+                worktree: format!("../worktrees/{}-agent", agent_name),
                 branch: format!("{}-agent", agent_name),
                 claude_config: ClaudeConfig::for_agent(agent_name),
                 claude_md_template: "default".to_string(),

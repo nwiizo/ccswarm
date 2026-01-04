@@ -202,7 +202,10 @@ impl PersistentSessionManager {
         tracing::info!("Creating new persistent session for agent: {}", agent_id);
 
         // Create workspace path
-        let workspace_path = self.workspace_root.join(format!("agents/{}", &agent_id));
+        let workspace_path = self.workspace_root
+            .parent()
+            .map(|p| p.join("worktrees").join(&agent_id))
+            .unwrap_or_else(|| self.workspace_root.join(".worktrees").join(&agent_id));
         tokio::fs::create_dir_all(&workspace_path)
             .await
             .context("Failed to create agent workspace")?;
