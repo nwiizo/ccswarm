@@ -47,7 +47,10 @@ impl SimpleClaudeAgent {
     ) -> Result<Self> {
         let agent_id = format!("{}-agent-{}", role.name().to_lowercase(), Uuid::new_v4());
         let session_id = Uuid::new_v4().to_string();
-        let workspace_path = workspace_root.join("agents").join(&agent_id);
+        let workspace_path = workspace_root
+            .parent()
+            .map(|p| p.join("worktrees").join(&agent_id))
+            .unwrap_or_else(|| workspace_root.join(".worktrees").join(&agent_id));
 
         let identity = AgentIdentity {
             agent_id: agent_id.clone(),

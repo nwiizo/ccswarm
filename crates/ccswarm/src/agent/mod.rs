@@ -59,6 +59,9 @@ pub struct ClaudeCodeAgent {
     /// Git worktree path
     pub worktree_path: PathBuf,
 
+    /// Git repository path (where to run git commands)
+    pub repo_path: PathBuf,
+
     /// Git branch name
     pub branch_name: String,
 
@@ -146,6 +149,7 @@ impl ClaudeCodeAgent {
         let agent = Self {
             identity,
             worktree_path,
+            repo_path: workspace_root.to_path_buf(),
             branch_name,
             claude_config,
             status: AgentStatus::Initializing,
@@ -213,37 +217,38 @@ impl ClaudeCodeAgent {
                 .context("Failed to create parent directory")?;
         }
 
+        // Create worktree with new branch in a single command
+        // git worktree add -b <branch> <path> creates both the branch and worktree
+        tracing::debug!(
+            "Creating worktree: git -C {:?} worktree add -b {} {:?}",
+            self.repo_path,
+            self.branch_name,
+            self.worktree_path
+        );
         let output = Command::new("git")
-            .args(["checkout", "-b", &self.branch_name])
-            .output()
-            .await
-            .context("Failed to create branch")?;
-
-        if !output.status.success()
-            && !String::from_utf8_lossy(&output.stderr).contains("already exists")
-        {
-            return Err(anyhow::anyhow!(
-                "Failed to create branch: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-
-        let output = Command::new("git")
+            .current_dir(&self.repo_path)
             .args([
                 "worktree",
                 "add",
+                "-b",
+                &self.branch_name,
                 self.worktree_path
                     .to_str()
                     .ok_or_else(|| anyhow::anyhow!("Invalid UTF-8 in worktree path"))?,
-                &self.branch_name,
             ])
             .output()
             .await
-            .context("Failed to create worktree")?;
+            .context(format!(
+                "Failed to execute git worktree command in {:?}",
+                self.repo_path
+            ))?;
 
         if !output.status.success() {
             return Err(anyhow::anyhow!(
-                "Failed to create worktree: {}",
+                "Failed to create worktree at {:?} from repo {:?}: stdout={}, stderr={}",
+                self.worktree_path,
+                self.repo_path,
+                String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             ));
         }
