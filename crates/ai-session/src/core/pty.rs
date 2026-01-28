@@ -139,4 +139,104 @@ impl PtyHandle {
             Err(_) => Ok(Vec::new()), // Timeout - return empty data
         }
     }
+
+    /// Spawn Claude Code in the PTY with --dangerously-skip-permissions flag
+    ///
+    /// This method launches Claude CLI in a PTY session for true parallel multi-agent execution.
+    /// Each call creates an independent Claude process that can run concurrently with others.
+    ///
+    /// # Arguments
+    /// * `prompt` - The prompt/instruction to send to Claude
+    /// * `working_dir` - Working directory for the Claude session
+    /// * `max_turns` - Maximum number of conversation turns (default: 1 for single task)
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ai_session::core::pty::PtyHandle;
+    /// use std::path::Path;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let pty = PtyHandle::new(24, 80)?;
+    ///     pty.spawn_claude("Create a hello world function", Path::new("/tmp"), Some(3)).await?;
+    ///     
+    ///     // Read output with timeout
+    ///     let output = pty.read_with_timeout(30000).await?;
+    ///     println!("Claude output: {}", String::from_utf8_lossy(&output));
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn spawn_claude(
+        &self,
+        prompt: &str,
+        working_dir: &std::path::Path,
+        max_turns: Option<u32>,
+    ) -> Result<()> {
+        let mut cmd = CommandBuilder::new("claude");
+        cmd.arg("--dangerously-skip-permissions");
+        cmd.arg("-p");
+        cmd.arg(prompt);
+        cmd.arg("--output-format");
+        cmd.arg("json");
+
+        // Set max turns if specified
+        if let Some(turns) = max_turns {
+            cmd.arg("--max-turns");
+            cmd.arg(turns.to_string());
+        }
+
+        cmd.cwd(working_dir);
+
+        self.spawn_command(cmd).await
+    }
+
+    /// Spawn Claude Code and wait for completion, returning the output
+    ///
+    /// This is a convenience method that spawns Claude, waits for it to finish,
+    /// and returns the collected output.
+    ///
+    /// # Arguments
+    /// * `prompt` - The prompt/instruction to send to Claude
+    /// * `working_dir` - Working directory for the Claude session
+    /// * `max_turns` - Maximum number of conversation turns
+    /// * `timeout_ms` - Timeout in milliseconds to wait for completion
+    pub async fn spawn_claude_and_wait(
+        &self,
+        prompt: &str,
+        working_dir: &std::path::Path,
+        max_turns: Option<u32>,
+        timeout_ms: u64,
+    ) -> Result<String> {
+        self.spawn_claude(prompt, working_dir, max_turns).await?;
+
+        // Collect output until process completes or timeout
+        let mut output = Vec::new();
+        let start = std::time::Instant::now();
+        let timeout_duration = Duration::from_millis(timeout_ms);
+
+        loop {
+            if start.elapsed() > timeout_duration {
+                break;
+            }
+
+            // Read available output
+            let chunk = self.read_with_timeout(500).await?;
+            if !chunk.is_empty() {
+                output.extend_from_slice(&chunk);
+            }
+
+            // Check if process has finished
+            if !self.is_running() {
+                // Read any remaining output
+                let remaining = self.read_with_timeout(100).await?;
+                output.extend_from_slice(&remaining);
+                break;
+            }
+
+            // Small delay to avoid busy-waiting
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        Ok(String::from_utf8_lossy(&output).to_string())
+    }
 }

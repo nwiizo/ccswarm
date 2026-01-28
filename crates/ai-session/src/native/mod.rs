@@ -339,6 +339,7 @@ impl NativeSessionManager {
 mod tests {
     use super::*;
 
+    #[cfg_attr(not(feature = "native-pty-tests"), ignore)]
     #[tokio::test]
     async fn test_native_session() -> Result<()> {
         let mut session = NativeSession::new("test")?;

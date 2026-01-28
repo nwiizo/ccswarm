@@ -1,9 +1,12 @@
 //! Session lifecycle management
 
+use super::headless::HeadlessHandle;
 use super::pty::PtyHandle;
-use super::{AISession, SessionStatus};
+use super::terminal::TerminalHandle;
+use super::{AISession, SessionConfig, SessionStatus};
 use anyhow::Result;
 use portable_pty::CommandBuilder;
+use std::io::ErrorKind;
 
 /// Start a session
 pub async fn start_session(session: &AISession) -> Result<()> {
@@ -16,10 +19,6 @@ pub async fn start_session(session: &AISession) -> Result<()> {
         *status = SessionStatus::Running;
     }
 
-    // Create PTY
-    let pty = PtyHandle::new(session.config.pty_size.0, session.config.pty_size.1)?;
-
-    // Build command
     let shell_env = std::env::var("SHELL").ok();
     let shell = session
         .config
@@ -28,21 +27,44 @@ pub async fn start_session(session: &AISession) -> Result<()> {
         .or(shell_env.as_deref())
         .unwrap_or("/bin/bash");
 
-    let mut cmd = CommandBuilder::new(shell);
-    cmd.cwd(&session.config.working_directory);
+    let terminal = if session.config.force_headless {
+        TerminalHandle::Headless(
+            HeadlessHandle::spawn_shell(
+                shell,
+                &session.config.working_directory,
+                session.config.environment.iter(),
+            )
+            .await?,
+        )
+    } else {
+        match spawn_pty(&session.config, shell).await {
+            Ok(pty) => TerminalHandle::Pty(pty),
+            Err(err) => {
+                if session.config.allow_headless_fallback && is_permission_denied(&err) {
+                    tracing::warn!(
+                        "PTY unavailable ({}). Falling back to headless shell for session {}",
+                        err,
+                        session.id
+                    );
+                    TerminalHandle::Headless(
+                        HeadlessHandle::spawn_shell(
+                            shell,
+                            &session.config.working_directory,
+                            session.config.environment.iter(),
+                        )
+                        .await?,
+                    )
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
 
-    // Set environment variables
-    for (key, value) in &session.config.environment {
-        cmd.env(key, value);
-    }
-
-    // Spawn command in PTY
-    pty.spawn_command(cmd).await?;
-
-    // Store PTY handle
+    // Store terminal handle
     {
-        let mut pty_lock = session.pty.write().await;
-        *pty_lock = Some(pty);
+        let mut terminal_lock = session.terminal.write().await;
+        *terminal_lock = Some(terminal);
     }
 
     // Update last activity
@@ -62,10 +84,12 @@ pub async fn stop_session(session: &AISession) -> Result<()> {
         *status = SessionStatus::Terminating;
     }
 
-    // Clear PTY handle (this will close the PTY)
+    // Clear terminal handle (this will close the underlying IO)
     {
-        let mut pty_lock = session.pty.write().await;
-        *pty_lock = None;
+        let mut terminal_lock = session.terminal.write().await;
+        if let Some(terminal) = terminal_lock.take() {
+            terminal.shutdown().await?;
+        }
     }
 
     // Clear process handle
@@ -83,6 +107,30 @@ pub async fn stop_session(session: &AISession) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn spawn_pty(config: &SessionConfig, shell: &str) -> Result<PtyHandle> {
+    let pty = PtyHandle::new(config.pty_size.0, config.pty_size.1)?;
+    let mut cmd = CommandBuilder::new(shell);
+    cmd.cwd(&config.working_directory);
+
+    for (key, value) in &config.environment {
+        cmd.env(key, value);
+    }
+
+    pty.spawn_command(cmd).await?;
+    Ok(pty)
+}
+
+fn is_permission_denied(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        if let Some(io_err) = cause.downcast_ref::<std::io::Error>() {
+            io_err.kind() == ErrorKind::PermissionDenied
+        } else {
+            let msg = cause.to_string();
+            msg.contains("PermissionDenied") || msg.contains("Operation not permitted")
+        }
+    })
 }
 
 /// Pause a session
