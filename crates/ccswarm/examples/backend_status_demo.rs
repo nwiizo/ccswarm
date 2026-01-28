@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
 
     // Display detailed endpoint information
     println!("\n📡 API Endpoints:");
-    for (key, endpoint) in &backend_status.api_endpoints {
+    for endpoint in backend_status.api_endpoints.values() {
         println!(
             "  {} {} - {} ({}ms)",
             endpoint.method,

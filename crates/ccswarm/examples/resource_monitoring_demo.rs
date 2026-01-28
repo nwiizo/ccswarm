@@ -24,12 +24,14 @@ async fn main() -> Result<()> {
     println!("===================================\n");
 
     // Create resource limits with aggressive settings for demo
-    let mut resource_limits = ResourceLimits::default();
-    resource_limits.idle_timeout = ChronoDuration::seconds(30); // 30 seconds for demo
-    resource_limits.idle_cpu_threshold = 5.0;
-    resource_limits.auto_suspend_enabled = true;
-    resource_limits.max_cpu_percent = 50.0;
-    resource_limits.max_memory_bytes = 1024 * 1024 * 1024; // 1GB
+    let resource_limits = ResourceLimits {
+        idle_timeout: ChronoDuration::seconds(30), // 30 seconds for demo
+        idle_cpu_threshold: 5.0,
+        auto_suspend_enabled: true,
+        max_cpu_percent: 50.0,
+        max_memory_bytes: 1024 * 1024 * 1024, // 1GB
+        ..Default::default()
+    };
 
     println!("📊 Resource Limits Configuration:");
     println!("  - Max CPU: {}%", resource_limits.max_cpu_percent);

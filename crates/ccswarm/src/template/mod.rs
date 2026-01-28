@@ -9,7 +9,6 @@
 
 pub mod manager;
 pub mod predefined;
-pub mod predefined_refactored;
 pub mod storage;
 pub mod template_factory;
 pub mod types;
