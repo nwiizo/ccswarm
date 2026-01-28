@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "ai-session"
-version = "0.3.6"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -59,6 +59,7 @@ dependencies = [
  "dirs",
  "futures-util",
  "log",
+ "mockall",
  "nix 0.30.1",
  "once_cell",
  "portable-pty",

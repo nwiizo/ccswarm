@@ -78,6 +78,51 @@ Commands::Start { daemon, port, .. } => { /* ... */ }
 Commands::Doctor { .. } => { /* ... */ }  // Even if ignoring all fields
 ```
 
+### Mockall Best Practices
+
+**Basic Mock Setup**:
+```rust
+use mockall::mock;
+use mockall::predicate::*;
+
+mock! {
+    pub MyService {
+        fn execute(&self, input: &str) -> Result<String>;
+    }
+}
+
+#[test]
+fn test_with_mock() {
+    let mut mock = MockMyService::new();
+    mock.expect_execute()
+        .times(1)                              // Verify call count
+        .withf(|input| input.contains("test")) // Argument matching
+        .returning(|_| Ok("result".into()));   // Return value
+
+    assert!(mock.execute("test input").is_ok());
+}
+```
+
+**Advanced Patterns**:
+```rust
+// Ordered calls with Sequence
+let mut seq = mockall::Sequence::new();
+mock.expect_step1().in_sequence(&mut seq).returning(|| Ok(()));
+mock.expect_step2().in_sequence(&mut seq).returning(|| Ok(()));
+
+// Verify method NOT called
+mock.expect_dangerous_op().times(0);
+
+// Multiple return values
+let counter = AtomicUsize::new(0);
+mock.expect_execute().returning(move |_| {
+    let n = counter.fetch_add(1, Ordering::SeqCst);
+    if n < 2 { Err(anyhow!("retry")) } else { Ok("success".into()) }
+});
+```
+
+Reference: `tests/mockall_tests.rs` for comprehensive examples.
+
 ## Workspace Commands
 
 ```bash
