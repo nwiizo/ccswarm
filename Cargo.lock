@@ -19,16 +19,30 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-client-protocol"
-version = "0.4.0"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc2526e80463b9742afed4829aedd6ae5632d6db778c6cc1fecb80c960c3521b"
+checksum = "76133c067c37ae7a3641c3ad1ec88f36aac06cea5f9b3b49b5c29f18214f9101"
 dependencies = [
+ "agent-client-protocol-schema",
  "anyhow",
  "async-broadcast",
  "async-trait",
  "futures",
  "log",
  "parking_lot",
+ "schemars 1.0.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "agent-client-protocol-schema"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61be4454304d7df1a5b44c4ae55e707ffe72eac4dfb1ef8762510ce8d8f6d924"
+dependencies = [
+ "anyhow",
+ "derive_more",
  "schemars 1.0.4",
  "serde",
  "serde_json",
@@ -45,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "ai-session"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -407,7 +421,7 @@ dependencies = [
 
 [[package]]
 name = "ccswarm"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "agent-client-protocol",
  "ai-session",
@@ -818,6 +832,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -2862,9 +2877,9 @@ dependencies = [
 
 [[package]]
 name = "slab"
-version = "0.4.10"
+version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04dc19736151f35336d325007ac991178d504a119863a2fcb3758cdb5e52c50d"
+checksum = "7a2ae44ef20feb57a68b23d846850f861394c2e02dc425a50098ae8c90267589"
 
 [[package]]
 name = "smallvec"
@@ -3472,6 +3487,12 @@ name = "unicode-width"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
+
+[[package]]
+name = "unicode-xid"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "unsafe-libyaml"
