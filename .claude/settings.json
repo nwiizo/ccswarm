@@ -1,6 +1,6 @@
 {
   "name": "ccswarm",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "AI Multi-Agent Orchestration System with Native AI-Session",
   "permissions": {
     "file_write": true,
@@ -8,6 +8,25 @@
     "bash": true,
     "web_fetch": true,
     "todo_write": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{"type": "command", "command": ".claude/hooks/validate-agent-scope.sh"}]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{"type": "command", "command": ".claude/hooks/format-code.sh"}]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{"type": "command", "command": ".claude/hooks/audit-trail.sh"}]
+      }
+    ]
   },
   "build_commands": {
     "test": "cargo test --workspace",
