@@ -271,37 +271,10 @@ impl AutoCreateEngine {
         let tasks = self.analyze_and_decompose(description).await?;
         info!("📋 Generated {} tasks", tasks.len());
 
-        // Step 3: Check if we should use real Claude API or simulation
-        let use_real_api = std::env::var("CCSWARM_USE_REAL_API")
-            .unwrap_or_default()
-            .to_lowercase()
-            == "true";
-
-        info!(
-            "📋 API mode check: CCSWARM_USE_REAL_API={}",
-            std::env::var("CCSWARM_USE_REAL_API").unwrap_or_else(|_| "not set".to_string())
-        );
-
-        if use_real_api {
-            info!("\n🤖 Executing with real Claude API...");
-            self.execute_with_real_agents(tasks, config, output_path)
-                .await?;
-        } else {
-            info!("\n🤖 Simulating agent execution...");
-            for task in &tasks {
-                let decision = self.delegation_engine.delegate_task(task.clone())?;
-                info!(
-                    "   {} → {}: {}",
-                    "Master",
-                    decision.target_agent.name(),
-                    task.description
-                );
-
-                // Simulate agent execution by creating files
-                self.simulate_agent_execution(&decision, task, output_path)
-                    .await?;
-            }
-        }
+        // Step 3: Execute with Claude Code CLI
+        info!("\n🤖 Executing with Claude Code CLI...");
+        self.execute_with_real_agents(tasks, config, output_path)
+            .await?;
 
         // Step 4: Create project structure
         self.create_project_structure(output_path).await?;

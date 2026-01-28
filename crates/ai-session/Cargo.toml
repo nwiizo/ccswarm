@@ -84,7 +84,7 @@ criterion = "0.5"
 tempfile = "3.10"
 
 [features]
-default = ["cli"]
+default = ["cli", "mcp"]
 cli = ["clap", "crossterm", "reqwest", "dirs"]
 server = ["axum", "tower", "tower-http", "clap"]
 mcp = ["reqwest", "tokio-tungstenite", "futures-util"]
