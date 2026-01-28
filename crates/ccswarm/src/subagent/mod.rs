@@ -13,11 +13,12 @@ pub mod spawner;
 pub mod workload_balancer;
 
 // Re-export key types for easier access
-// Note: MultiAgentExecutor temporarily disabled until ai-session integration is restored
+// ParallelExecutor now supports PTY-based execution via execute_with_claude_pty()
 pub use parallel_executor::{
     AggregationStrategy, ExecutionStatus, ParallelConfig, ParallelExecutionResult,
     ParallelExecutor, TaskExecutionResult,
 };
+pub use spawner::SpawnTask;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -18,6 +18,7 @@ pub mod traits;
 pub mod worktree_session;
 
 // Re-export ai-session types for multi-agent coordination
+pub use ai_session::PtyHandle;
 pub use ai_session::context::{SessionContext, TaskContext, WorkspaceState};
 pub use ai_session::coordination::{
     AgentId as AIAgentId, AgentMessage, BroadcastMessage, Message as CoordinationMessage,

@@ -486,6 +486,181 @@ impl ParallelExecutor {
         })
     }
 
+    /// Execute tasks using ai-session's PTY-based Claude sessions in parallel
+    ///
+    /// This method provides true PTY-based parallel execution where each task
+    /// gets an independent Claude Code session via ai-session's PtyHandle.
+    /// This enables more interactive and session-aware execution compared to
+    /// the simple Command-based approach.
+    ///
+    /// # Arguments
+    /// * `tasks` - List of tasks to execute
+    /// * `working_dir` - Working directory for Claude sessions
+    /// * `max_turns` - Maximum conversation turns per task (default: 3)
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ccswarm::subagent::{ParallelExecutor, SpawnTask};
+    /// use std::path::PathBuf;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let executor = ParallelExecutor::with_defaults();
+    ///     let tasks = vec![
+    ///         SpawnTask::new("Create a hello world function"),
+    ///         SpawnTask::new("Write unit tests for the function"),
+    ///     ];
+    ///     
+    ///     let result = executor.execute_with_claude_pty(
+    ///         tasks,
+    ///         Some(PathBuf::from("/tmp/project")),
+    ///         Some(3),
+    ///     ).await?;
+    ///     
+    ///     println!("Completed {} tasks", result.successful_count);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn execute_with_claude_pty(
+        &self,
+        tasks: Vec<SpawnTask>,
+        working_dir: Option<PathBuf>,
+        max_turns: Option<u32>,
+    ) -> SubagentResult<ParallelExecutionResult> {
+        use ai_session::PtyHandle;
+
+        let execution_id = uuid::Uuid::new_v4().to_string();
+        let start = std::time::Instant::now();
+
+        // Register execution
+        {
+            let mut active = self.active_executions.write().await;
+            active.insert(execution_id.clone(), ExecutionStatus::Running);
+        }
+
+        let task_timeout_ms = self.config.default_timeout_ms;
+        let mut futures = FuturesUnordered::new();
+        let work_dir = working_dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let max_turns = max_turns.unwrap_or(3);
+
+        for task in tasks {
+            let semaphore = Arc::clone(&self.semaphore);
+            let task_id = task.id.clone();
+            let prompt = task.prompt.clone();
+            let work_dir = work_dir.clone();
+
+            let future = async move {
+                // Acquire semaphore permit for concurrency control
+                let _permit = semaphore.acquire().await;
+                let task_start = std::time::Instant::now();
+
+                // Create PTY handle for this task
+                let pty_result = PtyHandle::new(24, 80);
+                let pty = match pty_result {
+                    Ok(pty) => pty,
+                    Err(e) => {
+                        return TaskExecutionResult {
+                            task_id,
+                            agent_id: None,
+                            status: ExecutionStatus::Failed,
+                            result: None,
+                            error: Some(format!("Failed to create PTY: {}", e)),
+                            duration_ms: task_start.elapsed().as_millis() as u64,
+                            retries: 0,
+                        };
+                    }
+                };
+
+                // Spawn Claude in the PTY and wait for output
+                let output_result = pty
+                    .spawn_claude_and_wait(&prompt, &work_dir, Some(max_turns), task_timeout_ms)
+                    .await;
+
+                let duration_ms = task_start.elapsed().as_millis() as u64;
+
+                match output_result {
+                    Ok(output) => {
+                        // Try to parse as JSON, fallback to raw text
+                        let result_value = match serde_json::from_str::<serde_json::Value>(&output)
+                        {
+                            Ok(json) => json,
+                            Err(_) => serde_json::json!({
+                                "output": output,
+                                "task_id": task_id
+                            }),
+                        };
+
+                        TaskExecutionResult {
+                            task_id,
+                            agent_id: Some(format!("claude-pty-{}", uuid::Uuid::new_v4())),
+                            status: ExecutionStatus::Completed,
+                            result: Some(result_value),
+                            error: None,
+                            duration_ms,
+                            retries: 0,
+                        }
+                    }
+                    Err(e) => TaskExecutionResult {
+                        task_id,
+                        agent_id: None,
+                        status: ExecutionStatus::Failed,
+                        result: None,
+                        error: Some(format!("Claude PTY execution failed: {}", e)),
+                        duration_ms,
+                        retries: 0,
+                    },
+                }
+            };
+
+            futures.push(future);
+        }
+
+        // Collect results from all parallel Claude PTY sessions
+        let mut task_results = Vec::new();
+        let mut first_error = None;
+
+        while let Some(result) = futures.next().await {
+            if self.config.fail_fast && !result.is_success() && first_error.is_none() {
+                first_error = Some(result.error.clone().unwrap_or_default());
+            }
+            task_results.push(result);
+        }
+
+        let total_duration_ms = start.elapsed().as_millis() as u64;
+        let successful_count = task_results.iter().filter(|r| r.is_success()).count();
+        let failed_count = task_results.len() - successful_count;
+
+        let status = if first_error.is_some() && self.config.fail_fast {
+            ExecutionStatus::Failed
+        } else {
+            ExecutionStatus::Completed
+        };
+
+        // Update active execution status
+        {
+            let mut active = self.active_executions.write().await;
+            active.insert(execution_id.clone(), status);
+        }
+
+        tracing::info!(
+            "Parallel Claude PTY execution completed: {} tasks, {} successful, {} failed, {}ms",
+            task_results.len(),
+            successful_count,
+            failed_count,
+            total_duration_ms
+        );
+
+        Ok(ParallelExecutionResult {
+            execution_id,
+            status,
+            task_results,
+            total_duration_ms,
+            successful_count,
+            failed_count,
+            aggregated_result: None,
+        })
+    }
+
     /// Execute with result aggregation
     pub async fn execute_with_aggregation<F, Fut>(
         &self,
