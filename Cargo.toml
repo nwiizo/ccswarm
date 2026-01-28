@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/ccswarm"]
+members = ["crates/ccswarm", "crates/ai-session"]
 resolver = "2"
 
 [workspace.package]

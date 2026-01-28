@@ -94,8 +94,7 @@ cargo build --release --workspace
 
 ## ⚠️ Limitations
 
-- **Simulation Mode**: By default, auto-create uses template-based generation, not real AI
-- **Claude Code Required**: Real AI execution requires Claude Code CLI to be installed
+- **Claude Code Required**: Auto-create requires Claude Code CLI (`claude` command) to be installed
 - **macOS/Linux Only**: Windows is not supported
 
 ## 📜 License
