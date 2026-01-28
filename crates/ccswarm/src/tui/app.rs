@@ -113,6 +113,11 @@ pub struct App {
     pub success_rate: f64,
     pub orchestration_usage: f64,
 
+    /// Session statistics (ai-session integration)
+    pub total_sessions: usize,
+    pub active_sessions: usize,
+    pub multi_agent_enabled: bool,
+
     /// Input state
     pub input_mode: InputMode,
     pub input_buffer: String,
@@ -176,6 +181,9 @@ impl App {
             tasks_failed: 0,
             success_rate: 100.0,
             orchestration_usage: 0.0,
+            total_sessions: 0,
+            active_sessions: 0,
+            multi_agent_enabled: true,
             input_mode: InputMode::Normal,
             input_buffer: String::new(),
             delegation_mode: DelegationMode::Analyze,
@@ -1562,6 +1570,9 @@ impl App {
             tasks_failed: self.tasks_failed,
             success_rate: self.success_rate,
             orchestration_usage: self.orchestration_usage,
+            total_sessions: self.total_sessions,
+            active_sessions: self.active_sessions,
+            multi_agent_enabled: self.multi_agent_enabled,
             input_mode: self.input_mode.clone(),
             input_buffer: self.input_buffer.clone(),
             delegation_mode: self.delegation_mode.clone(),
