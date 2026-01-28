@@ -2,11 +2,12 @@
 
 ## Project Overview
 
-ccswarm - High-performance AI Multi-Agent Orchestration System built with **Rust-native patterns**. No layered architecture - uses direct, efficient patterns for maximum performance and compile-time safety.
+ccswarm v0.4.0 - High-performance AI Multi-Agent Orchestration System built with **Rust-native patterns**. Enables **true parallel execution** of multiple Claude Code processes via ai-session's PTY integration.
 
 ## Claude Code Integration
 
-- **Auto-Connect**: WebSocket to `ws://localhost:9100` via ACP
+- **Parallel Execution**: Multiple independent Claude CLI processes run concurrently
+- **PTY-Based Sessions**: ai-session provides native terminal management
 - **Channel-Based Communication**: No shared state between agents
 - **Actor Pattern**: Each agent as an independent actor
 
@@ -46,7 +47,7 @@ Specialized agents for Task tool delegation:
 
 - [commands](.claude/reference/commands.md) - All CLI commands
 - [file-structure](.claude/reference/file-structure.md) - Project structure
-- [version-notes](.claude/reference/version-notes.md) - v0.3.8 module details
+- [version-notes](.claude/reference/version-notes.md) - v0.4.0 module details
 
 ## Skills
 
@@ -97,3 +98,152 @@ impl CCSwarmError {
 - `.expect()` is acceptable in type-state builders for invariants enforced by the type system
 - Document why `.expect()` is safe in comments
 - Type-state guarantees make these "impossible" to fail at runtime
+
+### Parallel Claude Execution (v0.4.0)
+Two approaches for parallel execution:
+
+**Command-Based (Simple)**:
+```rust
+use ccswarm::subagent::{ParallelExecutor, ParallelConfig, SpawnTask};
+
+let config = ParallelConfig {
+    max_concurrent: 5,           // Up to 5 parallel Claude processes
+    default_timeout_ms: 600_000, // 10 minutes per task
+    fail_fast: false,            // Continue on failures
+    ..Default::default()
+};
+
+let executor = ParallelExecutor::new(config);
+let tasks = vec![
+    SpawnTask::new("Create frontend components"),
+    SpawnTask::new("Create backend API"),
+];
+
+let result = executor.execute_with_claude(tasks, Some(work_dir)).await?;
+```
+
+**PTY-Based (Interactive)**:
+```rust
+// For session-aware, interactive execution
+let result = executor.execute_with_claude_pty(
+    tasks,
+    Some(work_dir),
+    Some(3),  // max_turns
+).await?;
+```
+
+### ai-session Integration Pattern
+ccswarm uses ai-session for terminal management:
+```rust
+use ai_session::PtyHandle;
+
+// Create PTY for Claude session
+let pty = PtyHandle::new(24, 80)?;
+pty.spawn_claude(&prompt, &working_dir, Some(3)).await?;
+
+// Read output with timeout
+let output = pty.read_with_timeout(timeout_ms).await?;
+```
+
+Benefits:
+- Native PTY (no tmux dependency)
+- Cross-platform (Linux, macOS)
+- Interactive terminal support
+- 93% token savings via session reuse
+
+### SpawnTask Builder Pattern
+Tasks for parallel execution use builder pattern:
+```rust
+let task = SpawnTask::new("Create a REST API")
+    .with_id("backend-task-1")
+    .with_agent_hint("backend")
+    .with_priority(5);
+```
+
+### Hook System Integration (v0.4.0)
+Integrated execution hooks from Claude Agent SDK pattern:
+```rust
+use ccswarm::hooks::{HookContext, HookRegistry, PreExecutionInput, HookResult};
+
+// Create hook registry
+let mut registry = HookRegistry::new();
+registry.register_execution_hook(MyExecutionHook::new());
+
+// Hooks run automatically during task execution
+// - pre_execution: Before task starts
+// - post_execution: After task completes
+// - on_error: When errors occur
+```
+
+Hook results control flow:
+- `HookResult::Continue` - Normal execution
+- `HookResult::Skip { reason }` - Skip operation
+- `HookResult::Deny { reason }` - Block operation
+- `HookResult::Abort { reason }` - Abort entire task
+
+### Verification Agent Pattern (v0.4.0)
+Auto-created applications are automatically verified:
+```rust
+use ccswarm::orchestrator::{VerificationAgent, VerificationConfig};
+
+let config = VerificationConfig::default();
+let agent = VerificationAgent::new(config);
+let result = agent.verify_app(app_path).await?;
+
+// Check results
+if result.success {
+    println!("All {} checks passed", result.checks.len());
+} else {
+    // Get remediation suggestions
+    let suggestions = VerificationAgent::get_remediation_suggestions(&result);
+    for s in suggestions {
+        println!("{}: {}", s.check_name, s.suggestion);
+    }
+}
+```
+
+Verification checks:
+1. Required files exist (package.json, server.js, index.html)
+2. Dependencies installed (npm install)
+3. Backend server health check
+4. Frontend HTML validation
+5. API endpoints working
+6. Tests pass (if present)
+
+### DynamicSpawner Pattern (v0.4.0)
+Dynamic agent spawning with workload balancing:
+```rust
+use ccswarm::subagent::{SubagentManager, DynamicSpawner, WorkloadBalancer};
+
+// Create spawner from manager
+let manager = Arc::new(RwLock::new(SubagentManager::new()));
+let spawner = SubagentManager::create_spawner_from(manager.clone());
+
+// Select agent based on capabilities
+let agent_id = manager.read().await
+    .select_agent_for_task(&["frontend", "react"]).await?;
+
+// Use workload balancer for optimal selection
+let balancer = manager.read().await.create_balancer();
+let selected = balancer.select_agent(
+    &required_capabilities,
+    &available_agents,
+    &current_workloads
+);
+```
+
+### App Type Detection Pattern
+Verification agent detects app type for customized checks:
+```rust
+use ccswarm::orchestrator::verification::AppType;
+
+let app_type = VerificationAgent::detect_app_type(app_path);
+match app_type {
+    AppType::NodeJs => { /* Node.js checks */ }
+    AppType::Python => { /* Python checks */ }
+    AppType::Rust => { /* Rust checks */ }
+    AppType::Go => { /* Go checks */ }
+    AppType::Static => { /* Static site checks */ }
+    AppType::Unknown => { /* Generic checks */ }
+}
+```
