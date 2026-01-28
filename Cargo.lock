@@ -59,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "ai-session"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -421,7 +421,7 @@ dependencies = [
 
 [[package]]
 name = "ccswarm"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "agent-client-protocol",
  "ai-session",
