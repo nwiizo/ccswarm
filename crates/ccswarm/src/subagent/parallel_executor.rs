@@ -15,8 +15,10 @@ use super::{SubagentResult, spawner::SpawnTask};
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::process::Command;
 use tokio::sync::{RwLock, Semaphore};
 use tokio::time::timeout;
 
@@ -325,6 +327,153 @@ impl ParallelExecutor {
             let mut active = self.active_executions.write().await;
             active.insert(execution_id.clone(), status);
         }
+
+        Ok(ParallelExecutionResult {
+            execution_id,
+            status,
+            task_results,
+            total_duration_ms,
+            successful_count,
+            failed_count,
+            aggregated_result: None,
+        })
+    }
+
+    /// Execute tasks using real Claude Code processes in parallel
+    ///
+    /// Each task spawns an independent `claude --dangerously-skip-permissions` process,
+    /// enabling true parallel multi-agent execution.
+    pub async fn execute_with_claude(
+        &self,
+        tasks: Vec<SpawnTask>,
+        working_dir: Option<PathBuf>,
+    ) -> SubagentResult<ParallelExecutionResult> {
+        let execution_id = uuid::Uuid::new_v4().to_string();
+        let start = std::time::Instant::now();
+
+        // Register execution
+        {
+            let mut active = self.active_executions.write().await;
+            active.insert(execution_id.clone(), ExecutionStatus::Running);
+        }
+
+        let task_timeout = Duration::from_millis(self.config.default_timeout_ms);
+        let mut futures = FuturesUnordered::new();
+        let work_dir = working_dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+        for task in tasks {
+            let semaphore = Arc::clone(&self.semaphore);
+            let task_id = task.id.clone();
+            let prompt = task.prompt.clone();
+            let work_dir = work_dir.clone();
+
+            let future = async move {
+                // Acquire semaphore permit for concurrency control
+                let _permit = semaphore.acquire().await;
+                let task_start = std::time::Instant::now();
+
+                // Spawn independent Claude Code process
+                let result: Result<Result<serde_json::Value, super::SubagentError>, _> =
+                    timeout(task_timeout, async {
+                        let output = Command::new("claude")
+                            .current_dir(&work_dir)
+                            .arg("--dangerously-skip-permissions")
+                            .arg("-p")
+                            .arg(&prompt)
+                            .arg("--output-format")
+                            .arg("json")
+                            .output()
+                            .await;
+
+                        match output {
+                            Ok(output) if output.status.success() => {
+                                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                                // Try to parse as JSON, fallback to raw text
+                                match serde_json::from_str::<serde_json::Value>(&stdout) {
+                                    Ok(json) => Ok(json),
+                                    Err(_) => Ok(serde_json::json!({
+                                        "output": stdout,
+                                        "task_id": task_id
+                                    })),
+                                }
+                            }
+                            Ok(output) => {
+                                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                                Err(super::SubagentError::Delegation(format!(
+                                    "Claude exited with error: {}",
+                                    stderr
+                                )))
+                            }
+                            Err(e) => Err(super::SubagentError::Delegation(format!(
+                                "Failed to spawn Claude: {}",
+                                e
+                            ))),
+                        }
+                    })
+                    .await;
+
+                let duration_ms = task_start.elapsed().as_millis() as u64;
+
+                match result {
+                    Ok(Ok(value)) => TaskExecutionResult {
+                        task_id,
+                        agent_id: Some(format!("claude-{}", uuid::Uuid::new_v4())),
+                        status: ExecutionStatus::Completed,
+                        result: Some(value),
+                        error: None,
+                        duration_ms,
+                        retries: 0,
+                    },
+                    Ok(Err(e)) => TaskExecutionResult {
+                        task_id,
+                        agent_id: None,
+                        status: ExecutionStatus::Failed,
+                        result: None,
+                        error: Some(e.to_string()),
+                        duration_ms,
+                        retries: 0,
+                    },
+                    Err(_) => TaskExecutionResult::timeout(&task_id, duration_ms),
+                }
+            };
+
+            futures.push(future);
+        }
+
+        // Collect results from all parallel Claude processes
+        let mut task_results = Vec::new();
+        let mut first_error = None;
+
+        while let Some(result) = futures.next().await {
+            if self.config.fail_fast && !result.is_success() && first_error.is_none() {
+                first_error = Some(result.error.clone().unwrap_or_default());
+            }
+            task_results.push(result);
+        }
+
+        let total_duration_ms = start.elapsed().as_millis() as u64;
+        let successful_count = task_results.iter().filter(|r| r.is_success()).count();
+        let failed_count = task_results.len() - successful_count;
+
+        let status = if first_error.is_some() && self.config.fail_fast {
+            ExecutionStatus::Failed
+        } else {
+            ExecutionStatus::Completed
+        };
+
+        // Update active execution status
+        {
+            let mut active = self.active_executions.write().await;
+            active.insert(execution_id.clone(), status);
+        }
+
+        tracing::info!(
+            "Parallel Claude execution completed: {} tasks, {} successful, {} failed, {}ms",
+            task_results.len(),
+            successful_count,
+            failed_count,
+            total_duration_ms
+        );
 
         Ok(ParallelExecutionResult {
             execution_id,

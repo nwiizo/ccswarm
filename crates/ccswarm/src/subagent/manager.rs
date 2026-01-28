@@ -3,7 +3,10 @@
 /// This module provides functionality to manage, create, and coordinate
 /// subagents within the ccswarm system.
 use super::{
-    SubagentConfig, SubagentDefinition, SubagentError, SubagentResult, parser::SubagentParser,
+    SubagentConfig, SubagentDefinition, SubagentError, SubagentResult,
+    parser::SubagentParser,
+    spawner::{DynamicSpawner, SpawnerConfig},
+    workload_balancer::WorkloadBalancer,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -46,6 +49,58 @@ impl SubagentManager {
             agents: Arc::new(RwLock::new(HashMap::new())),
             definitions: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Create a dynamic spawner for parallel agent operations
+    ///
+    /// The spawner uses the provided manager Arc internally and should be used
+    /// for spawning multiple agents in parallel.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let manager = Arc::new(RwLock::new(SubagentManager::new(config)));
+    /// let spawner = SubagentManager::create_spawner_from(Arc::clone(&manager));
+    /// ```
+    pub fn create_spawner_from(manager: Arc<RwLock<Self>>) -> DynamicSpawner {
+        let spawner_config = SpawnerConfig::default();
+        DynamicSpawner::new(manager, spawner_config)
+    }
+
+    /// Create a workload balancer for agent selection
+    ///
+    /// The balancer can be used to select the best agent for a task
+    /// based on various strategies (round-robin, least-loaded, etc.).
+    pub fn create_balancer(&self) -> WorkloadBalancer {
+        WorkloadBalancer::with_defaults()
+    }
+
+    /// Select the best available agent for a task
+    ///
+    /// This is a convenience method that creates a temporary balancer
+    /// for simple agent selection. For repeated selections, create
+    /// a balancer with `create_balancer()` and reuse it.
+    pub async fn select_agent_for_task(
+        &self,
+        required_capabilities: &[String],
+    ) -> SubagentResult<String> {
+        let agents = self.agents.read().await;
+        let available: Vec<_> = agents
+            .iter()
+            .filter(|(_, a)| a.status == SubagentStatus::Available)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        if available.is_empty() {
+            return Err(SubagentError::Delegation(
+                "No available agents for task".to_string(),
+            ));
+        }
+
+        // Use round-robin for simple selection
+        let balancer = self.create_balancer();
+        balancer
+            .select_agent(&available, required_capabilities, None, 0)
+            .await
     }
 
     /// Initialize the manager by loading subagent definitions

@@ -3,7 +3,7 @@
 //! Enables task-time dynamic subagent generation for parallel processing.
 //! Inspired by Claude Code TeammateTool patterns.
 
-use super::{SubagentError, SubagentResult, manager::SubagentManager};
+use super::{manager::SubagentManager, SubagentError, SubagentResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -222,6 +222,12 @@ impl SpawnTask {
     /// Add context
     pub fn with_context(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.context.insert(key.into(), value);
+        self
+    }
+
+    /// Set custom task ID
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
         self
     }
 }
