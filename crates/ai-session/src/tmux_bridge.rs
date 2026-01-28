@@ -316,7 +316,7 @@ impl TmuxClient {
     /// Sets a TMux option (implemented as no-op for compatibility)
     pub async fn set_option(&self, _session_name: &str, option: &str, value: &str) -> Result<()> {
         // Store options for reference but don't apply them to native sessions
-        log::debug!("TMux option set (no-op): {} = {}", option, value);
+        tracing::debug!("TMux option set (no-op): {} = {}", option, value);
         Ok(())
     }
 
@@ -458,7 +458,7 @@ impl TmuxClient {
                 });
 
                 // Log split information
-                log::debug!(
+                tracing::debug!(
                     "Split window {} {} with {}% size",
                     if vertical {
                         "vertically"
@@ -502,7 +502,7 @@ impl TmuxClient {
         }
 
         // Update session as attached
-        log::debug!("Session '{}' marked as attached", session_name);
+        tracing::debug!("Session '{}' marked as attached", session_name);
         Ok(())
     }
 
@@ -513,7 +513,7 @@ impl TmuxClient {
         }
 
         // Update session as detached
-        log::debug!("Session '{}' marked as detached", session_name);
+        tracing::debug!("Session '{}' marked as detached", session_name);
         Ok(())
     }
 
@@ -546,7 +546,7 @@ impl TmuxClient {
         for attempt in 0..=self.config.retry_count {
             if attempt > 0 {
                 tokio::time::sleep(self.config.retry_delay).await;
-                log::debug!("Retrying operation (attempt {})", attempt);
+                tracing::debug!("Retrying operation (attempt {})", attempt);
             }
 
             match timeout(self.config.command_timeout, operation()).await {
@@ -554,7 +554,7 @@ impl TmuxClient {
                 Ok(Err(e)) => {
                     last_error = Some(e);
                     if attempt < self.config.retry_count {
-                        log::warn!(
+                        tracing::warn!(
                             "Operation failed, will retry: {}",
                             last_error.as_ref().unwrap()
                         );
@@ -563,7 +563,7 @@ impl TmuxClient {
                 Err(_) => {
                     last_error = Some(anyhow::anyhow!("Operation timed out"));
                     if attempt < self.config.retry_count {
-                        log::warn!("Operation timed out, will retry");
+                        tracing::warn!("Operation timed out, will retry");
                     }
                 }
             }

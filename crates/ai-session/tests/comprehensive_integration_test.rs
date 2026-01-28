@@ -3,6 +3,10 @@
 //! This test suite verifies all major functionality of ai-session is working correctly,
 //! including session management, PTY operations, context management, MCP protocol,
 //! and multi-agent coordination.
+//!
+//! Requires the `mcp` feature to be enabled.
+
+#![cfg(feature = "mcp")]
 
 use ai_session::{
     coordination::{AgentId, MessageBus, MultiAgentSession},
