@@ -134,6 +134,42 @@ enum Commands {
         #[arg(long, default_value = "true")]
         auto_create: bool,
     },
+
+    /// Resume a Claude Code session by session ID
+    ClaudeResume {
+        /// Claude session ID to resume (UUID format)
+        session_id: String,
+
+        /// Working directory for the session
+        #[arg(short, long)]
+        dir: Option<PathBuf>,
+
+        /// Optional prompt to send after resuming
+        #[arg(short, long)]
+        prompt: Option<String>,
+
+        /// Maximum conversation turns (when using --prompt)
+        #[arg(long, default_value = "3")]
+        max_turns: u32,
+    },
+
+    /// Start a new Claude Code session with a specific session ID
+    ClaudeStart {
+        /// Prompt to send to Claude
+        prompt: String,
+
+        /// Session ID to use (will be auto-generated if not specified)
+        #[arg(long)]
+        session_id: Option<String>,
+
+        /// Working directory
+        #[arg(short, long)]
+        dir: Option<PathBuf>,
+
+        /// Maximum conversation turns
+        #[arg(long, default_value = "3")]
+        max_turns: u32,
+    },
 }
 
 #[derive(Subcommand)]
@@ -305,6 +341,20 @@ async fn main() -> Result<()> {
             raw,
             auto_create,
         } => claude_chat_mode(server, session, raw, auto_create).await?,
+
+        Commands::ClaudeResume {
+            session_id,
+            dir,
+            prompt,
+            max_turns,
+        } => claude_resume_session(session_id, dir, prompt, max_turns).await?,
+
+        Commands::ClaudeStart {
+            prompt,
+            session_id,
+            dir,
+            max_turns,
+        } => claude_start_session(prompt, session_id, dir, max_turns).await?,
     }
 
     Ok(())
@@ -998,4 +1048,83 @@ async fn check_session_exists(client: &reqwest::Client, name: &str, server: &str
     } else {
         Ok(false)
     }
+}
+
+/// Resume a Claude Code session by its session ID
+///
+/// This uses Claude's native `--resume` flag to continue a previous conversation.
+async fn claude_resume_session(
+    session_id: String,
+    dir: Option<PathBuf>,
+    prompt: Option<String>,
+    max_turns: u32,
+) -> Result<()> {
+    use ai_session::PtyHandle;
+
+    let working_dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+    println!("🔄 Resuming Claude session: {}", session_id);
+    println!("   Working directory: {}", working_dir.display());
+
+    let pty = PtyHandle::new(24, 80)?;
+
+    if let Some(p) = prompt {
+        println!("   Prompt: {}", p);
+        println!("   Max turns: {}", max_turns);
+        pty.resume_claude_with_prompt(&session_id, &p, &working_dir, Some(max_turns))
+            .await?;
+    } else {
+        // Interactive resume
+        pty.resume_claude(&session_id, &working_dir).await?;
+    }
+
+    println!("✅ Claude session resumed successfully");
+
+    // Read and display output
+    let output = pty.read_with_timeout(30000).await?;
+    if !output.is_empty() {
+        println!("\n📤 Output:");
+        println!("{}", String::from_utf8_lossy(&output));
+    }
+
+    Ok(())
+}
+
+/// Start a new Claude Code session with a specific session ID
+///
+/// This allows you to specify a session ID upfront so you can resume it later.
+async fn claude_start_session(
+    prompt: String,
+    session_id: Option<String>,
+    dir: Option<PathBuf>,
+    max_turns: u32,
+) -> Result<()> {
+    use ai_session::PtyHandle;
+
+    let working_dir = dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let session_id = session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    println!("🚀 Starting Claude session with ID: {}", session_id);
+    println!("   Working directory: {}", working_dir.display());
+    println!("   Prompt: {}", prompt);
+    println!("   Max turns: {}", max_turns);
+    println!();
+    println!("💡 To resume this session later, run:");
+    println!("   ai-session claude-resume {}", session_id);
+    println!();
+
+    let pty = PtyHandle::new(24, 80)?;
+    pty.spawn_claude_with_session(&prompt, &working_dir, &session_id, Some(max_turns))
+        .await?;
+
+    println!("✅ Claude session started");
+
+    // Read and display output
+    let output = pty.read_with_timeout(60000).await?;
+    if !output.is_empty() {
+        println!("\n📤 Output:");
+        println!("{}", String::from_utf8_lossy(&output));
+    }
+
+    Ok(())
 }
