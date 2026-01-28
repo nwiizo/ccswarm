@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.4.1"
+version = "0.4.2"
 edition.workspace = true
 authors.workspace = true
 description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
@@ -123,10 +123,10 @@ secrecy = { version = "0.10", features = ["serde"] }
 zeroize = "1.8"
 
 # AI Session Management - core session management library
-ai-session = { version = "0.4.1", path = "../ai-session" }
+ai-session = { version = "0.4.2", path = "../ai-session" }
 
 # ACP (Agent Client Protocol) support - for Claude Code integration
-agent-client-protocol = { version = "0.4.1", optional = true }
+agent-client-protocol = { version = "0.4.2", optional = true }
 jsonrpc-core = { version = "18.0", optional = true }
 tokio-tungstenite = { version = "0.24", optional = true }
 
