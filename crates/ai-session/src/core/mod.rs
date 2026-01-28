@@ -637,6 +637,88 @@ impl SessionManager {
 
         Ok(removed)
     }
+
+    /// Find a session by its name (exact match)
+    ///
+    /// # Arguments
+    /// * `name` - The exact name to search for
+    ///
+    /// # Returns
+    /// The session if found, None otherwise
+    pub fn find_session_by_name(&self, name: &str) -> Option<Arc<AISession>> {
+        self.sessions.iter().find_map(|entry| {
+            let session = entry.value();
+            if session.config.name.as_deref() == Some(name) {
+                Some(session.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Find sessions with names matching a prefix
+    ///
+    /// # Arguments
+    /// * `prefix` - The prefix to match against session names
+    ///
+    /// # Returns
+    /// List of sessions whose names start with the given prefix
+    pub fn list_sessions_by_prefix(&self, prefix: &str) -> Vec<Arc<AISession>> {
+        self.sessions
+            .iter()
+            .filter_map(|entry| {
+                let session = entry.value();
+                if session
+                    .config
+                    .name
+                    .as_ref()
+                    .map(|n| n.starts_with(prefix))
+                    .unwrap_or(false)
+                {
+                    Some(session.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// List all sessions with detailed information (snapshot, no locking required)
+    ///
+    /// Returns a vector of SessionInfo containing summary information about all active sessions.
+    /// This is more efficient than listing sessions and then querying each one individually.
+    pub fn list_sessions_detailed(&self) -> Vec<crate::SessionInfo> {
+        self.sessions
+            .iter()
+            .map(|entry| {
+                let session = entry.value();
+                let status = session
+                    .status
+                    .try_read()
+                    .map(|s| *s)
+                    .unwrap_or(SessionStatus::Initializing);
+                let last_activity = session
+                    .last_activity
+                    .try_read()
+                    .map(|t| *t)
+                    .unwrap_or(session.created_at);
+                let command_count = session.command_count.try_read().map(|c| *c).unwrap_or(0);
+                let context_tokens = session.total_tokens.try_read().map(|t| *t).unwrap_or(0);
+
+                crate::SessionInfo {
+                    id: session.id.clone(),
+                    name: session.config.name.clone(),
+                    status,
+                    created_at: session.created_at,
+                    last_activity,
+                    working_directory: session.config.working_directory.clone(),
+                    ai_features_enabled: session.config.enable_ai_features,
+                    context_token_count: context_tokens,
+                    command_count,
+                }
+            })
+            .collect()
+    }
 }
 
 impl Default for SessionManager {

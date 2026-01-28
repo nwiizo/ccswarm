@@ -155,16 +155,6 @@ impl From<&str> for CCSwarmError {
     }
 }
 
-#[cfg(feature = "claude-acp")]
-impl From<crate::acp_claude::ACPError> for CCSwarmError {
-    fn from(error: crate::acp_claude::ACPError) -> Self {
-        Self::Network {
-            message: error.to_string(),
-            source: None,
-        }
-    }
-}
-
 /// Result type alias for ccswarm operations
 pub type Result<T> = std::result::Result<T, CCSwarmError>;
 
@@ -479,6 +469,158 @@ impl std::fmt::Display for ErrorSeverity {
             Self::Medium => write!(f, "MEDIUM"),
             Self::High => write!(f, "HIGH"),
             Self::Critical => write!(f, "CRITICAL"),
+        }
+    }
+}
+
+// ============================================================================
+// FatalError Trait - Inspired by Zellij's error classification pattern
+// ============================================================================
+
+/// Trait for classifying errors as fatal or non-fatal.
+///
+/// Fatal errors indicate unrecoverable conditions that should cause the
+/// operation to abort completely. Non-fatal errors can be handled gracefully
+/// with fallback behavior.
+///
+/// # Example
+/// ```rust
+/// use ccswarm::error::{FatalError, ClassifiedError};
+///
+/// fn process() -> Result<(), ClassifiedError<std::io::Error>> {
+///     // Mark an error as fatal
+///     std::fs::read("critical_config.json")
+///         .map_err(|e| ClassifiedError::fatal(e))?;
+///     Ok(())
+/// }
+/// ```
+pub trait FatalError: Sized {
+    /// Mark this error as fatal (unrecoverable)
+    fn fatal(self) -> ClassifiedError<Self>;
+
+    /// Mark this error as non-fatal (recoverable)
+    fn non_fatal(self) -> ClassifiedError<Self>;
+}
+
+/// An error wrapper that classifies the error as fatal or non-fatal.
+///
+/// This enables graceful degradation by allowing callers to handle
+/// non-fatal errors differently from fatal ones.
+#[derive(Debug)]
+pub struct ClassifiedError<E> {
+    /// The underlying error
+    pub error: E,
+    /// Whether this error is fatal
+    pub is_fatal: bool,
+}
+
+impl<E> ClassifiedError<E> {
+    /// Create a fatal error
+    pub fn fatal(error: E) -> Self {
+        Self {
+            error,
+            is_fatal: true,
+        }
+    }
+
+    /// Create a non-fatal error
+    pub fn non_fatal(error: E) -> Self {
+        Self {
+            error,
+            is_fatal: false,
+        }
+    }
+
+    /// Check if this error is fatal
+    pub fn is_fatal(&self) -> bool {
+        self.is_fatal
+    }
+
+    /// Get the underlying error
+    pub fn into_inner(self) -> E {
+        self.error
+    }
+
+    /// Map the error to a different type
+    pub fn map<F, O>(self, f: F) -> ClassifiedError<O>
+    where
+        F: FnOnce(E) -> O,
+    {
+        ClassifiedError {
+            error: f(self.error),
+            is_fatal: self.is_fatal,
+        }
+    }
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for ClassifiedError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_fatal {
+            write!(f, "[FATAL] {}", self.error)
+        } else {
+            write!(f, "{}", self.error)
+        }
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for ClassifiedError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// Implement FatalError for any error type
+impl<E> FatalError for E {
+    fn fatal(self) -> ClassifiedError<Self> {
+        ClassifiedError::fatal(self)
+    }
+
+    fn non_fatal(self) -> ClassifiedError<Self> {
+        ClassifiedError::non_fatal(self)
+    }
+}
+
+/// Extension trait for Result types to easily classify errors
+pub trait ResultFatalExt<T, E> {
+    /// Mark the error as fatal if Result is Err
+    fn fatal_on_err(self) -> std::result::Result<T, ClassifiedError<E>>;
+
+    /// Mark the error as non-fatal if Result is Err
+    fn non_fatal_on_err(self) -> std::result::Result<T, ClassifiedError<E>>;
+}
+
+impl<T, E> ResultFatalExt<T, E> for std::result::Result<T, E> {
+    fn fatal_on_err(self) -> std::result::Result<T, ClassifiedError<E>> {
+        self.map_err(ClassifiedError::fatal)
+    }
+
+    fn non_fatal_on_err(self) -> std::result::Result<T, ClassifiedError<E>> {
+        self.map_err(ClassifiedError::non_fatal)
+    }
+}
+
+/// Determine if a CCSwarmError should be treated as fatal
+impl CCSwarmError {
+    /// Check if this error should be treated as fatal
+    ///
+    /// Fatal errors are those that indicate system-level failures
+    /// that cannot be recovered from:
+    /// - Authentication failures
+    /// - Critical configuration errors
+    /// - Orchestrator failures
+    pub fn is_fatal(&self) -> bool {
+        matches!(
+            self,
+            Self::Auth { .. } | Self::Configuration { .. } | Self::Orchestrator { .. }
+        )
+    }
+
+    /// Convert to a ClassifiedError based on error type
+    pub fn classify(self) -> ClassifiedError<Self> {
+        if self.is_fatal() {
+            ClassifiedError::fatal(self)
+        } else {
+            ClassifiedError::non_fatal(self)
         }
     }
 }

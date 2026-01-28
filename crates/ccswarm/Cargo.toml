@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.4.2"
+version = "0.4.3"
 edition.workspace = true
 authors.workspace = true
 description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
@@ -123,12 +123,7 @@ secrecy = { version = "0.10", features = ["serde"] }
 zeroize = "1.8"
 
 # AI Session Management - core session management library
-ai-session = { version = "0.4.2", path = "../ai-session" }
-
-# ACP (Agent Client Protocol) support - for Claude Code integration
-agent-client-protocol = { version = "0.4.2", optional = true }
-jsonrpc-core = { version = "18.0", optional = true }
-tokio-tungstenite = { version = "0.24", optional = true }
+ai-session = { version = "0.4.3", path = "../ai-session" }
 
 # Directory paths
 dirs = "5.0"
@@ -143,5 +138,3 @@ pretty_assertions = "1.4"
 default = []
 # Container feature for Docker integration (optional)
 container = ["bollard", "futures-util", "tar", "urlencoding"]
-# claude-acp feature is deprecated - use CLI direct execution instead
-claude-acp = ["agent-client-protocol", "jsonrpc-core", "tokio-tungstenite", "futures-util"]

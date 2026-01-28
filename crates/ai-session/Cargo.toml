@@ -1,6 +1,6 @@
 [package]
 name = "ai-session"
-version = "0.4.2"
+version = "0.4.3"
 edition.workspace = true
 authors.workspace = true
 description = "AI-optimized terminal session management library"
@@ -95,6 +95,8 @@ native-pty-tests = []
 cli = ["clap", "crossterm", "reqwest"]
 server = ["axum", "tower", "tower-http", "clap"]
 mcp = ["reqwest", "tokio-tungstenite", "futures-util"]
+# Optional tmux compatibility layer (not needed for native session management)
+tmux-compat = []
 
 [[bin]]
 name = "ai-session"

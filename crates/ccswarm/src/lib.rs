@@ -10,8 +10,6 @@
 #![allow(clippy::manual_is_ascii_check)]
 #![allow(clippy::option_if_let_else)]
 
-#[cfg(feature = "claude-acp")]
-pub mod acp_claude;
 pub mod agent;
 pub mod auto_accept;
 pub mod benchmark;
@@ -41,7 +39,6 @@ pub mod session;
 pub mod streaming;
 pub mod subagent;
 pub mod template;
-pub mod tmux;
 pub mod tracing;
 pub mod traits;
 pub mod tui;

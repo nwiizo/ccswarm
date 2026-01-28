@@ -10,6 +10,15 @@ use uuid::Uuid;
 
 use crate::core::AISession;
 
+/// Default channel capacity for agent message channels
+const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
+
+/// Channel capacity for broadcast messages (higher to handle burst)
+const BROADCAST_CHANNEL_CAPACITY: usize = 5000;
+
+/// Channel capacity for monitoring all messages
+const ALL_MESSAGES_CHANNEL_CAPACITY: usize = 10000;
+
 /// Agent identifier
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentId(Uuid);
@@ -121,10 +130,16 @@ impl Default for MessageBus {
 }
 
 impl MessageBus {
-    /// Create a new message bus
+    /// Create a new message bus with bounded channels
+    ///
+    /// Uses bounded channels to prevent memory exhaustion under load:
+    /// - Broadcast channel: 5000 messages (high capacity for burst traffic)
+    /// - All messages channel: 10000 messages (monitoring may fall behind)
     pub fn new() -> Self {
-        let (broadcast_sender, broadcast_receiver) = crossbeam_channel::unbounded();
-        let (all_messages_sender, all_messages_receiver) = crossbeam_channel::unbounded();
+        let (broadcast_sender, broadcast_receiver) =
+            crossbeam_channel::bounded(BROADCAST_CHANNEL_CAPACITY);
+        let (all_messages_sender, all_messages_receiver) =
+            crossbeam_channel::bounded(ALL_MESSAGES_CHANNEL_CAPACITY);
         Self {
             channels: DashMap::new(),
             broadcast_sender,
@@ -135,13 +150,16 @@ impl MessageBus {
         }
     }
 
-    /// Register an agent
+    /// Register an agent with bounded message channels
+    ///
+    /// Each agent gets a bounded channel with DEFAULT_CHANNEL_CAPACITY to
+    /// prevent any single slow agent from causing memory exhaustion.
     pub fn register_agent(&self, agent_id: AgentId) -> Result<()> {
-        let (sender, receiver) = crossbeam_channel::unbounded();
+        let (sender, receiver) = crossbeam_channel::bounded(DEFAULT_CHANNEL_CAPACITY);
         self.channels.insert(agent_id.clone(), (sender, receiver));
 
         // Also register agent message channel
-        let (agent_sender, agent_receiver) = crossbeam_channel::unbounded();
+        let (agent_sender, agent_receiver) = crossbeam_channel::bounded(DEFAULT_CHANNEL_CAPACITY);
         self.agent_channels
             .insert(agent_id, (agent_sender, agent_receiver));
         Ok(())
@@ -154,19 +172,40 @@ impl MessageBus {
         Ok(())
     }
 
-    /// Send a message to a specific agent
+    /// Send a message to a specific agent (non-blocking)
+    ///
+    /// Returns an error if the agent's channel is full or the agent is not found.
+    /// This prevents slow agents from blocking the sender.
     pub fn send_message(&self, _from: AgentId, to: AgentId, message: Message) -> Result<()> {
         if let Some(channel) = self.channels.get(&to) {
-            channel.0.send(message)?;
+            channel.0.try_send(message).map_err(|e| match e {
+                crossbeam_channel::TrySendError::Full(_) => {
+                    anyhow::anyhow!("Agent {} channel is full (backpressure)", to)
+                }
+                crossbeam_channel::TrySendError::Disconnected(_) => {
+                    anyhow::anyhow!("Agent {} channel disconnected", to)
+                }
+            })?;
             Ok(())
         } else {
             Err(anyhow::anyhow!("Agent not found: {}", to))
         }
     }
 
-    /// Broadcast a message to all agents
+    /// Broadcast a message to all agents (non-blocking)
+    ///
+    /// Returns an error if the broadcast channel is full.
     pub fn broadcast(&self, _from: AgentId, message: BroadcastMessage) -> Result<()> {
-        self.broadcast_sender.send(message)?;
+        self.broadcast_sender
+            .try_send(message)
+            .map_err(|e| match e {
+                crossbeam_channel::TrySendError::Full(_) => {
+                    anyhow::anyhow!("Broadcast channel is full (backpressure)")
+                }
+                crossbeam_channel::TrySendError::Disconnected(_) => {
+                    anyhow::anyhow!("Broadcast channel disconnected")
+                }
+            })?;
         Ok(())
     }
 
@@ -180,17 +219,28 @@ impl MessageBus {
         self.all_messages_receiver.clone()
     }
 
-    /// Publish a message to a specific agent
+    /// Publish a message to a specific agent (non-blocking)
+    ///
+    /// Returns an error if either the agent's channel or the monitoring channel is full.
+    /// This prevents slow consumers from causing memory exhaustion.
     pub async fn publish_to_agent(&self, agent_id: &AgentId, message: AgentMessage) -> Result<()> {
         // Send to the specific agent
         if let Some(channel) = self.agent_channels.get(agent_id) {
-            channel.0.send(message.clone())?;
+            channel.0.try_send(message.clone()).map_err(|e| match e {
+                crossbeam_channel::TrySendError::Full(_) => {
+                    anyhow::anyhow!("Agent {} channel is full (backpressure)", agent_id)
+                }
+                crossbeam_channel::TrySendError::Disconnected(_) => {
+                    anyhow::anyhow!("Agent {} channel disconnected", agent_id)
+                }
+            })?;
         } else {
             return Err(anyhow::anyhow!("Agent not found: {}", agent_id));
         }
 
-        // Also send to the all messages channel for monitoring
-        self.all_messages_sender.send(message)?;
+        // Also send to the all messages channel for monitoring (drop if full to avoid blocking)
+        // Monitoring is best-effort - we don't want to fail the primary send
+        let _ = self.all_messages_sender.try_send(message);
 
         Ok(())
     }
@@ -203,7 +253,216 @@ impl MessageBus {
     }
 }
 
-/// Inter-agent message
+// ============================================================================
+// Unified Message System
+// ============================================================================
+
+/// Unified message content - the actual message data
+///
+/// This enum consolidates all message types into a single, well-typed structure
+/// following the DRY principle. Each variant contains all necessary data for
+/// that specific message type.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessageContent {
+    /// Agent registration message
+    Registration {
+        agent_id: AgentId,
+        capabilities: Vec<String>,
+        metadata: serde_json::Value,
+    },
+    /// Task assignment to agent
+    TaskAssignment {
+        task_id: TaskId,
+        agent_id: AgentId,
+        task_data: serde_json::Value,
+    },
+    /// Task completion notification
+    TaskCompleted {
+        agent_id: AgentId,
+        task_id: TaskId,
+        result: serde_json::Value,
+    },
+    /// Task progress update
+    TaskProgress {
+        agent_id: AgentId,
+        task_id: TaskId,
+        progress: f32,
+        message: String,
+    },
+    /// Help request from agent
+    HelpRequest {
+        agent_id: AgentId,
+        context: String,
+        priority: MessagePriority,
+    },
+    /// Status update from agent
+    StatusUpdate {
+        agent_id: AgentId,
+        status: String,
+        metrics: serde_json::Value,
+    },
+    /// Data sharing between agents
+    DataShare { data: serde_json::Value },
+    /// Coordination request
+    CoordinationRequest {
+        request_type: String,
+        data: serde_json::Value,
+    },
+    /// Response to a previous message
+    Response {
+        in_reply_to: Uuid,
+        data: serde_json::Value,
+    },
+    /// Custom message type
+    Custom {
+        message_type: String,
+        data: serde_json::Value,
+    },
+}
+
+/// Unified inter-agent message with metadata
+///
+/// This structure combines message metadata (id, from, timestamp) with
+/// the actual message content. This is the primary message type for
+/// inter-agent communication.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnifiedMessage {
+    /// Unique message ID
+    pub id: Uuid,
+    /// Sender agent ID
+    pub from: AgentId,
+    /// Message content
+    pub content: MessageContent,
+    /// When the message was created
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+impl UnifiedMessage {
+    /// Create a new unified message
+    pub fn new(from: AgentId, content: MessageContent) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            from,
+            content,
+            timestamp: chrono::Utc::now(),
+        }
+    }
+
+    /// Create from legacy Message type
+    pub fn from_legacy_message(msg: Message) -> Self {
+        let content = match msg.message_type {
+            MessageType::TaskAssignment => MessageContent::Custom {
+                message_type: "task_assignment".to_string(),
+                data: msg.payload,
+            },
+            MessageType::StatusUpdate => MessageContent::Custom {
+                message_type: "status_update".to_string(),
+                data: msg.payload,
+            },
+            MessageType::DataShare => MessageContent::DataShare { data: msg.payload },
+            MessageType::CoordinationRequest => MessageContent::CoordinationRequest {
+                request_type: "legacy".to_string(),
+                data: msg.payload,
+            },
+            MessageType::Response => MessageContent::Response {
+                in_reply_to: Uuid::nil(),
+                data: msg.payload,
+            },
+            MessageType::Custom(t) => MessageContent::Custom {
+                message_type: t,
+                data: msg.payload,
+            },
+        };
+
+        Self {
+            id: msg.id,
+            from: msg.from,
+            content,
+            timestamp: msg.timestamp,
+        }
+    }
+
+    /// Create from AgentMessage (backward compatibility)
+    pub fn from_agent_message(from: AgentId, msg: AgentMessage) -> Self {
+        let content = match msg {
+            AgentMessage::Registration {
+                agent_id,
+                capabilities,
+                metadata,
+            } => MessageContent::Registration {
+                agent_id,
+                capabilities,
+                metadata,
+            },
+            AgentMessage::TaskAssignment {
+                task_id,
+                agent_id,
+                task_data,
+            } => MessageContent::TaskAssignment {
+                task_id,
+                agent_id,
+                task_data,
+            },
+            AgentMessage::TaskCompleted {
+                agent_id,
+                task_id,
+                result,
+            } => MessageContent::TaskCompleted {
+                agent_id,
+                task_id,
+                result,
+            },
+            AgentMessage::TaskProgress {
+                agent_id,
+                task_id,
+                progress,
+                message,
+            } => MessageContent::TaskProgress {
+                agent_id,
+                task_id,
+                progress,
+                message,
+            },
+            AgentMessage::HelpRequest {
+                agent_id,
+                context,
+                priority,
+            } => MessageContent::HelpRequest {
+                agent_id,
+                context,
+                priority,
+            },
+            AgentMessage::StatusUpdate {
+                agent_id,
+                status,
+                metrics,
+            } => MessageContent::StatusUpdate {
+                agent_id,
+                status,
+                metrics,
+            },
+            AgentMessage::Custom { message_type, data } => {
+                MessageContent::Custom { message_type, data }
+            }
+        };
+
+        Self {
+            id: Uuid::new_v4(),
+            from,
+            content,
+            timestamp: chrono::Utc::now(),
+        }
+    }
+}
+
+// ============================================================================
+// Backward Compatibility Types (Deprecated - use UnifiedMessage instead)
+// ============================================================================
+
+/// Legacy inter-agent message
+///
+/// **Deprecated**: Use `UnifiedMessage` instead for new code.
+/// This type is maintained for backward compatibility.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     /// Message ID
@@ -218,7 +477,9 @@ pub struct Message {
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
-/// Message types
+/// Legacy message types
+///
+/// **Deprecated**: Use `MessageContent` variants instead.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageType {
     /// Task assignment
@@ -235,7 +496,10 @@ pub enum MessageType {
     Custom(String),
 }
 
-/// Agent message for ccswarm integration
+/// Legacy agent message for ccswarm integration
+///
+/// **Deprecated**: Use `UnifiedMessage` with `MessageContent` instead.
+/// This type is maintained for backward compatibility.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AgentMessage {
     /// Agent registration
@@ -470,13 +734,39 @@ impl ResourceManager {
         Ok(())
     }
 
-    /// Check rate limit
+    /// Check rate limit for a resource
+    ///
+    /// Returns true if the request is within rate limits for the given resource,
+    /// or if no rate limit is configured for that resource.
     pub fn check_rate_limit(&self, resource: &str) -> bool {
         if let Some(limit) = self.rate_limits.get(resource) {
             limit.can_proceed()
         } else {
             true
         }
+    }
+
+    /// Set a rate limit for a resource
+    ///
+    /// # Arguments
+    /// * `resource` - The resource identifier (e.g., "api", "file_ops")
+    /// * `max_requests` - Maximum requests allowed per interval
+    /// * `interval` - Time window for rate limiting
+    pub fn set_rate_limit(
+        &self,
+        resource: &str,
+        max_requests: usize,
+        interval: std::time::Duration,
+    ) {
+        self.rate_limits
+            .insert(resource.to_string(), RateLimit::new(max_requests, interval));
+    }
+
+    /// Get remaining rate limit for a resource
+    pub fn rate_limit_remaining(&self, resource: &str) -> Option<usize> {
+        self.rate_limits
+            .get(resource)
+            .map(|limit| limit.remaining())
     }
 
     /// Write to shared memory
@@ -490,24 +780,105 @@ impl ResourceManager {
     }
 }
 
-/// Rate limit information
+/// Rate limit information using token bucket algorithm
+///
+/// This implementation provides proper rate limiting with automatic window
+/// reset and thread-safe counter management.
 #[derive(Debug, Clone)]
 pub struct RateLimit {
     /// Maximum requests per interval
     pub max_requests: usize,
-    /// Time interval
+    /// Time interval for the rate limit window
     pub interval: std::time::Duration,
-    /// Current count
-    pub current_count: Arc<RwLock<usize>>,
-    /// Last reset time
-    pub last_reset: Arc<RwLock<std::time::Instant>>,
+    /// Current count of requests in the window
+    current_count: Arc<std::sync::atomic::AtomicUsize>,
+    /// Last reset time (stored as nanos since UNIX_EPOCH for atomic operations)
+    last_reset_nanos: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl RateLimit {
-    /// Check if request can proceed
+    /// Create a new rate limit
+    ///
+    /// # Arguments
+    /// * `max_requests` - Maximum requests allowed per interval
+    /// * `interval` - Time window for rate limiting
+    pub fn new(max_requests: usize, interval: std::time::Duration) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+
+        Self {
+            max_requests,
+            interval,
+            current_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            last_reset_nanos: Arc::new(std::sync::atomic::AtomicU64::new(now)),
+        }
+    }
+
+    /// Check if request can proceed and increment counter if allowed
+    ///
+    /// Returns true if the request is within rate limits, false otherwise.
+    /// This is a non-blocking, thread-safe operation using atomic operations.
     pub fn can_proceed(&self) -> bool {
-        // Simplified implementation
-        true
+        use std::sync::atomic::Ordering;
+
+        let now_nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+
+        let last_reset = self.last_reset_nanos.load(Ordering::Acquire);
+        let interval_nanos = self.interval.as_nanos() as u64;
+
+        // Check if we need to reset the window
+        if now_nanos.saturating_sub(last_reset) >= interval_nanos {
+            // Try to reset the window (only one thread should succeed)
+            if self
+                .last_reset_nanos
+                .compare_exchange(last_reset, now_nanos, Ordering::AcqRel, Ordering::Relaxed)
+                .is_ok()
+            {
+                // Successfully reset, also reset the counter
+                self.current_count.store(0, Ordering::Release);
+            }
+        }
+
+        // Try to increment the counter
+        let current = self.current_count.fetch_add(1, Ordering::AcqRel);
+
+        if current < self.max_requests {
+            true
+        } else {
+            // Exceeded limit, decrement counter back
+            self.current_count.fetch_sub(1, Ordering::AcqRel);
+            false
+        }
+    }
+
+    /// Get the current count of requests in this window
+    pub fn current_count(&self) -> usize {
+        self.current_count
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Get remaining requests in this window
+    pub fn remaining(&self) -> usize {
+        let current = self.current_count();
+        self.max_requests.saturating_sub(current)
+    }
+
+    /// Reset the rate limit counter
+    pub fn reset(&self) {
+        use std::sync::atomic::Ordering;
+
+        let now_nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+
+        self.current_count.store(0, Ordering::Release);
+        self.last_reset_nanos.store(now_nanos, Ordering::Release);
     }
 }
 
@@ -650,5 +1021,55 @@ mod tests {
             }
             assert_eq!(count, 7); // All 7 message variants
         }
+    }
+
+    #[test]
+    fn test_rate_limit_basic() {
+        let limit = RateLimit::new(3, std::time::Duration::from_secs(60));
+
+        // First 3 requests should succeed
+        assert!(limit.can_proceed());
+        assert!(limit.can_proceed());
+        assert!(limit.can_proceed());
+
+        // 4th request should fail
+        assert!(!limit.can_proceed());
+
+        // Check remaining
+        assert_eq!(limit.current_count(), 3);
+        assert_eq!(limit.remaining(), 0);
+    }
+
+    #[test]
+    fn test_rate_limit_reset() {
+        let limit = RateLimit::new(2, std::time::Duration::from_secs(60));
+
+        assert!(limit.can_proceed());
+        assert!(limit.can_proceed());
+        assert!(!limit.can_proceed());
+
+        // Reset should allow more requests
+        limit.reset();
+        assert!(limit.can_proceed());
+        assert_eq!(limit.current_count(), 1);
+    }
+
+    #[test]
+    fn test_resource_manager_rate_limit() {
+        let manager = ResourceManager::new();
+
+        // No rate limit set - should allow
+        assert!(manager.check_rate_limit("api"));
+
+        // Set rate limit
+        manager.set_rate_limit("api", 2, std::time::Duration::from_secs(60));
+
+        // Check rate limit
+        assert!(manager.check_rate_limit("api"));
+        assert!(manager.check_rate_limit("api"));
+        assert!(!manager.check_rate_limit("api"));
+
+        // Check remaining
+        assert_eq!(manager.rate_limit_remaining("api"), Some(0));
     }
 }

@@ -26,18 +26,6 @@
 - **Shared Context**: Cross-agent knowledge sharing for improved efficiency
 - **Agent Role Boundaries**: Enforced specialization (Frontend, Backend, DevOps, QA)
 
-### 📊 Advanced Observability
-- **Decision Tracking**: Records AI agent decision-making processes
-- **Performance Profiling**: Monitors resource usage and optimization opportunities
-- **Anomaly Detection**: Identifies unusual patterns in agent behavior
-- **Real-time Metrics**: Session statistics and token usage monitoring
-
-### 🔒 Security & Isolation
-- **Capability-Based Security**: Fine-grained access control for agent actions
-- **Session Isolation**: Secure separation between different agent sessions
-- **Rate Limiting**: Prevents resource abuse and ensures fair usage
-- **Audit Trail**: Complete history of all executed commands
-
 ### 💾 Session Persistence
 - **State Snapshots**: Save and restore session state for continuity
 - **Command History**: Complete audit trail with compression
@@ -120,10 +108,8 @@ ai-session/
 ├── context/       # AI context optimization
 ├── output/        # Intelligent output parsing
 ├── coordination/  # Multi-agent communication
-├── observability/ # Metrics and tracing
-├── security/      # Security and isolation
 ├── persistence/   # Session state storage
-└── integration/   # External tool integration
+└── integration/   # External tool integration (tmux migration)
 ```
 
 ## CLI Tool
