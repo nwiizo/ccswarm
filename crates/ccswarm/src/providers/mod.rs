@@ -325,7 +325,10 @@ impl ProviderConfig for ClaudeCodeConfig {
         let mut env_vars = HashMap::new();
 
         if let Some(api_key) = &self.api_key {
-            env_vars.insert("ANTHROPIC_API_KEY".to_string(), api_key.expose().to_string());
+            env_vars.insert(
+                "ANTHROPIC_API_KEY".to_string(),
+                api_key.expose().to_string(),
+            );
         }
 
         env_vars
@@ -404,11 +407,17 @@ impl ProviderConfig for AiderConfig {
         let mut env_vars = HashMap::new();
 
         if let Some(openai_key) = &self.openai_api_key {
-            env_vars.insert("OPENAI_API_KEY".to_string(), openai_key.expose().to_string());
+            env_vars.insert(
+                "OPENAI_API_KEY".to_string(),
+                openai_key.expose().to_string(),
+            );
         }
 
         if let Some(anthropic_key) = &self.anthropic_api_key {
-            env_vars.insert("ANTHROPIC_API_KEY".to_string(), anthropic_key.expose().to_string());
+            env_vars.insert(
+                "ANTHROPIC_API_KEY".to_string(),
+                anthropic_key.expose().to_string(),
+            );
         }
 
         env_vars
@@ -494,7 +503,10 @@ impl ProviderConfig for CodexConfig {
     fn get_env_vars(&self) -> HashMap<String, String> {
         let mut env_vars = HashMap::new();
 
-        env_vars.insert("OPENAI_API_KEY".to_string(), self.api_key.expose().to_string());
+        env_vars.insert(
+            "OPENAI_API_KEY".to_string(),
+            self.api_key.expose().to_string(),
+        );
 
         if let Some(org) = &self.organization {
             env_vars.insert("OPENAI_ORGANIZATION".to_string(), org.clone());
