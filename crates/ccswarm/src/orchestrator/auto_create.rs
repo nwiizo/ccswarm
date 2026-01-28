@@ -10,6 +10,7 @@ use crate::config::CcswarmConfig;
 use crate::orchestrator::master_delegation::{
     DelegationDecision, DelegationStrategy, MasterDelegationEngine,
 };
+use crate::orchestrator::verification::{VerificationAgent, VerificationConfig};
 
 /// Application types that can be auto-created
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -279,9 +280,29 @@ impl AutoCreateEngine {
         // Step 4: Create project structure
         self.create_project_structure(output_path).await?;
 
-        // Step 5: Summary
+        // Step 5: Run verification
+        info!("\n🔍 Running verification agent...");
+        let verification_config = VerificationConfig::default();
+        let verification_agent = VerificationAgent::new(verification_config);
+        let verification_result = verification_agent.verify_app(output_path).await?;
+
+        // Step 6: Summary
         info!("\n📊 Auto-create completed!");
         info!("   📂 Project created at: {}", output_path.display());
+        info!(
+            "   ✅ Verification: {} ({}/{})",
+            if verification_result.success {
+                "PASSED"
+            } else {
+                "NEEDS ATTENTION"
+            },
+            verification_result
+                .checks
+                .iter()
+                .filter(|c| c.passed)
+                .count(),
+            verification_result.checks.len()
+        );
         info!("   🚀 To run the app:");
         info!("      cd {}", output_path.display());
         info!("      npm install");
@@ -443,7 +464,7 @@ impl AutoCreateEngine {
         _config: &CcswarmConfig,
         output_path: &Path,
     ) -> Result<()> {
-        use crate::subagent::{spawner::SpawnTask, ParallelConfig, ParallelExecutor};
+        use crate::subagent::{ParallelConfig, ParallelExecutor, spawner::SpawnTask};
 
         info!("\n🚀 Starting TRUE parallel multi-agent execution...");
         info!("   📋 Tasks to execute: {}", tasks.len());
