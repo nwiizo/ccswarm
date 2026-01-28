@@ -159,12 +159,15 @@ pub struct SessionState {
     /// Session ID
     pub session_id: SessionId,
     /// Session configuration
+    #[serde(default)]
     pub config: SessionConfig,
     /// Current status
+    #[serde(default)]
     pub status: SessionStatus,
     /// Session context
     pub context: SessionContext,
     /// Command history
+    #[serde(default)]
     pub command_history: Vec<CommandRecord>,
     /// Session metadata
     pub metadata: SessionMetadata,
