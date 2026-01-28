@@ -3,18 +3,11 @@
 //! This module provides session management for AI agents, integrating with the ai-session
 //! crate for multi-agent coordination and parallel execution.
 
-pub mod base_session;
 pub mod checkpoint;
 pub mod claude_session;
-pub mod compaction;
-pub mod context_bridge;
-pub mod coordinator;
 pub mod error;
-pub mod fork;
 pub mod memory;
 pub mod persistent_session;
-pub mod session_pool; // Used by coordinator
-pub mod traits;
 pub mod worktree_session;
 
 // Re-export ai-session types for multi-agent coordination
@@ -86,8 +79,6 @@ pub struct AgentSession {
     pub agent_id: String,
     /// Role of the agent in this session
     pub agent_role: AgentRole,
-    /// Name of the tmux session (legacy support)
-    pub tmux_session: String,
     /// Current status of the session
     pub status: SessionStatus,
     /// Whether the session is in background mode
@@ -122,11 +113,6 @@ impl AgentSession {
         description: Option<String>,
     ) -> Self {
         let session_id = Uuid::new_v4().to_string();
-        let tmux_session = format!(
-            "ccswarm-{}-{}",
-            agent_role.name().to_lowercase(),
-            &session_id[..8]
-        );
 
         let memory = SessionMemory::new(session_id.clone(), agent_id.clone());
 
@@ -134,7 +120,6 @@ impl AgentSession {
             id: session_id,
             agent_id: agent_id.clone(),
             agent_role,
-            tmux_session,
             status: SessionStatus::Active,
             background_mode: false,
             auto_accept: false,
@@ -456,14 +441,14 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found
     pub async fn terminate_session(&self, session_id: &str) -> SessionResult<()> {
-        let (_tmux_session, agent_id) = {
+        let agent_id = {
             let session = self
                 .sessions
                 .get(session_id)
                 .ok_or_else(|| SessionError::NotFound {
                     id: session_id.to_string(),
                 })?;
-            (session.tmux_session.clone(), session.agent_id.clone())
+            session.agent_id.clone()
         };
 
         // Stop resource monitoring if enabled

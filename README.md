@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> **Version 0.4.0** - Rust Edition 2024
+> **Version 0.4.3** - Rust Edition 2024
 
 [![CI](https://github.com/nwiizo/ccswarm/workflows/CI/badge.svg)](https://github.com/nwiizo/ccswarm/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/rust-edition_2024-blue.svg)](https://www.rust-lang.org)
@@ -15,7 +15,7 @@
 - **Git Worktree Isolation**: Each agent works in isolated Git worktrees
 - **Template System**: Predefined templates for common development tasks
 - **TUI Monitoring**: Real-time terminal UI for task tracking
-- **Session Management**: Agent session lifecycle management
+- **Native Session Management**: Native PTY-based session management (no tmux required)
 - **Resource Monitoring**: Track agent resource usage
 
 ## Quick Start
@@ -158,6 +158,12 @@ fn test_with_mock() {
 - [Architecture](docs/ARCHITECTURE.md) - System design
 - [Application Spec](docs/APPLICATION_SPEC.md) - Feature details
 - [Development Standards](.claude/rules/development-standards.md) - Coding guidelines
+
+## v0.4.3 Changes
+
+- **Native Session Management**: Removed tmux dependency - uses native PTY via ai-session
+- **Session Search API**: Added `find_session_by_name()` and `list_sessions_by_prefix()` methods
+- **Detailed Session Info**: New `list_sessions_detailed()` for comprehensive session information
 
 ## Limitations
 

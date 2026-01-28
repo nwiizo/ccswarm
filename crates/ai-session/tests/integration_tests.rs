@@ -4,7 +4,6 @@
 
 use ai_session::*;
 use anyhow::Result;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -179,83 +178,7 @@ async fn test_output_parsing() -> Result<()> {
     Ok(())
 }
 
-/// Test security and access control
-#[tokio::test]
-async fn test_security_features() -> Result<()> {
-    use security::{Action, FileAccessMode, SecureSession};
-
-    let secure_session = SecureSession::new("test-session");
-
-    // Test action checking
-    let test_actions = vec![
-        Action::FileAccess {
-            path: PathBuf::from("/tmp/test.txt"),
-            mode: FileAccessMode::Read,
-        },
-        Action::SystemCall {
-            syscall: "read".to_string(),
-        },
-    ];
-
-    for action in test_actions {
-        let _allowed = secure_session.is_allowed(&action);
-        // In a real test, we would assert based on policy
-    }
-
-    // Test rate limiting
-    let rate_limiter = security::RateLimit::new(5);
-
-    // Should allow first 5 requests
-    for _ in 0..5 {
-        assert!(rate_limiter.check());
-    }
-
-    // Should deny 6th request
-    assert!(!rate_limiter.check());
-
-    Ok(())
-}
-
-/// Test observability and monitoring
-#[tokio::test]
-async fn test_observability_features() -> Result<()> {
-    use observability::{Decision, DecisionId, DecisionTracker, DecisionType, SemanticTracer};
-    use std::collections::HashMap;
-
-    // Test semantic tracing
-    let tracer = SemanticTracer::new();
-
-    let span_id = tracer.start_span("test_operation", HashMap::new()).await;
-    // Note: add_span_metadata method may not be implemented
-    tracer.end_span(span_id).await?;
-
-    let traces = tracer.get_traces().await;
-    assert!(!traces.is_empty());
-
-    // Test decision tracking
-    let tracker = DecisionTracker::new();
-
-    let decision = Decision {
-        id: DecisionId::new(),
-        decision_type: DecisionType::TaskAssignment,
-        options: vec!["option_a".to_string(), "option_b".to_string()],
-        selected: "option_a".to_string(),
-        confidence: 0.95,
-        timestamp: chrono::Utc::now(),
-    };
-
-    tracker.track(decision.clone()).await?;
-
-    let decisions = tracker.get_decisions().await;
-    assert_eq!(decisions.len(), 1);
-    assert_eq!(decisions[0].selected, "option_a");
-
-    // Test decision analysis
-    let analysis = tracker.analyze_patterns().await;
-    assert_eq!(analysis.total_decisions, 1);
-
-    Ok(())
-}
+// Note: Security and observability tests removed - modules were deleted as unused
 
 /// Test tmux compatibility layer
 #[tokio::test]

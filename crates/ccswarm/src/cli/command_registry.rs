@@ -156,12 +156,6 @@ impl CommandRegistry {
             })
         });
 
-        #[cfg(feature = "claude-acp")]
-        register_command!(self, "claude-acp", runner, cmd,
-            Commands::ClaudeACP { command } =>
-            runner.handle_claude_acp(command)
-        );
-
         register_command!(self, "evolution", runner, cmd,
             Commands::Evolution { action } =>
             runner.handle_evolution(action)
@@ -255,8 +249,6 @@ impl CommandRegistry {
             Commands::Sangha { .. } => "sangha",
             Commands::Extend { .. } => "extend",
             Commands::Search { .. } => "search",
-            #[cfg(feature = "claude-acp")]
-            Commands::ClaudeACP { .. } => "claude-acp",
             Commands::Evolution { .. } => "evolution",
             Commands::Quality { .. } => "quality",
             Commands::Template { .. } => "template",

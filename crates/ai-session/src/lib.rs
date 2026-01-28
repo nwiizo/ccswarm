@@ -126,25 +126,22 @@
 //! - **IDE Integration**: VS Code extension support built-in
 //! - **CI/CD Ready**: Designed for automated workflows
 
-pub mod agent;
-pub mod ccswarm;
 pub mod context;
 pub mod coordination;
 pub mod core;
 pub mod integration;
-pub mod ipc;
 #[cfg(feature = "mcp")]
 pub mod mcp;
+#[cfg(feature = "tmux-compat")]
 pub mod native_portable;
+#[cfg(feature = "tmux-compat")]
 pub use native_portable as native;
-pub mod observability;
 pub mod output;
 pub mod persistence;
-pub mod security;
-pub mod session_cache;
 pub mod session_persistence;
+/// TMux compatibility layer (optional, use native SessionManager instead)
+#[cfg(feature = "tmux-compat")]
 pub mod tmux_bridge;
-pub mod unified_bus;
 
 // Re-export main types
 pub use context::{
@@ -183,13 +180,26 @@ use anyhow::Result;
 use std::path::PathBuf;
 
 /// Session information (for listing sessions)
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SessionInfo {
+    /// Unique session identifier
     pub id: SessionId,
+    /// Optional human-readable name
+    pub name: Option<String>,
+    /// Current session status
     pub status: SessionStatus,
+    /// When the session was created
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Last activity timestamp
+    pub last_activity: chrono::DateTime<chrono::Utc>,
+    /// Working directory for the session
     pub working_directory: PathBuf,
+    /// Whether AI features are enabled
     pub ai_features_enabled: bool,
+    /// Token count in context
     pub context_token_count: usize,
+    /// Number of commands executed
+    pub command_count: usize,
 }
 
 // Extension methods for AISession (for examples)
