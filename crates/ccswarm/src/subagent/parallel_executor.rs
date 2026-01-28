@@ -2,6 +2,14 @@
 //!
 //! Manages parallel execution of tasks across multiple subagents
 //! with result aggregation and error handling.
+//!
+//! This module integrates with ai-session's MultiAgentSession for true
+//! multi-agent parallel execution using the message bus for coordination.
+//!
+//! ai-session types are available via `crate::session::*`:
+//! - `MultiAgentSession` - Multi-agent coordination
+//! - `MessageBus` - Inter-agent communication
+//! - `AIResourceManager` - Resource management
 
 use super::{SubagentResult, spawner::SpawnTask};
 use futures::stream::{FuturesUnordered, StreamExt};

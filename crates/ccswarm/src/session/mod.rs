@@ -17,8 +17,18 @@ pub mod session_pool; // Used by coordinator
 pub mod traits;
 pub mod worktree_session;
 
-// Note: ai-session integration removed for now. Multi-agent coordination
-// features will be re-implemented when the ai-session crate is stable.
+// Re-export ai-session types for multi-agent coordination
+pub use ai_session::coordination::{
+    AgentId as AIAgentId, AgentMessage, BroadcastMessage, Message as CoordinationMessage,
+    MessageBus, MessagePriority, MessageType, MultiAgentSession,
+    ResourceManager as AIResourceManager, Task as AITask, TaskDistributor, TaskId, TaskPriority,
+};
+pub use ai_session::core::{
+    AISession, ContextConfig, SessionConfig as AISessionConfig, SessionError as AISessionError,
+    SessionId as AISessionId, SessionManager as AISessionManager, SessionResult as AISessionResult,
+    SessionStatus as AISessionStatus,
+};
+pub use ai_session::context::{SessionContext, TaskContext, WorkspaceState};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
