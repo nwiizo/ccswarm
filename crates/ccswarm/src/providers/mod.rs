@@ -6,6 +6,7 @@ pub mod custom;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -14,6 +15,96 @@ use tokio::process::Command;
 use crate::agent::{Task, TaskResult};
 use crate::identity::AgentIdentity;
 use std::path::Path;
+
+// ============================================================================
+// Sensitive String Handling
+// ============================================================================
+
+/// A wrapper around sensitive string data (like API keys) that:
+/// - Prevents accidental logging via custom Debug implementation
+/// - Supports Clone, Serialize, Deserialize for config compatibility
+/// - Uses secrecy::SecretString internally for memory safety
+///
+/// # Example
+/// ```rust,ignore
+/// let api_key = SensitiveString::new("sk-secret-key");
+/// println!("{:?}", api_key); // Prints: SensitiveString(****)
+/// let actual = api_key.expose(); // Get the actual value when needed
+/// ```
+#[derive(Clone)]
+pub struct SensitiveString(SecretString);
+
+impl SensitiveString {
+    /// Create a new SensitiveString from a string
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(SecretString::new(value.into().into()))
+    }
+
+    /// Expose the secret value. Use sparingly and only when necessary.
+    pub fn expose(&self) -> &str {
+        self.0.expose_secret()
+    }
+
+    /// Check if the underlying value is empty
+    pub fn is_empty(&self) -> bool {
+        self.0.expose_secret().is_empty()
+    }
+}
+
+impl std::fmt::Debug for SensitiveString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SensitiveString(****)")
+    }
+}
+
+impl std::fmt::Display for SensitiveString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "****")
+    }
+}
+
+impl Serialize for SensitiveString {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Never serialize the actual secret - serialize a placeholder
+        serializer.serialize_str("[REDACTED]")
+    }
+}
+
+impl<'de> Deserialize<'de> for SensitiveString {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        // If it's the placeholder, treat as empty (user should set via env var)
+        if s == "[REDACTED]" {
+            Ok(Self::new(""))
+        } else {
+            Ok(Self::new(s))
+        }
+    }
+}
+
+impl Default for SensitiveString {
+    fn default() -> Self {
+        Self::new("")
+    }
+}
+
+impl From<String> for SensitiveString {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<&str> for SensitiveString {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
 
 /// Supported AI providers for ccswarm agents
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -166,7 +257,8 @@ pub struct ClaudeCodeConfig {
     /// MCP servers configuration
     pub mcp_servers: HashMap<String, serde_json::Value>,
     /// API key (optional, uses system default if not provided)
-    pub api_key: Option<String>,
+    /// Note: Uses SensitiveString to prevent accidental logging
+    pub api_key: Option<SensitiveString>,
     /// Session ID for resuming conversations
     pub session_id: Option<String>,
     /// Resume a specific session
@@ -233,7 +325,7 @@ impl ProviderConfig for ClaudeCodeConfig {
         let mut env_vars = HashMap::new();
 
         if let Some(api_key) = &self.api_key {
-            env_vars.insert("ANTHROPIC_API_KEY".to_string(), api_key.clone());
+            env_vars.insert("ANTHROPIC_API_KEY".to_string(), api_key.expose().to_string());
         }
 
         env_vars
@@ -258,10 +350,10 @@ impl ProviderConfig for ClaudeCodeConfig {
 pub struct AiderConfig {
     /// Model to use (e.g., "gpt-4", "claude-3.5-sonnet")
     pub model: String,
-    /// OpenAI API key
-    pub openai_api_key: Option<String>,
-    /// Anthropic API key
-    pub anthropic_api_key: Option<String>,
+    /// OpenAI API key (uses SensitiveString to prevent accidental logging)
+    pub openai_api_key: Option<SensitiveString>,
+    /// Anthropic API key (uses SensitiveString to prevent accidental logging)
+    pub anthropic_api_key: Option<SensitiveString>,
     /// Auto-commit changes
     pub auto_commit: bool,
     /// Use git for version control
@@ -312,11 +404,11 @@ impl ProviderConfig for AiderConfig {
         let mut env_vars = HashMap::new();
 
         if let Some(openai_key) = &self.openai_api_key {
-            env_vars.insert("OPENAI_API_KEY".to_string(), openai_key.clone());
+            env_vars.insert("OPENAI_API_KEY".to_string(), openai_key.expose().to_string());
         }
 
         if let Some(anthropic_key) = &self.anthropic_api_key {
-            env_vars.insert("ANTHROPIC_API_KEY".to_string(), anthropic_key.clone());
+            env_vars.insert("ANTHROPIC_API_KEY".to_string(), anthropic_key.expose().to_string());
         }
 
         env_vars
@@ -345,8 +437,8 @@ impl ProviderConfig for AiderConfig {
 /// OpenAI Codex provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexConfig {
-    /// OpenAI API key
-    pub api_key: String,
+    /// OpenAI API key (uses SensitiveString to prevent accidental logging)
+    pub api_key: SensitiveString,
     /// Model to use (e.g., "code-davinci-002")
     pub model: String,
     /// Maximum tokens for completion
@@ -366,7 +458,7 @@ pub struct CodexConfig {
 impl Default for CodexConfig {
     fn default() -> Self {
         Self {
-            api_key: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
+            api_key: SensitiveString::new(std::env::var("OPENAI_API_KEY").unwrap_or_default()),
             model: "gpt-4".to_string(), // Codex models are deprecated, using GPT-4
             max_tokens: Some(2048),
             temperature: Some(0.1),
@@ -402,7 +494,7 @@ impl ProviderConfig for CodexConfig {
     fn get_env_vars(&self) -> HashMap<String, String> {
         let mut env_vars = HashMap::new();
 
-        env_vars.insert("OPENAI_API_KEY".to_string(), self.api_key.clone());
+        env_vars.insert("OPENAI_API_KEY".to_string(), self.api_key.expose().to_string());
 
         if let Some(org) = &self.organization {
             env_vars.insert("OPENAI_ORGANIZATION".to_string(), org.clone());

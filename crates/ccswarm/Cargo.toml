@@ -107,6 +107,10 @@ rand = "0.9"
 # System information for resource monitoring
 sysinfo = "0.33"
 
+# Secure secret handling (zeroize feature for memory safety)
+secrecy = { version = "0.10", features = ["serde"] }
+zeroize = "1.8"
+
 # AI Session Management removed - no longer needed
 
 # ACP (Agent Client Protocol) support - for Claude Code integration

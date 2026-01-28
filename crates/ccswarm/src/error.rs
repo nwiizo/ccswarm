@@ -381,8 +381,62 @@ impl CCSwarmError {
     }
 
     /// Check if this error should be retried
+    ///
+    /// Returns true for transient errors that may succeed on retry:
+    /// - Network errors (connection issues, timeouts)
+    /// - Resource errors (temporary resource exhaustion)
+    /// - Certain IO errors (connection reset, broken pipe, etc.)
     pub fn should_retry(&self) -> bool {
-        matches!(self, Self::Network { .. } | Self::Resource { .. })
+        match self {
+            Self::Network { .. } | Self::Resource { .. } => true,
+            Self::Io(io_err) => {
+                // Retry transient IO errors
+                matches!(
+                    io_err.kind(),
+                    std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::Interrupted
+                        | std::io::ErrorKind::WouldBlock
+                )
+            }
+            _ => false,
+        }
+    }
+
+    /// Get the suggested delay before retrying this error
+    ///
+    /// Returns a duration based on the error type:
+    /// - Network errors: 1 second (allow network recovery)
+    /// - Resource errors: 2 seconds (allow resource cleanup)
+    /// - IO errors: 500ms (quick retry for transient issues)
+    pub fn suggested_retry_delay(&self) -> std::time::Duration {
+        match self {
+            Self::Network { .. } => std::time::Duration::from_secs(1),
+            Self::Resource { .. } => std::time::Duration::from_secs(2),
+            Self::Io(_) => std::time::Duration::from_millis(500),
+            _ => std::time::Duration::from_secs(1),
+        }
+    }
+
+    /// Get the maximum number of retries recommended for this error
+    ///
+    /// Returns different limits based on error type:
+    /// - Network errors: 3 retries
+    /// - Resource errors: 5 retries (may need more time to recover)
+    /// - IO errors: 2 retries
+    /// - Non-retryable errors: 0 retries
+    pub fn max_retries(&self) -> u32 {
+        if !self.should_retry() {
+            return 0;
+        }
+        match self {
+            Self::Network { .. } => 3,
+            Self::Resource { .. } => 5,
+            Self::Io(_) => 2,
+            _ => 0,
+        }
     }
 
     /// Get error severity level
