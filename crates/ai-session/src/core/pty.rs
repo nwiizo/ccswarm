@@ -239,4 +239,141 @@ impl PtyHandle {
 
         Ok(String::from_utf8_lossy(&output).to_string())
     }
+
+    /// Spawn Claude Code with a specific session ID for later resumption
+    ///
+    /// This method allows you to specify a session ID that can be used later
+    /// with `resume_claude` to continue the conversation.
+    ///
+    /// # Arguments
+    /// * `prompt` - The prompt/instruction to send to Claude
+    /// * `working_dir` - Working directory for the Claude session
+    /// * `session_id` - UUID to use as the Claude session ID
+    /// * `max_turns` - Maximum number of conversation turns
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ai_session::core::pty::PtyHandle;
+    /// use std::path::Path;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let pty = PtyHandle::new(24, 80)?;
+    ///     let session_id = "2c4e029f-3411-442a-b24c-33001c78cd14";
+    ///
+    ///     // Start a new session with specific ID
+    ///     pty.spawn_claude_with_session(
+    ///         "Create a hello world function",
+    ///         Path::new("/tmp"),
+    ///         session_id,
+    ///         Some(3),
+    ///     ).await?;
+    ///
+    ///     // Later, resume the same session
+    ///     let pty2 = PtyHandle::new(24, 80)?;
+    ///     pty2.resume_claude(session_id, Path::new("/tmp")).await?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn spawn_claude_with_session(
+        &self,
+        prompt: &str,
+        working_dir: &std::path::Path,
+        session_id: &str,
+        max_turns: Option<u32>,
+    ) -> Result<()> {
+        let mut cmd = CommandBuilder::new("claude");
+        cmd.arg("--dangerously-skip-permissions");
+        cmd.arg("--session-id");
+        cmd.arg(session_id);
+        cmd.arg("-p");
+        cmd.arg(prompt);
+        cmd.arg("--output-format");
+        cmd.arg("json");
+
+        if let Some(turns) = max_turns {
+            cmd.arg("--max-turns");
+            cmd.arg(turns.to_string());
+        }
+
+        cmd.cwd(working_dir);
+
+        self.spawn_command(cmd).await
+    }
+
+    /// Resume a Claude Code session by session ID
+    ///
+    /// This method resumes a previous Claude conversation using the session ID
+    /// that was used when the session was created.
+    ///
+    /// # Arguments
+    /// * `session_id` - The Claude session ID to resume
+    /// * `working_dir` - Working directory for the Claude session
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ai_session::core::pty::PtyHandle;
+    /// use std::path::Path;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let pty = PtyHandle::new(24, 80)?;
+    ///
+    ///     // Resume a previous session
+    ///     pty.resume_claude(
+    ///         "2c4e029f-3411-442a-b24c-33001c78cd14",
+    ///         Path::new("/tmp"),
+    ///     ).await?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn resume_claude(
+        &self,
+        session_id: &str,
+        working_dir: &std::path::Path,
+    ) -> Result<()> {
+        let mut cmd = CommandBuilder::new("claude");
+        cmd.arg("--resume");
+        cmd.arg(session_id);
+
+        cmd.cwd(working_dir);
+
+        self.spawn_command(cmd).await
+    }
+
+    /// Resume a Claude Code session interactively with a new prompt
+    ///
+    /// This method resumes a previous Claude conversation and sends a new prompt.
+    ///
+    /// # Arguments
+    /// * `session_id` - The Claude session ID to resume
+    /// * `prompt` - New prompt to send to the resumed session
+    /// * `working_dir` - Working directory for the Claude session
+    /// * `max_turns` - Maximum number of conversation turns
+    pub async fn resume_claude_with_prompt(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        working_dir: &std::path::Path,
+        max_turns: Option<u32>,
+    ) -> Result<()> {
+        let mut cmd = CommandBuilder::new("claude");
+        cmd.arg("--dangerously-skip-permissions");
+        cmd.arg("--resume");
+        cmd.arg(session_id);
+        cmd.arg("-p");
+        cmd.arg(prompt);
+        cmd.arg("--output-format");
+        cmd.arg("json");
+
+        if let Some(turns) = max_turns {
+            cmd.arg("--max-turns");
+            cmd.arg(turns.to_string());
+        }
+
+        cmd.cwd(working_dir);
+
+        self.spawn_command(cmd).await
+    }
 }
