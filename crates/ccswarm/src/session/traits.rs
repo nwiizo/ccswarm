@@ -247,3 +247,67 @@ pub trait PersistentSession: Session {
     /// Get the persistence path
     fn get_persistence_path(&self) -> &Path;
 }
+
+/// Extension trait for sessions that support checkpointing
+#[async_trait::async_trait]
+pub trait CheckpointableSession: Session {
+    /// Create a checkpoint of current session state
+    async fn checkpoint(
+        &self,
+        label: Option<String>,
+    ) -> Result<super::checkpoint::SessionCheckpoint>;
+
+    /// Restore session state from a checkpoint
+    async fn restore(&mut self, checkpoint: &super::checkpoint::SessionCheckpoint) -> Result<()>;
+
+    /// List all checkpoints for this session
+    async fn list_checkpoints(&self) -> Result<Vec<super::checkpoint::SessionCheckpoint>>;
+
+    /// Delete a checkpoint
+    async fn delete_checkpoint(&self, checkpoint_id: &str) -> Result<()>;
+
+    /// Get the latest checkpoint
+    async fn get_latest_checkpoint(&self) -> Result<Option<super::checkpoint::SessionCheckpoint>>;
+}
+
+/// Extension trait for sessions that support forking
+#[async_trait::async_trait]
+pub trait ForkableSession: CheckpointableSession {
+    /// Fork the session from current state
+    async fn fork(&self, branch_name: Option<String>) -> Result<super::fork::ForkInfo>;
+
+    /// Fork from a specific checkpoint
+    async fn fork_from_checkpoint(
+        &self,
+        checkpoint_id: &str,
+        branch_name: Option<String>,
+    ) -> Result<super::fork::ForkInfo>;
+
+    /// List all forks of this session
+    async fn list_forks(&self) -> Result<Vec<super::fork::ForkInfo>>;
+
+    /// Abandon a fork
+    async fn abandon_fork(&self, fork_id: &str) -> Result<()>;
+}
+
+/// Extension trait for sessions that support context compaction
+#[async_trait::async_trait]
+pub trait CompactableSession: Session {
+    /// Compact the session context using the specified configuration
+    async fn compact(
+        &mut self,
+        config: &super::compaction::CompactionConfig,
+    ) -> Result<super::compaction::CompactionResult>;
+
+    /// Check if compaction is needed
+    async fn needs_compaction(&self, threshold_tokens: usize) -> bool;
+
+    /// Get current token count
+    async fn get_token_count(&self) -> Result<usize>;
+
+    /// Get context size in bytes
+    async fn get_context_size(&self) -> Result<usize>;
+
+    /// Clear all context
+    async fn clear_context(&mut self) -> Result<()>;
+}

@@ -26,6 +26,7 @@ pub mod extension;
 pub mod extension_stub;
 pub mod git;
 pub mod hitl;
+pub mod hooks;
 pub mod identity;
 pub mod mcp;
 pub mod memory;

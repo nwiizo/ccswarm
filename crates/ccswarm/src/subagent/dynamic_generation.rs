@@ -312,6 +312,10 @@ impl DynamicSubagentGenerator {
             tools,
             capabilities,
             metadata,
+            execution_config: Default::default(),
+            resource_limits: Default::default(),
+            spawn_context: None,
+            handoff_config: None,
         };
 
         Ok((definition, instructions))

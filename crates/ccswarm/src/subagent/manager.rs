@@ -228,6 +228,10 @@ impl SubagentManager {
             tools,
             capabilities,
             metadata: HashMap::new(),
+            execution_config: Default::default(),
+            resource_limits: Default::default(),
+            spawn_context: None,
+            handoff_config: None,
         };
 
         // Validate the definition

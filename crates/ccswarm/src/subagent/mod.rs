@@ -2,12 +2,15 @@ pub mod converter;
 pub mod delegation;
 pub mod dynamic_generation;
 pub mod manager;
+pub mod parallel_executor;
 /// Claude Code Native Subagent Integration Module
 ///
 /// This module provides integration with Claude Code's native subagent feature,
 /// allowing ccswarm to leverage built-in subagent capabilities for improved
 /// context management and parallel processing.
 pub mod parser;
+pub mod spawner;
+pub mod workload_balancer;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -31,6 +34,22 @@ pub struct SubagentDefinition {
     /// Optional metadata
     #[serde(default)]
     pub metadata: HashMap<String, serde_json::Value>,
+
+    /// Execution configuration for this subagent
+    #[serde(default)]
+    pub execution_config: spawner::ExecutionConfig,
+
+    /// Resource limits for this subagent
+    #[serde(default)]
+    pub resource_limits: spawner::ResourceLimits,
+
+    /// Spawn context for dynamic spawning
+    #[serde(default)]
+    pub spawn_context: Option<spawner::SpawnContext>,
+
+    /// Handoff configuration for agent-to-agent transfers
+    #[serde(default)]
+    pub handoff_config: Option<spawner::HandoffConfig>,
 }
 
 /// Tools available to a subagent

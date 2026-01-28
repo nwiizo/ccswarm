@@ -27,6 +27,10 @@ impl AgentConverter {
             tools,
             capabilities,
             metadata: Self::extract_metadata(config),
+            execution_config: Default::default(),
+            resource_limits: Default::default(),
+            spawn_context: None,
+            handoff_config: None,
         };
 
         let instructions = Self::generate_instructions(&role, &config.specialization);
