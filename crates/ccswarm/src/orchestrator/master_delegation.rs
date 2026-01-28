@@ -135,19 +135,16 @@ impl MasterDelegationEngine {
             },
             DelegationRule {
                 name: "Backend API Tasks".to_string(),
-                priority: 10,
-                condition: DelegationCondition::And(vec![
-                    DelegationCondition::DescriptionContains(vec![
-                        "api".to_string(),
-                        "server".to_string(),
-                        "database".to_string(),
-                        "backend".to_string(),
-                        "endpoint".to_string(),
-                        "rest".to_string(),
-                        "node".to_string(),
-                        "express".to_string(),
-                    ]),
-                    DelegationCondition::TaskTypeEquals(TaskType::Development),
+                priority: 11, // Higher priority than Frontend to ensure API tasks go to Backend
+                condition: DelegationCondition::DescriptionContains(vec![
+                    "api".to_string(),
+                    "server".to_string(),
+                    "database".to_string(),
+                    "backend".to_string(),
+                    "endpoint".to_string(),
+                    "rest".to_string(),
+                    "crud".to_string(),
+                    "express".to_string(),
                 ]),
                 target_agent: AgentRole::Backend {
                     technologies: vec!["Node.js".to_string(), "Express".to_string()],

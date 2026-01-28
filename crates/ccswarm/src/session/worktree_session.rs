@@ -116,18 +116,16 @@ impl WorktreeSessionManager {
     /// Create a new worktree session manager
     pub fn new(config: WorktreeSessionConfig) -> Result<Self> {
         // Determine worktrees base path: use configured path, or default to ../worktrees
-        let worktrees_base = config.worktrees_base_path
-            .clone()
-            .unwrap_or_else(|| {
-                config.repo_path.parent()
-                    .map(|p| p.join("worktrees"))
-                    .unwrap_or_else(|| config.repo_path.join(".worktrees"))
-            });
+        let worktrees_base = config.worktrees_base_path.clone().unwrap_or_else(|| {
+            config
+                .repo_path
+                .parent()
+                .map(|p| p.join("worktrees"))
+                .unwrap_or_else(|| config.repo_path.join(".worktrees"))
+        });
 
-        let persistent_manager = PersistentSessionManager::new(
-            worktrees_base.clone(),
-            config.persistent_config.clone(),
-        );
+        let persistent_manager =
+            PersistentSessionManager::new(worktrees_base.clone(), config.persistent_config.clone());
 
         let git_manager = ShellWorktreeManager::new(config.repo_path.clone())?;
 
@@ -227,13 +225,13 @@ impl WorktreeSessionManager {
         tracing::info!("Creating new worktree session for agent: {}", agent_id);
 
         // Determine worktree path: use configured base path or default to ../worktrees
-        let worktrees_base = self.config.worktrees_base_path
-            .clone()
-            .unwrap_or_else(|| {
-                self.config.repo_path.parent()
-                    .map(|p| p.join("worktrees"))
-                    .unwrap_or_else(|| self.config.repo_path.join(".worktrees"))
-            });
+        let worktrees_base = self.config.worktrees_base_path.clone().unwrap_or_else(|| {
+            self.config
+                .repo_path
+                .parent()
+                .map(|p| p.join("worktrees"))
+                .unwrap_or_else(|| self.config.repo_path.join(".worktrees"))
+        });
 
         // Create worktree session info
         let mut session_info = WorktreeSessionInfo {

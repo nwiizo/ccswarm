@@ -82,8 +82,7 @@ impl AgentPool {
             .ok_or_else(|| anyhow::anyhow!("No configuration for agent: {}", agent_type))?;
 
         // Create agent - use current directory as workspace root
-        let workspace_root = std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."));
+        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let mut agent = ClaudeCodeAgent::new(
             role,
             &workspace_root,

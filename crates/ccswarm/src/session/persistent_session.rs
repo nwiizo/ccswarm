@@ -202,7 +202,8 @@ impl PersistentSessionManager {
         tracing::info!("Creating new persistent session for agent: {}", agent_id);
 
         // Create workspace path
-        let workspace_path = self.workspace_root
+        let workspace_path = self
+            .workspace_root
             .parent()
             .map(|p| p.join("worktrees").join(&agent_id))
             .unwrap_or_else(|| self.workspace_root.join(".worktrees").join(&agent_id));
