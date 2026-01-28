@@ -271,9 +271,9 @@ impl AutoCreateEngine {
         let tasks = self.analyze_and_decompose(description).await?;
         info!("📋 Generated {} tasks", tasks.len());
 
-        // Step 3: Execute with Claude Code CLI
-        info!("\n🤖 Executing with Claude Code CLI...");
-        self.execute_with_real_agents(tasks, config, output_path)
+        // Step 3: Execute with TRUE parallel Claude Code processes
+        info!("\n🤖 Executing with parallel Claude Code processes...");
+        self.execute_with_parallel_agents(tasks, config, output_path)
             .await?;
 
         // Step 4: Create project structure
@@ -319,7 +319,8 @@ impl AutoCreateEngine {
         Ok(())
     }
 
-    /// Execute tasks with real Claude API agents
+    /// Execute tasks with real Claude API agents (sequential fallback)
+    #[allow(dead_code)]
     async fn execute_with_real_agents(
         &mut self,
         tasks: Vec<Task>,
@@ -432,7 +433,113 @@ impl AutoCreateEngine {
         Ok(())
     }
 
+    /// Execute tasks with TRUE parallel Claude Code processes
+    ///
+    /// This method spawns multiple independent `claude --dangerously-skip-permissions`
+    /// processes that run concurrently, enabling real multi-agent parallel execution.
+    pub async fn execute_with_parallel_agents(
+        &mut self,
+        tasks: Vec<Task>,
+        _config: &CcswarmConfig,
+        output_path: &Path,
+    ) -> Result<()> {
+        use crate::subagent::{spawner::SpawnTask, ParallelConfig, ParallelExecutor};
+
+        info!("\n🚀 Starting TRUE parallel multi-agent execution...");
+        info!("   📋 Tasks to execute: {}", tasks.len());
+
+        // Create output directory as workspace
+        let workspace_path = output_path.to_path_buf();
+        std::fs::create_dir_all(&workspace_path)?;
+
+        // Convert tasks to SpawnTasks with agent-specific prompts
+        let spawn_tasks: Vec<SpawnTask> = tasks
+            .iter()
+            .map(|task| {
+                let decision = self.delegation_engine.delegate_task(task.clone()).ok();
+                let agent_name = decision
+                    .as_ref()
+                    .map(|d| d.target_agent.name().to_string())
+                    .unwrap_or_else(|| "general".to_string());
+
+                info!("   {} → {}: {}", "Master", agent_name, task.description);
+
+                let prompt = format!(
+                    "You are a {} specialist agent. Your task is: {}\n\n\
+                     Working directory: {}\n\n\
+                     Instructions:\n\
+                     1. Create all necessary files for this task\n\
+                     2. Follow best practices for {}\n\
+                     3. Make the code production-ready\n\
+                     4. Include error handling and comments",
+                    agent_name,
+                    task.description,
+                    workspace_path.display(),
+                    agent_name
+                );
+
+                SpawnTask::new(&prompt).with_id(&task.id)
+            })
+            .collect();
+
+        // Configure parallel executor
+        let config = ParallelConfig {
+            max_concurrent: 5,           // Run up to 5 Claude processes in parallel
+            default_timeout_ms: 600_000, // 10 minutes per task
+            fail_fast: false,            // Continue even if some tasks fail
+            retry_failed: true,
+            max_retries: 1,
+            retry_delay_ms: 2000,
+            collect_partial_on_timeout: true,
+        };
+
+        let executor = ParallelExecutor::new(config);
+
+        info!(
+            "\n⚡ Spawning {} parallel Claude processes...",
+            spawn_tasks.len()
+        );
+
+        // Execute all tasks in parallel using independent Claude processes
+        let result = executor
+            .execute_with_claude(spawn_tasks, Some(workspace_path.clone()))
+            .await?;
+
+        // Report results
+        info!("\n📊 Parallel execution completed:");
+        info!("   ✅ Successful: {}", result.successful_count);
+        info!("   ❌ Failed: {}", result.failed_count);
+        info!("   ⏱️  Total time: {}ms", result.total_duration_ms);
+
+        for task_result in &result.task_results {
+            let status_icon = if task_result.is_success() {
+                "✅"
+            } else {
+                "❌"
+            };
+            info!(
+                "   {} Task {}: {:?} ({}ms)",
+                status_icon, task_result.task_id, task_result.status, task_result.duration_ms
+            );
+        }
+
+        if result.failed_count > 0 {
+            info!("\n⚠️  Some tasks failed, attempting fallback simulation...");
+            // Fallback to simulation for failed tasks
+            for task_result in result.failed_results() {
+                if let Some(task) = tasks.iter().find(|t| t.id == task_result.task_id) {
+                    let decision = self.delegation_engine.delegate_task(task.clone())?;
+                    self.simulate_agent_execution(&decision, task, output_path)
+                        .await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Master reviews agent outputs for quality
+    #[allow(dead_code)]
     async fn master_review_outputs(
         &self,
         task_outputs: &[(Task, crate::identity::AgentRole, String)],

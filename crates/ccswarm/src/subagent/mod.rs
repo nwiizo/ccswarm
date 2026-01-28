@@ -139,4 +139,7 @@ pub enum SubagentError {
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    #[error("Execution error: {0}")]
+    ExecutionError(String),
 }
