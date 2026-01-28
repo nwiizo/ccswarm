@@ -155,6 +155,16 @@ impl From<&str> for CCSwarmError {
     }
 }
 
+#[cfg(feature = "claude-acp")]
+impl From<crate::acp_claude::ACPError> for CCSwarmError {
+    fn from(error: crate::acp_claude::ACPError) -> Self {
+        Self::Network {
+            message: error.to_string(),
+            source: None,
+        }
+    }
+}
+
 /// Result type alias for ccswarm operations
 pub type Result<T> = std::result::Result<T, CCSwarmError>;
 
