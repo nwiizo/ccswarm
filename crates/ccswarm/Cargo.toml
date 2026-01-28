@@ -123,7 +123,7 @@ secrecy = { version = "0.10", features = ["serde"] }
 zeroize = "1.8"
 
 # AI Session Management - core session management library
-ai-session = { path = "../ai-session" }
+ai-session = { version = "0.4.0", path = "../ai-session" }
 
 # ACP (Agent Client Protocol) support - for Claude Code integration
 agent-client-protocol = { version = "0.4.0", optional = true }
