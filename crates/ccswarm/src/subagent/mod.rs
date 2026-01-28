@@ -12,6 +12,12 @@ pub mod parser;
 pub mod spawner;
 pub mod workload_balancer;
 
+// Re-export key types for easier access
+pub use parallel_executor::{
+    AggregationStrategy, ExecutionStatus, MultiAgentExecutor, ParallelConfig,
+    ParallelExecutionResult, ParallelExecutor, TaskExecutionResult,
+};
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;

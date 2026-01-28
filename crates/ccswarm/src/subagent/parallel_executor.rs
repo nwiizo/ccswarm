@@ -2,8 +2,12 @@
 //!
 //! Manages parallel execution of tasks across multiple subagents
 //! with result aggregation and error handling.
+//!
+//! This module integrates with ai-session's MultiAgentSession for true
+//! multi-agent parallel execution using the message bus for coordination.
 
 use super::{SubagentResult, spawner::SpawnTask};
+use crate::session::{AgentMessage, MessageBus, MultiAgentSession, ResourceManager};
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -439,6 +443,405 @@ impl Clone for ParallelExecutor {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
+            semaphore: Arc::clone(&self.semaphore),
+            active_executions: Arc::clone(&self.active_executions),
+        }
+    }
+}
+
+/// Multi-agent executor that integrates with ai-session's coordination layer
+///
+/// This executor uses ai-session's MultiAgentSession, MessageBus, and ResourceManager
+/// to achieve true parallel execution of Claude CLI sessions.
+pub struct MultiAgentExecutor {
+    /// Configuration
+    config: ParallelConfig,
+    /// Multi-agent session coordinator from ai-session
+    multi_session: Arc<MultiAgentSession>,
+    /// Message bus for inter-agent communication
+    message_bus: Arc<MessageBus>,
+    /// Resource manager for file locking and rate limiting
+    resource_manager: Arc<ResourceManager>,
+    /// Concurrency semaphore
+    semaphore: Arc<Semaphore>,
+    /// Active executions
+    active_executions: Arc<RwLock<HashMap<String, ExecutionStatus>>>,
+}
+
+impl MultiAgentExecutor {
+    /// Create a new multi-agent executor
+    pub fn new(config: ParallelConfig) -> Self {
+        let multi_session = Arc::new(MultiAgentSession::new());
+        let message_bus = multi_session.message_bus.clone();
+        let resource_manager = multi_session.resource_manager.clone();
+        let semaphore = Arc::new(Semaphore::new(config.max_concurrent));
+
+        Self {
+            config,
+            multi_session,
+            message_bus,
+            resource_manager,
+            semaphore,
+            active_executions: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Create with default configuration
+    pub fn with_defaults() -> Self {
+        Self::new(ParallelConfig::default())
+    }
+
+    /// Create from an existing multi-agent session
+    pub fn from_multi_session(
+        multi_session: Arc<MultiAgentSession>,
+        config: ParallelConfig,
+    ) -> Self {
+        let message_bus = multi_session.message_bus.clone();
+        let resource_manager = multi_session.resource_manager.clone();
+        let semaphore = Arc::new(Semaphore::new(config.max_concurrent));
+
+        Self {
+            config,
+            multi_session,
+            message_bus,
+            resource_manager,
+            semaphore,
+            active_executions: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Get the multi-agent session
+    pub fn multi_session(&self) -> &Arc<MultiAgentSession> {
+        &self.multi_session
+    }
+
+    /// Get the message bus
+    pub fn message_bus(&self) -> &Arc<MessageBus> {
+        &self.message_bus
+    }
+
+    /// Get the resource manager
+    pub fn resource_manager(&self) -> &Arc<ResourceManager> {
+        &self.resource_manager
+    }
+
+    /// Execute tasks in parallel using multi-agent coordination
+    ///
+    /// This method spawns concurrent tasks that can communicate through
+    /// the message bus and use shared resources via the resource manager.
+    pub async fn execute_parallel<F, Fut>(
+        &self,
+        tasks: Vec<SpawnTask>,
+        executor: F,
+    ) -> SubagentResult<ParallelExecutionResult>
+    where
+        F: Fn(SpawnTask, Arc<MessageBus>, Arc<ResourceManager>) -> Fut
+            + Send
+            + Sync
+            + Clone
+            + 'static,
+        Fut: std::future::Future<Output = SubagentResult<serde_json::Value>> + Send + 'static,
+    {
+        let execution_id = uuid::Uuid::new_v4().to_string();
+        let start = std::time::Instant::now();
+
+        // Register execution
+        {
+            let mut active = self.active_executions.write().await;
+            active.insert(execution_id.clone(), ExecutionStatus::Running);
+        }
+
+        let task_timeout = Duration::from_millis(self.config.default_timeout_ms);
+        let mut futures = FuturesUnordered::new();
+
+        for task in tasks {
+            let semaphore = Arc::clone(&self.semaphore);
+            let message_bus = Arc::clone(&self.message_bus);
+            let resource_manager = Arc::clone(&self.resource_manager);
+            let executor = executor.clone();
+            let task_id = task.id.clone();
+
+            let future = async move {
+                // Acquire semaphore permit
+                let _permit = semaphore.acquire().await;
+                let task_start = std::time::Instant::now();
+
+                // Execute with message bus and resource manager access
+                let result =
+                    timeout(task_timeout, executor(task, message_bus, resource_manager)).await;
+
+                let duration_ms = task_start.elapsed().as_millis() as u64;
+
+                match result {
+                    Ok(Ok(value)) => TaskExecutionResult {
+                        task_id,
+                        agent_id: None,
+                        status: ExecutionStatus::Completed,
+                        result: Some(value),
+                        error: None,
+                        duration_ms,
+                        retries: 0,
+                    },
+                    Ok(Err(e)) => TaskExecutionResult {
+                        task_id,
+                        agent_id: None,
+                        status: ExecutionStatus::Failed,
+                        result: None,
+                        error: Some(e.to_string()),
+                        duration_ms,
+                        retries: 0,
+                    },
+                    Err(_) => TaskExecutionResult::timeout(&task_id, duration_ms),
+                }
+            };
+
+            futures.push(future);
+        }
+
+        // Collect results
+        let mut task_results = Vec::new();
+        let mut first_error = None;
+
+        while let Some(result) = futures.next().await {
+            if self.config.fail_fast && !result.is_success() && first_error.is_none() {
+                first_error = Some(result.error.clone().unwrap_or_default());
+            }
+            task_results.push(result);
+        }
+
+        let total_duration_ms = start.elapsed().as_millis() as u64;
+        let successful_count = task_results.iter().filter(|r| r.is_success()).count();
+        let failed_count = task_results.len() - successful_count;
+
+        let status = if first_error.is_some() && self.config.fail_fast {
+            ExecutionStatus::Failed
+        } else {
+            ExecutionStatus::Completed
+        };
+
+        // Update active execution status
+        {
+            let mut active = self.active_executions.write().await;
+            active.insert(execution_id.clone(), status);
+        }
+
+        Ok(ParallelExecutionResult {
+            execution_id,
+            status,
+            task_results,
+            total_duration_ms,
+            successful_count,
+            failed_count,
+            aggregated_result: None,
+        })
+    }
+
+    /// Execute tasks with resource locking for file operations
+    ///
+    /// This is useful when multiple agents need to work on the same files
+    /// without conflicting with each other.
+    pub async fn execute_with_resource_locking<F, Fut>(
+        &self,
+        tasks: Vec<(SpawnTask, Vec<String>)>, // Task with file paths to lock
+        executor: F,
+    ) -> SubagentResult<ParallelExecutionResult>
+    where
+        F: Fn(SpawnTask, Arc<MessageBus>, Arc<ResourceManager>) -> Fut
+            + Send
+            + Sync
+            + Clone
+            + 'static,
+        Fut: std::future::Future<Output = SubagentResult<serde_json::Value>> + Send + 'static,
+    {
+        let execution_id = uuid::Uuid::new_v4().to_string();
+        let start = std::time::Instant::now();
+
+        // Register execution
+        {
+            let mut active = self.active_executions.write().await;
+            active.insert(execution_id.clone(), ExecutionStatus::Running);
+        }
+
+        let task_timeout = Duration::from_millis(self.config.default_timeout_ms);
+        let mut futures = FuturesUnordered::new();
+
+        for (task, file_paths) in tasks {
+            let semaphore = Arc::clone(&self.semaphore);
+            let message_bus = Arc::clone(&self.message_bus);
+            let resource_manager = Arc::clone(&self.resource_manager);
+            let executor = executor.clone();
+            let task_id = task.id.clone();
+
+            let future = async move {
+                // Acquire semaphore permit
+                let _permit = semaphore.acquire().await;
+                let task_start = std::time::Instant::now();
+
+                // Try to acquire file locks
+                let agent_id = crate::session::AIAgentId::new();
+                let mut locked_files: Vec<String> = Vec::new();
+
+                for path in &file_paths {
+                    if let Err(e) = resource_manager.acquire_file_lock(path, agent_id.clone()) {
+                        // Release already acquired locks
+                        for locked in locked_files.iter() {
+                            let _ = resource_manager.release_file_lock(locked, &agent_id);
+                        }
+                        return TaskExecutionResult {
+                            task_id,
+                            agent_id: None,
+                            status: ExecutionStatus::Failed,
+                            result: None,
+                            error: Some(format!("Failed to acquire lock for {}: {}", path, e)),
+                            duration_ms: task_start.elapsed().as_millis() as u64,
+                            retries: 0,
+                        };
+                    }
+                    locked_files.push(path.clone());
+                }
+
+                // Execute with message bus and resource manager access
+                let result = timeout(
+                    task_timeout,
+                    executor(task, message_bus, resource_manager.clone()),
+                )
+                .await;
+
+                // Release file locks
+                for path in locked_files.iter() {
+                    let _ = resource_manager.release_file_lock(path, &agent_id);
+                }
+
+                let duration_ms = task_start.elapsed().as_millis() as u64;
+
+                match result {
+                    Ok(Ok(value)) => TaskExecutionResult {
+                        task_id,
+                        agent_id: Some(agent_id.to_string()),
+                        status: ExecutionStatus::Completed,
+                        result: Some(value),
+                        error: None,
+                        duration_ms,
+                        retries: 0,
+                    },
+                    Ok(Err(e)) => TaskExecutionResult {
+                        task_id,
+                        agent_id: Some(agent_id.to_string()),
+                        status: ExecutionStatus::Failed,
+                        result: None,
+                        error: Some(e.to_string()),
+                        duration_ms,
+                        retries: 0,
+                    },
+                    Err(_) => TaskExecutionResult::timeout(&task_id, duration_ms),
+                }
+            };
+
+            futures.push(future);
+        }
+
+        // Collect results
+        let mut task_results = Vec::new();
+        let mut first_error = None;
+
+        while let Some(result) = futures.next().await {
+            if self.config.fail_fast && !result.is_success() && first_error.is_none() {
+                first_error = Some(result.error.clone().unwrap_or_default());
+            }
+            task_results.push(result);
+        }
+
+        let total_duration_ms = start.elapsed().as_millis() as u64;
+        let successful_count = task_results.iter().filter(|r| r.is_success()).count();
+        let failed_count = task_results.len() - successful_count;
+
+        let status = if first_error.is_some() && self.config.fail_fast {
+            ExecutionStatus::Failed
+        } else {
+            ExecutionStatus::Completed
+        };
+
+        // Update active execution status
+        {
+            let mut active = self.active_executions.write().await;
+            active.insert(execution_id.clone(), status);
+        }
+
+        Ok(ParallelExecutionResult {
+            execution_id,
+            status,
+            task_results,
+            total_duration_ms,
+            successful_count,
+            failed_count,
+            aggregated_result: None,
+        })
+    }
+
+    /// Broadcast a message to all registered agents
+    pub async fn broadcast_to_agents(&self, message: AgentMessage) -> SubagentResult<()> {
+        let agents = self.multi_session.list_agents();
+        for agent_id in agents {
+            if let Err(e) = self
+                .message_bus
+                .publish_to_agent(&agent_id, message.clone())
+                .await
+            {
+                tracing::warn!("Failed to broadcast to agent {}: {}", agent_id, e);
+            }
+        }
+        Ok(())
+    }
+
+    /// Subscribe to all agent messages for monitoring
+    pub fn subscribe_all(&self) -> crossbeam_channel::Receiver<AgentMessage> {
+        self.message_bus.subscribe_all()
+    }
+
+    /// Cancel an active execution
+    pub async fn cancel(&self, execution_id: &str) -> bool {
+        let mut active = self.active_executions.write().await;
+        if let Some(status) = active.get_mut(execution_id) {
+            if *status == ExecutionStatus::Running {
+                *status = ExecutionStatus::Cancelled;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Get execution status
+    pub async fn get_status(&self, execution_id: &str) -> Option<ExecutionStatus> {
+        let active = self.active_executions.read().await;
+        active.get(execution_id).copied()
+    }
+
+    /// List active executions
+    pub async fn list_active(&self) -> Vec<(String, ExecutionStatus)> {
+        let active = self.active_executions.read().await;
+        active
+            .iter()
+            .filter(|(_, s)| **s == ExecutionStatus::Running)
+            .map(|(id, s)| (id.clone(), *s))
+            .collect()
+    }
+
+    /// Clean up completed executions
+    pub async fn cleanup(&self) -> usize {
+        let mut active = self.active_executions.write().await;
+        let before = active.len();
+        active.retain(|_, s| *s == ExecutionStatus::Running);
+        before - active.len()
+    }
+}
+
+impl Clone for MultiAgentExecutor {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            multi_session: Arc::clone(&self.multi_session),
+            message_bus: Arc::clone(&self.message_bus),
+            resource_manager: Arc::clone(&self.resource_manager),
             semaphore: Arc::clone(&self.semaphore),
             active_executions: Arc::clone(&self.active_executions),
         }

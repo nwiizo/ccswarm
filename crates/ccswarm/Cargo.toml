@@ -24,8 +24,15 @@ name = "backend_status_demo"
 path = "examples/backend_status_demo.rs"
 
 [dependencies]
-# Async runtime
-tokio = { version = "1.40", features = ["full"] }
+# Async runtime - minimal features for reduced binary size
+tokio = { version = "1.40", features = [
+    "rt-multi-thread",  # Multi-threaded runtime
+    "macros",           # #[tokio::main], #[tokio::test]
+    "sync",             # Channels, RwLock, Mutex
+    "time",             # Sleep, intervals, timeouts
+    "io-util",          # AsyncRead/AsyncWrite utilities
+    "process",          # Process spawning for agents
+] }
 
 # Error handling
 anyhow = "1.0"
@@ -69,6 +76,9 @@ config = "0.15"
 # Async channels
 async-channel = "2.3"
 
+# Crossbeam channels for ai-session integration
+crossbeam-channel = "0.5"
+
 # State management
 dashmap = "6.1"
 
@@ -111,12 +121,13 @@ sysinfo = "0.33"
 secrecy = { version = "0.10", features = ["serde"] }
 zeroize = "1.8"
 
-# AI Session Management removed - no longer needed
+# AI Session Management - core session management library
+ai-session = { path = "../ai-session" }
 
 # ACP (Agent Client Protocol) support - for Claude Code integration
 agent-client-protocol = { version = "0.4.0", optional = true }
 jsonrpc-core = { version = "18.0", optional = true }
-tokio-tungstenite = { version = "0.20", optional = true }
+tokio-tungstenite = { version = "0.24", optional = true }
 
 # Directory paths
 dirs = "5.0"
