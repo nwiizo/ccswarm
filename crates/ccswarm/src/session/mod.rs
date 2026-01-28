@@ -1,8 +1,11 @@
 pub mod base_session;
+pub mod checkpoint;
 pub mod claude_session;
+pub mod compaction;
 pub mod context_bridge;
 pub mod coordinator;
 pub mod error;
+pub mod fork;
 pub mod memory;
 pub mod persistent_session;
 pub mod session_optimization;
