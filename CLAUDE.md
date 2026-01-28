@@ -61,3 +61,39 @@ Specialized agents for Task tool delegation:
 @docs/ARCHITECTURE.md
 @docs/APPLICATION_SPEC.md
 @.claude/settings.json
+
+## Implementation Patterns (Learnings)
+
+### SensitiveString Pattern
+API keys and secrets should use `SensitiveString` wrapper type:
+```rust
+use ccswarm::providers::SensitiveString;
+
+let api_key = SensitiveString::new("sk-secret");
+println!("{:?}", api_key);  // Output: SensitiveString(****)
+let actual = api_key.expose();  // Get actual value when needed
+```
+Benefits:
+- Debug/Display masks values (prevents accidental logging)
+- Supports Clone/Serialize/Deserialize
+- Uses `secrecy` crate for memory safety
+
+### Error Retry Hints Pattern
+Errors should provide retry guidance:
+```rust
+impl CCSwarmError {
+    fn should_retry(&self) -> bool { /* ... */ }
+    fn suggested_retry_delay(&self) -> Duration { /* ... */ }
+    fn max_retries(&self) -> u32 { /* ... */ }
+}
+```
+
+### CLI Testing Patterns
+- **E2E tests**: Execute actual binary (`tests/e2e_cli_test.rs`)
+- **Unit tests**: Test argument parsing with `Cli::try_parse_from()` (`tests/cli_unit_tests.rs`)
+- Use `{ .. }` pattern for enum variants with fields: `Commands::Start { .. } => {}`
+
+### Type-State Pattern Notes
+- `.expect()` is acceptable in type-state builders for invariants enforced by the type system
+- Document why `.expect()` is safe in comments
+- Type-state guarantees make these "impossible" to fail at runtime
