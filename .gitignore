@@ -95,3 +95,10 @@ scripts/*.sh
 
 # Root level temporary scripts
 /*.sh
+
+# Git worktrees
+crates/worktrees/
+
+# Mutation testing output
+mutants.out/
+mutants.out.old/
