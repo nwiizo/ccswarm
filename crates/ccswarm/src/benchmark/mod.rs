@@ -546,13 +546,13 @@ mod tests {
     fn test_predefined_bug_fixes() {
         let suite = PredefinedSuites::bug_fixes();
         assert_eq!(suite.id, "bug-fixes");
-        assert!(suite.tasks_by_type(TaskType::BugFix).len() > 0);
+        assert!(!suite.tasks_by_type(TaskType::BugFix).is_empty());
     }
 
     #[test]
     fn test_predefined_refactoring() {
         let suite = PredefinedSuites::refactoring();
         assert_eq!(suite.id, "refactoring");
-        assert!(suite.tasks_by_type(TaskType::Refactoring).len() > 0);
+        assert!(!suite.tasks_by_type(TaskType::Refactoring).is_empty());
     }
 }

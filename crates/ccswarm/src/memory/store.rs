@@ -429,7 +429,7 @@ mod tests {
 
         let effective = memory.effective_importance();
         // Should be close to 0.5 for new memory (no decay)
-        assert!(effective >= 0.4 && effective <= 0.6);
+        assert!((0.4..=0.6).contains(&effective));
     }
 
     #[tokio::test]
