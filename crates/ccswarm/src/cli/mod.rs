@@ -524,6 +524,13 @@ pub enum ConfigAction {
         #[arg(short, long, default_value = "ccswarm.json")]
         file: PathBuf,
     },
+
+    /// Show configuration details
+    Show {
+        /// Configuration file
+        #[arg(short, long, default_value = "ccswarm.json")]
+        file: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2525,6 +2532,61 @@ impl CliRunner {
                         println!("   Error: {}", e);
                     }
                     return Err(e);
+                }
+            },
+            ConfigAction::Show { file } => match CcswarmConfig::from_file(file.clone()).await {
+                Ok(config) => {
+                    if self.json_output {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "status": "success",
+                                "file": file,
+                                "config": config,
+                            }))?
+                        );
+                    } else {
+                        println!("📄 Configuration: {}", file.display());
+                        println!("Project: {}", config.project.name);
+                        println!(
+                            "Repository: {} (branch: {})",
+                            config.project.repository.url, config.project.repository.main_branch
+                        );
+                        println!(
+                            "Master Claude role: {}, think mode: {}",
+                            config.project.master_claude.role,
+                            config.project.master_claude.think_mode
+                        );
+                        println!("Agents ({}):", config.agents.len());
+                        for (name, agent) in &config.agents {
+                            println!(
+                                "  - {} [{}] -> {}",
+                                name, agent.specialization, agent.worktree
+                            );
+                        }
+                        println!(
+                            "Coordination: method={}, sync={}s, quality_gate={}, master_review={}",
+                            config.coordination.communication_method,
+                            config.coordination.sync_interval,
+                            config.coordination.quality_gate_frequency,
+                            config.coordination.master_review_trigger
+                        );
+                    }
+                }
+                Err(e) => {
+                    if self.json_output {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "status": "error",
+                                "message": "Failed to read configuration",
+                                "file": file,
+                                "error": e.to_string(),
+                            }))?
+                        );
+                    } else {
+                        println!("❌ Failed to read configuration {}: {}", file.display(), e);
+                    }
                 }
             },
         }

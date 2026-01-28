@@ -3,7 +3,7 @@
 //! Enables task-time dynamic subagent generation for parallel processing.
 //! Inspired by Claude Code TeammateTool patterns.
 
-use super::{manager::SubagentManager, SubagentError, SubagentResult};
+use super::{SubagentError, SubagentResult, manager::SubagentManager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
