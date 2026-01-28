@@ -1,0 +1,100 @@
+#!/bin/bash
+# Claude Chat - Quick access to Claude Code conversations
+# This script provides a convenient wrapper for ai-session claude-chat command
+
+# Default configuration
+AI_SESSION_BIN="${AI_SESSION_BIN:-/Users/nwiizo/ghq/github.com/nwiizo/ccswarm/target/debug/ai-session}"
+CLAUDE_SERVER="${CLAUDE_SERVER:-http://localhost:4000}"
+CLAUDE_SESSION="${CLAUDE_SESSION:-claude-code}"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Check if ai-session binary exists
+if [ ! -x "$AI_SESSION_BIN" ]; then
+    echo -e "${RED}❌ Error: ai-session binary not found at $AI_SESSION_BIN${NC}"
+    echo "Please build ai-session first or set AI_SESSION_BIN environment variable"
+    exit 1
+fi
+
+# Parse command line arguments
+SERVER="$CLAUDE_SERVER"
+SESSION="$CLAUDE_SESSION"
+RAW=false
+AUTO_CREATE=true
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --server)
+            SERVER="$2"
+            shift 2
+            ;;
+        --session)
+            SESSION="$2"
+            shift 2
+            ;;
+        --raw)
+            RAW=true
+            shift
+            ;;
+        --no-auto-create)
+            AUTO_CREATE=false
+            shift
+            ;;
+        -h|--help)
+            echo "Claude Chat - AI-powered coding assistant"
+            echo ""
+            echo "Usage: claude-chat [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --server URL         Server URL (default: $CLAUDE_SERVER)"
+            echo "  --session NAME       Session name (default: $CLAUDE_SESSION)"
+            echo "  --raw               Show raw output"
+            echo "  --no-auto-create    Don't auto-create session"
+            echo "  -h, --help          Show this help"
+            echo ""
+            echo "Environment variables:"
+            echo "  AI_SESSION_BIN      Path to ai-session binary"
+            echo "  CLAUDE_SERVER       Default server URL"
+            echo "  CLAUDE_SESSION      Default session name"
+            echo ""
+            echo "Examples:"
+            echo "  claude-chat"
+            echo "  claude-chat --server http://localhost:5000"
+            echo "  claude-chat --session my-claude"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Build command
+CMD="$AI_SESSION_BIN claude-chat --server $SERVER --session $SESSION"
+
+if [ "$RAW" = true ]; then
+    CMD="$CMD --raw"
+fi
+
+if [ "$AUTO_CREATE" = false ]; then
+    CMD="$CMD --auto-create false"
+fi
+
+# Show startup banner
+echo -e "${BLUE}╭─────────────────────────────────────────╮${NC}"
+echo -e "${BLUE}│       🤖 Claude Code Chat Session       │${NC}"
+echo -e "${BLUE}├─────────────────────────────────────────┤${NC}"
+echo -e "${BLUE}│ Server:  ${GREEN}$SERVER${BLUE}                       │${NC}"
+echo -e "${BLUE}│ Session: ${GREEN}$SESSION${BLUE}                       │${NC}"
+echo -e "${BLUE}╰─────────────────────────────────────────╯${NC}"
+echo ""
+
+# Execute the command
+exec $CMD
