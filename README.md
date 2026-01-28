@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> 🚀 **Version 0.3.8** - Rust-Native Multi-Agent Orchestration with Advanced Features
+> 🚀 **Version 0.3.8** - Rust-Native Multi-Agent Orchestration System
 
 [![CI](https://github.com/nwiizo/ccswarm/workflows/CI/badge.svg)](https://github.com/nwiizo/ccswarm/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
@@ -116,40 +116,10 @@ ccswarm/
 - **Smart Proposal System**: Structured proposals with consensus algorithms
 - **Safe Implementation**: Risk assessment and rollback mechanisms
 
-### 📊 Observability & Tracing (NEW in v0.3.8)
-- **OpenTelemetry Compatible**: Export traces to Jaeger, Zipkin, or custom backends
-- **Langfuse Integration**: LLM-specific observability with token tracking
-- **Span Tracking**: Trace agent execution across the entire workflow
-- **Token Usage Metrics**: Monitor and optimize LLM API costs
+### 📊 Observability & Tracing
+- **OpenTelemetry Compatible**: Basic tracing infrastructure with span tracking
+- **Token Usage Metrics**: Monitor LLM API token consumption
 - **Trace Visualization**: Hierarchical span trees for debugging
-
-### 👤 Human-in-the-Loop (HITL) (NEW in v0.3.8)
-- **Approval Workflows**: Gate critical actions with human oversight
-- **Policy-Based Rules**: Define approval requirements by risk level
-- **Multi-Channel Notifications**: CLI, Slack, Email, and custom channels
-- **Escalation Support**: Automatic escalation on timeout or rejection
-- **Audit Trail**: Complete history of all approval decisions
-
-### 🧠 Long-term Memory & RAG (NEW in v0.3.8)
-- **Vector Embeddings**: Semantic search over past experiences
-- **Short-term/Long-term Memory**: Session-aware memory consolidation
-- **Retrieval Augmented Generation**: Context-aware agent responses
-- **Importance-based Retention**: Smart memory decay and prioritization
-- **Multiple Backends**: In-memory, file-based, or vector DB storage
-
-### 📈 Graph-based Workflow Engine (NEW in v0.3.8)
-- **DAG Workflows**: Define complex task dependencies as graphs
-- **Conditional Branching**: Dynamic workflow paths based on conditions
-- **Parallel Execution**: Run independent tasks concurrently
-- **Approval Gates**: Integrate HITL at workflow checkpoints
-- **Sub-workflows**: Compose complex workflows from simpler ones
-
-### 🎯 Benchmark Integration (NEW in v0.3.8)
-- **SWE-Bench Style Evaluation**: Standardized agent performance testing
-- **Predefined Suites**: Basic coding, bug fixes, refactoring benchmarks
-- **Metrics Collection**: Track pass rates, scores, and improvements
-- **Leaderboard System**: Compare agent performance over time
-- **Custom Benchmarks**: Create project-specific evaluation suites
 
 ### 🎯 Core Capabilities
 - **Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
@@ -1038,13 +1008,9 @@ All operations show live progress:
 
 ## 🚀 What's New in v0.3.8
 
-ccswarm v0.3.8 introduces **5 major new features**:
-
-- **📊 Observability/Tracing**: OpenTelemetry and Langfuse compatible tracing with span hierarchies
-- **👤 Human-in-the-Loop**: Policy-based approval workflows with multi-channel notifications
-- **🧠 Long-term Memory/RAG**: Vector embeddings and retrieval-augmented generation
-- **📈 Graph Workflow Engine**: DAG-based workflows with conditional branching and parallel execution
-- **🎯 Benchmark Integration**: SWE-Bench style evaluation with predefined suites and leaderboards
+- **🐛 Bug Fix**: Git worktree creation error "already checked out" resolved (#65, #66)
+- **📊 Tracing Infrastructure**: Basic OpenTelemetry-compatible tracing with token tracking
+- **🧹 Codebase Cleanup**: Removed unused modules and simplified architecture
 
 ### Previous Features (v0.3.7)
 - **🤖 Claude Code Integration**: Default connection via Agent Client Protocol (ACP)
