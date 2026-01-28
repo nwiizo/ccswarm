@@ -8,7 +8,7 @@
 
 **ccswarm** is a high-performance multi-agent orchestration system built with Rust-native patterns. It coordinates specialized AI agents using zero-cost abstractions, type-state patterns, and channel-based communication for efficient task delegation without runtime overhead.
 
-> **🚀 Default Integration**: ccswarm now uses **Claude Code via ACP (Agent Client Protocol)** as the default communication method. Simply start Claude Code and ccswarm automatically connects!
+> **🚀 Default Integration**: ccswarm uses **Claude Code via ACP (Agent Client Protocol)** as the default communication method. Start the [ACP bridge](#-acp-bridge-setup) and ccswarm automatically connects!
 
 ## 📚 Documentation
 
@@ -165,7 +165,7 @@ ccswarm/
 
 > **New to ccswarm?** Start with our [📖 Getting Started Guide](docs/GETTING_STARTED.md) for a comprehensive walkthrough with examples and best practices!
 
-> **Note**: Claude Code integration requires running Claude Code locally on ws://localhost:9100
+> **Note**: Claude Code integration requires a WebSocket bridge. See [ACP Bridge Setup](#-acp-bridge-setup) below.
 
 ### 1. Installation
 
@@ -180,6 +180,31 @@ cargo build --release
 
 # Or install locally
 cargo install --path crates/ccswarm
+```
+
+### 🔌 ACP Bridge Setup
+
+ccswarm connects to Claude Code via WebSocket on `ws://localhost:9100`. Since Claude Code ACP adapters use stdio (not WebSocket), you need a bridge:
+
+```bash
+# Install the WebSocket bridge
+npm install -g servep
+
+# Install Claude Code ACP adapter (uses your existing Claude Code subscription)
+npm install -g acp-claude-code
+
+# Start the bridge (Terminal 1)
+servep -p 9100 --ws "/::npx acp-claude-code"
+
+# Test connection (Terminal 2)
+ccswarm claude-acp test
+```
+
+**Authentication**: The `acp-claude-code` adapter uses your existing Claude Code CLI session from `~/.claude/config.json`. No `ANTHROPIC_API_KEY` needed if you're logged in with a Pro/Max subscription.
+
+```bash
+# If not logged in, authenticate first
+claude login
 ```
 
 ### 🎯 Try Sample Demos
@@ -285,6 +310,7 @@ ccswarm v0.3.7 features a streamlined Rust-native architecture with efficient pa
 ├─────────────────────────────────────────┤
 │     Claude ACP Integration              │ ← WebSocket Communication
 │     ├─ Agent Client Protocol           │   ws://localhost:9100
+│     ├─ servep Bridge (stdio→WebSocket) │   Required for ACP
 │     ├─ Real-time Task Delegation       │   JSON-RPC 2.0
 │     ├─ Session Persistence             │   UUID-based
 │     └─ Auto-reconnect with Retry       │   Exponential backoff
@@ -774,11 +800,14 @@ ccswarm session create --agent frontend
 
 **Provider errors**
 ```bash
-# Check API keys
-echo $ANTHROPIC_API_KEY
+# Check if ACP bridge is running
+ss -tlnp | grep 9100
 
-# Verify provider config
-ccswarm config show
+# Start the bridge if not running
+servep -p 9100 --ws "/::npx acp-claude-code"
+
+# Check Claude Code login
+claude /login
 ```
 
 **Worktree conflicts**
