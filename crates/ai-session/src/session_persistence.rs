@@ -142,11 +142,11 @@ impl PersistentSessionManager {
     pub async fn get_session(&self, id: &SessionId) -> Option<Arc<AISession>> {
         if let Some(session) = self.inner.get_session(id) {
             // Check if session needs to be started
-            if session.status().await == SessionStatus::Initializing {
-                if let Err(e) = session.start().await {
-                    eprintln!("Error: Failed to start session {}: {}", id, e);
-                    return None;
-                }
+            if session.status().await == SessionStatus::Initializing
+                && let Err(e) = session.start().await
+            {
+                eprintln!("Error: Failed to start session {id}: {e}");
+                return None;
             }
             Some(session)
         } else {

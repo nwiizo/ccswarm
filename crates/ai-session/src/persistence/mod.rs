@@ -101,12 +101,11 @@ impl PersistenceManager {
 
         let mut entries = fs::read_dir(&self.storage_path).await?;
         while let Some(entry) = entries.next_entry().await? {
-            if entry.file_type().await?.is_dir() {
-                if let Ok(name) = entry.file_name().into_string() {
-                    if let Ok(id) = SessionId::parse_str(&name) {
-                        sessions.push(id);
-                    }
-                }
+            if entry.file_type().await?.is_dir()
+                && let Ok(name) = entry.file_name().into_string()
+                && let Ok(id) = SessionId::parse_str(&name)
+            {
+                sessions.push(id);
             }
         }
 

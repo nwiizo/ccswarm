@@ -1,10 +1,10 @@
 //! PTY (Pseudo-Terminal) management
 
 use anyhow::Result;
-use portable_pty::{native_pty_system, Child, CommandBuilder, PtySize};
+use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 /// Handle to a PTY
 pub struct PtyHandle {
@@ -122,12 +122,12 @@ impl PtyHandle {
 
     /// Check if child process is running
     pub fn is_running(&self) -> bool {
-        if let Ok(child_lock) = self.child.lock() {
-            if let Some(_child) = child_lock.as_ref() {
-                // For portable-pty, we assume the process is running if we have a handle
-                // In a production implementation, we'd check the actual process status
-                return true;
-            }
+        if let Ok(child_lock) = self.child.lock()
+            && let Some(_child) = child_lock.as_ref()
+        {
+            // For portable-pty, we assume the process is running if we have a handle
+            // In a production implementation, we'd check the actual process status
+            return true;
         }
         false
     }

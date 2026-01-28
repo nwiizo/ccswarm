@@ -172,6 +172,15 @@ impl Clone for HookRegistry {
     }
 }
 
+impl std::fmt::Debug for HookRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HookRegistry")
+            .field("execution_hooks", &"<hooks>")
+            .field("tool_hooks", &"<hooks>")
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

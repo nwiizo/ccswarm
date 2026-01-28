@@ -277,17 +277,17 @@ impl APILimits {
     /// Check if API call is allowed
     pub fn is_allowed(&self, endpoint: &str, _method: &str) -> bool {
         // Check endpoint-specific limit
-        if let Some(limit) = self.endpoint_limits.get(endpoint) {
-            if !limit.check() {
-                return false;
-            }
+        if let Some(limit) = self.endpoint_limits.get(endpoint)
+            && !limit.check()
+        {
+            return false;
         }
 
         // Check global limit
-        if let Some(ref limit) = self.global_limit {
-            if !limit.check() {
-                return false;
-            }
+        if let Some(ref limit) = self.global_limit
+            && !limit.check()
+        {
+            return false;
         }
 
         true

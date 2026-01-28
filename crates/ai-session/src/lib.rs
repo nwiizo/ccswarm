@@ -169,7 +169,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Initialize the logging system
 pub fn init_logging() {
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
     tracing_subscriber::registry()
         .with(fmt::layer())

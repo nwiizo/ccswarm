@@ -5,7 +5,7 @@ use portable_pty::{CommandBuilder, PtySize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use uuid::Uuid;
 
 /// Native session that replaces tmux functionality

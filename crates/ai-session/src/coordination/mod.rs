@@ -462,10 +462,10 @@ impl ResourceManager {
 
     /// Release a file lock
     pub fn release_file_lock(&self, path: &str, agent_id: &AgentId) -> Result<()> {
-        if let Some((_, owner)) = self.file_locks.remove(path) {
-            if owner != *agent_id {
-                return Err(anyhow::anyhow!("Not the lock owner"));
-            }
+        if let Some((_, owner)) = self.file_locks.remove(path)
+            && owner != *agent_id
+        {
+            return Err(anyhow::anyhow!("Not the lock owner"));
         }
         Ok(())
     }

@@ -123,13 +123,9 @@ mod external_integration_tests {
     fn test_integration_initialization() {
         let mut mock = MockExternalIntegration::new();
 
-        mock.expect_name()
-            .times(1)
-            .returning(|| "vscode");
+        mock.expect_name().times(1).returning(|| "vscode");
 
-        mock.expect_initialize()
-            .times(1)
-            .returning(|| Ok(()));
+        mock.expect_initialize().times(1).returning(|| Ok(()));
 
         assert_eq!(mock.name(), "vscode");
         assert!(mock.initialize().is_ok());
@@ -225,12 +221,9 @@ mod transport_tests {
     fn test_transport_close() {
         let mut mock = MockTransport::new();
 
-        mock.expect_close()
-            .times(1)
-            .returning(|| Ok(()));
+        mock.expect_close().times(1).returning(|| Ok(()));
 
-        mock.expect_send()
-            .times(0); // No sends after close
+        mock.expect_send().times(0); // No sends after close
 
         assert!(mock.close().is_ok());
     }
@@ -240,9 +233,7 @@ mod transport_tests {
     fn test_receive_timeout() {
         let mut mock = MockTransport::new();
 
-        mock.expect_receive()
-            .times(1)
-            .returning(|| Ok(None));
+        mock.expect_receive().times(1).returning(|| Ok(None));
 
         let result = mock.receive().unwrap();
         assert!(result.is_none());
@@ -254,16 +245,12 @@ mod transport_tests {
         let mut mock = MockTransport::new();
         let counter = std::sync::atomic::AtomicUsize::new(0);
 
-        mock.expect_send()
-            .times(3)
-            .returning(|_| Ok(()));
+        mock.expect_send().times(3).returning(|_| Ok(()));
 
-        mock.expect_receive()
-            .times(3)
-            .returning(move || {
-                let n = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                Ok(Some(format!("response-{}", n)))
-            });
+        mock.expect_receive().times(3).returning(move || {
+            let n = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(Some(format!("response-{}", n)))
+        });
 
         for i in 0..3 {
             mock.send(&format!("request-{}", i)).unwrap();
@@ -406,13 +393,13 @@ mod session_manager_tests {
     fn test_list_sessions() {
         let mut mock = MockSessionManager::new();
 
-        mock.expect_list_sessions()
-            .times(1)
-            .returning(|| vec![
+        mock.expect_list_sessions().times(1).returning(|| {
+            vec![
                 "session-1".to_string(),
                 "session-2".to_string(),
                 "session-3".to_string(),
-            ]);
+            ]
+        });
 
         let sessions = mock.list_sessions();
         assert_eq!(sessions.len(), 3);
@@ -470,9 +457,7 @@ mod context_compressor_tests {
         let mut mock = MockContextCompressor::new();
 
         // Expect 93% compression (0.07 ratio means 93% reduction)
-        mock.expect_compression_ratio()
-            .times(1)
-            .returning(|| 0.07);
+        mock.expect_compression_ratio().times(1).returning(|| 0.07);
 
         let ratio = mock.compression_ratio();
         assert!(ratio < 0.1); // Less than 10% of original size
@@ -550,10 +535,7 @@ mod integration_patterns {
             .returning(|_| true);
 
         // Then allow transport operation
-        transport_mock
-            .expect_send()
-            .times(1)
-            .returning(|_| Ok(()));
+        transport_mock.expect_send().times(1).returning(|_| Ok(()));
 
         // Simulate capability check before network operation
         if caps_mock.has_capability(&network_cap) {
