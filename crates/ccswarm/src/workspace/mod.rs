@@ -35,7 +35,7 @@ impl SimpleWorkspaceManager {
         }
 
         // agents ディレクトリを作成
-        let agents_dir = self.base_path.join("agents");
+        let agents_dir = self.base_path.parent().map(|p| p.join("worktrees")).unwrap_or_else(|| self.base_path.join(".worktrees"));
         if !agents_dir.exists() {
             fs::create_dir_all(&agents_dir)
                 .await
@@ -47,7 +47,7 @@ impl SimpleWorkspaceManager {
 
     /// エージェント用ワークスペースを作成
     pub async fn create_workspace(&self, agent_id: &str) -> Result<WorkspaceInfo> {
-        let workspace_path = self.base_path.join("agents").join(agent_id);
+        let workspace_path = self.base_path.parent().map(|p| p.join("worktrees")).unwrap_or_else(|| self.base_path.join(".worktrees")).join(agent_id);
 
         if workspace_path.exists() {
             warn!("Workspace already exists: {}", workspace_path.display());
@@ -74,7 +74,7 @@ impl SimpleWorkspaceManager {
 
     /// ワークスペース一覧を取得
     pub async fn list_workspaces(&self) -> Result<Vec<WorkspaceInfo>> {
-        let agents_dir = self.base_path.join("agents");
+        let agents_dir = self.base_path.parent().map(|p| p.join("worktrees")).unwrap_or_else(|| self.base_path.join(".worktrees"));
         if !agents_dir.exists() {
             return Ok(Vec::new());
         }
@@ -105,7 +105,7 @@ impl SimpleWorkspaceManager {
 
     /// ワークスペースを削除
     pub async fn remove_workspace(&self, agent_id: &str) -> Result<()> {
-        let workspace_path = self.base_path.join("agents").join(agent_id);
+        let workspace_path = self.base_path.parent().map(|p| p.join("worktrees")).unwrap_or_else(|| self.base_path.join(".worktrees")).join(agent_id);
 
         if workspace_path.exists() {
             fs::remove_dir_all(&workspace_path)
@@ -129,7 +129,7 @@ impl SimpleWorkspaceManager {
 
     /// ワークスペース情報を読み込み
     async fn load_workspace_info(&self, agent_id: &str) -> Result<WorkspaceInfo> {
-        let workspace_path = self.base_path.join("agents").join(agent_id);
+        let workspace_path = self.base_path.parent().map(|p| p.join("worktrees")).unwrap_or_else(|| self.base_path.join(".worktrees")).join(agent_id);
         let info_file = workspace_path.join(".workspace_info.json");
 
         let content = fs::read_to_string(&info_file)
@@ -143,7 +143,7 @@ impl SimpleWorkspaceManager {
 
     /// CLAUDEの設定ファイルを配置
     pub async fn setup_claude_config(&self, agent_id: &str, claude_md_content: &str) -> Result<()> {
-        let workspace_path = self.base_path.join("agents").join(agent_id);
+        let workspace_path = self.base_path.parent().map(|p| p.join("worktrees")).unwrap_or_else(|| self.base_path.join(".worktrees")).join(agent_id);
         let claude_md_path = workspace_path.join("CLAUDE.md");
 
         fs::write(&claude_md_path, claude_md_content)
