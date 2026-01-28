@@ -3,8 +3,8 @@
 //! These tests verify the complete CLI workflow by executing the actual binary
 //! and checking outputs and side effects.
 
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 use tempfile::TempDir;
 
 /// Get the path to the ccswarm binary
@@ -72,7 +72,10 @@ fn test_cli_version() {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(output.status.success(), "Version command should succeed");
-    assert!(stdout.contains("ccswarm") || stdout.contains("0."), "Should show version");
+    assert!(
+        stdout.contains("ccswarm") || stdout.contains("0."),
+        "Should show version"
+    );
 }
 
 // ============================================================================
@@ -92,10 +95,7 @@ fn test_init_creates_config() {
         .expect("Failed to init git");
 
     // Run ccswarm init
-    let output = run_ccswarm(
-        &["init", "--name", "TestProject"],
-        Some(project_path),
-    );
+    let output = run_ccswarm(&["init", "--name", "TestProject"], Some(project_path));
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -122,7 +122,13 @@ fn test_init_with_agents() {
         .expect("Failed to init git");
 
     let output = run_ccswarm(
-        &["init", "--name", "MultiAgentProject", "--agents", "frontend,backend"],
+        &[
+            "init",
+            "--name",
+            "MultiAgentProject",
+            "--agents",
+            "frontend,backend",
+        ],
         Some(project_path),
     );
 
@@ -203,10 +209,10 @@ fn test_agents_list() {
 
     // Should succeed or show no agents message
     assert!(
-        output.status.success() ||
-        stdout.to_lowercase().contains("no agent") ||
-        stdout.to_lowercase().contains("agent") ||
-        stderr.to_lowercase().contains("no agent"),
+        output.status.success()
+            || stdout.to_lowercase().contains("no agent")
+            || stdout.to_lowercase().contains("agent")
+            || stderr.to_lowercase().contains("no agent"),
         "Agents command should work. stdout: {}, stderr: {}",
         stdout,
         stderr
@@ -250,10 +256,10 @@ fn test_config_show() {
 
     // Should show config or error about missing config
     assert!(
-        output.status.success() ||
-        stdout.contains("project") ||
-        stderr.contains("config") ||
-        stderr.contains("not found"),
+        output.status.success()
+            || stdout.contains("project")
+            || stderr.contains("config")
+            || stderr.contains("not found"),
         "Config show should return config or error. stdout: {}, stderr: {}",
         stdout,
         stderr
@@ -284,9 +290,9 @@ fn test_health_command() {
 
     // Health check should run (may report issues but shouldn't crash)
     assert!(
-        output.status.success() ||
-        stdout.to_lowercase().contains("health") ||
-        stderr.to_lowercase().contains("check"),
+        output.status.success()
+            || stdout.to_lowercase().contains("health")
+            || stderr.to_lowercase().contains("check"),
         "Health command should execute. stdout: {}, stderr: {}",
         stdout,
         stderr
@@ -301,10 +307,10 @@ fn test_doctor_command() {
 
     // Doctor should run diagnostics
     assert!(
-        output.status.success() ||
-        stdout.to_lowercase().contains("doctor") ||
-        stdout.to_lowercase().contains("diagnostic") ||
-        stderr.to_lowercase().contains("check"),
+        output.status.success()
+            || stdout.to_lowercase().contains("doctor")
+            || stdout.to_lowercase().contains("diagnostic")
+            || stderr.to_lowercase().contains("check"),
         "Doctor command should execute. stdout: {}, stderr: {}",
         stdout,
         stderr
@@ -334,10 +340,10 @@ fn test_session_list() {
 
     // Should list sessions or show empty
     assert!(
-        output.status.success() ||
-        stdout.to_lowercase().contains("session") ||
-        stdout.to_lowercase().contains("no ") ||
-        stderr.to_lowercase().contains("session"),
+        output.status.success()
+            || stdout.to_lowercase().contains("session")
+            || stdout.to_lowercase().contains("no ")
+            || stderr.to_lowercase().contains("session"),
         "Session list should work. stdout: {}, stderr: {}",
         stdout,
         stderr
@@ -368,9 +374,9 @@ fn test_template_list() {
 
     // Should list available templates
     assert!(
-        output.status.success() ||
-        stdout.to_lowercase().contains("template") ||
-        stderr.to_lowercase().contains("template"),
+        output.status.success()
+            || stdout.to_lowercase().contains("template")
+            || stderr.to_lowercase().contains("template"),
         "Template list should work. stdout: {}, stderr: {}",
         stdout,
         stderr
@@ -413,9 +419,9 @@ fn test_json_output_flag() {
     // (may be empty JSON array or object)
     if output.status.success() && !stdout.is_empty() {
         // If there's output, it should be valid JSON or JSON-like
-        let is_json_like = stdout.trim().starts_with('{') ||
-                          stdout.trim().starts_with('[') ||
-                          stdout.contains("\"");
+        let is_json_like = stdout.trim().starts_with('{')
+            || stdout.trim().starts_with('[')
+            || stdout.contains("\"");
         assert!(
             is_json_like || stdout.is_empty(),
             "JSON output should be JSON formatted: {}",
@@ -433,10 +439,7 @@ fn test_invalid_command() {
     let output = run_ccswarm(&["invalid-command-that-does-not-exist"], None);
 
     // Should fail gracefully
-    assert!(
-        !output.status.success(),
-        "Invalid command should fail"
-    );
+    assert!(!output.status.success(), "Invalid command should fail");
 }
 
 #[test]
@@ -491,9 +494,9 @@ fn test_full_workflow_init_to_task() {
 
     // Init should work
     assert!(
-        init_output.status.success() ||
-        init_stdout.contains("initialized") ||
-        init_stderr.contains("already"),
+        init_output.status.success()
+            || init_stdout.contains("initialized")
+            || init_stderr.contains("already"),
         "Project init should succeed. stdout: {}, stderr: {}",
         init_stdout,
         init_stderr
@@ -514,10 +517,10 @@ fn test_full_workflow_init_to_task() {
 
     // Status should show project info or indicate not running
     assert!(
-        status_output.status.success() ||
-        status_stdout.to_lowercase().contains("status") ||
-        status_stderr.to_lowercase().contains("not running") ||
-        status_stderr.to_lowercase().contains("no orchestrator"),
+        status_output.status.success()
+            || status_stdout.to_lowercase().contains("status")
+            || status_stderr.to_lowercase().contains("not running")
+            || status_stderr.to_lowercase().contains("no orchestrator"),
         "Status should work. stdout: {}, stderr: {}",
         status_stdout,
         status_stderr
@@ -542,8 +545,7 @@ fn test_verbose_flag() {
 #[test]
 fn test_all_subcommands_have_help() {
     let subcommands = [
-        "init", "task", "agents", "config", "session",
-        "template", "health", "doctor", "status",
+        "init", "task", "agents", "config", "session", "template", "health", "doctor", "status",
     ];
 
     for subcmd in subcommands {

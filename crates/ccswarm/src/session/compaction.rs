@@ -372,7 +372,11 @@ mod tests {
         let removed = history.apply_truncation(50, 3);
 
         // We should have removed some messages since we exceeded target
-        assert!(removed > 0, "Expected to remove messages, original_tokens={}, target=50", original_tokens);
+        assert!(
+            removed > 0,
+            "Expected to remove messages, original_tokens={}, target=50",
+            original_tokens
+        );
         assert!(history.message_count() < original_count);
     }
 
