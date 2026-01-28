@@ -46,10 +46,10 @@ The workspace configuration enables:
                       │
 ┌─────────────────────▼───────────────────────────────────────┐
 │                    AI-Session Management Layer               │
-│  - Native PTY implementation                                 │
-│  - Context compression (93% token savings)                   │
+│  - True parallel execution via MultiAgentExecutor            │
+│  - Message bus for inter-agent communication                 │
+│  - Resource manager for file locking                         │
 │  - Session persistence and recovery                          │
-│  - Multi-agent coordination bus                              │
 │  📖 See: ../crates/ai-session/docs/ARCHITECTURE.md          │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -100,18 +100,41 @@ Revolutionary session management powered by the ai-session crate, replacing tmux
 #### AI-Session Adapter (`ai_session_adapter.rs`)
 - **Bridge Layer**: Connects ccswarm orchestrator with ai-session crate (located in `crates/ai-session/`)
 - **Session Lifecycle**: Creates, manages, and terminates ai-session instances for each agent
-- **Context Compression**: Leverages ai-session's 93% token reduction capabilities
+- **Context Management**: Token-efficient conversation history management
 - **Cross-Platform PTY**: Uses ai-session's native PTY implementation
 - **Integration API**: See [../crates/ai-session/docs/ccswarm-integration-api.md](../crates/ai-session/docs/ccswarm-integration-api.md)
 - **Message Bus Integration**: Coordinates multi-agent communication via ai-session's coordination layer
 
 #### AI-Session Features Used by ccswarm
-- **Token-Efficient Context**: Automatic conversation history compression using zstd
+- **Token-Efficient Context**: Context window management with FIFO eviction
 - **Semantic Output Parsing**: Intelligent analysis of build results, test outputs, and error messages
 - **Multi-Agent Coordination**: Message bus architecture for agent-to-agent communication
 - **Session Persistence**: Automatic crash recovery and state restoration
 - **MCP Protocol Support**: HTTP API server for external tool integration
 - **Performance Monitoring**: Real-time metrics and token usage tracking
+
+### 3.1 Parallel Execution (`crates/ccswarm/src/subagent/parallel_executor.rs`)
+True multi-agent parallel execution using ai-session's coordination layer.
+
+#### MultiAgentExecutor
+```rust
+// Create executor with ai-session integration
+let executor = MultiAgentExecutor::new(ParallelConfig::default());
+
+// Execute tasks in parallel with message bus access
+executor.execute_parallel(tasks, |task, message_bus, resource_manager| async move {
+    // Agents can communicate through message_bus
+    // Resource conflicts handled by resource_manager
+    execute_task(task).await
+}).await?;
+```
+
+#### Key Features
+- **True Parallel Execution**: Multiple Claude CLI sessions run concurrently
+- **Message Bus Communication**: Agents can communicate during execution
+- **Resource Locking**: File locking prevents conflicts on shared resources
+- **Semaphore-Based Concurrency**: Configurable max concurrent executions
+- **Result Aggregation**: Collect, merge, or select from parallel results
 
 #### Session Types in ccswarm
 - **Agent Session**: Specialized ai-session instance per agent (frontend, backend, devops, qa)
