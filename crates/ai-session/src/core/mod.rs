@@ -81,9 +81,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+pub mod headless;
 pub mod lifecycle;
 pub mod process;
 pub mod pty;
+pub mod terminal;
 
 use crate::context::SessionContext;
 use crate::persistence::CommandRecord;
@@ -202,6 +204,12 @@ pub struct SessionConfig {
     pub context_config: ContextConfig,
     /// Agent role (optional)
     pub agent_role: Option<String>,
+    /// Force headless (non-PTY) execution (useful for restricted sandboxes)
+    #[serde(default)]
+    pub force_headless: bool,
+    /// Allow automatic fallback to headless mode when PTY creation fails
+    #[serde(default = "SessionConfig::default_allow_headless_fallback")]
+    pub allow_headless_fallback: bool,
 }
 
 /// Context configuration for AI features
@@ -229,7 +237,15 @@ impl Default for SessionConfig {
             enable_ai_features: false,
             context_config: ContextConfig::default(),
             agent_role: None,
+            force_headless: false,
+            allow_headless_fallback: true,
         }
+    }
+}
+
+impl SessionConfig {
+    fn default_allow_headless_fallback() -> bool {
+        true
     }
 }
 
@@ -254,8 +270,8 @@ pub struct AISession {
     pub context: Arc<RwLock<SessionContext>>,
     /// Process handle
     process: Arc<RwLock<Option<process::ProcessHandle>>>,
-    /// PTY handle
-    pty: Arc<RwLock<Option<pty::PtyHandle>>>,
+    /// Terminal handle (PTY or headless)
+    terminal: Arc<RwLock<Option<terminal::TerminalHandle>>>,
     /// Creation time
     pub created_at: DateTime<Utc>,
     /// Last activity time
@@ -282,7 +298,7 @@ impl AISession {
             status: RwLock::new(SessionStatus::Initializing),
             context: Arc::new(RwLock::new(SessionContext::new(id))),
             process: Arc::new(RwLock::new(None)),
-            pty: Arc::new(RwLock::new(None)),
+            terminal: Arc::new(RwLock::new(None)),
             created_at: now,
             last_activity: Arc::new(RwLock::new(now)),
             metadata: Arc::new(RwLock::new(HashMap::new())),
@@ -306,7 +322,7 @@ impl AISession {
             status: RwLock::new(SessionStatus::Initializing),
             context: Arc::new(RwLock::new(SessionContext::new(id))),
             process: Arc::new(RwLock::new(None)),
-            pty: Arc::new(RwLock::new(None)),
+            terminal: Arc::new(RwLock::new(None)),
             created_at,
             last_activity: Arc::new(RwLock::new(now)),
             metadata: Arc::new(RwLock::new(HashMap::new())),
@@ -328,9 +344,9 @@ impl AISession {
 
     /// Send input to the session
     pub async fn send_input(&self, input: &str) -> Result<()> {
-        let mut pty = self.pty.write().await;
-        if let Some(pty) = pty.as_mut() {
-            pty.write(input.as_bytes()).await?;
+        let terminal_guard = self.terminal.read().await;
+        if let Some(terminal) = terminal_guard.as_ref() {
+            terminal.write(input.as_bytes()).await?;
             *self.last_activity.write().await = Utc::now();
             Ok(())
         } else {
@@ -340,9 +356,9 @@ impl AISession {
 
     /// Read output from the session
     pub async fn read_output(&self) -> Result<Vec<u8>> {
-        let pty = self.pty.read().await;
-        if let Some(pty) = pty.as_ref() {
-            let output = pty.read().await?;
+        let terminal = self.terminal.read().await;
+        if let Some(terminal) = terminal.as_ref() {
+            let output = terminal.read().await?;
             *self.last_activity.write().await = Utc::now();
             Ok(output)
         } else {

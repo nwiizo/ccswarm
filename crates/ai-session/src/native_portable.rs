@@ -358,6 +358,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg_attr(not(feature = "native-pty-tests"), ignore)]
     #[tokio::test]
     async fn test_session_manager() -> Result<()> {
         let manager = NativeSessionManager::new();

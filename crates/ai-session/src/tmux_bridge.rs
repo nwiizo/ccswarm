@@ -636,6 +636,8 @@ pub enum TmuxError {
 mod tests {
     use super::*;
 
+    // This test requires tmux and can hang on CI - always ignore
+    #[ignore = "requires tmux and can hang in CI"]
     #[tokio::test]
     async fn test_session_lifecycle() -> Result<()> {
         let client = TmuxClient::new().await?;
@@ -670,6 +672,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg_attr(not(feature = "native-pty-tests"), ignore)]
     #[tokio::test]
     async fn test_window_management() -> Result<()> {
         let client = TmuxClient::new().await?;
@@ -699,6 +702,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg_attr(not(feature = "native-pty-tests"), ignore)]
     #[tokio::test]
     async fn test_pane_management() -> Result<()> {
         let client = TmuxClient::new().await?;
@@ -725,6 +729,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg_attr(not(feature = "native-pty-tests"), ignore)]
     #[tokio::test]
     async fn test_invalid_session_name() {
         let client = TmuxClient::new().await.unwrap();
@@ -735,6 +740,7 @@ mod tests {
         assert!(client.create_session("", "/tmp").await.is_err());
     }
 
+    #[cfg_attr(not(feature = "native-pty-tests"), ignore)]
     #[tokio::test]
     async fn test_session_prefix() -> Result<()> {
         let config = TmuxConfig {

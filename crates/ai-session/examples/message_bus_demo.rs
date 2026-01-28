@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
     let all_messages = message_bus.subscribe_all();
 
     // Spawn a monitoring task
-    let monitor_handle = tokio::spawn(async move {
+    let _monitor_handle = tokio::spawn(async move {
         println!("Starting message monitor...\n");
 
         while let Ok(msg) = all_messages.recv() {

@@ -91,6 +91,7 @@ mockall = "0.13"
 
 [features]
 default = []
+native-pty-tests = []
 cli = ["clap", "crossterm", "reqwest"]
 server = ["axum", "tower", "tower-http", "clap"]
 mcp = ["reqwest", "tokio-tungstenite", "futures-util"]
@@ -115,4 +116,3 @@ required-features = ["cli"]
 [[example]]
 name = "multi_agent"
 required-features = ["cli"]
-
