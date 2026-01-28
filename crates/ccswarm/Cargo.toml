@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.3.7"
+version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
@@ -124,6 +124,7 @@ tempfile = "3.12"
 pretty_assertions = "1.4"
 
 [features]
-default = ["urlencoding", "claude-acp"]
+default = ["urlencoding"]
+# claude-acp feature is deprecated - use CLI direct execution instead
 container = ["bollard", "futures-util", "tar", "urlencoding"]
 claude-acp = ["agent-client-protocol", "jsonrpc-core", "tokio-tungstenite", "futures-util"]
