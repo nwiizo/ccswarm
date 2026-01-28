@@ -87,6 +87,7 @@ use std::io::Read as IoRead;
 
 /// Session configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SessionConfig {
     /// Maximum token limit for the session
     pub max_tokens: usize,
@@ -222,21 +223,41 @@ impl SessionContext {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenEfficientHistory {
     /// Active messages in the conversation (uncompressed, recent)
+    #[serde(default)]
     pub messages: Vec<Message>,
     /// Compressed older messages (zstd compressed)
+    #[serde(default)]
     pub compressed_history: Option<CompressedHistory>,
     /// Maximum token limit
+    #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
     /// Current token count (approximate)
+    #[serde(default)]
     pub current_tokens: usize,
     /// Number of recent messages to keep uncompressed
+    #[serde(default = "default_keep_recent")]
     pub keep_recent: usize,
     /// Compression level for zstd
+    #[serde(default = "default_compression_level")]
     pub compression_level: i32,
     /// Total messages ever added (including compressed)
+    #[serde(default)]
     pub total_messages_added: usize,
     /// Total tokens saved through compression
+    #[serde(default)]
     pub tokens_saved_by_compression: usize,
+}
+
+fn default_max_tokens() -> usize {
+    100_000
+}
+
+fn default_keep_recent() -> usize {
+    20
+}
+
+fn default_compression_level() -> i32 {
+    3
 }
 
 impl Default for TokenEfficientHistory {

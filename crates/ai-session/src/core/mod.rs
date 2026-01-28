@@ -159,9 +159,10 @@ impl std::fmt::Display for SessionId {
 }
 
 /// Session status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SessionStatus {
     /// Session is being initialized
+    #[default]
     Initializing,
     /// Session is running and ready
     Running,
@@ -177,6 +178,7 @@ pub enum SessionStatus {
 
 /// Session configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SessionConfig {
     /// Session name (optional)
     pub name: Option<String>,
@@ -205,15 +207,14 @@ pub struct SessionConfig {
     /// Agent role (optional)
     pub agent_role: Option<String>,
     /// Force headless (non-PTY) execution (useful for restricted sandboxes)
-    #[serde(default)]
     pub force_headless: bool,
     /// Allow automatic fallback to headless mode when PTY creation fails
-    #[serde(default = "SessionConfig::default_allow_headless_fallback")]
     pub allow_headless_fallback: bool,
 }
 
 /// Context configuration for AI features
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ContextConfig {
     /// Maximum tokens for context
     pub max_tokens: usize,
@@ -240,12 +241,6 @@ impl Default for SessionConfig {
             force_headless: false,
             allow_headless_fallback: true,
         }
-    }
-}
-
-impl SessionConfig {
-    fn default_allow_headless_fallback() -> bool {
-        true
     }
 }
 
