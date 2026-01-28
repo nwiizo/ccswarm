@@ -133,6 +133,7 @@ pub mod coordination;
 pub mod core;
 pub mod integration;
 pub mod ipc;
+#[cfg(feature = "mcp")]
 pub mod mcp;
 pub mod native_portable;
 pub use native_portable as native;
@@ -151,8 +152,9 @@ pub use context::{
     SessionContext, TaskContext, WorkspaceState,
 };
 pub use coordination::{
-    AgentId, AgentMessage, Message as CoordinationMessage, MessageBus, MessagePriority,
-    MessageType, MultiAgentSession, TaskId,
+    AgentId, AgentMessage, BroadcastMessage, Message as CoordinationMessage, MessageBus,
+    MessagePriority, MessageType, MultiAgentSession, ResourceManager, Task, TaskDistributor,
+    TaskId, TaskPriority,
 };
 pub use core::{
     AISession, ContextConfig, SessionConfig, SessionError, SessionId, SessionResult, SessionStatus,

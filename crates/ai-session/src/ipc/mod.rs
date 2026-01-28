@@ -75,7 +75,7 @@ impl IpcServer {
 
         // Bind to socket
         let listener = UnixListener::bind(&self.socket_path)?;
-        log::info!("IPC server listening on {:?}", self.socket_path);
+        tracing::info!("IPC server listening on {:?}", self.socket_path);
 
         loop {
             let (stream, _) = listener.accept().await?;
@@ -84,7 +84,7 @@ impl IpcServer {
             // Handle connection in separate task
             tokio::spawn(async move {
                 if let Err(e) = handle_client(stream, session_manager).await {
-                    log::error!("Client handler error: {}", e);
+                    tracing::error!("Client handler error: {}", e);
                 }
             });
         }
@@ -137,7 +137,7 @@ async fn handle_client(
                 writer.flush().await?;
             }
             Err(e) => {
-                log::error!("Read error: {}", e);
+                tracing::error!("Read error: {}", e);
                 break;
             }
         }

@@ -154,7 +154,7 @@ impl NativeSession {
                         }
                     }
                     Err(e) => {
-                        log::error!("PTY read error: {}", e);
+                        tracing::error!("PTY read error: {}", e);
                         *status.write().await = SessionStatus::Error(e.to_string());
                         break;
                     }
@@ -170,7 +170,7 @@ impl NativeSession {
 
                 while let Some(data) = input_rx.recv().await {
                     if let Err(e) = writer.write_all(&data) {
-                        log::error!("PTY write error: {}", e);
+                        tracing::error!("PTY write error: {}", e);
                         break;
                     }
                     let _ = writer.flush();

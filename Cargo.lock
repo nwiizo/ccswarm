@@ -58,6 +58,7 @@ dependencies = [
  "dashmap",
  "dirs",
  "futures-util",
+ "log",
  "nix 0.30.1",
  "once_cell",
  "portable-pty",

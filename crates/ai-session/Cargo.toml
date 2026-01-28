@@ -10,8 +10,19 @@ keywords = ["terminal", "session", "ai", "pty", "tmux-alternative"]
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
-# Core async runtime
-tokio = { version = "1.40", features = ["full"] }
+# Core async runtime - minimal features for library
+tokio = { version = "1.40", features = [
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "time",
+    "io-util",
+    "io-std",
+    "process",
+    "signal",
+    "fs",
+    "net",
+] }
 async-trait = "0.1"
 
 # Error handling
@@ -25,70 +36,63 @@ nix = { version = "0.30", features = ["term", "process", "signal", "fs"] }
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-bincode = "1.3"
 
 # Logging and tracing
-log = "0.4"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Data structures
 dashmap = "6.0"
-bytes = "1.7"
-ringbuf = "0.3"
 
-# Compression and storage
+# Compression
 zstd = "0.13"
-lz4 = "1.24"
+base64 = "0.22"
 
 # Time and UUID
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
 
-# IPC and communication
+# Inter-agent communication
 crossbeam-channel = "0.5"
-ipc-channel = { version = "0.18", features = ["async"] }
 
 # File system
-notify = "6.1"
 tempfile = "3.10"
 
-# Pattern matching and parsing
+# Pattern matching
 regex = "1.10"
 once_cell = "1.19"
 
-# HTTP client for remote commands
+# Logging (used in core modules)
+log = "0.4"
+
+# Directory paths (used in session_cache, session_persistence)
+dirs = "5.0"
+
+# Optional: HTTP client for MCP
 reqwest = { version = "0.12", features = ["json"], optional = true }
 
-# WebSocket support for MCP transport
+# Optional: WebSocket for MCP transport
 tokio-tungstenite = { version = "0.24", optional = true }
 futures-util = { version = "0.3", optional = true }
 
-# HTTP server support
+# Optional: HTTP server
 axum = { version = "0.7", features = ["json"], optional = true }
 tower = { version = "0.4", optional = true }
 tower-http = { version = "0.5", features = ["cors"], optional = true }
 
-# CLI utilities (for examples and testing)
+# Optional: CLI utilities
 clap = { version = "4.5", features = ["derive"], optional = true }
 crossterm = { version = "0.29", optional = true }
-dirs = { version = "5.0", optional = true }
-
-# Testing utilities
-mockall = { version = "0.13", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
-proptest = "1.5"
-criterion = "0.5"
 tempfile = "3.10"
 
 [features]
-default = ["cli", "mcp"]
-cli = ["clap", "crossterm", "reqwest", "dirs"]
+default = []
+cli = ["clap", "crossterm", "reqwest"]
 server = ["axum", "tower", "tower-http", "clap"]
 mcp = ["reqwest", "tokio-tungstenite", "futures-util"]
-testing = ["mockall"]
 
 [[bin]]
 name = "ai-session"
@@ -98,6 +102,10 @@ required-features = ["cli"]
 name = "ai-session-server"
 path = "src/bin/server.rs"
 required-features = ["server"]
+
+[[example]]
+name = "mcp_server_test"
+required-features = ["mcp"]
 
 [[example]]
 name = "basic_session"

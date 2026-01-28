@@ -2,9 +2,12 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
+
+#[cfg(feature = "mcp")]
+use futures_util::{SinkExt, StreamExt};
+#[cfg(feature = "mcp")]
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 use super::jsonrpc::JsonRpcMessage;
@@ -80,6 +83,7 @@ impl Transport for StdioTransport {
     }
 }
 
+#[cfg(feature = "mcp")]
 type WebSocketPair = (
     futures_util::stream::SplitSink<
         tokio_tungstenite::WebSocketStream<
@@ -95,6 +99,7 @@ type WebSocketPair = (
 );
 
 /// HTTP/WebSocket transport for remote MCP communication
+#[cfg(feature = "mcp")]
 pub struct HttpTransport {
     base_url: String,
     client: reqwest::Client,
@@ -102,6 +107,7 @@ pub struct HttpTransport {
     is_connected: bool,
 }
 
+#[cfg(feature = "mcp")]
 impl HttpTransport {
     /// Create a new HTTP transport
     pub fn new(base_url: String) -> Self {
@@ -164,6 +170,7 @@ impl HttpTransport {
     }
 }
 
+#[cfg(feature = "mcp")]
 #[async_trait]
 impl Transport for HttpTransport {
     async fn send(&mut self, message: JsonRpcMessage) -> Result<()> {
@@ -262,6 +269,7 @@ mod tests {
         // Transport created successfully
     }
 
+    #[cfg(feature = "mcp")]
     #[test]
     fn test_http_transport_creation() {
         let _transport = HttpTransport::new("http://localhost:8080".to_string());

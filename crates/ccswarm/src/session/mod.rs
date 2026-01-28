@@ -17,26 +17,14 @@ pub mod session_pool; // Used by coordinator
 pub mod traits;
 pub mod worktree_session;
 
-// Deprecated modules (replaced by ai-session integration):
-// - session_typestate: Use ai-session's StateSession pattern
-// - session_optimization: Use ai-session's context compression
-
-// Re-export ai-session types for multi-agent coordination
-pub use ai_session::coordination::{
-    AgentId as AIAgentId, AgentMessage, BroadcastMessage, Message as CoordinationMessage,
-    MessageBus, MessagePriority, MessageType, MultiAgentSession, ResourceManager, Task as AITask,
-    TaskDistributor, TaskId, TaskPriority,
-};
-pub use ai_session::core::{
-    AISession, ContextConfig, SessionConfig as AISessionConfig, SessionError as AISessionError,
-    SessionId as AISessionId, SessionResult as AISessionResult, SessionStatus as AISessionStatus,
-};
+// Note: ai-session integration removed for now. Multi-agent coordination
+// features will be re-implemented when the ai-session crate is stable.
 
 use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use dashmap::DashMap;
 use uuid::Uuid;
 
 use self::error::{SessionError, SessionResult};
@@ -244,9 +232,6 @@ impl AgentSession {
 }
 
 /// Manages multiple agent sessions with native session management
-///
-/// This manager integrates with ai-session for multi-agent coordination
-/// while maintaining compatibility with ccswarm's session model.
 pub struct SessionManager {
     /// Map of session ID to agent session (lock-free concurrent access)
     sessions: DashMap<String, AgentSession>,
@@ -254,10 +239,6 @@ pub struct SessionManager {
     resource_monitor: Option<Arc<ResourceMonitor>>,
     /// Resource integration handler
     resource_integration: Option<Arc<SessionResourceIntegration>>,
-    /// Multi-agent session coordinator (ai-session integration)
-    multi_agent_session: Option<Arc<MultiAgentSession>>,
-    /// Message bus for inter-agent communication
-    message_bus: Option<Arc<MessageBus>>,
 }
 
 impl SessionManager {
@@ -266,8 +247,6 @@ impl SessionManager {
             sessions: DashMap::new(),
             resource_monitor: None,
             resource_integration: None,
-            multi_agent_session: None,
-            message_bus: None,
         })
     }
 
@@ -289,46 +268,7 @@ impl SessionManager {
             sessions: DashMap::new(),
             resource_monitor: Some(resource_monitor),
             resource_integration: Some(resource_integration),
-            multi_agent_session: None,
-            message_bus: None,
         })
-    }
-
-    /// Creates a new session manager with multi-agent coordination enabled
-    pub async fn with_multi_agent_coordination(
-        resource_limits: crate::resource::ResourceLimits,
-    ) -> SessionResult<Self> {
-        let resource_monitor = Arc::new(ResourceMonitor::new(resource_limits));
-        let resource_integration =
-            Arc::new(SessionResourceIntegration::new(resource_monitor.clone()));
-
-        // Start the monitoring loop
-        let monitor_clone = resource_monitor.clone();
-        tokio::spawn(async move {
-            monitor_clone.start_monitoring_loop().await;
-        });
-
-        // Initialize multi-agent coordination
-        let multi_agent_session = Arc::new(MultiAgentSession::new());
-        let message_bus = multi_agent_session.message_bus.clone();
-
-        Ok(Self {
-            sessions: DashMap::new(),
-            resource_monitor: Some(resource_monitor),
-            resource_integration: Some(resource_integration),
-            multi_agent_session: Some(multi_agent_session),
-            message_bus: Some(message_bus),
-        })
-    }
-
-    /// Get the multi-agent session coordinator
-    pub fn get_multi_agent_session(&self) -> Option<Arc<MultiAgentSession>> {
-        self.multi_agent_session.clone()
-    }
-
-    /// Get the message bus for inter-agent communication
-    pub fn get_message_bus(&self) -> Option<Arc<MessageBus>> {
-        self.message_bus.clone()
     }
 
     /// Creates a new agent session
@@ -374,19 +314,6 @@ impl SessionManager {
             }
         }
 
-        // Register with multi-agent coordinator if available
-        if let Some(ref multi_session) = self.multi_agent_session {
-            let ai_agent_id = AIAgentId::new();
-            // Note: We don't have an AISession here, so we skip registration
-            // The multi-agent coordinator will be used for message passing only
-            tracing::debug!(
-                "Session {} created, ai-agent-id: {} (message bus only), multi-session agents: {}",
-                session.id,
-                ai_agent_id,
-                multi_session.list_agents().len()
-            );
-        }
-
         Ok(session)
     }
 
@@ -398,12 +325,12 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be paused
     pub async fn pause_session(&self, session_id: &str) -> SessionResult<()> {
-        let mut session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SessionError::NotFound {
-                id: session_id.to_string(),
-            })?;
+        let mut session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
 
         match session.status {
             SessionStatus::Active | SessionStatus::Background => {
@@ -426,12 +353,12 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be resumed
     pub async fn resume_session(&self, session_id: &str) -> SessionResult<()> {
-        let mut session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SessionError::NotFound {
-                id: session_id.to_string(),
-            })?;
+        let mut session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
 
         match session.status {
             SessionStatus::Paused => {
@@ -458,12 +385,12 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be detached
     pub async fn detach_session(&self, session_id: &str) -> SessionResult<()> {
-        let mut session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SessionError::NotFound {
-                id: session_id.to_string(),
-            })?;
+        let mut session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
 
         match session.status {
             SessionStatus::Active | SessionStatus::Background => {
@@ -486,12 +413,12 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be attached
     pub async fn attach_session(&self, session_id: &str) -> SessionResult<()> {
-        let mut session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SessionError::NotFound {
-                id: session_id.to_string(),
-            })?;
+        let mut session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
 
         match session.status {
             SessionStatus::Detached => {
@@ -560,12 +487,12 @@ impl SessionManager {
         session_id: &str,
         auto_accept: bool,
     ) -> SessionResult<()> {
-        let mut session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SessionError::NotFound {
-                id: session_id.to_string(),
-            })?;
+        let mut session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
 
         session.background_mode = true;
         if auto_accept && session.auto_accept_config.is_none() {
@@ -596,12 +523,12 @@ impl SessionManager {
         session_id: &str,
         config: AutoAcceptConfig,
     ) -> SessionResult<()> {
-        let mut session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SessionError::NotFound {
-                id: session_id.to_string(),
-            })?;
+        let mut session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
 
         session.enable_auto_accept(config);
 
@@ -616,12 +543,12 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found
     pub async fn disable_auto_accept(&self, session_id: &str) -> SessionResult<()> {
-        let mut session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SessionError::NotFound {
-                id: session_id.to_string(),
-            })?;
+        let mut session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
 
         session.disable_auto_accept();
 
@@ -641,12 +568,12 @@ impl SessionManager {
         session_id: &str,
         config: AutoAcceptConfig,
     ) -> SessionResult<()> {
-        let mut session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SessionError::NotFound {
-                id: session_id.to_string(),
-            })?;
+        let mut session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SessionError::NotFound {
+                    id: session_id.to_string(),
+                })?;
 
         session.update_auto_accept_config(config);
 
