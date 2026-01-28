@@ -35,6 +35,9 @@ pub use whiteboard::{AnnotationMarker, EntryType, Whiteboard, WhiteboardEntry};
 
 use self::interleaved_thinking::{DecisionType, InterleavedThinkingEngine, ThinkingStep};
 use crate::config::ClaudeConfig;
+use crate::hooks::{
+    HookContext, HookRegistry, HookResult, OnErrorInput, PostExecutionInput, PreExecutionInput,
+};
 use crate::identity::boundary::TaskBoundaryChecker;
 use crate::identity::boundary::TaskEvaluation;
 use crate::identity::{AgentIdentity, AgentRole, IdentityMonitor, IdentityStatus};
@@ -94,6 +97,10 @@ pub struct ClaudeCodeAgent {
 
     /// Practical wisdom (phronesis) manager
     pub phronesis: PhronesisManager,
+
+    /// Hook registry for pre/post execution hooks
+    #[serde(skip)]
+    pub hook_registry: HookRegistry,
 }
 
 impl ClaudeCodeAgent {
@@ -146,6 +153,8 @@ impl ClaudeCodeAgent {
         let whiteboard = Whiteboard::new(agent_id.clone());
         let phronesis = PhronesisManager::new();
 
+        let hook_registry = HookRegistry::new();
+
         let agent = Self {
             identity,
             worktree_path,
@@ -161,6 +170,7 @@ impl ClaudeCodeAgent {
             personality,
             whiteboard,
             phronesis,
+            hook_registry,
         };
 
         Ok(agent)
@@ -548,6 +558,55 @@ impl ClaudeCodeAgent {
 
     async fn execute_task_with_monitoring(&mut self, task: Task) -> Result<TaskResult> {
         let start_time = std::time::Instant::now();
+
+        // Create hook context for this execution
+        let hook_ctx = HookContext::new(self.identity.agent_id.clone())
+            .with_task(task.id.clone())
+            .with_working_directory(self.worktree_path.to_string_lossy().to_string());
+
+        // Run pre-execution hooks
+        let pre_input = PreExecutionInput {
+            task_description: task.description.clone(),
+            task_type: format!("{:?}", task.task_type),
+            priority: format!("{:?}", task.priority),
+            details: task.details.clone(),
+        };
+
+        let pre_result = self
+            .hook_registry
+            .run_pre_execution(pre_input, hook_ctx.clone())
+            .await;
+
+        match pre_result {
+            HookResult::Deny { reason } => {
+                return Ok(TaskResult {
+                    success: false,
+                    output: serde_json::json!({
+                        "error": "Pre-execution hook denied",
+                        "reason": reason
+                    }),
+                    error: Some(format!("Denied by pre-execution hook: {}", reason)),
+                    duration: start_time.elapsed(),
+                });
+            }
+            HookResult::Abort { reason } => {
+                return Err(anyhow::anyhow!("Aborted by pre-execution hook: {}", reason));
+            }
+            HookResult::Skip { reason } => {
+                tracing::info!("Task skipped by pre-execution hook: {}", reason);
+                return Ok(TaskResult {
+                    success: true,
+                    output: serde_json::json!({
+                        "skipped": true,
+                        "reason": reason
+                    }),
+                    error: None,
+                    duration: start_time.elapsed(),
+                });
+            }
+            _ => {} // Continue with execution
+        }
+
         let mut monitor = IdentityMonitor::new(&self.identity.agent_id);
         let mut thinking_engine = InterleavedThinkingEngine::new().with_config(
             crate::agent::interleaved_thinking::ThinkingConfig {
@@ -690,6 +749,19 @@ impl ClaudeCodeAgent {
                         "タスク中断",
                         AnnotationMarker::Important,
                     );
+
+                    // Run on_error hooks before returning error
+                    let error_input = OnErrorInput {
+                        error_message: reason.clone(),
+                        error_type: "TaskAbort".to_string(),
+                        is_recoverable: false,
+                        stack_trace: None,
+                    };
+                    let _ = self
+                        .hook_registry
+                        .run_on_error(error_input, hook_ctx.clone())
+                        .await;
+
                     return Err(anyhow::anyhow!("Task aborted: {}", reason));
                 }
             }
@@ -709,6 +781,22 @@ impl ClaudeCodeAgent {
             task.id
         ));
 
+        let duration = start_time.elapsed();
+
+        // Run post-execution hooks
+        let post_input = PostExecutionInput {
+            task_description: task.description.clone(),
+            success: true,
+            output: serde_json::json!({ "response": final_output }),
+            error: None,
+            duration_ms: duration.as_millis() as u64,
+        };
+
+        let _ = self
+            .hook_registry
+            .run_post_execution(post_input, hook_ctx)
+            .await;
+
         Ok(TaskResult {
             success: true,
             output: serde_json::json!({
@@ -719,7 +807,7 @@ impl ClaudeCodeAgent {
                 "execution_iterations": execution_count,
             }),
             error: None,
-            duration: start_time.elapsed(),
+            duration,
         })
     }
 

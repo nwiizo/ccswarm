@@ -149,9 +149,18 @@ async fn test_output_parsing() -> Result<()> {
 
     // Test various output types
     let test_outputs = vec![
-        ("ls -la\ntotal 42\ndrwxr-xr-x  5 user  staff  160 Dec  1 10:00 .\ndrwxr-xr-x  3 user  staff   96 Dec  1 09:00 ..", "file_listing"),
-        ("npm test\n✓ should pass test 1\n✓ should pass test 2\n✗ should fail test 3", "test_output"),
-        ("git status\nOn branch main\nnothing to commit, working tree clean", "git_status"),
+        (
+            "ls -la\ntotal 42\ndrwxr-xr-x  5 user  staff  160 Dec  1 10:00 .\ndrwxr-xr-x  3 user  staff   96 Dec  1 09:00 ..",
+            "file_listing",
+        ),
+        (
+            "npm test\n✓ should pass test 1\n✓ should pass test 2\n✗ should fail test 3",
+            "test_output",
+        ),
+        (
+            "git status\nOn branch main\nnothing to commit, working tree clean",
+            "git_status",
+        ),
         ("error: command not found: nonexistent", "error_output"),
     ];
 

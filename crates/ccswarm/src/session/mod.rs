@@ -18,6 +18,7 @@ pub mod traits;
 pub mod worktree_session;
 
 // Re-export ai-session types for multi-agent coordination
+pub use ai_session::context::{SessionContext, TaskContext, WorkspaceState};
 pub use ai_session::coordination::{
     AgentId as AIAgentId, AgentMessage, BroadcastMessage, Message as CoordinationMessage,
     MessageBus, MessagePriority, MessageType, MultiAgentSession,
@@ -28,7 +29,6 @@ pub use ai_session::core::{
     SessionId as AISessionId, SessionManager as AISessionManager, SessionResult as AISessionResult,
     SessionStatus as AISessionStatus,
 };
-pub use ai_session::context::{SessionContext, TaskContext, WorkspaceState};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;

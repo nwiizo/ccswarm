@@ -3,11 +3,11 @@
 use ai_session::{SessionConfig, SessionManager};
 use anyhow::Result;
 use axum::{
+    Router,
     extract::{Path, State},
     http::StatusCode,
     response::Json,
     routing::{delete, get, post},
-    Router,
 };
 use clap::Parser;
 use serde::{Deserialize, Serialize};

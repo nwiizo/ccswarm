@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
 
 use crate::agent::{AgentTask, AgentType, TaskType};
@@ -454,12 +454,12 @@ impl PromptBuilder {
         // Aider-specific prompt format
         let mut prompt = format!("/ask {}\n", task.description);
 
-        if let Some(files) = task.parameters.get("files") {
-            if let Some(files_list) = files.as_array() {
-                for file in files_list {
-                    if let Some(file_str) = file.as_str() {
-                        prompt.push_str(&format!("/add {}\n", file_str));
-                    }
+        if let Some(files) = task.parameters.get("files")
+            && let Some(files_list) = files.as_array()
+        {
+            for file in files_list {
+                if let Some(file_str) = file.as_str() {
+                    prompt.push_str(&format!("/add {file_str}\n"));
                 }
             }
         }

@@ -1,9 +1,9 @@
 //! MCP server implementation for ai-session
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, error, info, warn};
 
 use super::jsonrpc::{
@@ -197,8 +197,8 @@ impl McpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp::transport::StdioTransport;
     use crate::SessionManager;
+    use crate::mcp::transport::StdioTransport;
 
     #[tokio::test]
     async fn test_mcp_server_creation() {
