@@ -1,53 +1,53 @@
-# 全体レビュー
+# Full Review
 
-ccswarm コードベースに対して全てのレビューを一括実行します。
+Runs all reviews at once on the ccswarm codebase.
 
-## 実行内容
+## Execution Content
 
-以下のレビューを実行します:
+The following reviews are executed:
 
-1. **設計準拠チェック** - CLAUDE.md, docs/ARCHITECTURE.md との整合性
-2. **コード品質** - Rust ベストプラクティス準拠
-3. **重複コード検出** - `/review-duplicates` コマンドを実行（similarity-rs）
-4. **アーキテクチャパターン** - Type-State, Channel-Based 等のパターン準拠
+1. **Design Compliance Check** - Consistency with CLAUDE.md, docs/ARCHITECTURE.md
+2. **Code Quality** - Rust best practices compliance
+3. **Duplicate Code Detection** - Execute `/review-duplicates` command (similarity-rs)
+4. **Architecture Patterns** - Type-State, Channel-Based pattern compliance
 
-## 実行方法
+## Execution Method
 
-Task ツールで `all-reviewer` エージェントを実行:
+Execute with Task tool using `all-reviewer` agent:
 
 ```
 subagent_type: "Explore"
-prompt: "ccswarm に対して全体レビューを実行してください。
-1. CLAUDE.md との設計準拠確認
-2. docs/ARCHITECTURE.md アーキテクチャパターン準拠確認
-3. Rust ベストプラクティス準拠確認
-4. /review-duplicates - 重複コード検出
-各カテゴリの結果をJSON形式でまとめてください。"
+prompt: "Execute a full review on ccswarm.
+1. CLAUDE.md design compliance check
+2. docs/ARCHITECTURE.md architecture pattern compliance check
+3. Rust best practices compliance check
+4. /review-duplicates - Duplicate code detection
+Summarize the results for each category in JSON format."
 ```
 
-## アーキテクチャパターンチェック項目
+## Architecture Pattern Check Items
 
-CLAUDE.md に基づくパターン:
+Patterns based on CLAUDE.md:
 
-| # | パターン | 基準 |
-|---|---------|------|
-| 1 | Type-State Pattern | コンパイル時状態検証、ゼロランタイムコスト |
-| 2 | Channel-Based Orchestration | Arc<Mutex> より Channel 優先 |
-| 3 | Iterator Pipelines | ゼロコスト抽象化 |
-| 4 | Actor Model | ロックよりメッセージパッシング |
-| 5 | Minimal Testing | 8-10 テスト程度、コア機能に集中 |
+| # | Pattern | Criteria |
+|---|---------|----------|
+| 1 | Type-State Pattern | Compile-time state verification, zero runtime cost |
+| 2 | Channel-Based Orchestration | Prefer Channel over Arc<Mutex> |
+| 3 | Iterator Pipelines | Zero-cost abstractions |
+| 4 | Actor Model | Message passing over locks |
+| 5 | Minimal Testing | Around 8-10 tests, focus on core functionality |
 
-## Rust ベストプラクティスチェック項目
+## Rust Best Practices Check Items
 
-| # | 項目 | 基準 |
-|---|-----|------|
-| 1 | unwrap() 排除 | プロダクションコードで使用禁止 |
-| 2 | Result<T, E> | thiserror でカスタムエラー型 |
-| 3 | async/await | tokio ランタイム使用 |
-| 4 | Clippy clean | 警告なし |
-| 5 | Documentation | 公開 API に rustdoc |
+| # | Item | Criteria |
+|---|------|----------|
+| 1 | unwrap() elimination | Forbidden in production code |
+| 2 | Result<T, E> | Custom error types with thiserror |
+| 3 | async/await | Use tokio runtime |
+| 4 | Clippy clean | No warnings |
+| 5 | Documentation | rustdoc for public APIs |
 
-## 出力形式
+## Output Format
 
 ```json
 {
@@ -63,7 +63,7 @@ CLAUDE.md に基づくパターン:
     },
     "similarity": {
       "duplicate_patterns": N,
-      "refactoring_candidates": ["候補1", "候補2"]
+      "refactoring_candidates": ["candidate1", "candidate2"]
     }
   },
   "architecture_patterns": {
@@ -81,8 +81,8 @@ CLAUDE.md に基づくパターン:
 }
 ```
 
-## 関連
+## Related
 
-- `/check-impl` - 基本チェック（フォーマット、リント、テスト）
-- `/review-duplicates` - 重複コード検出（similarity-rs）
-- `/review-architecture` - アーキテクチャパターン詳細レビュー
+- `/check-impl` - Basic checks (format, lint, test)
+- `/review-duplicates` - Duplicate code detection (similarity-rs)
+- `/review-architecture` - Architecture pattern detailed review
