@@ -5,7 +5,7 @@ ccswarm is an AI Multi-Agent Orchestration System that coordinates specialized A
 
 ## Tech Stack
 - **Language**: Rust (1.70+)
-- **Build System**: Cargo workspace with two crates (ccswarm and ai-session)
+- **Build System**: Cargo workspace (ai-session: v0.4.0)
 - **Architecture**: Microkernel with pluggable providers
 - **Async Runtime**: Tokio
 - **Key Dependencies**: serde, tokio, colored, portable-pty
@@ -24,4 +24,4 @@ ccswarm is an AI Multi-Agent Orchestration System that coordinates specialized A
 - Working directory: /Users/nwiizo/ghq/github.com/nwiizo/ccswarm
 - Workspace structure:
   - `crates/ccswarm/` - Main orchestration system
-  - `crates/ai-session/` - Terminal session management library
+  - `crates/ai-session/` - Terminal session management library (v0.4.0)

@@ -72,7 +72,7 @@ ccswarm/
 │   │   ├── Cargo.toml
 │   │   ├── src/
 │   │   └── tests/
-│   └── ai-session/        # Terminal session management crate
+│   └── ai-session/        # Terminal session management (v0.4.0)
 │       ├── Cargo.toml
 │       ├── src/
 │       └── examples/
@@ -89,14 +89,14 @@ cargo build --workspace
 
 # Build specific crate
 cargo build -p ccswarm
-cargo build -p ai-session
+cargo build -p ai-session  # v0.4.0
 
 # Run all tests
 cargo test --workspace
 
 # Run specific tests
 cargo test -p ccswarm
-cargo test -p ai-session
+cargo test -p ai-session  # v0.4.0
 
 # Run with verbose output
 cargo test --workspace -- --nocapture
@@ -173,7 +173,7 @@ src/
     └── error.rs
 ```
 
-### ai-session Crate (`crates/ai-session/`)
+### ai-session Crate (`crates/ai-session/`) - v0.4.0
 
 ```
 src/

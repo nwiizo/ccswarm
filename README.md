@@ -64,6 +64,7 @@ ccswarm/
 ```
 
 ## 🌟 Key Features
+> **Status**: ✅ implemented | ⚡ file-export | 🔜 planned
 
 ### 🤖 Claude Code Integration via ACP (Default)
 - **Native Claude Code Support**: Direct integration with Claude Code through Agent Client Protocol (ACP)
@@ -118,32 +119,32 @@ ccswarm/
 - **Safe Implementation**: Risk assessment and rollback mechanisms
 
 ### 📊 Observability & Tracing (NEW in v0.3.8)
-- **OpenTelemetry Compatible**: Export traces to Jaeger, Zipkin, or custom backends
-- **Langfuse Integration**: LLM-specific observability with token tracking
-- **Span Tracking**: Trace agent execution across the entire workflow
-- **Token Usage Metrics**: Monitor and optimize LLM API costs
-- **Trace Visualization**: Hierarchical span trees for debugging
+- **OpenTelemetry Compatible**: Export traces to Jaeger, Zipkin, or custom backends ⚡
+- **Langfuse Integration**: LLM-specific observability with token tracking ⚡
+- **Span Tracking**: Trace agent execution across the entire workflow ✅
+- **Token Usage Metrics**: Monitor and optimize LLM API costs ✅
+- **Trace Visualization**: Hierarchical span trees for debugging ✅
 
 ### 👤 Human-in-the-Loop (HITL) (NEW in v0.3.8)
-- **Approval Workflows**: Gate critical actions with human oversight
-- **Policy-Based Rules**: Define approval requirements by risk level
-- **Multi-Channel Notifications**: CLI, Slack, Email, and custom channels
-- **Escalation Support**: Automatic escalation on timeout or rejection
-- **Audit Trail**: Complete history of all approval decisions
+- **Approval Workflows**: Gate critical actions with human oversight ✅
+- **Policy-Based Rules**: Define approval requirements by risk level ✅
+- **Multi-Channel Notifications**: CLI ✅, Slack/Email 🔜
+- **Escalation Support**: Timeout ✅, escalation 🔜
+- **Audit Trail**: Complete history of all approval decisions ✅
 
 ### 🧠 Long-term Memory & RAG (NEW in v0.3.8)
-- **Vector Embeddings**: Semantic search over past experiences
-- **Short-term/Long-term Memory**: Session-aware memory consolidation
-- **Retrieval Augmented Generation**: Context-aware agent responses
-- **Importance-based Retention**: Smart memory decay and prioritization
-- **Multiple Backends**: In-memory, file-based, or vector DB storage
+- **Vector Embeddings**: Semantic search over past experiences 🔜
+- **Short-term/Long-term Memory**: Session-aware memory consolidation ✅
+- **Retrieval Augmented Generation**: Context-aware agent responses ✅
+- **Importance-based Retention**: Smart memory decay and prioritization ✅
+- **Multiple Backends**: In-memory ✅, file-based/vector DB 🔜
 
 ### 📈 Graph-based Workflow Engine (NEW in v0.3.8)
-- **DAG Workflows**: Define complex task dependencies as graphs
-- **Conditional Branching**: Dynamic workflow paths based on conditions
-- **Parallel Execution**: Run independent tasks concurrently
-- **Approval Gates**: Integrate HITL at workflow checkpoints
-- **Sub-workflows**: Compose complex workflows from simpler ones
+- **DAG Workflows**: Define complex task dependencies as graphs ✅
+- **Conditional Branching**: Dynamic workflow paths based on conditions 🔜
+- **Parallel Execution**: Run independent tasks concurrently 🔜
+- **Approval Gates**: Integrate HITL at workflow checkpoints 🔜
+- **Sub-workflows**: Compose complex workflows from simpler ones 🔜
 
 ### 🎯 Benchmark Integration (NEW in v0.3.8)
 - **SWE-Bench Style Evaluation**: Standardized agent performance testing
@@ -299,7 +300,7 @@ ccswarm template apply rust-cli --var project_name=awesome-tool
 
 ## 🏗️ Architecture
 
-ccswarm v0.3.7 features a streamlined Rust-native architecture with efficient patterns:
+ccswarm v0.3.8 features a streamlined Rust-native architecture with efficient patterns:
 
 ```
 ┌─────────────────────────────────────────┐

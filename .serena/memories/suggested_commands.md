@@ -4,12 +4,12 @@
 - `cargo build --workspace` - Build entire workspace
 - `cargo build --release --workspace` - Build release version
 - `cargo build -p ccswarm` - Build specific crate
-- `cargo build -p ai-session` - Build ai-session crate
+- `cargo build -p ai-session` - Build ai-session crate (v0.4.0)
 
 ## Test Commands
 - `cargo test --workspace` - Run all tests
 - `cargo test --lib -p ccswarm` - Test ccswarm library
-- `cargo test --lib -p ai-session` - Test ai-session library
+- `cargo test --lib -p ai-session` - Test ai-session library (v0.4.0)
 - `cargo test -- --nocapture` - Show test output
 
 ## Code Quality

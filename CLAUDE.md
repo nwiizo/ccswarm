@@ -6,31 +6,32 @@ ccswarm - High-performance AI Multi-Agent Orchestration System built with **Rust
 
 ## New in v0.3.8
 
-Five major new modules added:
+Five major new modules added (✅ done | ⚡ file-export | 🔜 planned):
 
 ### Observability/Tracing (`src/tracing/`)
-- OpenTelemetry and Langfuse compatible export
-- Span hierarchies with token tracking
-- Trace collector with LRU eviction
-- Multiple export formats (JSON, OpenTelemetry, Langfuse, CSV)
+- OpenTelemetry and Langfuse compatible export ⚡
+- Span hierarchies with token tracking ✅
+- Trace collector with LRU eviction ✅
+- Multiple export formats (JSON, OpenTelemetry, Langfuse, CSV) ✅
 
 ### Human-in-the-Loop (`src/hitl/`)
-- Approval workflows with policy-based rules
-- Multi-channel notifications (CLI, Slack, Email)
-- Escalation support with timeout handling
-- Complete audit trail for all decisions
+- Approval workflows with policy-based rules ✅
+- Multi-channel notifications: CLI ✅, Slack/Email 🔜
+- Timeout handling ✅, escalation 🔜
+- Complete audit trail for all decisions ✅
 
 ### Long-term Memory/RAG (`src/memory/`)
-- Vector embeddings with cosine similarity
-- Short-term/Long-term memory separation
-- Retrieval-augmented generation support
-- Importance-based retention with decay
+- Vector embeddings with cosine similarity 🔜
+- Short-term/Long-term memory separation ✅
+- Retrieval-augmented generation support ✅
+- Importance-based retention with decay ✅
+- Backends: in-memory ✅, file/vector DB 🔜
 
 ### Graph Workflow Engine (`src/workflow/`)
-- DAG-based task workflows
-- Conditional branching and parallel execution
-- Approval gates at workflow checkpoints
-- Sub-workflow composition
+- DAG-based task workflows ✅
+- Conditional branching and parallel execution 🔜
+- Approval gates at workflow checkpoints 🔜
+- Sub-workflow composition 🔜
 
 ### Benchmark Integration (`src/benchmark/`)
 - SWE-Bench style evaluation framework
@@ -118,7 +119,7 @@ cargo test --workspace
 
 # Build specific crate
 cargo build -p ccswarm
-cargo build -p ai-session
+cargo build -p ai-session  # v0.4.0
 
 # Run ccswarm from workspace root
 cargo run -p ccswarm -- --help
@@ -133,7 +134,7 @@ cargo doc --workspace --no-deps --open
 
 ### Crate-Specific Development
 ```bash
-# Work on ai-session crate
+# Work on ai-session crate (v0.4.0)
 cd crates/ai-session
 cargo test
 cargo doc --open
@@ -147,6 +148,8 @@ cargo run -- --help
 cd ../..
 cargo test --workspace
 ```
+
+> **Note**: The `ai-session` crate is planned for v0.4.0. Session management is currently in `src/session/`.
 
 ### Claude ACP Commands (Default Integration)
 ```bash
@@ -191,7 +194,7 @@ cargo run -p ccswarm -- session attach <session-id>
 # Logging levels
 RUST_LOG=debug cargo run -p ccswarm -- start
 RUST_LOG=ccswarm::session=trace cargo run -p ccswarm -- start
-RUST_LOG=ai_session=debug cargo run -p ccswarm -- start
+RUST_LOG=ai_session=debug cargo run -p ccswarm -- start  # v0.4.0
 
 # Check agent status
 cargo run -p ccswarm -- agent list
