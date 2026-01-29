@@ -1,69 +1,69 @@
-# Issue #7: Day 10 - 統合テストとデモ
+# Issue #7: Day 10 - Integration Tests and Demo
 
-## 概要
-Claude Code ACP統合の統合テストを実行し、デモを準備する。
+## Overview
+Run integration tests for Claude Code ACP integration and prepare demo.
 
-## タスクリスト
+## Task List
 
-### 1. 統合テスト
-- [ ] エンドツーエンドテストの作成:
+### 1. Integration Tests
+- [ ] Create end-to-end tests:
 ```rust
 #[tokio::test]
 async fn test_full_workflow() {
-    // 1. 接続
-    // 2. タスク送信
-    // 3. 結果確認
-    // 4. 切断
+    // 1. Connect
+    // 2. Send task
+    // 3. Verify result
+    // 4. Disconnect
 }
 ```
 
-### 2. パフォーマンステスト
-- [ ] 接続時間の測定
-- [ ] タスク実行時間の測定
-- [ ] メモリ使用量の確認
+### 2. Performance Tests
+- [ ] Measure connection time
+- [ ] Measure task execution time
+- [ ] Check memory usage
 
-### 3. デモシナリオ
-- [ ] 基本的なタスク実行デモ
-- [ ] エラーリカバリーのデモ
-- [ ] 複数タスクの連続実行デモ
+### 3. Demo Scenarios
+- [ ] Basic task execution demo
+- [ ] Error recovery demo
+- [ ] Multiple consecutive task execution demo
 
-### 4. デモスクリプト
+### 4. Demo Script
 ```bash
 #!/bin/bash
 # demo.sh
 echo "🚀 Claude Code ACP Demo"
 
-# 1. 接続テスト
+# 1. Connection test
 ccswarm claude-acp test
 
-# 2. シンプルなタスク
+# 2. Simple task
 ccswarm claude-acp send "Write hello world"
 
-# 3. 複雑なタスク
+# 3. Complex task
 ccswarm task "Create TODO app" --via-acp
 ```
 
-### 5. ビデオ/スクリーンショット
-- [ ] デモ実行のスクリーンショット
-- [ ] 主要機能のGIFアニメーション
-- [ ] セットアップ手順の画像
+### 5. Video/Screenshots
+- [ ] Demo execution screenshots
+- [ ] GIF animations of main features
+- [ ] Setup procedure images
 
-## 受け入れ基準
-- [ ] 統合テストが全て成功する
-- [ ] デモスクリプトが問題なく実行される
-- [ ] パフォーマンスが要件を満たす（接続5秒以内）
-- [ ] デモ資料が完成している
+## Acceptance Criteria
+- [ ] All integration tests succeed
+- [ ] Demo script runs without issues
+- [ ] Performance meets requirements (connection under 5 seconds)
+- [ ] Demo materials complete
 
-## 成果物
-- [ ] テストレポート
-- [ ] デモスクリプト
-- [ ] スクリーンショット/動画
-- [ ] プレゼンテーション資料
+## Deliverables
+- [ ] Test report
+- [ ] Demo script
+- [ ] Screenshots/videos
+- [ ] Presentation materials
 
-## 見積もり時間
-6-8時間
+## Estimated Time
+6-8 hours
 
-## ラベル
+## Labels
 - `task`
 - `day-10`
 - `integration-test`

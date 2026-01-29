@@ -1,12 +1,12 @@
-# Issue #1: Day 1 - プロジェクト設定と依存関係追加
+# Issue #1: Day 1 - Project Setup and Dependency Addition
 
-## 概要
-Claude Code ACP統合のための基礎セットアップを行う。
+## Overview
+Perform basic setup for Claude Code ACP integration.
 
-## タスクリスト
+## Task List
 
-### 1. 依存関係の追加
-- [ ] `Cargo.toml`に以下を追加:
+### 1. Add Dependencies
+- [ ] Add the following to `Cargo.toml`:
 ```toml
 [dependencies]
 agent-client-protocol = "0.3.1"
@@ -17,31 +17,31 @@ tokio-tungstenite = "0.20"
 claude-acp = []
 ```
 
-### 2. モジュール構造の作成
-- [ ] `src/acp_claude/`ディレクトリを作成
-- [ ] `src/acp_claude/mod.rs`を作成
-- [ ] `src/acp_claude/adapter.rs`を作成
-- [ ] `src/acp_claude/client.rs`を作成
-- [ ] `src/acp_claude/config.rs`を作成
+### 2. Create Module Structure
+- [ ] Create `src/acp_claude/` directory
+- [ ] Create `src/acp_claude/mod.rs`
+- [ ] Create `src/acp_claude/adapter.rs`
+- [ ] Create `src/acp_claude/client.rs`
+- [ ] Create `src/acp_claude/config.rs`
 
-### 3. 基本的な型定義
-- [ ] `ClaudeACPConfig`構造体を定義
-- [ ] `ClaudeACPError`エラー型を定義
-- [ ] `ACPResult<T>`型エイリアスを定義
+### 3. Basic Type Definitions
+- [ ] Define `ClaudeACPConfig` struct
+- [ ] Define `ClaudeACPError` error type
+- [ ] Define `ACPResult<T>` type alias
 
-### 4. フィーチャーフラグの設定
-- [ ] `#[cfg(feature = "claude-acp")]`でモジュールを条件付きコンパイル
-- [ ] `main.rs`にフィーチャーフラグを追加
+### 4. Feature Flag Setup
+- [ ] Conditionally compile module with `#[cfg(feature = "claude-acp")]`
+- [ ] Add feature flag to `main.rs`
 
-## 受け入れ基準
-- [ ] `cargo build --features claude-acp`が成功する
-- [ ] 既存のビルド`cargo build`も成功する
-- [ ] 新しいモジュールが正しくインポートされる
+## Acceptance Criteria
+- [ ] `cargo build --features claude-acp` succeeds
+- [ ] Existing build `cargo build` also succeeds
+- [ ] New modules import correctly
 
-## 見積もり時間
-4-6時間
+## Estimated Time
+4-6 hours
 
-## ラベル
+## Labels
 - `task`
 - `day-1`
 - `setup`

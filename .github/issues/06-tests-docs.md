@@ -1,12 +1,12 @@
-# Issue #6: Day 9 - ユニットテストとドキュメント
+# Issue #6: Day 9 - Unit Tests and Documentation
 
-## 概要
-Claude Code ACP統合のテストとドキュメントを作成する。
+## Overview
+Create tests and documentation for Claude Code ACP integration.
 
-## タスクリスト
+## Task List
 
-### 1. ユニットテスト
-- [ ] `adapter.rs`のテスト:
+### 1. Unit Tests
+- [ ] Tests for `adapter.rs`:
 ```rust
 #[cfg(test)]
 mod adapter_tests {
@@ -24,36 +24,36 @@ mod adapter_tests {
 }
 ```
 
-### 2. 設定テスト
-- [ ] 設定ファイルの読み込みテスト
-- [ ] 環境変数の読み込みテスト
-- [ ] デフォルト値のテスト
+### 2. Configuration Tests
+- [ ] Configuration file loading tests
+- [ ] Environment variable loading tests
+- [ ] Default value tests
 
-### 3. モックサーバー
-- [ ] テスト用モックサーバーの作成
-- [ ] 各種レスポンスパターンの実装
-- [ ] エラーケースのシミュレーション
+### 3. Mock Server
+- [ ] Create test mock server
+- [ ] Implement various response patterns
+- [ ] Simulate error cases
 
-### 4. ドキュメント
-- [ ] README.mdの更新
-- [ ] API ドキュメント（rustdoc）
-- [ ] 使用例の追加
-- [ ] トラブルシューティングガイド
+### 4. Documentation
+- [ ] Update README.md
+- [ ] API documentation (rustdoc)
+- [ ] Add usage examples
+- [ ] Troubleshooting guide
 
-### 5. 設定例
-- [ ] `.ccswarm.yml.example`の作成
-- [ ] 環境変数の例を`.env.example`に追加
+### 5. Configuration Examples
+- [ ] Create `.ccswarm.yml.example`
+- [ ] Add environment variable examples to `.env.example`
 
-## 受け入れ基準
-- [ ] `cargo test --features claude-acp`が成功する
-- [ ] テストカバレッジ80%以上
-- [ ] `cargo doc --features claude-acp`でドキュメント生成
-- [ ] README.mdに使用方法が記載されている
+## Acceptance Criteria
+- [ ] `cargo test --features claude-acp` succeeds
+- [ ] Test coverage 80%+
+- [ ] `cargo doc --features claude-acp` generates documentation
+- [ ] README.md has usage instructions
 
-## 見積もり時間
-6-8時間
+## Estimated Time
+6-8 hours
 
-## ラベル
+## Labels
 - `task`
 - `day-9`
 - `testing`
