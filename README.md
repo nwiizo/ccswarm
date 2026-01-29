@@ -61,6 +61,7 @@ ccswarm/
 │   ├── GETTING_STARTED.md
 │   └── commands/
 └── sample/                # Demo scripts and examples
+```
 
 ## 🌟 Key Features
 
@@ -74,7 +75,7 @@ ccswarm/
 
 ### 🎯 Developer Experience First
 - **Interactive Setup Wizard**: Guided configuration for new users
-- **Built-in Tutorial**: Learn by doing with hands-on chapters  
+- **Built-in Tutorial**: Learn by doing with hands-on chapters
 - **Smart Error Messages**: Helpful suggestions and solutions
 - **Progress Indicators**: Real-time feedback for all operations
 - **Contextual Help**: `ccswarm help <topic>` for detailed guidance
@@ -610,7 +611,6 @@ my_app/
 └── .gitignore      # Git config
 ```
 
-
 ### Proactive & Security Commands
 ```bash
 # Proactive mode is enabled by default in all new projects
@@ -635,6 +635,7 @@ ccswarm deps analyze --show-blockers
 ccswarm deps resolve --auto-order
 ```
 
+### Session Commands
 ```bash
 ccswarm session list
 ccswarm session stats --show-savings
@@ -774,9 +775,6 @@ cargo test -p ccswarm --test integration_tests
 # - demos/multi-agent/       - Multi-agent monitoring demo
 # - demos/session-persistence/ - Session recovery demo
 # - demos/auto-create/       - Application generation demo
-
-
-
 ```
 
 ## 🚨 Need Help?
@@ -786,7 +784,7 @@ cargo test -p ccswarm --test integration_tests
 We've created extensive documentation to help you succeed with ccswarm:
 
 - **🚀 [Getting Started](docs/GETTING_STARTED.md)**: Complete beginner's guide with hands-on tutorials
-- **⚙️ [Configuration](docs/CONFIGURATION.md)**: All configuration options explained with examples  
+- **⚙️ [Configuration](docs/CONFIGURATION.md)**: All configuration options explained with examples
 - **🔧 [Troubleshooting](docs/TROUBLESHOOTING.md)**: Detailed solutions for common issues
 - **🤝 [Contributing](CONTRIBUTING.md)**: How to contribute to the project
 
@@ -857,7 +855,7 @@ ccswarm extend autonomous --continuous        # Continuous improvement
 
 # Optional search-based extension
 ccswarm search mdn "react server components"
-ccswarm search github "rust async patterns" 
+ccswarm search github "rust async patterns"
 ccswarm extend propose --title "Add RSC Support"
 
 # View extension progress
@@ -921,11 +919,8 @@ cargo test --workspace
 # Build only ccswarm (main orchestration)
 cargo build -p ccswarm
 
-
 # Run ccswarm from workspace root
 cargo run -p ccswarm -- init --name "MyProject"
-
-
 
 # Generate documentation for entire workspace
 cargo doc --workspace --no-deps --open
@@ -985,28 +980,6 @@ cd my-app && npm install && npm start
 
 For detailed instructions, examples, and Docker configurations, see [STANDALONE_DEPLOYMENT.md](STANDALONE_DEPLOYMENT.md).
 
-### Contributing
-```bash
-# Fork and clone
-git clone https://github.com/yourusername/ccswarm.git
-cd ccswarm
-
-# Run all tests in workspace
-cargo test --workspace
-
-# Format all code
-cargo fmt --all
-
-# Run clippy on all crates
-cargo clippy --workspace -- -D warnings
-
-# Check documentation for entire workspace
-cargo doc --workspace --no-deps --open
-
-# Build release version
-cargo build --release --workspace
-```
-
 ## 💡 Enhanced User Experience
 
 ### Getting Started
@@ -1014,7 +987,7 @@ cargo build --release --workspace
 # First time? Use the setup wizard
 ccswarm setup
 
-# Need help? Interactive tutorial  
+# Need help? Interactive tutorial
 ccswarm tutorial
 
 # Check system health
@@ -1059,7 +1032,7 @@ All operations show live progress:
    Description: Implement user authentication
    Priority: 🟡 High
    Type: Feature
-   
+
 💡 Quick tips:
   • View task progress: ccswarm task status task-a1b2
   • List all tasks: ccswarm task list
@@ -1111,7 +1084,7 @@ cargo build --release --workspace
 
 **Documentation Contributions Welcome:** Help us improve our guides by contributing to:
 - [Getting Started Guide](docs/GETTING_STARTED.md) - Add examples and tutorials
-- [Configuration Reference](docs/CONFIGURATION.md) - Expand configuration examples  
+- [Configuration Reference](docs/CONFIGURATION.md) - Expand configuration examples
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Add solutions for new issues
 
 ## 📄 License
@@ -1126,4 +1099,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Experience Claude Code integration with autonomous AI orchestration in ccswarm v0.3.7** 🤖🧠🚀
+**Experience Claude Code integration with autonomous AI orchestration in ccswarm v0.3.8** 🤖🧠🚀

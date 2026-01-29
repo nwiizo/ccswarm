@@ -63,6 +63,15 @@ ccswarm uses **Claude Code via ACP** with efficient patterns:
 
 ## Development Standards
 
+### Language Convention
+
+Ensure all content is in English per international open-source conventions:
+- Source code comments and rustdoc
+- Commit messages and PR descriptions
+- Markdown documentation
+- Agent and command definitions (`.claude/`)
+- Issue templates and GitHub content
+
 ### Code Quality Requirements
 - Run `cargo fmt && cargo clippy -- -D warnings && cargo test` before commits
 - **Minimal tests only**: ~10 tests maximum covering core functionality
