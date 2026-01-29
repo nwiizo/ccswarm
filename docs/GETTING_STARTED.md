@@ -57,7 +57,7 @@ cd ccswarm
 cargo build --release
 cargo install --path crates/ccswarm
 
-# Optional: Install ai-session CLI separately
+# Optional: Install ai-session CLI separately (v0.4.0)
 cargo install --path crates/ai-session
 ```
 
@@ -122,7 +122,7 @@ ccswarm start
 
 You'll see output like:
 ```
-🚀 ccswarm v0.3.5 starting...
+🚀 ccswarm v0.3.8 starting...
 ✅ Master Claude initialized (proactive mode enabled)
 ✅ Frontend agent ready
 ✅ Backend agent ready

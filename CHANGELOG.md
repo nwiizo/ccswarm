@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8] - 2026-01-29
+
+> **Note**: v0.3.8 modules added 2025-12-15, Cargo.toml bumped 2026-01-29.
+> Status: ✅ done | ⚡ file-export | 🔜 planned
+
+### Added
+- **Observability/Tracing** (`src/tracing/`): OpenTelemetry and Langfuse compatible tracing
+  - Span hierarchies with token tracking ✅
+  - Trace collector with LRU eviction ✅
+  - Multiple export formats ⚡ (JSON, OpenTelemetry, Langfuse, CSV)
+
+- **Human-in-the-Loop** (`src/hitl/`): Approval workflows with policy-based rules ✅
+  - Multi-channel notifications: CLI ✅, Slack/Email 🔜
+  - Timeout handling ✅, escalation 🔜
+  - Complete audit trail ✅
+
+- **Long-term Memory/RAG** (`src/memory/`): Memory system with RAG support
+  - Short-term/Long-term memory separation ✅
+  - RAG context building ✅
+  - Importance-based retention ✅
+  - Vector embeddings (real API) 🔜
+  - Multiple backends: in-memory ✅, file/DB 🔜
+
+- **Graph Workflow Engine** (`src/workflow/`): DAG-based task workflows
+  - Workflow registry and state tracking ✅
+  - Conditional branching 🔜
+  - Parallel execution 🔜
+  - Approval gates 🔜
+  - Sub-workflow composition 🔜
+
+- **Benchmark Integration** (`src/benchmark/`): SWE-Bench style evaluation ✅
+  - Predefined suites (basic coding, bug fixes, refactoring) ✅
+  - Metrics collection with leaderboard ✅
+  - Custom benchmark creation ✅
+
+### Changed
+- Updated documentation with implementation status markers (✅/⚡/🔜)
+- Noted ai-session crate planned for v0.4.0 (session management currently in ccswarm)
+
 ## [0.3.7] - 2025-06-26
 
 ### Added
