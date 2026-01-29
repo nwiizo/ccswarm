@@ -256,6 +256,17 @@ git commit -m "refactor(core): extract common error types"
 
 ## Coding Standards
 
+### Language Convention
+
+To ensure accessibility for the broader international open-source community, please use English for:
+- Source code comments and rustdoc
+- Commit messages and PR descriptions
+- Issue and discussion content
+- Markdown documentation (README, CLAUDE.md, etc.)
+- Agent and command definitions (`.claude/` directory)
+
+This helps contributors across the globe collaborate effectively.
+
 ### Rust Guidelines
 
 Follow the [Rust Style Guide](https://doc.rust-lang.org/nightly/style-guide/) and these additional rules:
@@ -380,7 +391,7 @@ pub mod session {
     pub mod manager;
     pub mod persistence;
     pub mod compression;
-    
+
     pub use manager::SessionManager;
     pub use persistence::SessionStore;
 }
@@ -401,10 +412,10 @@ use thiserror::Error;
 pub enum SessionError {
     #[error("Session not found: {name}")]
     NotFound { name: String },
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Configuration error: {message}")]
     Configuration { message: String },
 }
@@ -427,14 +438,14 @@ Tests are organized into three categories:
 mod tests {
     use super::*;
     use tokio_test;
-    
+
     #[tokio::test]
     async fn test_session_creation() {
         let config = SessionConfig::default();
         let session = Session::create("test", config).await.unwrap();
         assert_eq!(session.name(), "test");
     }
-    
+
     #[test]
     fn test_role_validation() {
         let role = AgentRole::Frontend;
@@ -454,10 +465,10 @@ use ccswarm::{Session, Agent, Task};
 async fn test_agent_task_execution() {
     let session = Session::create("test").await.unwrap();
     let agent = Agent::new(AgentRole::Frontend, session).await.unwrap();
-    
+
     let task = Task::new("Create a button component");
     let result = agent.execute(task).await.unwrap();
-    
+
     assert!(result.contains("button"));
 }
 ```
@@ -519,7 +530,7 @@ pub trait Provider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_agent_with_mock_provider() {
         let mut mock_provider = MockProvider::new();
@@ -528,7 +539,7 @@ mod tests {
             .with(eq(task))
             .times(1)
             .returning(|_| Ok("result".to_string()));
-            
+
         let agent = Agent::new(mock_provider);
         let result = agent.execute(task).await.unwrap();
         assert_eq!(result, "result");
@@ -558,14 +569,14 @@ mod tests {
 ///
 /// ```
 /// use ccswarm::SessionManager;
-/// 
+///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let manager = SessionManager::new().await?;
 ///     let session = manager.create_session("my-session").await?;
-///     
+///
 ///     // Use the session...
-///     
+///
 ///     manager.destroy_session(session.id()).await?;
 ///     Ok(())
 /// }
