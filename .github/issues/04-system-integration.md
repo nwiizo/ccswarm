@@ -1,12 +1,12 @@
-# Issue #4: Day 6-7 - 既存システムとの統合
+# Issue #4: Day 6-7 - Integration with Existing System
 
-## 概要
-Claude Code ACPをccswarmの既存のタスクシステムと統合する。
+## Overview
+Integrate Claude Code ACP with ccswarm's existing task system.
 
-## タスクリスト
+## Task List
 
-### 1. MasterClaudeへの統合
-- [ ] `src/orchestrator/mod.rs`を修正:
+### 1. Integration with MasterClaude
+- [ ] Modify `src/orchestrator/mod.rs`:
 ```rust
 pub struct MasterClaude {
     #[cfg(feature = "claude-acp")]
@@ -14,13 +14,13 @@ pub struct MasterClaude {
 }
 ```
 
-### 2. タスク委譲ロジック
-- [ ] `delegate_task()`メソッドの修正
-- [ ] Claude Code優先モードの実装
-- [ ] `delegate_to_claude_acp()`メソッドの追加
+### 2. Task Delegation Logic
+- [ ] Modify `delegate_task()` method
+- [ ] Implement Claude Code priority mode
+- [ ] Add `delegate_to_claude_acp()` method
 
-### 3. 設定ファイルサポート
-- [ ] `.ccswarm.yml`の読み込み
+### 3. Configuration File Support
+- [ ] Load `.ccswarm.yml`
 ```yaml
 claude_acp:
   enabled: true
@@ -29,25 +29,25 @@ claude_acp:
   prefer_claude: true
 ```
 
-### 4. 環境変数サポート
+### 4. Environment Variable Support
 - [ ] `CCSWARM_CLAUDE_ACP_URL`
 - [ ] `CCSWARM_CLAUDE_ACP_ENABLED`
 - [ ] `CCSWARM_CLAUDE_ACP_AUTO_CONNECT`
 
-### 5. 既存コマンドの拡張
-- [ ] `ccswarm task`に`--via-acp`フラグを追加
-- [ ] `ccswarm status`にACP状態を追加
+### 5. Extend Existing Commands
+- [ ] Add `--via-acp` flag to `ccswarm task`
+- [ ] Add ACP status to `ccswarm status`
 
-## 受け入れ基準
-- [ ] 既存の機能が壊れない
-- [ ] Claude Code経由でタスクが実行できる
-- [ ] 設定ファイルが正しく読み込まれる
-- [ ] 環境変数が反映される
+## Acceptance Criteria
+- [ ] Existing functionality not broken
+- [ ] Tasks can execute via Claude Code
+- [ ] Configuration file loads correctly
+- [ ] Environment variables are reflected
 
-## 見積もり時間
-8-10時間
+## Estimated Time
+8-10 hours
 
-## ラベル
+## Labels
 - `task`
 - `day-6-7`
 - `integration`
