@@ -147,11 +147,11 @@ ccswarm/
 - **Sub-workflows**: Compose complex workflows from simpler ones 🔜
 
 ### 🎯 Benchmark Integration (NEW in v0.3.8)
-- **SWE-Bench Style Evaluation**: Standardized agent performance testing
-- **Predefined Suites**: Basic coding, bug fixes, refactoring benchmarks
-- **Metrics Collection**: Track pass rates, scores, and improvements
-- **Leaderboard System**: Compare agent performance over time
-- **Custom Benchmarks**: Create project-specific evaluation suites
+- **SWE-Bench Style Evaluation**: Standardized agent performance testing ✅
+- **Predefined Suites**: Basic coding, bug fixes, refactoring benchmarks ✅
+- **Metrics Collection**: Track pass rates, scores, and improvements ✅
+- **Leaderboard System**: Compare agent performance over time ✅
+- **Custom Benchmarks**: Create project-specific evaluation suites ✅
 
 ### 🎯 Core Capabilities
 - **Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
@@ -167,7 +167,7 @@ ccswarm/
 
 > **New to ccswarm?** Start with our [📖 Getting Started Guide](docs/GETTING_STARTED.md) for a comprehensive walkthrough with examples and best practices!
 
-> **Note**: Claude Code integration requires a WebSocket bridge. See [ACP Bridge Setup](#-acp-bridge-setup) below.
+> **Note**: Claude Code integration requires a WebSocket bridge. See [Claude ACP Guide](docs/CLAUDE_ACP.md) for setup instructions.
 
 ### 1. Installation
 
@@ -182,31 +182,6 @@ cargo build --release
 
 # Or install locally
 cargo install --path crates/ccswarm
-```
-
-### 🔌 ACP Bridge Setup
-
-ccswarm connects to Claude Code via WebSocket on `ws://localhost:9100`. Since Claude Code ACP adapters use stdio (not WebSocket), you need a bridge:
-
-```bash
-# Install the WebSocket bridge
-npm install -g servep
-
-# Install Claude Code ACP adapter (uses your existing Claude Code subscription)
-npm install -g acp-claude-code
-
-# Start the bridge (Terminal 1)
-servep -p 9100 --ws "/::npx acp-claude-code"
-
-# Test connection (Terminal 2)
-ccswarm claude-acp test
-```
-
-**Authentication**: The `acp-claude-code` adapter uses your existing Claude Code CLI session from `~/.claude/config.json`. No `ANTHROPIC_API_KEY` needed if you're logged in with a Pro/Max subscription.
-
-```bash
-# If not logged in, authenticate first
-claude login
 ```
 
 ### 🎯 Try Sample Demos

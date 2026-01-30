@@ -34,10 +34,10 @@ Five major new modules added (✅ done | ⚡ file-export | 🔜 planned):
 - Sub-workflow composition 🔜
 
 ### Benchmark Integration (`src/benchmark/`)
-- SWE-Bench style evaluation framework
-- Predefined suites (basic coding, bug fixes, refactoring)
-- Metrics collection with leaderboard
-- Custom benchmark creation
+- SWE-Bench style evaluation framework ✅
+- Predefined suites (basic coding, bug fixes, refactoring) ✅
+- Metrics collection with leaderboard ✅
+- Custom benchmark creation ✅
 
 ## Key Architectural Learnings
 
