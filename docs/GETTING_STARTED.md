@@ -56,9 +56,6 @@ cd ccswarm
 # Build and install
 cargo build --release
 cargo install --path crates/ccswarm
-
-# Optional: Install ai-session CLI separately (v0.4.0)
-cargo install --path crates/ai-session
 ```
 
 ## First-Time Setup
@@ -333,37 +330,78 @@ ccswarm worktree clean
 ccswarm worktree reset --agent frontend
 ```
 
-## Understanding the Interface
+## Terminal UI (TUI) Guide
 
-### Terminal UI (TUI) Navigation
+Start the TUI with `ccswarm tui` for real-time monitoring.
 
-The TUI has several tabs:
+### TUI Tabs
 
-1. **Overview**: System status and metrics
-2. **Tasks**: Active and completed tasks
-3. **Agents**: Agent status and workload
-4. **Sessions**: Session management and statistics
-5. **Logs**: Real-time system logs
+| Tab | Description |
+|-----|-------------|
+| **Overview** | System status, metrics, health indicators |
+| **Tasks** | Active, pending, and completed tasks |
+| **Agents** | Agent status, workload, and performance |
+| **Sessions** | Session management and token savings stats |
+| **Logs** | Real-time system logs with filtering |
 
 ### Key Bindings
-- `Tab/Shift+Tab`: Switch between tabs
-- `↑↓` or `jk`: Navigate lists
-- `Enter`: Select/activate items
-- `c`: Command mode
-- `t`: Quick task creation
-- `s`: Session management
-- `h` or `?`: Help
-- `q`: Quit
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift+Tab` | Switch between tabs |
+| `↑↓` or `jk` | Navigate lists |
+| `Enter` | Select/activate item |
+| `c` | Enter command mode |
+| `t` | Quick task creation |
+| `s` | Session management |
+| `f` | Filter/search |
+| `r` | Refresh |
+| `h` or `?` | Show help |
+| `q` | Quit |
 
 ### Command Mode
-Press `c` to enter command mode, then use:
+
+Press `c` to enter command mode. Available commands:
+
 ```
-task <description> [priority] [type]    # Create task
-agent <role>                           # Focus on agent
-session list|attach|pause|resume       # Session commands
-filter <pattern>                       # Filter content
-monitor <agent>                        # Monitor specific agent
-help                                   # Show help
+task <description> [high|medium|low] [feature|bug|test|docs|refactor]
+agent <type>
+session list|attach|pause|resume|stats
+filter <pattern>
+worktree list|clean
+monitor <agent>
+review status|history
+help
+```
+
+### Smart Task Parsing
+
+Tasks can include priority and type in brackets:
+
+```
+task Fix login bug [high] [bug]
+task Add docs [docs]
+task Create dashboard [medium] [feature]
+```
+
+### Sample Demo Scripts
+
+Try the demos in the `sample/` directory:
+
+```bash
+cd sample/
+
+# Setup (builds ccswarm)
+./setup.sh
+
+# Claude Code integration demo
+./claude_acp_demo.sh
+
+# Task management demo
+./task_management_demo.sh
+
+# Multi-agent collaboration demo
+./multi_agent_demo.sh
 ```
 
 ## Next Steps
