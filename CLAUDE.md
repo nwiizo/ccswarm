@@ -2,14 +2,25 @@
 
 ## Project Overview
 
-ccswarm v0.4.0 - High-performance AI Multi-Agent Orchestration System built with **Rust-native patterns**. Enables **true parallel execution** of multiple Claude Code processes via ai-session's PTY integration.
+ccswarm v0.4.3 - AI Multi-Agent Orchestration System built with **Rust-native patterns**. Provides workflow automation infrastructure with native PTY session management via ai-session.
 
-## Claude Code Integration
+> **Implementation Status**: ~50% complete. See [docs/analysis/](docs/analysis/) for detailed gap analysis.
 
-- **Parallel Execution**: Multiple independent Claude CLI processes run concurrently
-- **PTY-Based Sessions**: ai-session provides native terminal management
-- **Channel-Based Communication**: No shared state between agents
-- **Actor Pattern**: Each agent as an independent actor
+## What Works
+
+- **CLI Infrastructure**: All commands parse and route correctly
+- **Session Management**: Native PTY sessions via ai-session (no tmux)
+- **TUI Dashboard**: Real-time monitoring with ratatui
+- **Git Worktrees**: Isolated workspaces per agent
+- **Template System**: Project scaffolding from templates
+- **Configuration**: Project and agent config management
+
+## What's Partial/In Progress
+
+- **`start` Command**: Initializes but coordination loop not implemented
+- **Parallel Executor**: Structure exists, not wired to orchestrator
+- **Auto-Create**: Template generation works; full AI generation incomplete
+- **ai-session Integration**: Used for sessions; MessageBus not leveraged
 
 ## Quick Commands
 
