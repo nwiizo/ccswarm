@@ -1,12 +1,12 @@
-# Issue #5: Day 8 - エラーハンドリング強化
+# Issue #5: Day 8 - Error Handling Enhancement
 
-## 概要
-Claude Code ACP統合のエラーハンドリングとリトライロジックを強化する。
+## Overview
+Enhance error handling and retry logic for Claude Code ACP integration.
 
-## タスクリスト
+## Task List
 
-### 1. エラー型の定義
-- [ ] `ACPError`列挙型の実装:
+### 1. Define Error Types
+- [ ] Implement `ACPError` enum:
 ```rust
 #[derive(Error, Debug)]
 pub enum ACPError {
@@ -24,36 +24,36 @@ pub enum ACPError {
 }
 ```
 
-### 2. リトライメカニズム
-- [ ] 指数バックオフの実装
-- [ ] 最大リトライ回数の設定
-- [ ] リトライ間隔の設定
+### 2. Retry Mechanism
+- [ ] Implement exponential backoff
+- [ ] Configure maximum retry count
+- [ ] Configure retry interval
 
-### 3. 接続監視
-- [ ] ハートビート機能の実装
-- [ ] 自動再接続の実装
-- [ ] 接続状態の監視
+### 3. Connection Monitoring
+- [ ] Implement heartbeat functionality
+- [ ] Implement auto-reconnection
+- [ ] Monitor connection state
 
-### 4. ユーザー向けエラーメッセージ
-- [ ] わかりやすいエラーメッセージ
-- [ ] トラブルシューティングのヒント
-- [ ] 診断コマンドの実装
+### 4. User-Facing Error Messages
+- [ ] Clear error messages
+- [ ] Troubleshooting hints
+- [ ] Implement diagnose command
 
-### 5. ロギング
-- [ ] デバッグレベルのログ追加
-- [ ] エラー時の詳細情報記録
-- [ ] パフォーマンスメトリクス
+### 5. Logging
+- [ ] Add debug level logs
+- [ ] Record detailed error information
+- [ ] Performance metrics
 
-## 受け入れ基準
-- [ ] 接続失敗時に自動リトライが動作する
-- [ ] エラーメッセージが分かりやすい
-- [ ] `RUST_LOG=debug`で詳細なログが出力される
-- [ ] 接続が切れても自動復旧する
+## Acceptance Criteria
+- [ ] Auto-retry works on connection failure
+- [ ] Error messages are clear
+- [ ] Detailed logs output with `RUST_LOG=debug`
+- [ ] Auto-recovery when connection drops
 
-## 見積もり時間
-6-8時間
+## Estimated Time
+6-8 hours
 
-## ラベル
+## Labels
 - `task`
 - `day-8`
 - `error-handling`

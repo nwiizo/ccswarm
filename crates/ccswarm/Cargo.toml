@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.3.7"
+version = "0.3.8"
 edition.workspace = true
 authors.workspace = true
 description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
