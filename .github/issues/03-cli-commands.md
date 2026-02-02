@@ -1,12 +1,12 @@
-# Issue #3: Day 4-5 - CLIコマンド実装
+# Issue #3: Day 4-5 - CLI Command Implementation
 
-## 概要
-Claude Code ACPを操作するためのCLIコマンドを実装する。
+## Overview
+Implement CLI commands for operating Claude Code ACP.
 
-## タスクリスト
+## Task List
 
-### 1. CLIコマンド構造の追加
-- [ ] `src/cli/mod.rs`に以下を追加:
+### 1. Add CLI Command Structure
+- [ ] Add the following to `src/cli/mod.rs`:
 ```rust
 #[derive(Subcommand)]
 pub enum ClaudeACPCommands {
@@ -19,33 +19,33 @@ pub enum ClaudeACPCommands {
 }
 ```
 
-### 2. コマンドハンドラーの実装
-- [ ] `claude-acp start` - ACP接続を開始
-- [ ] `claude-acp test` - 接続テスト
-- [ ] `claude-acp send` - タスク送信
-- [ ] `claude-acp stop` - 接続終了
-- [ ] `claude-acp status` - 現在の状態表示
-- [ ] `claude-acp diagnose` - トラブルシューティング
+### 2. Implement Command Handlers
+- [ ] `claude-acp start` - Start ACP connection
+- [ ] `claude-acp test` - Connection test
+- [ ] `claude-acp send` - Send task
+- [ ] `claude-acp stop` - End connection
+- [ ] `claude-acp status` - Display current state
+- [ ] `claude-acp diagnose` - Troubleshooting
 
-### 3. 出力フォーマット
-- [ ] カラフルな出力（絵文字付き）
-- [ ] プログレスバー表示
-- [ ] エラーメッセージの整形
+### 3. Output Format
+- [ ] Colorful output (with emoji)
+- [ ] Progress bar display
+- [ ] Error message formatting
 
-### 4. ヘルプメッセージ
-- [ ] 各コマンドの詳細なヘルプ
-- [ ] 使用例の追加
-- [ ] トラブルシューティングガイド
+### 4. Help Messages
+- [ ] Detailed help for each command
+- [ ] Add usage examples
+- [ ] Troubleshooting guide
 
-## 受け入れ基準
-- [ ] `ccswarm claude-acp --help`でヘルプが表示される
-- [ ] 各コマンドが正しく動作する
-- [ ] エラー時に適切なメッセージが表示される
+## Acceptance Criteria
+- [ ] `ccswarm claude-acp --help` displays help
+- [ ] Each command works correctly
+- [ ] Appropriate messages displayed on errors
 
-## 見積もり時間
-8-10時間
+## Estimated Time
+8-10 hours
 
-## ラベル
+## Labels
 - `task`
 - `day-4-5`
 - `cli`

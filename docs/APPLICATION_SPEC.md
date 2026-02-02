@@ -387,7 +387,19 @@ cargo run --package ai-session --bin server
 
 ## Version History
 
-### v0.3.5 (Current)
+### v0.3.8 (Current)
+- Observability/Tracing with OpenTelemetry and Langfuse support
+- Human-in-the-Loop approval workflows
+- Long-term Memory/RAG with vector embeddings
+- Graph Workflow Engine with DAG-based execution
+- Benchmark Integration with SWE-Bench style evaluation
+
+### v0.3.7
+- Search Agent with Gemini CLI integration
+- Enhanced Sangha participation for agents
+- Improved inter-agent communication
+
+### v0.3.5
 - Proactive Master Claude with goal tracking
 - Security agent integration
 - Enhanced auto-create capabilities
