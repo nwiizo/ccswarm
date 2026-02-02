@@ -1,23 +1,23 @@
-# アーキテクチャレビュー
+# Architecture Review
 
-ccswarm のアーキテクチャパターン準拠を詳細にレビューします。
+Reviews ccswarm's architecture pattern compliance in detail.
 
-## 実行内容
+## Execution Content
 
-CLAUDE.md と docs/ARCHITECTURE.md に基づき、以下のパターン準拠を確認:
+Based on CLAUDE.md and docs/ARCHITECTURE.md, verify compliance with the following patterns:
 
-1. **Type-State Pattern** - コンパイル時状態検証
-2. **Channel-Based Orchestration** - メッセージパッシング
-3. **Iterator Pipelines** - ゼロコスト抽象化
-4. **Actor Model** - ロックフリー設計
-5. **Minimal Testing** - 必要最小限のテスト
+1. **Type-State Pattern** - Compile-time state verification
+2. **Channel-Based Orchestration** - Message passing
+3. **Iterator Pipelines** - Zero-cost abstractions
+4. **Actor Model** - Lock-free design
+5. **Minimal Testing** - Minimum necessary tests
 
-## チェック項目
+## Check Items
 
 ### 1. Type-State Pattern
 
 ```rust
-// 期待: コンパイル時に状態遷移を検証
+// Expected: Verify state transitions at compile time
 struct Agent<S: State> {
     state: PhantomData<S>,
     // ...
@@ -32,7 +32,7 @@ impl Agent<Ready> {
 }
 ```
 
-検索パターン:
+Search patterns:
 ```bash
 grep -r "PhantomData" crates/
 grep -r "impl.*<.*State>" crates/
@@ -41,37 +41,37 @@ grep -r "impl.*<.*State>" crates/
 ### 2. Channel-Based Orchestration
 
 ```rust
-// 期待: Arc<Mutex> より Channel 優先
+// Expected: Prefer Channel over Arc<Mutex>
 let (tx, rx) = tokio::sync::mpsc::channel(100);
 
-// 避けるべき:
+// Avoid:
 // let shared = Arc::new(Mutex::new(state));
 ```
 
-検索パターン:
+Search patterns:
 ```bash
-grep -r "Arc<Mutex" crates/ | wc -l  # 少ないほど良い
+grep -r "Arc<Mutex" crates/ | wc -l  # Lower is better
 grep -r "mpsc::channel\|broadcast::channel" crates/
 ```
 
 ### 3. Iterator Pipelines
 
 ```rust
-// 期待: iterator chains でゼロコスト抽象化
+// Expected: Zero-cost abstractions with iterator chains
 let results: Vec<_> = items
     .iter()
     .filter(|x| x.active)
     .map(|x| process(x))
     .collect();
 
-// 避けるべき:
+// Avoid:
 // for item in items { if item.active { ... } }
 ```
 
 ### 4. Actor Model
 
 ```rust
-// 期待: 各エージェントが独立したアクター
+// Expected: Each agent as an independent actor
 struct AgentActor {
     receiver: mpsc::Receiver<Message>,
 }
@@ -87,13 +87,13 @@ impl AgentActor {
 
 ### 5. Minimal Testing
 
-| 基準 | 期待値 |
-|-----|-------|
-| 総テスト数 | 8-10程度 |
-| 統合テスト | コア機能のみ |
-| 単体テスト | 複雑なロジックのみ |
+| Criteria | Expected Value |
+|----------|----------------|
+| Total tests | Around 8-10 |
+| Integration tests | Core functionality only |
+| Unit tests | Complex logic only |
 
-## 出力形式
+## Output Format
 
 ```json
 {
@@ -102,19 +102,19 @@ impl AgentActor {
       "status": "OK|PARTIAL|NG",
       "usage_count": N,
       "examples": ["Agent<Ready>", "Session<Connected>"],
-      "missing": ["推奨される適用箇所"]
+      "missing": ["recommended application areas"]
     },
     "channel_based": {
       "status": "OK|PARTIAL|NG",
       "channel_count": N,
       "arc_mutex_count": N,
-      "refactor_candidates": ["共有状態の Channel 化候補"]
+      "refactor_candidates": ["candidates for channel conversion"]
     },
     "iterator_pipelines": {
       "status": "OK|PARTIAL|NG",
       "iterator_usage": N,
       "loop_usage": N,
-      "refactor_candidates": ["Iterator 化候補"]
+      "refactor_candidates": ["candidates for iterator conversion"]
     },
     "actor_model": {
       "status": "OK|PARTIAL|NG",
@@ -126,29 +126,29 @@ impl AgentActor {
       "test_count": N,
       "integration_tests": N,
       "unit_tests": N,
-      "recommendation": "テスト追加/削除の推奨"
+      "recommendation": "test addition/removal recommendation"
     }
   },
   "score": "N/5",
-  "recommendations": ["優先対応事項"]
+  "recommendations": ["priority action items"]
 }
 ```
 
-## 使用例
+## Usage Example
 
 ```
 subagent_type: "Explore"
-prompt: "ccswarm のアーキテクチャパターン準拠をレビューしてください。
-1. Type-State Pattern の使用状況
-2. Channel-Based vs Arc<Mutex> の比率
-3. Iterator Pipelines の活用度
-4. Actor Model の実装状況
-5. テスト数と品質
-JSON形式でレポートを作成してください。"
+prompt: "Review ccswarm's architecture pattern compliance.
+1. Type-State Pattern usage
+2. Channel-Based vs Arc<Mutex> ratio
+3. Iterator Pipelines utilization
+4. Actor Model implementation
+5. Test count and quality
+Create a report in JSON format."
 ```
 
-## 関連
+## Related
 
-- `/review-all` - 全体レビュー
-- `CLAUDE.md` - アーキテクチャガイドライン
-- `docs/ARCHITECTURE.md` - 詳細アーキテクチャ
+- `/review-all` - Full review
+- `CLAUDE.md` - Architecture guidelines
+- `docs/ARCHITECTURE.md` - Detailed architecture

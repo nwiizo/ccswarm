@@ -1,38 +1,38 @@
-# 実装チェック
+# Implementation Check
 
-ccswarm ワークスペースに対して基本チェックを実行します。
+Runs basic checks on the ccswarm workspace.
 
-## 実行内容
+## Execution Content
 
 ```bash
-# 1. フォーマット・リント
+# 1. Format/Lint
 cargo fmt --all --check && cargo clippy --workspace -- -D warnings
 
-# 2. テスト
+# 2. Tests
 cargo test --workspace
 
-# 3. ビルド確認
+# 3. Build verification
 cargo build --workspace --release
 ```
 
-## チェック項目
+## Check Items
 
-| 項目 | コマンド | 基準 |
-|-----|---------|------|
-| フォーマット | `cargo fmt --all --check` | エラーなし |
-| リント | `cargo clippy --workspace -- -D warnings` | 警告なし |
-| テスト | `cargo test --workspace` | 全パス |
-| ビルド | `cargo build --workspace` | エラーなし |
+| Item | Command | Criteria |
+|------|---------|----------|
+| Format | `cargo fmt --all --check` | No errors |
+| Lint | `cargo clippy --workspace -- -D warnings` | No warnings |
+| Tests | `cargo test --workspace` | All pass |
+| Build | `cargo build --workspace` | No errors |
 
-## Rust 2024 Edition 対応
+## Rust 2024 Edition Support
 
-ccswarm は Rust 2024 Edition を使用しています。以下の点に注意:
+ccswarm uses Rust 2024 Edition. Note the following:
 
-- `std::env::set_var` は `unsafe` ブロックが必要
-- パターンマッチングで暗黙の借用が行われるため `ref`/`ref mut` は不要
-- 明示的な型注釈が必要な場面が増加
+- `std::env::set_var` requires `unsafe` block
+- Pattern matching has implicit borrowing so `ref`/`ref mut` are unnecessary
+- Explicit type annotations are required more often
 
-## 出力形式
+## Output Format
 
 ```json
 {
@@ -51,7 +51,7 @@ ccswarm は Rust 2024 Edition を使用しています。以下の点に注意:
 }
 ```
 
-## 関連
+## Related
 
-- `/review-all` - 全体レビュー（設計準拠・品質含む）
-- `/review-duplicates` - 重複コード検出
+- `/review-all` - Full review (includes design compliance and quality)
+- `/review-duplicates` - Duplicate code detection

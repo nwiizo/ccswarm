@@ -1,12 +1,12 @@
-# Issue #2: Day 2-3 - Claude Code ACPアダプター実装
+# Issue #2: Day 2-3 - Claude Code ACP Adapter Implementation
 
-## 概要
-Claude Codeと通信するためのACPアダプターを実装する。
+## Overview
+Implement the ACP adapter for communicating with Claude Code.
 
-## タスクリスト
+## Task List
 
-### 1. ClaudeCodeAdapterの実装
-- [ ] `adapter.rs`に以下を実装:
+### 1. Implement ClaudeCodeAdapter
+- [ ] Implement the following in `adapter.rs`:
 ```rust
 pub struct ClaudeCodeAdapter {
     connection: Option<ClientSideConnection>,
@@ -15,31 +15,31 @@ pub struct ClaudeCodeAdapter {
 }
 ```
 
-### 2. 接続管理
-- [ ] `connect()`メソッドの実装
-  - [ ] WebSocket接続の確立
-  - [ ] ACPプロトコルの初期化
-  - [ ] セッション作成
-- [ ] `disconnect()`メソッドの実装
-- [ ] `is_connected()`メソッドの実装
+### 2. Connection Management
+- [ ] Implement `connect()` method
+  - [ ] Establish WebSocket connection
+  - [ ] Initialize ACP protocol
+  - [ ] Create session
+- [ ] Implement `disconnect()` method
+- [ ] Implement `is_connected()` method
 
-### 3. タスク送信
-- [ ] `send_task()`メソッドの実装
-  - [ ] PromptRequestの作成
-  - [ ] レスポンスの処理
-  - [ ] エラーハンドリング
+### 3. Task Sending
+- [ ] Implement `send_task()` method
+  - [ ] Create PromptRequest
+  - [ ] Process response
+  - [ ] Error handling
 
-### 4. 自動リトライ機能
-- [ ] `connect_with_retry()`メソッドの実装
-- [ ] 指数バックオフの実装
-- [ ] タイムアウト処理
+### 4. Auto-retry Functionality
+- [ ] Implement `connect_with_retry()` method
+- [ ] Implement exponential backoff
+- [ ] Timeout handling
 
-### 5. 設定管理
-- [ ] 環境変数からの設定読み込み
-- [ ] デフォルト値の設定
-- [ ] 設定のバリデーション
+### 5. Configuration Management
+- [ ] Load configuration from environment variables
+- [ ] Set default values
+- [ ] Configuration validation
 
-## テストケース
+## Test Cases
 ```rust
 #[cfg(test)]
 mod tests {
@@ -54,16 +54,16 @@ mod tests {
 }
 ```
 
-## 受け入れ基準
-- [ ] アダプターが正しく初期化される
-- [ ] モックサーバーへの接続が成功する
-- [ ] タスクの送受信が動作する
-- [ ] リトライロジックが機能する
+## Acceptance Criteria
+- [ ] Adapter initializes correctly
+- [ ] Connection to mock server succeeds
+- [ ] Task send/receive works
+- [ ] Retry logic functions
 
-## 見積もり時間
-8-12時間
+## Estimated Time
+8-12 hours
 
-## ラベル
+## Labels
 - `task`
 - `day-2-3`
 - `implementation`

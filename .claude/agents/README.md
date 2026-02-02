@@ -1,90 +1,90 @@
 # Claude Code Agents
 
-ccswarm プロジェクト用のサブエージェントです。
+Sub-agents for the ccswarm project.
 
-## エージェント一覧
+## Agent List
 
-| エージェント | 説明 | コマンド |
-|-------------|------|---------|
-| `all-reviewer` | 全レビュー統合（設計準拠・品質・アーキテクチャ） | `/review-all` |
-| `architecture-reviewer` | アーキテクチャパターン準拠レビュー | `/review-architecture` |
-| `rust-fix-agent` | Rust ビルド・clippy エラー修正 | `/check-impl` |
-| `code-refactor-agent` | 重複コード検出・リファクタリング | `/review-duplicates` |
+| Agent | Description | Command |
+|-------|-------------|---------|
+| `all-reviewer` | Integrated review (design compliance, quality, architecture) | `/review-all` |
+| `architecture-reviewer` | Architecture pattern compliance review | `/review-architecture` |
+| `rust-fix-agent` | Rust build/clippy error fixing | `/check-impl` |
+| `code-refactor-agent` | Duplicate code detection and refactoring | `/review-duplicates` |
 
-## 使い方
+## Usage
 
-Task ツールで呼び出します:
+Invoke via Task tool:
 
 ```
-subagent_type: "エージェント名"
-prompt: "[タスク内容]"
+subagent_type: "agent-name"
+prompt: "[task content]"
 ```
 
-## エージェント詳細
+## Agent Details
 
 ### all-reviewer
 
-全てのレビューを一括実行する統合エージェント。
+Integrated agent that runs all reviews at once.
 
-**チェック項目:**
-- CLAUDE.md 設計準拠
-- docs/ARCHITECTURE.md アーキテクチャ準拠
-- Rust ベストプラクティス
-- 重複コード検出
+**Check Items:**
+- CLAUDE.md design compliance
+- docs/ARCHITECTURE.md architecture compliance
+- Rust best practices
+- Duplicate code detection
 
-**出力**: 設計準拠、コード品質、アーキテクチャの統合レポート（JSON）
+**Output**: Integrated report (JSON) covering design compliance, code quality, and architecture
 
 ### architecture-reviewer
 
-アーキテクチャパターン専門レビュー。
+Specialized architecture pattern review.
 
-**チェック項目:**
-- Type-State Pattern の使用状況
-- Channel-Based vs Arc<Mutex> の比率
-- Iterator Pipelines の活用度
-- Actor Model の実装状況
-- Minimal Testing の準拠
+**Check Items:**
+- Type-State Pattern usage
+- Channel-Based vs Arc<Mutex> ratio
+- Iterator Pipelines utilization
+- Actor Model implementation
+- Minimal Testing compliance
 
-**出力**: 各パターンの評価とスコア（JSON）
+**Output**: Evaluation and score for each pattern (JSON)
 
 ### rust-fix-agent
 
-Rust のビルドエラーと clippy 警告を修正する専門エージェント。
+Specialized agent for fixing Rust build errors and clippy warnings.
 
-**機能:**
-- コンパイルエラーの修正
-- Clippy 警告の対処
-- Rust 2024 Edition 対応
+**Features:**
+- Compile error fixes
+- Clippy warning resolution
+- Rust 2024 Edition support
 
-**原則**: YAGNI（You Aren't Gonna Need It）- 必要最小限の修正
+**Principle**: YAGNI (You Aren't Gonna Need It) - minimal necessary fixes
 
 ### code-refactor-agent
 
-重複コード検出とリファクタリングを行うエージェント。
+Agent for duplicate code detection and refactoring.
 
-**機能:**
-- similarity-rs による意味的類似コード検出
-- DRY 原則に基づくリファクタリング提案
-- ccswarm パターンへの変換
+**Features:**
+- Semantic similarity detection using similarity-rs
+- Refactoring proposals based on DRY principle
+- Conversion to ccswarm patterns
 
-**検出カテゴリ:**
-| カテゴリ | 検出パターン |
-|---------|------------|
-| 共通関数抽出 | 類似度 95%+、10行以上 |
-| トレイト化 | 類似度 90-95%、5行以上 |
-| Channel 化 | Arc<Mutex> の共有状態 |
+**Detection Categories:**
+| Category | Detection Pattern |
+|----------|-------------------|
+| Common function extraction | 95%+ similarity, 10+ lines |
+| Trait conversion | 90-95% similarity, 5+ lines |
+| Channel conversion | Arc<Mutex> shared state |
 
-## モデル設定
+## Model Settings
 
-| エージェント | モデル | 理由 |
-|-------------|-------|------|
-| all-reviewer | sonnet | バランスの取れたレビュー |
-| architecture-reviewer | sonnet | パターン分析に適切 |
-| rust-fix-agent | opus | 複雑な修正に高精度 |
-| code-refactor-agent | opus | セマンティック分析に高精度 |
+| Agent | Model | Reason |
+|-------|-------|--------|
+| all-reviewer | sonnet | Balanced review |
+| architecture-reviewer | sonnet | Suitable for pattern analysis |
+| rust-fix-agent | opus | High precision for complex fixes |
+| code-refactor-agent | opus | High precision for semantic analysis |
 
-## 関連
+## Related
 
-- `.claude/commands/` - スラッシュコマンド定義
-- `CLAUDE.md` - プロジェクトガイドライン
-- `docs/ARCHITECTURE.md` - アーキテクチャ設計
+- `.claude/commands/` - Slash command definitions
+- `CLAUDE.md` - Project guidelines
+- `docs/ARCHITECTURE.md` - Architecture design

@@ -4,9 +4,9 @@ This document provides a comprehensive reference for working with the ccswarm wo
 
 ## Workspace Structure
 
-The ccswarm project uses a Cargo workspace with two main crates:
+The ccswarm project uses a Cargo workspace:
 - `crates/ccswarm/` - Main application and orchestration system
-- `crates/ai-session/` - Native AI session management library
+- `crates/ai-session/` - Native AI session management library (v0.4.0)
 
 ## Common Workspace Commands
 
@@ -21,7 +21,7 @@ cargo build --workspace --release
 
 # Build specific crate
 cargo build -p ccswarm
-cargo build -p ai-session
+cargo build -p ai-session  # v0.4.0
 
 # Clean and rebuild
 cargo clean
@@ -39,7 +39,7 @@ cargo test --workspace -- --nocapture
 
 # Test specific crate
 cargo test -p ccswarm
-cargo test -p ai-session
+cargo test -p ai-session  # v0.4.0
 
 # Run integration tests only
 cargo test --workspace --test '*'
@@ -78,7 +78,7 @@ cargo doc --workspace --no-deps --open
 
 # Generate docs for specific crate
 cargo doc -p ccswarm --no-deps --open
-cargo doc -p ai-session --no-deps --open
+cargo doc -p ai-session --no-deps --open  # v0.4.0
 ```
 
 ### Running ccswarm
@@ -139,7 +139,7 @@ cargo audit
 ### Publishing (for maintainers)
 
 ```bash
-# Publish ai-session first (dependency)
+# Publish ai-session first (dependency) - v0.4.0
 cd crates/ai-session
 cargo publish --dry-run
 cargo publish
@@ -156,7 +156,7 @@ The workspace is configured in the root `Cargo.toml`:
 
 ```toml
 [workspace]
-members = ["crates/ccswarm", "crates/ai-session"]
+members = ["crates/ccswarm", "crates/ai-session"]  # ai-session: v0.4.0
 resolver = "2"
 
 [workspace.package]
