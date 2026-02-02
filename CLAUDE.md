@@ -339,6 +339,18 @@ git worktree add ../ccswarm-backend feature/api-enhancement
 git worktree add ../ccswarm-devops feature/ci-cd-improvement
 ```
 
+## Working on v0.4.0 Features
+
+⚠️ **See [docs/UPCOMING_FEATURES.md](docs/UPCOMING_FEATURES.md) for v0.4.0 implementation patterns and integration guides.**
+
+The v0.4.0 codebase contains implementation patterns that exist but aren't fully integrated:
+- Hook System Integration
+- Verification Agent Pattern
+- DynamicSpawner with workload balancing
+- Parallel execution (command-based and PTY-based)
+- ai-session MessageBus coordination
+- Session persistence and resume/fork
+
 ## Import Additional Documentation
 @docs/ARCHITECTURE.md
 @docs/APPLICATION_SPEC.md
