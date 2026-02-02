@@ -1,50 +1,50 @@
-# プロダクションレディチェック
+# Production Readiness Check
 
-ccswarm のプロダクション品質基準を確認します。
+Verifies ccswarm's production quality criteria.
 
-## チェック項目
+## Check Items
 
-CLAUDE.md に基づく7つの品質基準:
+7 quality criteria based on CLAUDE.md:
 
-| # | 項目 | 基準 | チェックコマンド |
-|---|-----|------|-----------------|
-| 1 | unwrap() 排除 | プロダクションコードで使用禁止 | `grep -r "\.unwrap()" crates/ccswarm/src/` |
-| 2 | Result/Error handling | thiserror でカスタムエラー型 | `grep -r "thiserror" crates/` |
-| 3 | Async patterns | tokio ランタイム、async-trait | `cargo check` |
-| 4 | Documentation | 公開 API に rustdoc | `cargo doc --workspace` |
-| 5 | Clippy clean | 警告なし | `cargo clippy --workspace -- -D warnings` |
-| 6 | Channel-Based | Arc<Mutex> より Channel 優先 | `grep -r "Arc<Mutex" crates/` |
-| 7 | Minimal tests | 8-10 テスト程度 | `cargo test --workspace 2>&1 | grep "test result"` |
+| # | Item | Criteria | Check Command |
+|---|------|----------|---------------|
+| 1 | unwrap() elimination | Forbidden in production code | `grep -r "\.unwrap()" crates/ccswarm/src/` |
+| 2 | Result/Error handling | Custom error types with thiserror | `grep -r "thiserror" crates/` |
+| 3 | Async patterns | tokio runtime, async-trait | `cargo check` |
+| 4 | Documentation | rustdoc for public APIs | `cargo doc --workspace` |
+| 5 | Clippy clean | No warnings | `cargo clippy --workspace -- -D warnings` |
+| 6 | Channel-Based | Prefer Channel over Arc<Mutex> | `grep -r "Arc<Mutex" crates/` |
+| 7 | Minimal tests | Around 8-10 tests | `cargo test --workspace 2>&1 | grep "test result"` |
 
-## 実行方法
+## Execution Method
 
 ```bash
-# 1. unwrap() チェック
+# 1. unwrap() check
 echo "=== unwrap() count ==="
 grep -r "\.unwrap()" crates/ccswarm/src/ --include="*.rs" | grep -v "test" | wc -l
 
-# 2. エラーハンドリング確認
+# 2. Error handling verification
 echo "=== thiserror usage ==="
 grep -r "use thiserror" crates/
 
-# 3. Clippy チェック
+# 3. Clippy check
 echo "=== Clippy check ==="
 cargo clippy --workspace -- -D warnings
 
-# 4. ドキュメント生成
+# 4. Documentation generation
 echo "=== Documentation ==="
 cargo doc --workspace --no-deps
 
-# 5. Arc<Mutex> カウント
+# 5. Arc<Mutex> count
 echo "=== Arc<Mutex> count ==="
 grep -r "Arc<Mutex" crates/ccswarm/src/ | wc -l
 
-# 6. テスト数確認
+# 6. Test count verification
 echo "=== Test count ==="
 cargo test --workspace 2>&1 | grep "test result"
 ```
 
-## 出力形式
+## Output Format
 
 ```json
 {
@@ -52,7 +52,7 @@ cargo test --workspace 2>&1 | grep "test result"
     "unwrap_elimination": {
       "status": "OK|NG",
       "count": N,
-      "locations": ["問題箇所"]
+      "locations": ["problem locations"]
     },
     "error_handling": {
       "status": "OK|NG",
@@ -90,25 +90,25 @@ cargo test --workspace 2>&1 | grep "test result"
 }
 ```
 
-## 判定基準
+## Evaluation Criteria
 
-| スコア | 判定 | 説明 |
-|-------|------|------|
-| 7/7 | PRODUCTION_READY | 本番環境にデプロイ可能 |
-| 5-6/7 | NEEDS_WORK | 軽微な改善が必要 |
-| 0-4/7 | CRITICAL | 重大な改善が必要 |
+| Score | Verdict | Description |
+|-------|---------|-------------|
+| 7/7 | PRODUCTION_READY | Ready to deploy to production |
+| 5-6/7 | NEEDS_WORK | Minor improvements needed |
+| 0-4/7 | CRITICAL | Significant improvements needed |
 
-## 使用例
+## Usage Example
 
 ```
 subagent_type: "rust-fix-agent"
-prompt: "ccswarm のプロダクションレディチェックを実行してください。
-7つの基準それぞれについて確認し、問題があれば修正してください。
-結果をJSON形式でレポートしてください。"
+prompt: "Run production readiness check on ccswarm.
+Verify each of the 7 criteria and fix any issues found.
+Report results in JSON format."
 ```
 
-## 関連
+## Related
 
-- `/check-impl` - 基本チェック
-- `/review-all` - 全体レビュー
-- `.claude/agents/rust-fix-agent.md` - Rust 修正エージェント
+- `/check-impl` - Basic checks
+- `/review-all` - Full review
+- `.claude/agents/rust-fix-agent.md` - Rust fix agent

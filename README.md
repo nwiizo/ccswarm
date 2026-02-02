@@ -8,7 +8,7 @@
 
 **ccswarm** is a high-performance multi-agent orchestration system built with Rust-native patterns. It coordinates specialized AI agents using zero-cost abstractions, type-state patterns, and channel-based communication for efficient task delegation without runtime overhead.
 
-> **🚀 Default Integration**: ccswarm now uses **Claude Code via ACP (Agent Client Protocol)** as the default communication method. Simply start Claude Code and ccswarm automatically connects!
+> **🚀 Default Integration**: ccswarm uses **Claude Code via ACP (Agent Client Protocol)** as the default communication method. Start the [ACP bridge](#-acp-bridge-setup) and ccswarm automatically connects!
 
 ## 📚 Documentation
 
@@ -61,8 +61,10 @@ ccswarm/
 │   ├── GETTING_STARTED.md
 │   └── commands/
 └── sample/                # Demo scripts and examples
+```
 
 ## 🌟 Key Features
+> **Status**: ✅ implemented | ⚡ file-export | 🔜 planned
 
 ### 🤖 Claude Code Integration via ACP (Default)
 - **Native Claude Code Support**: Direct integration with Claude Code through Agent Client Protocol (ACP)
@@ -74,7 +76,7 @@ ccswarm/
 
 ### 🎯 Developer Experience First
 - **Interactive Setup Wizard**: Guided configuration for new users
-- **Built-in Tutorial**: Learn by doing with hands-on chapters  
+- **Built-in Tutorial**: Learn by doing with hands-on chapters
 - **Smart Error Messages**: Helpful suggestions and solutions
 - **Progress Indicators**: Real-time feedback for all operations
 - **Contextual Help**: `ccswarm help <topic>` for detailed guidance
@@ -117,39 +119,39 @@ ccswarm/
 - **Safe Implementation**: Risk assessment and rollback mechanisms
 
 ### 📊 Observability & Tracing (NEW in v0.3.8)
-- **OpenTelemetry Compatible**: Export traces to Jaeger, Zipkin, or custom backends
-- **Langfuse Integration**: LLM-specific observability with token tracking
-- **Span Tracking**: Trace agent execution across the entire workflow
-- **Token Usage Metrics**: Monitor and optimize LLM API costs
-- **Trace Visualization**: Hierarchical span trees for debugging
+- **OpenTelemetry Compatible**: Export traces to Jaeger, Zipkin, or custom backends ⚡
+- **Langfuse Integration**: LLM-specific observability with token tracking ⚡
+- **Span Tracking**: Trace agent execution across the entire workflow ✅
+- **Token Usage Metrics**: Monitor and optimize LLM API costs ✅
+- **Trace Visualization**: Hierarchical span trees for debugging ✅
 
 ### 👤 Human-in-the-Loop (HITL) (NEW in v0.3.8)
-- **Approval Workflows**: Gate critical actions with human oversight
-- **Policy-Based Rules**: Define approval requirements by risk level
-- **Multi-Channel Notifications**: CLI, Slack, Email, and custom channels
-- **Escalation Support**: Automatic escalation on timeout or rejection
-- **Audit Trail**: Complete history of all approval decisions
+- **Approval Workflows**: Gate critical actions with human oversight ✅
+- **Policy-Based Rules**: Define approval requirements by risk level ✅
+- **Multi-Channel Notifications**: CLI ✅, Slack/Email 🔜
+- **Escalation Support**: Timeout ✅, escalation 🔜
+- **Audit Trail**: Complete history of all approval decisions ✅
 
 ### 🧠 Long-term Memory & RAG (NEW in v0.3.8)
-- **Vector Embeddings**: Semantic search over past experiences
-- **Short-term/Long-term Memory**: Session-aware memory consolidation
-- **Retrieval Augmented Generation**: Context-aware agent responses
-- **Importance-based Retention**: Smart memory decay and prioritization
-- **Multiple Backends**: In-memory, file-based, or vector DB storage
+- **Vector Embeddings**: Semantic search over past experiences 🔜
+- **Short-term/Long-term Memory**: Session-aware memory consolidation ✅
+- **Retrieval Augmented Generation**: Context-aware agent responses ✅
+- **Importance-based Retention**: Smart memory decay and prioritization ✅
+- **Multiple Backends**: In-memory ✅, file-based/vector DB 🔜
 
 ### 📈 Graph-based Workflow Engine (NEW in v0.3.8)
-- **DAG Workflows**: Define complex task dependencies as graphs
-- **Conditional Branching**: Dynamic workflow paths based on conditions
-- **Parallel Execution**: Run independent tasks concurrently
-- **Approval Gates**: Integrate HITL at workflow checkpoints
-- **Sub-workflows**: Compose complex workflows from simpler ones
+- **DAG Workflows**: Define complex task dependencies as graphs ✅
+- **Conditional Branching**: Dynamic workflow paths based on conditions 🔜
+- **Parallel Execution**: Run independent tasks concurrently 🔜
+- **Approval Gates**: Integrate HITL at workflow checkpoints 🔜
+- **Sub-workflows**: Compose complex workflows from simpler ones 🔜
 
 ### 🎯 Benchmark Integration (NEW in v0.3.8)
-- **SWE-Bench Style Evaluation**: Standardized agent performance testing
-- **Predefined Suites**: Basic coding, bug fixes, refactoring benchmarks
-- **Metrics Collection**: Track pass rates, scores, and improvements
-- **Leaderboard System**: Compare agent performance over time
-- **Custom Benchmarks**: Create project-specific evaluation suites
+- **SWE-Bench Style Evaluation**: Standardized agent performance testing ✅
+- **Predefined Suites**: Basic coding, bug fixes, refactoring benchmarks ✅
+- **Metrics Collection**: Track pass rates, scores, and improvements ✅
+- **Leaderboard System**: Compare agent performance over time ✅
+- **Custom Benchmarks**: Create project-specific evaluation suites ✅
 
 ### 🎯 Core Capabilities
 - **Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
@@ -165,7 +167,7 @@ ccswarm/
 
 > **New to ccswarm?** Start with our [📖 Getting Started Guide](docs/GETTING_STARTED.md) for a comprehensive walkthrough with examples and best practices!
 
-> **Note**: Claude Code integration requires running Claude Code locally on ws://localhost:9100
+> **Note**: Claude Code integration requires a WebSocket bridge. See [Claude ACP Guide](docs/CLAUDE_ACP.md) for setup instructions.
 
 ### 1. Installation
 
@@ -273,7 +275,7 @@ ccswarm template apply rust-cli --var project_name=awesome-tool
 
 ## 🏗️ Architecture
 
-ccswarm v0.3.7 features a streamlined Rust-native architecture with efficient patterns:
+ccswarm v0.3.8 features a streamlined Rust-native architecture with efficient patterns:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -285,6 +287,7 @@ ccswarm v0.3.7 features a streamlined Rust-native architecture with efficient pa
 ├─────────────────────────────────────────┤
 │     Claude ACP Integration              │ ← WebSocket Communication
 │     ├─ Agent Client Protocol           │   ws://localhost:9100
+│     ├─ servep Bridge (stdio→WebSocket) │   Required for ACP
 │     ├─ Real-time Task Delegation       │   JSON-RPC 2.0
 │     ├─ Session Persistence             │   UUID-based
 │     └─ Auto-reconnect with Retry       │   Exponential backoff
@@ -584,7 +587,6 @@ my_app/
 └── .gitignore      # Git config
 ```
 
-
 ### Proactive & Security Commands
 ```bash
 # Proactive mode is enabled by default in all new projects
@@ -609,6 +611,7 @@ ccswarm deps analyze --show-blockers
 ccswarm deps resolve --auto-order
 ```
 
+### Session Commands
 ```bash
 ccswarm session list
 ccswarm session stats --show-savings
@@ -748,9 +751,6 @@ cargo test -p ccswarm --test integration_tests
 # - demos/multi-agent/       - Multi-agent monitoring demo
 # - demos/session-persistence/ - Session recovery demo
 # - demos/auto-create/       - Application generation demo
-
-
-
 ```
 
 ## 🚨 Need Help?
@@ -760,7 +760,7 @@ cargo test -p ccswarm --test integration_tests
 We've created extensive documentation to help you succeed with ccswarm:
 
 - **🚀 [Getting Started](docs/GETTING_STARTED.md)**: Complete beginner's guide with hands-on tutorials
-- **⚙️ [Configuration](docs/CONFIGURATION.md)**: All configuration options explained with examples  
+- **⚙️ [Configuration](docs/CONFIGURATION.md)**: All configuration options explained with examples
 - **🔧 [Troubleshooting](docs/TROUBLESHOOTING.md)**: Detailed solutions for common issues
 - **🤝 [Contributing](CONTRIBUTING.md)**: How to contribute to the project
 
@@ -774,11 +774,14 @@ ccswarm session create --agent frontend
 
 **Provider errors**
 ```bash
-# Check API keys
-echo $ANTHROPIC_API_KEY
+# Check if ACP bridge is running
+ss -tlnp | grep 9100
 
-# Verify provider config
-ccswarm config show
+# Start the bridge if not running
+servep -p 9100 --ws "/::npx acp-claude-code"
+
+# Check Claude Code login
+claude /login
 ```
 
 **Worktree conflicts**
@@ -828,7 +831,7 @@ ccswarm extend autonomous --continuous        # Continuous improvement
 
 # Optional search-based extension
 ccswarm search mdn "react server components"
-ccswarm search github "rust async patterns" 
+ccswarm search github "rust async patterns"
 ccswarm extend propose --title "Add RSC Support"
 
 # View extension progress
@@ -892,11 +895,8 @@ cargo test --workspace
 # Build only ccswarm (main orchestration)
 cargo build -p ccswarm
 
-
 # Run ccswarm from workspace root
 cargo run -p ccswarm -- init --name "MyProject"
-
-
 
 # Generate documentation for entire workspace
 cargo doc --workspace --no-deps --open
@@ -956,28 +956,6 @@ cd my-app && npm install && npm start
 
 For detailed instructions, examples, and Docker configurations, see [STANDALONE_DEPLOYMENT.md](STANDALONE_DEPLOYMENT.md).
 
-### Contributing
-```bash
-# Fork and clone
-git clone https://github.com/yourusername/ccswarm.git
-cd ccswarm
-
-# Run all tests in workspace
-cargo test --workspace
-
-# Format all code
-cargo fmt --all
-
-# Run clippy on all crates
-cargo clippy --workspace -- -D warnings
-
-# Check documentation for entire workspace
-cargo doc --workspace --no-deps --open
-
-# Build release version
-cargo build --release --workspace
-```
-
 ## 💡 Enhanced User Experience
 
 ### Getting Started
@@ -985,7 +963,7 @@ cargo build --release --workspace
 # First time? Use the setup wizard
 ccswarm setup
 
-# Need help? Interactive tutorial  
+# Need help? Interactive tutorial
 ccswarm tutorial
 
 # Check system health
@@ -1030,7 +1008,7 @@ All operations show live progress:
    Description: Implement user authentication
    Priority: 🟡 High
    Type: Feature
-   
+
 💡 Quick tips:
   • View task progress: ccswarm task status task-a1b2
   • List all tasks: ccswarm task list
@@ -1082,7 +1060,7 @@ cargo build --release --workspace
 
 **Documentation Contributions Welcome:** Help us improve our guides by contributing to:
 - [Getting Started Guide](docs/GETTING_STARTED.md) - Add examples and tutorials
-- [Configuration Reference](docs/CONFIGURATION.md) - Expand configuration examples  
+- [Configuration Reference](docs/CONFIGURATION.md) - Expand configuration examples
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Add solutions for new issues
 
 ## 📄 License
@@ -1097,4 +1075,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Experience Claude Code integration with autonomous AI orchestration in ccswarm v0.3.7** 🤖🧠🚀
+**Experience Claude Code integration with autonomous AI orchestration in ccswarm v0.3.8** 🤖🧠🚀
