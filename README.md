@@ -1,10 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-<<<<<<< HEAD
-> **Version 0.4.3** - Rust Edition 2024
-=======
 > **Version 0.3.8** - Rust-Native Multi-Agent Orchestration with Advanced Features
->>>>>>> e29fbdc (docs: restructure README with hub-and-spoke model)
 
 [![CI](https://github.com/nwiizo/ccswarm/workflows/CI/badge.svg)](https://github.com/nwiizo/ccswarm/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/rust-edition_2024-blue.svg)](https://www.rust-lang.org)
@@ -12,7 +8,6 @@
 
 **ccswarm** is a workflow automation framework for coordinating specialized AI agents using Claude Code CLI. It provides task delegation infrastructure, template-based scaffolding, and Git worktree isolation for parallel development.
 
-<<<<<<< HEAD
 ## Implementation Status
 
 | Category | Status | Description |
@@ -173,10 +168,27 @@
 - **LLM Quality Judge**: Advanced code evaluation with multi-dimensional scoring
 - **Search Agent**: Web search integration via Gemini CLI for research tasks
 
+## In Development (v0.4.0)
+
+See **[docs/UPCOMING_FEATURES.md](docs/UPCOMING_FEATURES.md)** for detailed implementation patterns and integration guides.
+
+Features with code already in codebase but not fully integrated:
+- 🔧 **Hook System Integration** - Extensible execution hooks with priority-based registry
+- 🔧 **Verification Agent** - Auto-verify created applications with 6-check workflow
+- 🔧 **DynamicSpawner** - Intelligent workload balancing for agent selection
+- 🔧 **Parallel Execution** - True multi-agent parallelism (command-based & PTY-based)
+- 🔧 **ai-session MessageBus** - Inter-agent coordination with 93% token savings
+- 🔧 **Session Persistence** - Resume/fork/checkpoint capabilities with crash recovery
+
+**Roadmap:**
+1. Fix `start` command coordination loop (Critical)
+2. Wire ParallelExecutor to orchestrator (Critical)
+3. Implement inter-process communication (Critical)
+4. Integrate ai-session features (High Value)
+
 ## Quick Start
 
 > **New to ccswarm?** See the [Getting Started Guide](docs/GETTING_STARTED.md) for a complete walkthrough.
->>>>>>> e29fbdc (docs: restructure README with hub-and-spoke model)
 
 ### Installation
 
