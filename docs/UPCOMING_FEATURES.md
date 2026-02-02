@@ -542,6 +542,103 @@ pub async fn run_daemon(config: DaemonConfig) -> Result<()> {
 
 ---
 
+### 5. Provider Integration (v0.4.0)
+**Status:** ✅ Code exists | 🔧 Not integrated
+
+**Location:** `crates/ccswarm/src/providers/`
+
+**What Exists:**
+- `claude_code.rs` - ClaudeCodeExecutor (executes `claude` CLI)
+- `claude_api.rs` - ClaudeApiClient (direct Anthropic API)
+- `aider.rs` - AiderExecutor (Aider CLI integration)
+- `codex.rs` - CodexExecutor (OpenAI API)
+- `custom.rs` - CustomExecutor (generic command wrapper)
+- `mod.rs` - ProviderFactory and trait system
+
+**Current Reality:**
+Actual execution flow: `AgentPool` → `PersistentClaudeSession` → simulated responses
+
+`PersistentClaudeSession::execute_prompt()` returns hardcoded output based on keywords:
+- Task contains "React" → "Created React components with TypeScript..."
+- Task contains "API" → "Created Express API with endpoints..."
+- Task contains "test" → "Created test suites..."
+- Default → "Task completed successfully"
+
+**Provider System Not Used:**
+- `ProviderFactory::create_executor()` has **zero usages** in codebase
+- No providers are ever instantiated
+- AgentPool doesn't call provider system
+
+**Integration TODO:**
+- [ ] Replace simulated responses in `PersistentClaudeSession::execute_prompt()`
+- [ ] Wire `ProviderFactory::create_executor()` into AgentPool execution path
+- [ ] Add provider selection to `ccswarm.json` agent configuration
+- [ ] Implement actual Claude Code CLI/API execution
+- [ ] Add provider health checks to `ccswarm doctor` command
+- [ ] Remove hardcoded keyword matching
+
+**File References:**
+- Simulated execution: `crates/ccswarm/src/session/claude_session.rs:127-137`
+- Provider factory: `crates/ccswarm/src/providers/mod.rs:756-795`
+- Agent pool: `crates/ccswarm/src/agent/pool.rs:143-182`
+
+---
+
+### 6. ACP Integration (v0.4.0+)
+**Status:** 🚧 Stub implementation
+
+**Location:** `crates/ccswarm/src/acp_claude/`
+
+**What Exists:**
+- `adapter.rs` - SimplifiedClaudeAdapter (CLI wrapper, **not** WebSocket)
+- `config.rs` - ClaudeACPConfig (has WebSocket URL config)
+- `error.rs` - ACPError types
+
+**What's Missing:**
+- ❌ WebSocket implementation (currently just executes `claude` CLI)
+- ❌ CLI commands: `ccswarm claude-acp test/start/send/status/diagnose` (documented but don't exist)
+- ❌ Integration with orchestrator (adapter never instantiated anywhere)
+- ❌ Multi-provider ACP support
+- ❌ No WebSocket dependencies in Cargo.toml (no `tokio-tungstenite`)
+
+**Documented vs Reality:**
+
+| Documented | Reality |
+|------------|---------|
+| WebSocket bridge at ws://localhost:9100 | No WebSocket code exists |
+| `ccswarm claude-acp test` command | Command not in CLI enum |
+| `ccswarm claude-acp send` command | Command not in CLI enum |
+| Default integration method | Never used anywhere |
+
+**SimplifiedClaudeAdapter Methods:**
+- `connect()` - Runs `claude --version` to verify CLI exists
+- `send_task()` - Executes `claude -p <task> --dangerously-skip-permissions`
+- Never called by orchestrator
+
+**Planned Architecture:**
+```
+┌─────────────┐  WebSocket   ┌─────────────┐  stdio  ┌─────────────┐
+│  ccswarm    │ ◄─────────► │   servep    │ ◄─────► │ acp-claude  │
+│  (client)   │  ws://9100  │  (bridge)   │         │   -code     │
+└─────────────┘             └─────────────┘         └─────────────┘
+```
+
+**Integration TODO:**
+- [ ] Implement WebSocket client using `tokio-tungstenite`
+- [ ] Add `ccswarm claude-acp` CLI commands to Commands enum
+- [ ] Wire SimplifiedClaudeAdapter into provider system or orchestrator
+- [ ] Document servep bridge setup process
+- [ ] Add ACP health checks
+- [ ] OR: Decide if ACP should integrate via ProviderFactory instead of separate module
+
+**Decision Needed:**
+Should ACP be:
+- A) Separate WebSocket integration (as documented)?
+- B) Part of ProviderFactory as ClaudeACP provider type?
+- C) Removed in favor of direct provider system?
+
+---
+
 ## Known Limitations (from Gap Analysis)
 
 From `docs/analysis/00-capability-gap-analysis.md`:
