@@ -8,51 +8,29 @@
 
 **ccswarm** is a workflow automation framework for coordinating specialized AI agents using Claude Code CLI. It provides task delegation infrastructure, template-based scaffolding, and Git worktree isolation for parallel development.
 
+> **AI Integration**: ccswarm currently uses **simulated execution** (keyword-based responses). Multi-provider system (CLI, API, ACP) is implemented but not integrated. See [docs/UPCOMING_FEATURES.md](docs/UPCOMING_FEATURES.md) for v0.4.0 roadmap.
+
 ## Implementation Status
 
 | Category | Status | Description |
 |----------|--------|-------------|
-| CLI Infrastructure | Working | All commands parse and route correctly |
-| Session Management | Working | Native PTY-based sessions via ai-session |
-| TUI Monitoring | Working | Real-time terminal UI with ratatui |
-| Configuration | Working | Project configs, agent settings |
-| Git Worktrees | Working | Create, list, remove, prune |
-| Template System | Working | Predefined templates for app scaffolding |
-| Task Queue | Working | Task queuing and tracking |
-| Parallel Executor | Partial | Structure exists, not integrated with orchestrator |
-| `start` Command | Partial | Initializes but coordination loop not implemented |
-| Auto-Create | Partial | Templates work, full AI generation incomplete |
-| Sangha (Voting) | Planned | Data structures only |
-| Extensions | Planned | Stub implementation |
+| CLI Infrastructure | ✅ Working | All commands parse and route correctly |
+| Session Management | ✅ Working | Native PTY-based sessions |
+| TUI Monitoring | ✅ Working | Real-time terminal UI with ratatui |
+| Configuration | ✅ Working | Project configs, agent settings |
+| Git Worktrees | ✅ Working | Create, list, remove, prune |
+| Template System | ✅ Working | Predefined templates for app scaffolding |
+| Task Queue | ✅ Working | Task queuing and tracking |
+| AI Execution | ⚠️ Simulated | Returns keyword-based responses |
+| Provider System | 🚧 Planned | Code exists, not integrated |
+| ACP Integration | 🚧 Stub | CLI wrapper only, no WebSocket |
+| Parallel Executor | ⚠️ Partial | Structure exists, not integrated with orchestrator |
+| `start` Command | ⚠️ Partial | Initializes but coordination loop not implemented |
+| Auto-Create | ⚠️ Partial | Templates work, full AI generation incomplete |
+| Sangha (Voting) | 🚧 Planned | Data structures only |
+| Extensions | 🚧 Planned | Stub implementation |
 
 > **Note**: See [docs/analysis/](docs/analysis/) for detailed capability gap analysis.
-
-## What Works Today
-
-- **CLI Commands**: Initialize projects, manage sessions, run TUI, check health
-- **Session Management**: Create, list, attach, detach sessions (native PTY, no tmux)
-- **Template Scaffolding**: Generate project structure from templates
-- **Git Worktrees**: Isolated workspaces per agent role
-- **TUI Dashboard**: Monitor tasks and sessions in terminal
-- **Resource Monitoring**: Track agent usage statistics
-- **Configuration**: Load/save project and agent configs
-
-## What's In Progress
-
-- **Orchestrator Coordination**: `start` command initializes but doesn't run coordination loop
-- **Parallel Agent Execution**: ParallelExecutor implemented but not wired to orchestrator
-- **Auto-Create**: Template generation works; full AI-driven creation incomplete
-- **ai-session Integration**: Available for session management; multi-agent coordination not leveraged
-
-## Quick Start
-
-### Prerequisites
-
-- Rust (Edition 2024 compatible toolchain)
-- Git 2.20+
-- Claude Code CLI (`claude` command) - optional for template-only usage
-=======
-> **Default Integration**: ccswarm uses **Claude Code via ACP (Agent Client Protocol)** as the default communication method. Start the [ACP bridge](docs/CLAUDE_ACP.md) and ccswarm automatically connects!
 
 ## Documentation
 
@@ -64,121 +42,127 @@
 | **[Commands Reference](docs/COMMANDS.md)** | Complete CLI command reference |
 | **[Claude ACP Guide](docs/CLAUDE_ACP.md)** | Claude Code integration setup |
 | **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Common issues and solutions |
+| **[Upcoming Features](docs/UPCOMING_FEATURES.md)** | v0.4.0 implementation patterns |
 | **[Application Spec](docs/APPLICATION_SPEC.md)** | Detailed feature specifications |
 | **[Contributing](CONTRIBUTING.md)** | How to contribute |
 
 ## Key Features
 
-> **Status**: ✅ implemented | ⚡ file-export | 🔜 planned
+> **Status Legend**: ✅ Working | ⚠️ Partial | 🚧 Planned
 
-### Claude Code Integration via ACP (Default)
-- **Native Claude Code Support**: Direct integration with Claude Code through Agent Client Protocol (ACP)
-- **WebSocket Communication**: Real-time bidirectional communication with Claude Code
-- **Auto-Connect**: Automatically connects to Claude Code on startup (default: ws://localhost:9100)
-- **Task Delegation**: Send tasks directly to Claude Code for execution
-- **Session Management**: Persistent session IDs for continuous interaction
-- **Diagnostics**: Built-in connection testing and troubleshooting tools
+### Multi-Provider AI Integration (🚧 Planned)
+- **Provider Architecture**: 5 providers implemented (ClaudeCode, Aider, ClaudeAPI, Codex, Custom)
+- **Current Execution**: Simulated responses (keyword-based matching)
+- **ACP Module**: Stub implementation (CLI wrapper, no WebSocket)
+- **Status**: Code exists but not integrated with orchestrator
+- See [docs/UPCOMING_FEATURES.md](docs/UPCOMING_FEATURES.md) for integration roadmap
 
-### Developer Experience First
+### Developer Experience (✅ Working)
 - **Interactive Setup Wizard**: Guided configuration for new users
 - **Built-in Tutorial**: Learn by doing with hands-on chapters
 - **Smart Error Messages**: Helpful suggestions and solutions
-- **Progress Indicators**: Real-time feedback for all operations
+- **Progress Indicators**: Real-time feedback for operations
 - **Contextual Help**: `ccswarm help <topic>` for detailed guidance
 - **System Doctor**: `ccswarm doctor --fix` diagnoses and fixes issues
-- **CLI Performance**: Ongoing refactoring for improved performance and maintainability
 
-### Proactive ProactiveMaster
-- **Autonomous Orchestration**: Intelligent task prediction and generation (enabled by default)
-- **Real-time Progress Analysis**: Continuous monitoring with bottleneck detection
-- **Dependency Resolution**: Automatic task ordering and dependency management
-- **Goal-Driven Planning**: OKR integration with milestone tracking
-- **Pattern Recognition**: Learn from task completion patterns for better predictions
-- **Velocity Tracking**: Team performance analysis and optimization suggestions
-
-### Security Agent
-- **OWASP Top 10 Scanning**: Comprehensive vulnerability detection
-- **Risk Assessment**: Automated security scoring with CI/CD integration
-- **Real-time Monitoring**: Continuous vulnerability scanning during development
-- **Dependency Security**: Scan npm, cargo, pip, and composer packages
-- **Security Reporting**: Detailed reports with remediation suggestions
-
-### Session Management
-- **WebSocket Sessions**: Persistent connections via Claude ACP
-- **Cross-Platform Support**: Works on Linux, macOS, and Windows
-- **Multi-Agent Coordination**: Enhanced message bus architecture
+### Session Management (✅ Working)
+- **Native PTY Sessions**: Cross-platform terminal sessions (no tmux)
+- **Session Lifecycle**: Create, list, attach, detach, pause, resume
 - **Auto-Recovery**: Automatic reconnection and state persistence
+- **Resource Monitoring**: Track session usage and statistics
 
-### Template System
+### Template System (✅ Working)
 - **Predefined Templates**: Rust CLI, security review, performance optimization
 - **Variable Substitution**: Dynamic content generation with context
-- **Category-Based Organization**: Application, utility, review, optimization
+- **Category Organization**: Application, utility, review, optimization
 - **Custom Templates**: Create and store project-specific templates
-- **Validation System**: Type-safe template validation before application
+- **Validation System**: Type-safe template validation
 
-### Collective Intelligence
-- **Sangha System**: Buddhist-inspired democratic decision-making
-- **Autonomous Self-Extension**: Agents independently analyze and propose improvements
-- **Experience-Based Learning**: Continuous introspective analysis drives growth
-- **Smart Proposal System**: Structured proposals with consensus algorithms
-- **Safe Implementation**: Risk assessment and rollback mechanisms
+### Git Worktree Isolation (✅ Working)
+- **Parallel Development**: Multiple branches simultaneously without conflicts
+- **Per-Agent Workspaces**: Isolated environments for each agent role
+- **Automatic Management**: Create, list, remove, prune operations
+- **Safe Isolation**: No cross-agent file access or conflicts
 
-### Observability & Tracing (NEW in v0.3.8)
-- **OpenTelemetry Compatible**: Export traces to Jaeger, Zipkin, or custom backends ⚡
-- **Langfuse Integration**: LLM-specific observability with token tracking ⚡
-- **Span Tracking**: Trace agent execution across the entire workflow ✅
-- **Token Usage Metrics**: Monitor and optimize LLM API costs ✅
-- **Trace Visualization**: Hierarchical span trees for debugging ✅
+### Task Queue & Tracking (✅ Working)
+- **Task Management**: Create, queue, and track tasks
+- **Priority Levels**: High, medium, low task prioritization
+- **Status Tracking**: Pending, in-progress, completed states
+- **Task Metadata**: Tags, descriptions, dependencies
 
-### Human-in-the-Loop (HITL) (NEW in v0.3.8)
-- **Approval Workflows**: Gate critical actions with human oversight ✅
-- **Policy-Based Rules**: Define approval requirements by risk level ✅
-- **Multi-Channel Notifications**: CLI ✅, Slack/Email 🔜
-- **Escalation Support**: Timeout ✅, escalation 🔜
-- **Audit Trail**: Complete history of all approval decisions ✅
+### Orchestrator & Delegation (⚠️ Partial)
+- **ProactiveMaster**: Intelligent task analysis (structure exists)
+- **Agent Assignment**: Optimal agent selection (basic routing works)
+- **Coordination Loop**: Continuous monitoring (not implemented)
+- **Dependency Resolution**: Auto task ordering (planned)
 
-### Long-term Memory & RAG (NEW in v0.3.8)
-- **Vector Embeddings**: Semantic search over past experiences 🔜
-- **Short-term/Long-term Memory**: Session-aware memory consolidation ✅
-- **Retrieval Augmented Generation**: Context-aware agent responses ✅
-- **Importance-based Retention**: Smart memory decay and prioritization ✅
-- **Multiple Backends**: In-memory ✅, file-based/vector DB 🔜
+### Parallel Execution (⚠️ Partial)
+- **ParallelExecutor**: Multi-agent concurrency structure exists
+- **Message Bus**: Inter-agent communication framework ready
+- **Resource Management**: File locking and conflict prevention designed
+- **Integration**: Not wired to orchestrator yet
 
-### Graph-based Workflow Engine (NEW in v0.3.8)
-- **DAG Workflows**: Define complex task dependencies as graphs ✅
-- **Conditional Branching**: Dynamic workflow paths based on conditions 🔜
-- **Parallel Execution**: Run independent tasks concurrently 🔜
-- **Approval Gates**: Integrate HITL at workflow checkpoints 🔜
-- **Sub-workflows**: Compose complex workflows from simpler ones 🔜
+### Auto-Create System (⚠️ Partial)
+- **Template Scaffolding**: Generate project structure (working)
+- **Variable Substitution**: Dynamic content generation (working)
+- **AI-Driven Generation**: Natural language to app (incomplete)
+- **Custom Templates**: User-defined project types (working)
 
-### Benchmark Integration (NEW in v0.3.8)
-- **SWE-Bench Style Evaluation**: Standardized agent performance testing ✅
-- **Predefined Suites**: Basic coding, bug fixes, refactoring benchmarks ✅
-- **Metrics Collection**: Track pass rates, scores, and improvements ✅
-- **Leaderboard System**: Compare agent performance over time ✅
-- **Custom Benchmarks**: Create project-specific evaluation suites ✅
+### Observability & Tracing (✅ v0.3.8)
+- **Span Tracking**: Trace agent execution across workflows
+- **Token Usage Metrics**: Monitor and optimize LLM API costs
+- **Trace Visualization**: Hierarchical span trees for debugging
+- **OpenTelemetry Export**: Jaeger, Zipkin integration (file-export ready)
+- **Langfuse Integration**: LLM-specific observability (file-export ready)
 
-### Core Capabilities
-- **Multi-Provider Support**: Claude Code, Aider, OpenAI Codex, Custom tools
-- **Intelligent Delegation**: ProactiveMaster analyzes and assigns tasks optimally
-- **Auto-Create System**: Generate complete applications from natural language
-- **Enhanced TUI**: Real-time monitoring with task management and filtering
-- **Git Worktree Isolation**: Parallel development without conflicts
-- **Auto-Accept Mode**: Safe automated execution with risk assessment
-- **LLM Quality Judge**: Advanced code evaluation with multi-dimensional scoring
-- **Search Agent**: Web search integration via Gemini CLI for research tasks
+### Human-in-the-Loop (✅ v0.3.8)
+- **Approval Workflows**: Gate critical actions with human oversight
+- **Policy-Based Rules**: Define approval requirements by risk level
+- **CLI Notifications**: Interactive approval prompts
+- **Timeout Handling**: Automatic escalation on timeout
+- **Audit Trail**: Complete history of approval decisions
+- **Multi-Channel**: Slack/Email integration (planned)
+
+### Long-term Memory & RAG (✅ v0.3.8)
+- **Short/Long-term Memory**: Session-aware memory consolidation
+- **Retrieval Augmented Generation**: Context-aware responses
+- **Importance Retention**: Smart memory decay and prioritization
+- **In-Memory Backend**: Fast access for current session
+- **Vector Embeddings**: Semantic search (planned)
+- **Persistent Storage**: File/vector DB backends (planned)
+
+### Graph Workflow Engine (✅ v0.3.8)
+- **DAG Workflows**: Define task dependencies as graphs
+- **Conditional Execution**: Dynamic workflow paths
+- **Parallel Tasks**: Run independent tasks concurrently (structure ready)
+- **Approval Gates**: HITL integration at checkpoints (planned)
+- **Sub-workflows**: Compose complex workflows (planned)
+
+### Benchmark Integration (✅ v0.3.8)
+- **SWE-Bench Style**: Standardized agent performance testing
+- **Predefined Suites**: Basic coding, bug fixes, refactoring
+- **Metrics Collection**: Track pass rates, scores, improvements
+- **Leaderboard System**: Compare agent performance over time
+- **Custom Benchmarks**: Create project-specific evaluation suites
+
+### Collective Intelligence (🚧 Planned)
+- **Sangha System**: Democratic decision-making (data structures only)
+- **Self-Extension**: Agents propose improvements (stub implementation)
+- **Experience Learning**: Continuous introspective analysis (planned)
+- **Consensus Algorithms**: Smart proposal voting (planned)
+- **Safe Implementation**: Risk assessment and rollback (planned)
 
 ## In Development (v0.4.0)
 
 See **[docs/UPCOMING_FEATURES.md](docs/UPCOMING_FEATURES.md)** for detailed implementation patterns and integration guides.
 
 Features with code already in codebase but not fully integrated:
-- 🔧 **Hook System Integration** - Extensible execution hooks with priority-based registry
-- 🔧 **Verification Agent** - Auto-verify created applications with 6-check workflow
+- 🔧 **Hook System Integration** - Extensible execution hooks with priority registry
+- 🔧 **Verification Agent** - Auto-verify applications with 6-check workflow
 - 🔧 **DynamicSpawner** - Intelligent workload balancing for agent selection
-- 🔧 **Parallel Execution** - True multi-agent parallelism (command-based & PTY-based)
+- 🔧 **Parallel Execution** - True multi-agent parallelism (command & PTY-based)
 - 🔧 **ai-session MessageBus** - Inter-agent coordination with 93% token savings
-- 🔧 **Session Persistence** - Resume/fork/checkpoint capabilities with crash recovery
+- 🔧 **Session Persistence** - Resume/fork/checkpoint with crash recovery
 
 **Roadmap:**
 1. Fix `start` command coordination loop (Critical)
@@ -196,67 +180,6 @@ Features with code already in codebase but not fully integrated:
 git clone https://github.com/nwiizo/ccswarm.git
 cd ccswarm
 cargo build --release
-<<<<<<< HEAD
-```
-
-### Basic Usage
-
-```bash
-# Initialize a project
-./target/release/ccswarm init --name "MyProject"
-
-# List available templates
-./target/release/ccswarm template list
-
-# Check system health
-./target/release/ccswarm doctor
-
-# Start TUI monitoring
-./target/release/ccswarm tui
-
-# Session management
-./target/release/ccswarm session list
-./target/release/ccswarm session create --name "dev-session"
-
-# Git worktree management
-./target/release/ccswarm worktree list
-./target/release/ccswarm worktree create feature/auth
-```
-
-## CLI Commands
-
-### Working Commands
-
-| Command | Description |
-|---------|-------------|
-| `init` | Initialize a new ccswarm project |
-| `tui` | Start Terminal User Interface |
-| `session` | Session management (list, create, attach, detach) |
-| `worktree` | Git worktree management |
-| `template` | Template listing and management |
-| `config` | Configuration management |
-| `doctor` | System health checks and diagnostics |
-| `health` | Resource and connectivity checks |
-| `tutorial` | Interactive learning tutorial |
-| `setup` | Interactive setup wizard |
-| `status` | Show current status |
-| `agents` | List agent configurations |
-
-### Partial/Stub Commands
-
-| Command | Status |
-|---------|--------|
-| `start` | Initializes but exits immediately |
-| `stop` | Stub - prints message only |
-| `auto-create` | Template scaffolding works; AI generation incomplete |
-| `task` | Queue structures work; execution not connected |
-| `delegate` | Routing exists; actual delegation incomplete |
-| `review` | Structure exists; quality evaluation incomplete |
-| `sangha` | Data structures only |
-| `extend` | Stub implementation |
-| `search` | Types defined; no implementation |
-| `subagent` | Management exists; parallel execution not wired |
-=======
 cargo install --path crates/ccswarm
 ```
 
@@ -301,9 +224,9 @@ cd sample/
 │     ├─ Task Analysis & Delegation      │   Pattern matching
 │     └─ Quality Review Integration      │   Async/await
 ├─────────────────────────────────────────┤
-│     Claude ACP Integration              │ ← WebSocket (ws://localhost:9100)
-│     ├─ Agent Client Protocol           │   JSON-RPC 2.0
-│     └─ Real-time Task Delegation       │   Auto-reconnect
+│     Multi-Provider Integration          │ ← Planned (v0.4.0)
+│     ├─ Provider System (5 impl.)       │   Code exists, not wired
+│     └─ Current: Simulated Execution    │   Keyword-based responses
 ├─────────────────────────────────────────┤
 │     Specialized Agent Pool              │ ← Actor Model
 │     ├─ Frontend Agent (React/Vue/UI)   │
@@ -326,70 +249,23 @@ cd sample/
 - **Iterator Pipelines**: Zero-cost abstractions for task processing
 - **Minimal Testing**: Only 8 essential tests covering core functionality
 - **No Arc<Mutex>**: Replaced with actor model and channels
->>>>>>> e29fbdc (docs: restructure README with hub-and-spoke model)
 
 ## Project Structure
 
 ```
 ccswarm/
-<<<<<<< HEAD
-├── Cargo.toml              # Workspace configuration
-├── crates/
-│   ├── ccswarm/            # Main CLI and orchestration
-│   │   ├── src/
-│   │   │   ├── cli/        # CLI commands (working)
-│   │   │   ├── orchestrator/ # Task delegation (partial)
-│   │   │   ├── agent/      # Agent management (working)
-│   │   │   ├── session/    # Session management (working)
-│   │   │   ├── template/   # Template system (working)
-│   │   │   ├── subagent/   # Parallel execution (partial)
-│   │   │   ├── tui/        # Terminal UI (working)
-│   │   │   └── resource/   # Resource monitoring (working)
-│   │   └── tests/
-│   └── ai-session/         # Session management library
-│       ├── src/
-│       │   ├── core/       # PTY, lifecycle, process
-│       │   ├── context/    # Context compression
-│       │   ├── coordination/ # Message bus (available)
-│       │   └── mcp/        # MCP server
-│       └── tests/
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── APPLICATION_SPEC.md
-│   └── analysis/           # Implementation gap analysis
-└── .claude/                # Claude Code configuration
-```
-
-## Development
-
-```bash
-# Run all tests
-cargo test --workspace
-
-# Run only library tests
-cargo test --lib -p ccswarm
-
-# Run ai-session tests
-cargo test --lib -p ai-session
-
-# Check code quality
-cargo fmt && cargo clippy -- -D warnings
-
-# Build release
-cargo build --release --workspace
-```
-
-## ai-session Crate
-
-The `ai-session` crate provides native PTY-based session management:
-=======
 ├── crates/
 │   └── ccswarm/           # Main orchestration crate
 │       ├── src/
 │       │   ├── acp_claude/  # Claude ACP integration
 │       │   ├── cli/         # CLI commands
 │       │   ├── orchestrator/ # ProactiveMaster
-│       │   └── agent/       # Agent types
+│       │   ├── agent/       # Agent types
+│       │   ├── session/     # Session management
+│       │   ├── template/    # Template system
+│       │   ├── subagent/    # Parallel execution
+│       │   ├── tui/         # Terminal UI
+│       │   └── resource/    # Resource monitoring
 │       └── tests/
 ├── docs/                  # Documentation
 └── sample/                # Demo scripts
@@ -414,68 +290,9 @@ ccswarm can run without Claude Code! See [STANDALONE_DEPLOYMENT.md](STANDALONE_D
 - Custom providers
 
 ## License
->>>>>>> e29fbdc (docs: restructure README with hub-and-spoke model)
-
-```rust
-use ai_session::{SessionManager, SessionConfig};
-
-<<<<<<< HEAD
-// Create session manager
-let manager = SessionManager::new();
-=======
-## Acknowledgments
->>>>>>> e29fbdc (docs: restructure README with hub-and-spoke model)
-
-// Create a session
-let mut config = SessionConfig::default();
-config.name = "dev-session".to_string();
-let session = manager.create_session(config).await?;
-
-// Session lifecycle
-manager.pause_session(&session.id).await?;
-manager.resume_session(&session.id).await?;
-```
-
-<<<<<<< HEAD
-Features:
-- Cross-platform PTY implementation (Linux, macOS)
-- Session lifecycle management
-- Context compression (available)
-- MCP server (available)
-- Message bus for coordination (available, not utilized by orchestrator)
-
-## Known Limitations
-
-- **Orchestrator Not Running**: `ccswarm start` initializes but doesn't run coordination loop
-- **Claude Code Required**: Auto-create features require Claude Code CLI
-- **macOS/Linux Only**: Windows not supported due to Unix-specific PTY dependencies
-- **No True Parallel Execution**: ParallelExecutor exists but not connected to orchestrator
-
-## Roadmap
-
-See [Issue #67](https://github.com/nwiizo/ccswarm/issues/67) for redesign discussion.
-
-**Phase 1 (Current Focus):**
-- Fix `start` command to run coordination loop
-- Wire ParallelExecutor to orchestrator
-- Implement actual agent process spawning
-
-**Phase 2:**
-- Leverage ai-session's MessageBus for agent coordination
-- Implement context compression for token savings
-- Add ACP (Agent Client Protocol) support for multi-vendor agents
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md) - System design
-- [Application Spec](docs/APPLICATION_SPEC.md) - Feature details
-- [Capability Gap Analysis](docs/analysis/00-capability-gap-analysis.md) - Implementation status
-- [Architecture Comparison](docs/analysis/01-multi-agent-architecture-comparison.md) - ACP vs SDK vs PTY
-- [Development Standards](.claude/rules/development-standards.md) - Coding guidelines
-
-## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-=======
+
+## Acknowledgments
+
 **Experience Claude Code integration with autonomous AI orchestration in ccswarm v0.3.8**
->>>>>>> e29fbdc (docs: restructure README with hub-and-spoke model)
