@@ -165,10 +165,19 @@ Features with code already in codebase but not fully integrated:
 - 🔧 **Session Persistence** - Resume/fork/checkpoint with crash recovery
 
 **Roadmap:**
-1. Fix `start` command coordination loop (Critical)
-2. Wire ParallelExecutor to orchestrator (Critical)
-3. Implement inter-process communication (Critical)
-4. Integrate ai-session features (High Value)
+
+| Phase | Task | Priority | Status |
+|-------|------|----------|--------|
+| 1 | Fix `start` command coordination loop | Critical | Not Started |
+| 1 | Wire ParallelExecutor to orchestrator | Critical | Not Started |
+| 1 | Implement inter-process communication (Unix socket/SQLite) | Critical | Not Started |
+| 2 | Integrate ai-session MessageBus for agent coordination | High | Not Started |
+| 2 | Enable context compression (93% token savings) | High | Not Started |
+| 2 | Make ACP optional (`--enable-acp` flag) | Medium | Not Started |
+| 3 | Multi-vendor agent support (Gemini CLI, Codex CLI, OpenCode) | Medium | Planned |
+| 3 | Sangha collective decision-making | Low | Planned |
+
+> **Note**: ACP (Agent Client Protocol) will be optional. PTY/CLI remains the primary execution method. See [Issue #67](https://github.com/nwiizo/ccswarm/issues/67) for discussion.
 
 ## Quick Start
 
@@ -270,6 +279,19 @@ ccswarm/
 ├── docs/                  # Documentation
 └── sample/                # Demo scripts
 ```
+
+## Known Limitations
+
+| Limitation | Impact | Workaround |
+|------------|--------|------------|
+| `start` command exits immediately | No continuous orchestration | Use TUI or individual commands |
+| ParallelExecutor not wired | No true parallel agent execution | Tasks run sequentially |
+| ACP WebSocket not functional | No real-time bidirectional comms | Uses CLI wrapper instead |
+| ai-session MessageBus unused | No inter-agent coordination | Agents work independently |
+| No IPC between processes | Commands are isolated | Each command is standalone |
+| macOS/Linux only | No Windows support | Use WSL on Windows |
+
+See [docs/analysis/00-capability-gap-analysis.md](docs/analysis/00-capability-gap-analysis.md) for detailed analysis.
 
 ## Contributing
 
