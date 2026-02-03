@@ -35,3 +35,11 @@
 - Prefer `RwLock` over `Mutex` when reads dominate
 - Never hold locks across `.await` points
 - Use channel-based coordination, not shared state
+
+## Claude Code Integration
+
+ccswarm uses **Claude Code via ACP** with efficient patterns:
+- **Auto-Connect**: WebSocket connection to ws://localhost:9100
+- **Channel-Based Communication**: No shared state between agents
+- **Type-Safe Messages**: Compile-time validation of message types
+- **Actor Pattern**: Each agent as an independent actor
