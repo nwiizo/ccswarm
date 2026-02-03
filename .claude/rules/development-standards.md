@@ -1,5 +1,14 @@
 # Development Standards
 
+## Language Convention
+
+Ensure all content is in English per international open-source conventions:
+- Source code comments and rustdoc
+- Commit messages and PR descriptions
+- Markdown documentation
+- Agent and command definitions (`.claude/`)
+- Issue templates and GitHub content
+
 ## Code Quality Requirements
 
 - Run before commits: `cargo fmt && cargo clippy -- -D warnings && cargo test`

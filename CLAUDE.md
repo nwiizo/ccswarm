@@ -2,405 +2,57 @@
 
 ## Project Overview
 
-ccswarm v0.4.3 - AI Multi-Agent Orchestration System with **ai-session** integration. Uses Rust-native patterns for performance and compile-time safety.
+ccswarm v0.4.3 - AI Multi-Agent Orchestration System with **ai-session** integration.
 
-> **Implementation Status**: ~50% complete. Core infrastructure works, orchestration partially implemented. ai-session crate integrated for native PTY sessions.
+> **Implementation Status**: ~50% complete. See `.claude/reference/version-notes.md` for details.
 
-## What Actually Works Today
+## Quick Commands
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| CLI Infrastructure | ✅ Working | All commands parse and route correctly |
-| Session Management | ✅ Working | Native PTY sessions via ai-session (no tmux) |
-| TUI Dashboard | ✅ Working | Real-time monitoring with ratatui |
-| Git Worktrees | ✅ Working | Isolated workspaces per agent |
-| Template System | ✅ Working | Project scaffolding from templates |
-| Configuration | ✅ Working | Project and agent config management |
-| Task Queue | ⚠️ Partial | Queuing works, execution not connected |
-| `start` Command | ⚠️ Partial | Initializes but coordination loop incomplete |
-| Parallel Executor | ⚠️ Partial | Structure exists, not wired to orchestrator |
-| Auto-Create | ⚠️ Partial | Template generation works, AI generation incomplete |
-| Sangha (Voting) | 🚧 Planned | Data structures only |
-| Extensions | 🚧 Planned | Stub implementation |
-
-**Key Limitation**: Orchestrator coordination loop not fully implemented. `ccswarm start` initializes but doesn't run continuous agent coordination.
-
-## New in v0.3.8
-
-Five major new modules added (✅ done | ⚡ file-export | 🔜 planned):
-
-### Observability/Tracing (`src/tracing/`)
-- OpenTelemetry and Langfuse compatible export ⚡
-- Span hierarchies with token tracking ✅
-- Trace collector with LRU eviction ✅
-- Multiple export formats (JSON, OpenTelemetry, Langfuse, CSV) ✅
-
-### Human-in-the-Loop (`src/hitl/`)
-- Approval workflows with policy-based rules ✅
-- Multi-channel notifications: CLI ✅, Slack/Email 🔜
-- Timeout handling ✅, escalation 🔜
-- Complete audit trail for all decisions ✅
-
-### Long-term Memory/RAG (`src/memory/`)
-- Vector embeddings with cosine similarity 🔜
-- Short-term/Long-term memory separation ✅
-- Retrieval-augmented generation support ✅
-- Importance-based retention with decay ✅
-- Backends: in-memory ✅, file/vector DB 🔜
-
-### Graph Workflow Engine (`src/workflow/`)
-- DAG-based task workflows ✅
-- Conditional branching and parallel execution 🔜
-- Approval gates at workflow checkpoints 🔜
-- Sub-workflow composition 🔜
-
-### Benchmark Integration (`src/benchmark/`)
-- SWE-Bench style evaluation framework ✅
-- Predefined suites (basic coding, bug fixes, refactoring) ✅
-- Metrics collection with leaderboard ✅
-- Custom benchmark creation ✅
-
-## Key Architectural Learnings
-
-### ✅ What Works (Rust Best Practices)
-- **Type-State Pattern**: Compile-time state validation with zero runtime cost
-- **Channel-Based Orchestration**: Message-passing without Arc<Mutex> or shared state
-- **Iterator Pipelines**: Zero-cost abstractions for efficient task processing
-- **Actor Model**: Replace locks with message-passing actors
-- **Minimal Testing**: Only 8 essential tests - focus on core functionality
-
-### ❌ What Doesn't Work
-- **Layered Architecture**: Unnecessary abstraction in Rust
-- **Excessive Arc<Mutex>**: Causes contention, use channels instead
-- **Over-testing**: 300+ tests create maintenance burden without value
-- **Complex Abstractions**: Direct patterns are clearer and more efficient
-
-## Claude Code Integration (Default)
-
-ccswarm uses **Claude Code via ACP** with efficient patterns:
-- **Auto-Connect**: WebSocket connection to ws://localhost:9100
-- **Channel-Based Communication**: No shared state between agents
-- **Type-Safe Messages**: Compile-time validation of message types
-- **Actor Pattern**: Each agent as an independent actor
-
-## Development Standards
-
-### Language Convention
-
-Ensure all content is in English per international open-source conventions:
-- Source code comments and rustdoc
-- Commit messages and PR descriptions
-- Markdown documentation
-- Agent and command definitions (`.claude/`)
-- Issue templates and GitHub content
-
-### Code Quality Requirements
-- Run `cargo fmt && cargo clippy -- -D warnings && cargo test` before commits
-- **Minimal tests only**: ~10 tests maximum covering core functionality
-- Document public APIs with rustdoc
-- Keep cyclomatic complexity <10
-
-### Rust-Native Architecture Patterns
-- **Type-State Pattern**: Agent state transitions validated at compile time
-- **Channel-Based Concurrency**: No Arc<Mutex>, use tokio channels
-- **Iterator Chains**: Use iterator methods for collection processing
-- **Error Handling**: Result<T, E> with thiserror, no .unwrap()
-- **Zero-Cost Abstractions**: Compile-time optimizations, no runtime overhead
-
-#### Command Registry Pattern
-- **Purpose**: Eliminates massive match statements in CLI handling
-- **Implementation**: Uses HashMap of command handlers with async closures
-- **Benefits**: Reduces code duplication, improves maintainability
-- **Location**: `crates/ccswarm/src/cli/command_registry.rs`
-- **Usage**: Register commands once, dispatch dynamically
-
-#### Error Template System
-- **Purpose**: Standardizes error diagrams and visualizations
-- **Implementation**: Template engine with reusable diagram patterns
-- **Templates**: Box diagrams, flow diagrams, network diagrams
-- **Location**: `crates/ccswarm/src/utils/error_template.rs`
-- **Benefits**: Consistent error presentation, reduced duplication
-
-### Testing Strategy
-- Unit tests colocated with implementation in `#[cfg(test)]` modules
-- Integration tests in `crates/ccswarm/tests/` directory
-- Use `#[tokio::test]` for async tests
-- Mock external dependencies with `mockall` or similar
-- Run workspace-wide tests with `cargo test --workspace`
-
-## Frequently Used Commands
-
-### Workspace Management
 ```bash
-# Build entire workspace
-cargo build --workspace
-
-# Test entire workspace
-cargo test --workspace
-
-# Build specific crate
-cargo build -p ccswarm
-
-# Run ccswarm from workspace root
-cargo run -p ccswarm -- --help
-
-# Format and check entire workspace
-cargo fmt --all
-cargo clippy --workspace -- -D warnings
-
-# Generate documentation for all crates
-cargo doc --workspace --no-deps --open
+cargo fmt && cargo clippy -- -D warnings && cargo test  # Before commit
+cargo run -p ccswarm -- --help                          # Run ccswarm
 ```
 
-### Crate-Specific Development
-```bash
-# Work on ccswarm crate
-cd crates/ccswarm
-cargo test
-cargo run -- --help
+## Rules
 
-# Return to workspace root for workspace commands
-cd ../..
-cargo test --workspace
-```
+- [development-standards](.claude/rules/development-standards.md) - Code quality, testing, language convention
+- [architecture-patterns](.claude/rules/architecture-patterns.md) - Rust patterns, Claude ACP integration
+- [security-guidelines](.claude/rules/security-guidelines.md) - Security, agent roles, environment
+- [performance](.claude/rules/performance.md) - Optimization guidelines
 
-> **Note**: Session management is in `crates/ccswarm/src/session/`. The `ai-session` crate extraction is planned for v0.4.0.
+## Hooks
 
-### Claude ACP Commands (Default Integration)
-```bash
-# Test Claude Code connection
-cargo run -p ccswarm -- claude-acp test
+Automated validation via Claude Code hooks:
+- `validate-agent-scope.sh` - Pre-edit agent scope validation
+- `format-code.sh` - Post-edit auto-formatting
+- `audit-trail.sh` - Session activity logging
 
-# Start ACP adapter
-cargo run -p ccswarm -- claude-acp start
+## Agents (Subagents)
 
-# Send task to Claude Code
-cargo run -p ccswarm -- claude-acp send --task "Analyze code for improvements"
+- [frontend-specialist](.claude/agents/frontend-specialist.md) - React, Vue, UI/UX
+- [backend-specialist](.claude/agents/backend-specialist.md) - APIs, databases
+- [devops-specialist](.claude/agents/devops-specialist.md) - Docker, CI/CD
+- [qa-specialist](.claude/agents/qa-specialist.md) - Testing, quality
+- [rust-fix-agent](.claude/agents/rust-fix-agent.md) - Rust build/clippy fixes
+- [code-refactor-agent](.claude/agents/code-refactor-agent.md) - Code refactoring
+- [architecture-reviewer](.claude/agents/architecture-reviewer.md) - Architecture review
 
-# Check connection status
-cargo run -p ccswarm -- claude-acp status
+## Reference (Load On-Demand)
 
-# Run diagnostics
-cargo run -p ccswarm -- claude-acp diagnose
-```
+- [commands](.claude/reference/commands.md) - All CLI commands
+- [file-structure](.claude/reference/file-structure.md) - Project structure
+- [version-notes](.claude/reference/version-notes.md) - Implementation status, v0.3.8/v0.4.0 features
 
-### Development Workflow
-```bash
-# Initial setup (from workspace root)
-cargo run -p ccswarm -- init --name "MyProject" --agents frontend,backend
+## Skills
 
-# Start system (auto-connects to Claude Code)
-cargo run -p ccswarm -- start
-cargo run -p ccswarm -- tui  # Monitor in terminal UI
+- [git-worktree](.claude/skills/git-worktree/SKILL.md) - Parallel development workflow
+- [rust-agent-specialist](.claude/skills/rust-agent-specialist/SKILL.md) - Rust-native patterns
+- [deploy-workflow](.claude/skills/deploy-workflow/SKILL.md) - Release deployment
+- [benchmark-runner](.claude/skills/benchmark-runner/SKILL.md) - Performance benchmarks
+- [hitl-approval](.claude/skills/hitl-approval/SKILL.md) - Human-in-the-loop approval
 
-# Create and manage tasks
-cargo run -p ccswarm -- task "Implement user authentication [high] [feature]"
-cargo run -p ccswarm -- task list --status pending
-cargo run -p ccswarm -- delegate task "Add login API" --agent backend
+## Documentation
 
-# Session management
-cargo run -p ccswarm -- session list
-cargo run -p ccswarm -- session stats
-cargo run -p ccswarm -- session attach <session-id>
-```
-
-### Debugging Commands
-```bash
-# Logging levels
-RUST_LOG=debug cargo run -p ccswarm -- start
-RUST_LOG=ccswarm::session=trace cargo run -p ccswarm -- start
-RUST_LOG=ai_session=debug cargo run -p ccswarm -- start  # v0.4.0
-
-# Check agent status
-cargo run -p ccswarm -- agent list
-cargo run -p ccswarm -- logs --agent frontend --tail 50
-
-# Quality review
-cargo run -p ccswarm -- review status
-cargo run -p ccswarm -- review history --failed
-```
-
-### Advanced Features
-```bash
-# Auto-create applications
-cargo run -p ccswarm -- auto-create "Create a real-time chat app with React and WebSockets"
-
-# Sangha collective intelligence
-cargo run -p ccswarm -- sangha propose --type feature --title "Add GraphQL support"
-cargo run -p ccswarm -- sangha vote <proposal-id> aye --reason "Improves API flexibility"
-
-# Autonomous agent extension
-cargo run -p ccswarm -- extend autonomous --continuous
-```
-
-### New User Experience
-```bash
-# Interactive setup wizard for first-time users
-cargo run -p ccswarm -- setup
-
-# Interactive tutorial to learn ccswarm
-cargo run -p ccswarm -- tutorial
-cargo run -p ccswarm -- tutorial --chapter 2  # Start from specific chapter
-
-# Enhanced help system with examples
-cargo run -p ccswarm -- help-topic "agent management"
-cargo run -p ccswarm -- help-topic --search "error"
-```
-
-### System Health and Diagnostics
-```bash
-# System health checks
-cargo run -p ccswarm -- health --check-agents --check-sessions
-cargo run -p ccswarm -- health --diagnose --detailed
-cargo run -p ccswarm -- health --resources --format json
-
-# Doctor command for diagnosing and fixing issues
-cargo run -p ccswarm -- doctor
-cargo run -p ccswarm -- doctor --fix
-cargo run -p ccswarm -- doctor --error "E001"
-```
-
-## Project-Specific Guidelines
-
-### Agent Role Enforcement
-- Frontend agents: React, Vue, UI/UX, CSS only
-- Backend agents: APIs, databases, server logic only
-- DevOps agents: Docker, CI/CD, infrastructure only
-- QA agents: Testing and quality assurance only
-
-### Security Requirements
-- Never hardcode API keys or secrets
-- Validate all user inputs
-- Respect protected file patterns (.env, *.key, .git/)
-- Use environment variables for sensitive data
-
-### Performance Optimizations
-- Reuse sessions whenever possible for efficiency
-- Run independent tasks concurrently
-- Use session pooling for similar operations
-- Enable context compression for long-running sessions
-
-## Development Workflow with Git Worktree
-
-### Why Use Git Worktree?
-Git worktree allows working on multiple branches simultaneously without switching contexts. Each worktree is an independent working directory with its own branch, enabling parallel development and reducing context switching overhead.
-
-### Setting Up Worktrees for ccswarm Development
-```bash
-# Create worktree for feature development
-git worktree add ../ccswarm-feature-auth feature/user-authentication
-
-# Create worktree for bug fixes
-git worktree add ../ccswarm-bugfix-api hotfix/api-validation
-
-# Create worktree for experiments
-git worktree add ../ccswarm-experiment-ai experiment/new-ai-model
-```
-
-### Recommended Worktree Structure
-```
-github.com/nwiizo/
-├── ccswarm/                 # Main repository (master branch)
-├── ccswarm-feature-*/        # Feature development worktrees
-├── ccswarm-bugfix-*/         # Bug fix worktrees
-├── ccswarm-hotfix-*/         # Hotfix worktrees
-└── ccswarm-experiment-*/     # Experimental worktrees
-```
-
-### Managing Worktrees
-```bash
-# List all worktrees
-git worktree list
-
-# Remove worktree after merging
-git worktree remove ../ccswarm-feature-auth
-
-# Prune stale worktree information
-git worktree prune
-```
-
-### Best Practices for ccswarm Development
-1. **One worktree per feature/bug**: Keep changes isolated
-2. **Naming convention**: Use descriptive names like `ccswarm-feature-<description>`
-3. **Clean up after merging**: Remove worktrees once branches are merged
-4. **Regular pruning**: Run `git worktree prune` periodically
-5. **Parallel testing**: Run tests in different worktrees simultaneously
-
-### Integration with ccswarm Agents
-Each agent can work in its own worktree for true parallel development:
-```bash
-# Frontend agent worktree
-git worktree add ../ccswarm-frontend feature/ui-redesign
-
-# Backend agent worktree
-git worktree add ../ccswarm-backend feature/api-enhancement
-
-# DevOps agent worktree
-git worktree add ../ccswarm-devops feature/ci-cd-improvement
-```
-
-## Working on v0.4.0 Features
-
-⚠️ **See [docs/UPCOMING_FEATURES.md](docs/UPCOMING_FEATURES.md) for v0.4.0 implementation patterns and integration guides.**
-
-The v0.4.0 codebase contains implementation patterns that exist but aren't fully integrated:
-- Hook System Integration
-- Verification Agent Pattern
-- DynamicSpawner with workload balancing
-- Parallel execution (command-based and PTY-based)
-- ai-session MessageBus coordination
-- Session persistence and resume/fork
-
-## Import Additional Documentation
 @docs/ARCHITECTURE.md
 @docs/APPLICATION_SPEC.md
-@docs/CONFIGURATION.md
-@docs/COMMANDS.md
-@docs/TROUBLESHOOTING.md
-@docs/commands/workspace-commands.md
 @.claude/settings.json
-@.claude/commands/project-rules.md
-
-## Workspace File Structure
-```
-ccswarm/
-├── Cargo.toml                   # Workspace configuration
-├── CLAUDE.md                    # This file
-├── README.md                    # Main project documentation
-├── docs/
-│   ├── ARCHITECTURE.md          # System architecture
-│   ├── APPLICATION_SPEC.md      # Application specifications
-│   ├── CLAUDE_ACP.md           # Claude ACP integration guide
-│   ├── COMMANDS.md             # CLI command reference
-│   ├── CONFIGURATION.md        # Configuration reference
-│   ├── GETTING_STARTED.md      # Getting started guide
-│   ├── TROUBLESHOOTING.md      # Troubleshooting guide
-│   └── commands/
-│       ├── README.md            # Commands documentation index
-│       └── workspace-commands.md # Workspace development guide
-├── crates/
-│   └── ccswarm/                 # Main application crate
-│       ├── src/                 # Source code
-│       │   ├── acp_claude/      # Claude ACP integration module
-│       │   │   ├── adapter.rs   # WebSocket adapter
-│       │   │   ├── config.rs    # Configuration management
-│       │   │   └── error.rs     # Error handling
-│       │   ├── cli/             # CLI module with command registry
-│       │   │   ├── command_registry.rs  # Command dispatch system
-│       │   │   ├── command_handler.rs   # Command execution logic
-│       │   │   └── commands/            # Individual command modules
-│       │   └── utils/           # Utility modules
-│       │       └── error_template.rs    # Error diagram templates
-│       ├── tests/               # Integration tests
-│       └── Cargo.toml           # Crate configuration
-├── sample/                      # Sample scripts and demos
-│   ├── claude_acp_demo.sh      # Claude ACP demonstration
-│   ├── task_management_demo.sh # Task management demo
-│   ├── multi_agent_demo.sh     # Multi-agent collaboration
-│   ├── setup.sh                # Setup script
-│   └── ccswarm.yaml            # Sample configuration
-└── .claude/
-    ├── settings.json            # Claude Code settings
-    └── commands/
-        └── project-rules.md     # Development rules
-```
