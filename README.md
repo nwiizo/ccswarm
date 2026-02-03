@@ -1,6 +1,6 @@
 # ccswarm: AI Multi-Agent Orchestration System
 
-> **Version 0.3.8** - Rust-Native Multi-Agent Orchestration with Advanced Features
+> **Version 0.4.3** - Rust-Native Multi-Agent Orchestration with ai-session Integration
 
 [![CI](https://github.com/nwiizo/ccswarm/workflows/CI/badge.svg)](https://github.com/nwiizo/ccswarm/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/rust-edition_2024-blue.svg)](https://www.rust-lang.org)
@@ -8,7 +8,7 @@
 
 **ccswarm** is a workflow automation framework for coordinating specialized AI agents using Claude Code CLI. It provides task delegation infrastructure, template-based scaffolding, and Git worktree isolation for parallel development.
 
-> **AI Integration**: ccswarm currently uses **simulated execution** (keyword-based responses). Multi-provider system (CLI, API, ACP) is implemented but not integrated. See [docs/UPCOMING_FEATURES.md](docs/UPCOMING_FEATURES.md) for v0.4.0 roadmap.
+> **AI Integration**: ccswarm uses native PTY sessions via **ai-session** crate. Multi-provider system exists but orchestrator coordination loop is not fully implemented. See [docs/UPCOMING_FEATURES.md](docs/UPCOMING_FEATURES.md) for roadmap.
 
 ## Implementation Status
 
@@ -108,14 +108,14 @@
 - **AI-Driven Generation**: Natural language to app (incomplete)
 - **Custom Templates**: User-defined project types (working)
 
-### Observability & Tracing (✅ v0.3.8)
+### Observability & Tracing (✅ v0.4.3)
 - **Span Tracking**: Trace agent execution across workflows
 - **Token Usage Metrics**: Monitor and optimize LLM API costs
 - **Trace Visualization**: Hierarchical span trees for debugging
 - **OpenTelemetry Export**: Jaeger, Zipkin integration (file-export ready)
 - **Langfuse Integration**: LLM-specific observability (file-export ready)
 
-### Human-in-the-Loop (✅ v0.3.8)
+### Human-in-the-Loop (✅ v0.4.3)
 - **Approval Workflows**: Gate critical actions with human oversight
 - **Policy-Based Rules**: Define approval requirements by risk level
 - **CLI Notifications**: Interactive approval prompts
@@ -123,7 +123,7 @@
 - **Audit Trail**: Complete history of approval decisions
 - **Multi-Channel**: Slack/Email integration (planned)
 
-### Long-term Memory & RAG (✅ v0.3.8)
+### Long-term Memory & RAG (✅ v0.4.3)
 - **Short/Long-term Memory**: Session-aware memory consolidation
 - **Retrieval Augmented Generation**: Context-aware responses
 - **Importance Retention**: Smart memory decay and prioritization
@@ -131,14 +131,14 @@
 - **Vector Embeddings**: Semantic search (planned)
 - **Persistent Storage**: File/vector DB backends (planned)
 
-### Graph Workflow Engine (✅ v0.3.8)
+### Graph Workflow Engine (✅ v0.4.3)
 - **DAG Workflows**: Define task dependencies as graphs
 - **Conditional Execution**: Dynamic workflow paths
 - **Parallel Tasks**: Run independent tasks concurrently (structure ready)
 - **Approval Gates**: HITL integration at checkpoints (planned)
 - **Sub-workflows**: Compose complex workflows (planned)
 
-### Benchmark Integration (✅ v0.3.8)
+### Benchmark Integration (✅ v0.4.3)
 - **SWE-Bench Style**: Standardized agent performance testing
 - **Predefined Suites**: Basic coding, bug fixes, refactoring
 - **Metrics Collection**: Track pass rates, scores, improvements
@@ -295,4 +295,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-**Experience Claude Code integration with autonomous AI orchestration in ccswarm v0.3.8**
+**Experience Claude Code integration with autonomous AI orchestration in ccswarm v0.4.3**

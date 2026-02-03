@@ -2,16 +2,16 @@
 
 ## Project Overview
 
-ccswarm - High-performance AI Multi-Agent Orchestration System built with **Rust-native patterns**. No layered architecture - uses direct, efficient patterns for maximum performance and compile-time safety.
+ccswarm v0.4.3 - AI Multi-Agent Orchestration System with **ai-session** integration. Uses Rust-native patterns for performance and compile-time safety.
 
-> **Implementation Status**: ~50% complete. Core infrastructure works, orchestration partially implemented.
+> **Implementation Status**: ~50% complete. Core infrastructure works, orchestration partially implemented. ai-session crate integrated for native PTY sessions.
 
 ## What Actually Works Today
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | CLI Infrastructure | ✅ Working | All commands parse and route correctly |
-| Session Management | ✅ Working | Native PTY sessions (no tmux) |
+| Session Management | ✅ Working | Native PTY sessions via ai-session (no tmux) |
 | TUI Dashboard | ✅ Working | Real-time monitoring with ratatui |
 | Git Worktrees | ✅ Working | Isolated workspaces per agent |
 | Template System | ✅ Working | Project scaffolding from templates |
