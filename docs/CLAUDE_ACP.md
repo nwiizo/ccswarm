@@ -1,5 +1,20 @@
 # Claude ACP Integration Guide
 
+> ⚠️ **STATUS: STUB IMPLEMENTATION - NOT FUNCTIONAL**
+>
+> This document describes the **planned** ACP integration architecture.
+>
+> **Current reality:**
+> - ✅ SimplifiedClaudeAdapter exists (CLI wrapper in `src/acp_claude/`)
+> - ❌ WebSocket implementation missing
+> - ❌ CLI commands don't exist (`ccswarm claude-acp test/start/send/status/diagnose`)
+> - ❌ Not integrated with orchestrator
+> - ❌ Provider system not wired up
+>
+> See [UPCOMING_FEATURES.md](UPCOMING_FEATURES.md) for v0.4.0 integration roadmap.
+
+---
+
 ccswarm integrates with Claude Code via the Agent Client Protocol (ACP) over WebSocket.
 
 ## Overview

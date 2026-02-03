@@ -4,15 +4,13 @@ This directory contains command reference documentation for the ccswarm project.
 
 ## Available Documentation
 
-- **[quickstart.md](quickstart.md)** - One-command setup guide for new ccswarm projects
 - **[workspace-commands.md](workspace-commands.md)** - Comprehensive guide to working with the Cargo workspace structure
-- **[../RESOURCE_MONITORING.md](../RESOURCE_MONITORING.md)** - Resource monitoring and efficiency features
+- **[../COMMANDS.md](../COMMANDS.md)** - Complete CLI command reference
 
-## Additional Command References
+## Additional References
 
-For CLI-specific commands, see:
-- **[../../.claude/commands/](../../.claude/commands/)** - Detailed ccswarm CLI command documentation
-- **[../../CLAUDE.md](../../CLAUDE.md)** - Frequently used commands section
+- **[../../.claude/commands/](../../.claude/commands/)** - Claude Code command documentation
+- **[../../CLAUDE.md](../../CLAUDE.md)** - Development standards and commands
 
 ## Quick Reference
 
