@@ -38,11 +38,15 @@ pub enum CoordinationType {
 pub mod ai_message_bus;
 pub mod conversion;
 pub mod dialogue;
+pub mod mailbox;
 
 // Re-export key conversion utilities
 pub use conversion::{
     AgentMappingRegistry, UnifiedAgentInfo, convert_from_ai_session, convert_to_ai_session,
 };
+
+// Re-export mailbox types
+pub use mailbox::{AgentMailbox, MailboxMessage, MailboxPriority, MailboxSystem, MessageTarget};
 
 /// Messages sent between agents and the orchestrator
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -67,8 +67,8 @@ impl CommandRegistry {
         );
 
         register_command!(self, "start", runner, cmd,
-            Commands::Start { daemon, port, isolation, use_real_api } =>
-            runner.start_orchestrator(*daemon, *port, isolation, *use_real_api)
+            Commands::Start { daemon, port, isolation, use_real_api, delegate, enable_acp, .. } =>
+            runner.start_orchestrator(*daemon, *port, isolation, *use_real_api, *delegate, *enable_acp)
         );
 
         register_command!(self, "status", runner, cmd,
@@ -200,6 +200,11 @@ impl CommandRegistry {
             Commands::Quickstart { name, no_prompt, all_agents, with_tests } =>
             runner.handle_quickstart(name.as_deref(), *no_prompt, *all_agents, *with_tests)
         );
+
+        register_command!(self, "verify", runner, cmd,
+            Commands::Verify { path, backend_port, skip_deps } =>
+            runner.handle_verify(path, *backend_port, *skip_deps)
+        );
     }
 
     /// Register a command handler
@@ -259,6 +264,7 @@ impl CommandRegistry {
             Commands::Health { .. } => "health",
             Commands::Doctor { .. } => "doctor",
             Commands::Quickstart { .. } => "quickstart",
+            Commands::Verify { .. } => "verify",
         }
     }
 }

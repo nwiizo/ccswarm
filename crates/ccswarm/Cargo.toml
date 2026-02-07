@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.4.3"
+version = "0.4.5"
 edition.workspace = true
 authors.workspace = true
 description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
@@ -91,6 +91,11 @@ tokio-util = "0.7"
 # HTTP client for API providers
 reqwest = { version = "0.12", features = ["json"] }
 
+# HTTP server for IPC
+axum = { version = "0.7", features = ["json"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+
 # Testing utilities
 tempfile = "3.8"
 
@@ -123,7 +128,7 @@ secrecy = { version = "0.10", features = ["serde"] }
 zeroize = "1.8"
 
 # AI Session Management - core session management library
-ai-session = { version = "0.4.3", path = "../ai-session" }
+ai-session = { version = "0.4.5", path = "../ai-session" }
 
 # Directory paths
 dirs = "5.0"
