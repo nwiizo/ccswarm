@@ -257,15 +257,15 @@ pub struct MasterClaudeConfig {
 }
 
 fn default_proactive_mode() -> bool {
-    true // デフォルトでプロアクティブモードを有効化
+    true // Enable proactive mode by default
 }
 
 fn default_proactive_frequency() -> u64 {
-    30 // デフォルト30秒
+    30 // Default 30 seconds
 }
 
 fn default_high_frequency() -> u64 {
-    15 // デフォルト15秒（高頻度モード）
+    15 // Default 15 seconds (high frequency mode)
 }
 
 impl Default for MasterClaudeConfig {

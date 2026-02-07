@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tokio::process::Command;
 use tracing::{info, warn};
 
-/// Git worktree情報（シェルコマンド版）
+/// Git worktree information (shell command version)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShellWorktreeInfo {
     pub path: PathBuf,
@@ -14,14 +14,14 @@ pub struct ShellWorktreeInfo {
     pub is_bare: bool,
 }
 
-/// シェルコマンドベースのGit worktree管理
+/// Shell command-based Git worktree management
 #[derive(Debug)]
 pub struct ShellWorktreeManager {
     repo_path: PathBuf,
 }
 
 impl ShellWorktreeManager {
-    /// 新しいワークツリー管理を作成
+    /// Create a new worktree manager
     pub fn new(repo_path: PathBuf) -> Result<Self> {
         Ok(Self { repo_path })
     }
@@ -35,7 +35,7 @@ impl ShellWorktreeManager {
             .unwrap_or(false)
     }
 
-    /// リポジトリを初期化（必要に応じて）
+    /// Initialize repository (if needed)
     pub async fn init_if_needed(path: &Path) -> Result<()> {
         if !path.join(".git").exists() {
             info!("Initializing new Git repository at: {}", path.display());
@@ -54,7 +54,7 @@ impl ShellWorktreeManager {
                 ));
             }
 
-            // 初期コミットを作成
+            // Create initial commit
             let readme_content =
                 "# ccswarm Project\n\nThis repository is managed by ccswarm multi-agent system.\n";
             tokio::fs::write(path.join("README.md"), readme_content).await?;
@@ -84,7 +84,7 @@ impl ShellWorktreeManager {
         Ok(())
     }
 
-    /// ワークツリー一覧を取得
+    /// Get list of worktrees
     pub async fn list_worktrees(&self) -> Result<Vec<ShellWorktreeInfo>> {
         let output = Command::new("git")
             .args(["worktree", "list", "--porcelain"])
@@ -104,7 +104,7 @@ impl ShellWorktreeManager {
         self.parse_worktree_list(&output_str).await
     }
 
-    /// 古いワークツリーをクリーンアップ
+    /// Clean up old worktrees
     pub async fn prune_worktrees(&self) -> Result<()> {
         let output = Command::new("git")
             .args(["worktree", "prune"])
@@ -124,12 +124,12 @@ impl ShellWorktreeManager {
         Ok(())
     }
 
-    /// インスタンス版のinit_if_needed
+    /// Instance version of init_if_needed
     pub async fn init_repo_if_needed(&self) -> Result<()> {
         Self::init_if_needed(&self.repo_path).await
     }
 
-    /// 簡易版のcreate_worktree (デフォルトパラメータ付き)
+    /// Simple version of create_worktree (with default parameters)
     pub async fn create_worktree(
         &self,
         worktree_path: &Path,
@@ -139,14 +139,14 @@ impl ShellWorktreeManager {
             .await
     }
 
-    /// フルパラメータ版のcreate_worktree
+    /// Full parameter version of create_worktree
     pub async fn create_worktree_full(
         &self,
         worktree_path: &Path,
         branch_name: &str,
         create_new_branch: bool,
     ) -> Result<ShellWorktreeInfo> {
-        // ブランチが存在するかチェック
+        // Check if branch exists
         let branch_exists = self.branch_exists(branch_name).await?;
 
         let mut args = vec!["worktree", "add"];
@@ -177,7 +177,7 @@ impl ShellWorktreeManager {
             ));
         }
 
-        // ワークツリー情報を取得
+        // Get worktree information
         let head_commit = self.get_head_commit(worktree_path).await?;
         let is_locked = self.is_worktree_locked(worktree_path).await?;
 
@@ -197,12 +197,12 @@ impl ShellWorktreeManager {
         Ok(info)
     }
 
-    /// シンプル版のremove_worktree
+    /// Simple version of remove_worktree
     pub async fn remove_worktree(&self, worktree_path: &Path) -> Result<()> {
         self.remove_worktree_full(worktree_path, false).await
     }
 
-    /// フルパラメータ版のremove_worktree
+    /// Full parameter version of remove_worktree
     pub async fn remove_worktree_full(&self, worktree_path: &Path, force: bool) -> Result<()> {
         let mut args = vec!["worktree", "remove"];
 
@@ -232,9 +232,9 @@ impl ShellWorktreeManager {
         Ok(())
     }
 
-    /// ワークツリー内の変更をコミット
+    /// Commit changes in worktree
     pub async fn commit_worktree_changes(&self, worktree_path: &Path, message: &str) -> Result<()> {
-        // まず変更があるかチェック
+        // First check if there are any changes
         let status_output = Command::new("git")
             .args(["status", "--porcelain"])
             .current_dir(worktree_path)
@@ -249,7 +249,7 @@ impl ShellWorktreeManager {
             ));
         }
 
-        // 変更がない場合は何もしない
+        // Do nothing if there are no changes
         if status_output.stdout.is_empty() {
             info!(
                 "No changes to commit in worktree: {}",
@@ -258,7 +258,7 @@ impl ShellWorktreeManager {
             return Ok(());
         }
 
-        // 変更をステージング
+        // Stage changes
         let add_output = Command::new("git")
             .args(["add", "."])
             .current_dir(worktree_path)
@@ -273,7 +273,7 @@ impl ShellWorktreeManager {
             ));
         }
 
-        // コミット
+        // Commit
         let commit_output = Command::new("git")
             .args(["commit", "-m", message])
             .current_dir(worktree_path)
@@ -292,7 +292,7 @@ impl ShellWorktreeManager {
         Ok(())
     }
 
-    /// ブランチが存在するかチェック
+    /// Check if branch exists
     async fn branch_exists(&self, branch_name: &str) -> Result<bool> {
         let output = Command::new("git")
             .args(["branch", "--list", branch_name])
@@ -303,7 +303,7 @@ impl ShellWorktreeManager {
         Ok(output.status.success() && !output.stdout.is_empty())
     }
 
-    /// HEADコミットを取得
+    /// Get HEAD commit
     async fn get_head_commit(&self, worktree_path: &Path) -> Result<String> {
         let output = Command::new("git")
             .args(["rev-parse", "HEAD"])
@@ -318,26 +318,26 @@ impl ShellWorktreeManager {
         }
     }
 
-    /// ワークツリーがロックされているかチェック
+    /// Check if worktree is locked
     async fn is_worktree_locked(&self, _worktree_path: &Path) -> Result<bool> {
-        // シンプル版では常にfalseを返す
-        // 実際の実装では .git/worktrees/<name>/locked ファイルの存在をチェック
+        // Simple version always returns false
+        // Full implementation would check for .git/worktrees/<name>/locked file
         Ok(false)
     }
 
-    /// worktree listの出力をパース
+    /// Parse worktree list output
     async fn parse_worktree_list(&self, output: &str) -> Result<Vec<ShellWorktreeInfo>> {
         let mut worktrees = Vec::new();
         let mut current_worktree: Option<ShellWorktreeInfo> = None;
 
         for line in output.lines() {
             if line.starts_with("worktree ") {
-                // 前のワークツリーを保存
+                // Save previous worktree
                 if let Some(wt) = current_worktree.take() {
                     worktrees.push(wt);
                 }
 
-                // 新しいワークツリーを開始
+                // Start new worktree
                 let path_str = line
                     .strip_prefix("worktree ")
                     .ok_or_else(|| anyhow::anyhow!("Invalid worktree line format: {}", line))?;
@@ -366,7 +366,7 @@ impl ShellWorktreeManager {
             }
         }
 
-        // 最後のワークツリーを追加
+        // Add last worktree
         if let Some(wt) = current_worktree {
             worktrees.push(wt);
         }

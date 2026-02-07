@@ -301,13 +301,12 @@ impl SessionManager {
         self.sessions.insert(session.id.clone(), session.clone());
 
         // Start resource monitoring if enabled
-        if let Some(ref integration) = self.resource_integration {
-            if let Err(e) = integration
+        if let Some(ref integration) = self.resource_integration
+            && let Err(e) = integration
                 .on_session_created(&session.id, &session.agent_id, None)
                 .await
-            {
-                tracing::warn!("Failed to start resource monitoring: {}", e);
-            }
+        {
+            tracing::warn!("Failed to start resource monitoring: {}", e);
         }
 
         Ok(session)
@@ -452,13 +451,12 @@ impl SessionManager {
         };
 
         // Stop resource monitoring if enabled
-        if let Some(ref integration) = self.resource_integration {
-            if let Err(e) = integration
+        if let Some(ref integration) = self.resource_integration
+            && let Err(e) = integration
                 .on_session_terminated(session_id, &agent_id)
                 .await
-            {
-                tracing::warn!("Failed to stop resource monitoring: {}", e);
-            }
+        {
+            tracing::warn!("Failed to stop resource monitoring: {}", e);
         }
 
         // Update session status
@@ -730,7 +728,7 @@ impl Default for SessionManager {
                 // Create with default resource monitoring enabled
                 Self::with_resource_monitoring(crate::resource::ResourceLimits::default())
                     .await
-                    .expect("Failed to create SessionManager")
+                    .unwrap_or_else(|e| panic!("SessionManager creation failed: {e}"))
             })
         })
     }

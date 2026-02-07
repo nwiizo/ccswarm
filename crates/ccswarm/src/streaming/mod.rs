@@ -106,17 +106,17 @@ impl StreamSubscription {
     /// Unified filtering logic
     fn entry_matches_options(entry: &OutputEntry, options: &SubscriptionOptions) -> bool {
         // Check agent filter
-        if let Some(ref agent_id) = options.agent_id {
-            if &entry.agent_id != agent_id {
-                return false;
-            }
+        if let Some(ref agent_id) = options.agent_id
+            && &entry.agent_id != agent_id
+        {
+            return false;
         }
 
         // Check output filter
-        if let Some(ref filter) = options.filter {
-            if !entry.matches_filter(filter) {
-                return false;
-            }
+        if let Some(ref filter) = options.filter
+            && !entry.matches_filter(filter)
+        {
+            return false;
         }
 
         true

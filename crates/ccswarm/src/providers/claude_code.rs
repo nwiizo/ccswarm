@@ -177,15 +177,14 @@ impl ClaudeCodeExecutor {
 
     /// Build Claude Code command arguments based on current CLI options
     fn build_command_args(&self, prompt: &str) -> Vec<String> {
-        let mut args = Vec::new();
-
-        // Add prompt (print mode)
-        args.push("-p".to_string());
-        args.push(prompt.to_string());
-
-        // Add output format (replaces deprecated --json flag)
-        args.push("--output-format".to_string());
-        args.push(self.config.output_format.as_cli_arg().to_string());
+        let mut args = vec![
+            // Add prompt (print mode)
+            "-p".to_string(),
+            prompt.to_string(),
+            // Add output format (replaces deprecated --json flag)
+            "--output-format".to_string(),
+            self.config.output_format.as_cli_arg().to_string(),
+        ];
 
         // Add dangerous skip if enabled
         if self.config.dangerous_skip {
@@ -266,32 +265,31 @@ impl ClaudeCodeExecutor {
         use crate::providers::OutputFormat;
 
         // Try to parse as JSON if JSON output format is used
-        if self.config.output_format == OutputFormat::Json
-            || self.config.output_format == OutputFormat::StreamJson
+        if (self.config.output_format == OutputFormat::Json
+            || self.config.output_format == OutputFormat::StreamJson)
+            && let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&output)
         {
-            if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&output) {
-                // Extract the result field if present (new JSON format)
-                let result_output = if let Some(result) = json_value.get("result") {
-                    json!({
-                        "response": result,
-                        "task_id": task.id,
-                        "format": "json",
-                        "cost_usd": json_value.get("total_cost_usd"),
-                        "duration_ms": json_value.get("duration_ms"),
-                        "session_id": json_value.get("session_id"),
-                        "num_turns": json_value.get("num_turns")
-                    })
-                } else {
-                    json_value
-                };
+            // Extract the result field if present (new JSON format)
+            let result_output = if let Some(result) = json_value.get("result") {
+                json!({
+                    "response": result,
+                    "task_id": task.id,
+                    "format": "json",
+                    "cost_usd": json_value.get("total_cost_usd"),
+                    "duration_ms": json_value.get("duration_ms"),
+                    "session_id": json_value.get("session_id"),
+                    "num_turns": json_value.get("num_turns")
+                })
+            } else {
+                json_value
+            };
 
-                return TaskResult {
-                    success: true,
-                    output: result_output,
-                    error: None,
-                    duration,
-                };
-            }
+            return TaskResult {
+                success: true,
+                output: result_output,
+                error: None,
+                duration,
+            };
         }
 
         // Fallback to text output

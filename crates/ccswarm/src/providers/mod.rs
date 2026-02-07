@@ -491,10 +491,10 @@ impl ProviderConfig for CodexConfig {
         }
 
         // Validate temperature range
-        if let Some(temp) = self.temperature {
-            if !(0.0..=1.0).contains(&temp) {
-                return Err(anyhow::anyhow!("Temperature must be between 0.0 and 1.0"));
-            }
+        if let Some(temp) = self.temperature
+            && !(0.0..=1.0).contains(&temp)
+        {
+            return Err(anyhow::anyhow!("Temperature must be between 0.0 and 1.0"));
         }
 
         Ok(())

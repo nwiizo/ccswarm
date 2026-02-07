@@ -59,35 +59,34 @@ impl OutputEntry {
     /// Check if this entry matches a filter pattern
     pub fn matches_filter(&self, filter: &OutputFilter) -> bool {
         // Check agent filter
-        if let Some(ref agent_ids) = filter.agent_ids {
-            if !agent_ids.contains(&self.agent_id) {
-                return false;
-            }
+        if let Some(ref agent_ids) = filter.agent_ids
+            && !agent_ids.contains(&self.agent_id)
+        {
+            return false;
         }
 
         // Check output type filter
-        if let Some(ref output_types) = filter.output_types {
-            if !output_types.contains(&self.output_type) {
-                return false;
-            }
+        if let Some(ref output_types) = filter.output_types
+            && !output_types.contains(&self.output_type)
+        {
+            return false;
         }
 
         // Check content filter
-        if let Some(ref pattern) = filter.content_pattern {
-            if !self
+        if let Some(ref pattern) = filter.content_pattern
+            && !self
                 .content
                 .to_lowercase()
                 .contains(&pattern.to_lowercase())
-            {
-                return false;
-            }
+        {
+            return false;
         }
 
         // Check task filter
-        if let Some(ref task_id) = filter.task_id {
-            if self.task_id.as_ref() != Some(task_id) {
-                return false;
-            }
+        if let Some(ref task_id) = filter.task_id
+            && self.task_id.as_ref() != Some(task_id)
+        {
+            return false;
         }
 
         true

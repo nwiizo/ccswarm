@@ -235,10 +235,10 @@ impl Workflow {
             for output_id in &node.outputs {
                 if let Some(count) = in_degree.get_mut(output_id.0.as_str()) {
                     *count = count.saturating_sub(1);
-                    if *count == 0 {
-                        if let Some(next_node) = self.get_node(output_id) {
-                            queue.push_back(next_node);
-                        }
+                    if *count == 0
+                        && let Some(next_node) = self.get_node(output_id)
+                    {
+                        queue.push_back(next_node);
                     }
                 }
             }
@@ -379,15 +379,11 @@ impl WorkflowBuilder {
 
         // Find and update the source node
         for node in &mut self.nodes {
-            if node.id == from_id {
-                if !node.outputs.contains(&to_id) {
-                    node.outputs.push(to_id.clone());
-                }
+            if node.id == from_id && !node.outputs.contains(&to_id) {
+                node.outputs.push(to_id.clone());
             }
-            if node.id == to_id {
-                if !node.inputs.contains(&from_id) {
-                    node.inputs.push(from_id.clone());
-                }
+            if node.id == to_id && !node.inputs.contains(&from_id) {
+                node.inputs.push(from_id.clone());
             }
         }
 

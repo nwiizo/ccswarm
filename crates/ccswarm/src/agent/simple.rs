@@ -13,33 +13,33 @@ use crate::workspace::SimpleWorkspaceManager;
 #[path = "simple_orchestrator.rs"]
 mod simple_orchestrator;
 
-/// Git不使用のシンプルなエージェント
+/// Simple agent without Git integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimpleClaudeAgent {
-    /// エージェントID
+    /// Agent identity
     pub identity: AgentIdentity,
 
-    /// ワークスペースパス
+    /// Workspace path
     pub workspace_path: PathBuf,
 
-    /// Claude設定
+    /// Claude configuration
     pub claude_config: ClaudeConfig,
 
-    /// 現在のステータス
+    /// Current status
     pub status: AgentStatus,
 
-    /// 現在のタスク
+    /// Current task
     pub current_task: Option<Task>,
 
-    /// タスク履歴
+    /// Task history
     pub task_history: Vec<(Task, TaskResult)>,
 
-    /// 最終活動時刻
+    /// Last activity timestamp
     pub last_activity: DateTime<Utc>,
 }
 
 impl SimpleClaudeAgent {
-    /// 新しいシンプルエージェントを作成
+    /// Create a new simple agent
     pub async fn new(
         role: AgentRole,
         workspace_root: &std::path::Path,
@@ -75,7 +75,7 @@ impl SimpleClaudeAgent {
         Ok(agent)
     }
 
-    /// 環境変数を作成
+    /// Create environment variables
     fn create_env_vars(
         agent_id: &str,
         session_id: &str,
@@ -90,16 +90,16 @@ impl SimpleClaudeAgent {
         env_vars
     }
 
-    /// エージェントを初期化
+    /// Initialize the agent
     pub async fn initialize(&mut self, workspace_manager: &SimpleWorkspaceManager) -> Result<()> {
         tracing::info!("Initializing simple agent: {}", self.identity.agent_id);
 
-        // ワークスペースを作成
+        // Create workspace
         workspace_manager
             .create_workspace(&self.identity.agent_id)
             .await?;
 
-        // CLAUDE.mdを生成
+        // Generate CLAUDE.md
         let claude_md_content = crate::agent::claude::generate_claude_md_content(&self.identity);
         workspace_manager
             .setup_claude_config(&self.identity.agent_id, &claude_md_content)
@@ -115,7 +115,7 @@ impl SimpleClaudeAgent {
         Ok(())
     }
 
-    /// タスクを実行
+    /// Execute a task
     pub async fn execute_task(&mut self, task: Task) -> Result<TaskResult> {
         tracing::info!(
             "Agent {} executing task: {}",
@@ -129,7 +129,7 @@ impl SimpleClaudeAgent {
 
         let start_time = std::time::Instant::now();
 
-        // シミュレートされたタスク実行
+        // Simulated task execution
         let result = self.simulate_task_execution(&task).await?;
 
         let duration = start_time.elapsed();
@@ -147,7 +147,7 @@ impl SimpleClaudeAgent {
             TaskResult::failure(result.error_message, duration)
         };
 
-        // タスク履歴に追加
+        // Add to task history
         self.task_history.push((task, task_result.clone()));
         self.current_task = None;
         self.status = AgentStatus::Available;
@@ -156,9 +156,9 @@ impl SimpleClaudeAgent {
         Ok(task_result)
     }
 
-    /// タスク実行をシミュレート
+    /// Simulate task execution
     async fn simulate_task_execution(&self, task: &Task) -> Result<SimulatedResult> {
-        // エージェントの専門性に基づいてタスクを評価
+        // Evaluate task based on agent specialization
         let can_handle = self.can_handle_task(task);
 
         if !can_handle {
@@ -177,7 +177,7 @@ impl SimpleClaudeAgent {
             });
         }
 
-        // 成功をシミュレート
+        // Simulate success
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         Ok(SimulatedResult {
@@ -191,7 +191,7 @@ impl SimpleClaudeAgent {
         })
     }
 
-    /// タスクが処理可能かチェック
+    /// Check if the task can be handled by this agent
     fn can_handle_task(&self, task: &Task) -> bool {
         let role_name = self.identity.specialization.name().to_lowercase();
         let description = task.description.to_lowercase();
@@ -234,18 +234,18 @@ impl SimpleClaudeAgent {
                     || description.contains("bug")
                     || description.contains("validation")
             }
-            _ => true, // Masterエージェントは全て処理可能
+            _ => true, // Master agent can handle all tasks
         }
     }
 
-    /// ステータスを更新
+    /// Update status
     pub fn update_status(&mut self, status: AgentStatus) {
         self.status = status;
         self.last_activity = Utc::now();
     }
 }
 
-/// シミュレートされたタスク実行結果
+/// Simulated task execution result
 #[derive(Debug)]
 struct SimulatedResult {
     is_success: bool,

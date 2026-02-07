@@ -36,7 +36,7 @@ use crate::config::CcswarmConfig;
 use crate::execution::{ExecutionEngine, TaskStatus};
 use crate::orchestrator::ProactiveMaster;
 
-/// ccswarm - Claude Code統括型マルチエージェントシステム
+/// ccswarm - Claude Code integrated multi-agent system
 #[derive(Parser)]
 #[command(name = "ccswarm")]
 #[command(about = "Claude Code multi-agent orchestration system")]
@@ -1592,25 +1592,24 @@ impl CliRunner {
             .timeout(std::time::Duration::from_secs(2))
             .build()?;
 
-        if let Ok(response) = client.get(&url).send().await {
-            if response.status().is_success() {
-                if let Ok(status) = response.json::<StatusResponse>().await {
-                    if !self.json_output {
-                        println!("📊 ccswarm Live Status (IPC)");
-                        println!("============================");
-                        println!("Master ID: {}", status.master_id);
-                        println!("Active Agents: {}", status.active_agents);
-                        println!("Pending Tasks: {}", status.pending_tasks);
-                        println!("Running Tasks: {}", status.running_tasks);
-                        println!("Completed Tasks: {}", status.completed_tasks);
-                        println!("Phase: {}", status.phase);
-                        println!("Uptime: {}s", status.uptime_secs);
-                        println!();
-                    } else {
-                        println!("{}", serde_json::to_string_pretty(&status)?);
-                        return Ok(());
-                    }
-                }
+        if let Ok(response) = client.get(&url).send().await
+            && response.status().is_success()
+            && let Ok(status) = response.json::<StatusResponse>().await
+        {
+            if !self.json_output {
+                println!("📊 ccswarm Live Status (IPC)");
+                println!("============================");
+                println!("Master ID: {}", status.master_id);
+                println!("Active Agents: {}", status.active_agents);
+                println!("Pending Tasks: {}", status.pending_tasks);
+                println!("Running Tasks: {}", status.running_tasks);
+                println!("Completed Tasks: {}", status.completed_tasks);
+                println!("Phase: {}", status.phase);
+                println!("Uptime: {}s", status.uptime_secs);
+                println!();
+            } else {
+                println!("{}", serde_json::to_string_pretty(&status)?);
+                return Ok(());
             }
         }
 
@@ -1628,46 +1627,42 @@ impl CliRunner {
                     println!("Updated: {}", status["timestamp"]);
 
                     // Check if this is a backend agent and show backend-specific info
-                    if let Some(role) = status.get("role") {
-                        if role.as_str() == Some("Backend") {
-                            if let Some(backend_info) = status.get("backend_specific") {
-                                println!("\n🔧 Backend Status:");
-                                if let Some(api_health) = backend_info.get("api_health") {
-                                    println!(
-                                        "  API Health: {:.1}%",
-                                        api_health.as_f64().unwrap_or(0.0) * 100.0
-                                    );
-                                }
-                                if let Some(db) = backend_info.get("database") {
-                                    println!(
-                                        "  Database: {} ({})",
-                                        if db["is_connected"].as_bool().unwrap_or(false) {
-                                            "Connected"
-                                        } else {
-                                            "Disconnected"
-                                        },
-                                        db["database_type"].as_str().unwrap_or("Unknown")
-                                    );
-                                }
-                                if let Some(server) = backend_info.get("server") {
-                                    println!(
-                                        "  Server: {:.1}MB RAM, {:.1}% CPU",
-                                        server["memory_usage_mb"].as_f64().unwrap_or(0.0),
-                                        server["cpu_usage_percent"].as_f64().unwrap_or(0.0)
-                                    );
-                                }
-                                if let Some(services) =
-                                    backend_info.get("services").and_then(|s| s.as_array())
-                                {
-                                    println!("  Active Services: {}", services.len());
-                                }
-                                if let Some(activity) = backend_info.get("recent_activity") {
-                                    println!(
-                                        "  Recent API Calls: {}",
-                                        activity.as_u64().unwrap_or(0)
-                                    );
-                                }
-                            }
+                    if let Some(role) = status.get("role")
+                        && role.as_str() == Some("Backend")
+                        && let Some(backend_info) = status.get("backend_specific")
+                    {
+                        println!("\n🔧 Backend Status:");
+                        if let Some(api_health) = backend_info.get("api_health") {
+                            println!(
+                                "  API Health: {:.1}%",
+                                api_health.as_f64().unwrap_or(0.0) * 100.0
+                            );
+                        }
+                        if let Some(db) = backend_info.get("database") {
+                            println!(
+                                "  Database: {} ({})",
+                                if db["is_connected"].as_bool().unwrap_or(false) {
+                                    "Connected"
+                                } else {
+                                    "Disconnected"
+                                },
+                                db["database_type"].as_str().unwrap_or("Unknown")
+                            );
+                        }
+                        if let Some(server) = backend_info.get("server") {
+                            println!(
+                                "  Server: {:.1}MB RAM, {:.1}% CPU",
+                                server["memory_usage_mb"].as_f64().unwrap_or(0.0),
+                                server["cpu_usage_percent"].as_f64().unwrap_or(0.0)
+                            );
+                        }
+                        if let Some(services) =
+                            backend_info.get("services").and_then(|s| s.as_array())
+                        {
+                            println!("  Active Services: {}", services.len());
+                        }
+                        if let Some(activity) = backend_info.get("recent_activity") {
+                            println!("  Recent API Calls: {}", activity.as_u64().unwrap_or(0));
                         }
                     }
 
@@ -1707,33 +1702,32 @@ impl CliRunner {
                         println!("  Status: {}", status["status"]);
                         println!("  Updated: {}", status["timestamp"]);
 
-                        if let Some(role) = status.get("role") {
-                            if role.as_str() == Some("Backend") {
-                                if let Some(backend_info) = status.get("backend_specific") {
-                                    if let Some(api_health) = backend_info.get("api_health") {
-                                        print!(
-                                            "  API Health: {:.0}% | ",
-                                            api_health.as_f64().unwrap_or(0.0) * 100.0
-                                        );
-                                    }
-                                    if let Some(db) = backend_info.get("database") {
-                                        print!(
-                                            "DB: {} | ",
-                                            if db["is_connected"].as_bool().unwrap_or(false) {
-                                                "✓"
-                                            } else {
-                                                "✗"
-                                            }
-                                        );
-                                    }
-                                    if let Some(services) =
-                                        backend_info.get("services").and_then(|s| s.as_array())
-                                    {
-                                        print!("Services: {}", services.len());
-                                    }
-                                    println!();
-                                }
+                        if let Some(role) = status.get("role")
+                            && role.as_str() == Some("Backend")
+                            && let Some(backend_info) = status.get("backend_specific")
+                        {
+                            if let Some(api_health) = backend_info.get("api_health") {
+                                print!(
+                                    "  API Health: {:.0}% | ",
+                                    api_health.as_f64().unwrap_or(0.0) * 100.0
+                                );
                             }
+                            if let Some(db) = backend_info.get("database") {
+                                print!(
+                                    "DB: {} | ",
+                                    if db["is_connected"].as_bool().unwrap_or(false) {
+                                        "✓"
+                                    } else {
+                                        "✗"
+                                    }
+                                );
+                            }
+                            if let Some(services) =
+                                backend_info.get("services").and_then(|s| s.as_array())
+                            {
+                                print!("Services: {}", services.len());
+                            }
+                            println!();
                         }
 
                         if detailed {
@@ -2946,9 +2940,9 @@ fn create_default_config(repo_path: &Path) -> Result<CcswarmConfig> {
                 think_mode: crate::config::ThinkMode::UltraThink,
                 permission_level: "supervised".to_string(),
                 claude_config: crate::config::ClaudeConfig::for_master(),
-                enable_proactive_mode: true, // デフォルト有効
-                proactive_frequency: 30,     // 30秒間隔
-                high_frequency: 15,          // 高頻度15秒間隔
+                enable_proactive_mode: true, // Enabled by default
+                proactive_frequency: 30,     // 30 second interval
+                high_frequency: 15,          // High frequency 15 second interval
             },
         },
         agents,

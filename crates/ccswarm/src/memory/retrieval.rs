@@ -283,22 +283,22 @@ impl TextChunker {
         for sentence in sentences {
             let sentence_with_punct = format!("{}. ", sentence.trim());
 
-            if current_chunk.len() + sentence_with_punct.len() > self.window_size {
-                if !current_chunk.is_empty() {
-                    chunks.push(TextChunk {
-                        content: current_chunk.trim().to_string(),
-                        start: current_start,
-                        end: current_start + current_chunk.len(),
-                        index: chunk_index,
-                    });
-                    chunk_index += 1;
+            if current_chunk.len() + sentence_with_punct.len() > self.window_size
+                && !current_chunk.is_empty()
+            {
+                chunks.push(TextChunk {
+                    content: current_chunk.trim().to_string(),
+                    start: current_start,
+                    end: current_start + current_chunk.len(),
+                    index: chunk_index,
+                });
+                chunk_index += 1;
 
-                    // Keep some overlap
-                    let words: Vec<&str> = current_chunk.split_whitespace().collect();
-                    let overlap_words = words.len().min(5);
-                    current_chunk = words[words.len().saturating_sub(overlap_words)..].join(" ");
-                    current_start = current_start + current_chunk.len() - current_chunk.len();
-                }
+                // Keep some overlap
+                let words: Vec<&str> = current_chunk.split_whitespace().collect();
+                let overlap_words = words.len().min(5);
+                current_chunk = words[words.len().saturating_sub(overlap_words)..].join(" ");
+                current_start = current_start + current_chunk.len() - current_chunk.len();
             }
 
             current_chunk.push_str(&sentence_with_punct);

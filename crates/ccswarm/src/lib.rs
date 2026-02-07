@@ -3,11 +3,7 @@
 #![allow(clippy::field_reassign_with_default)]
 #![allow(clippy::module_inception)]
 #![allow(clippy::needless_borrows_for_generic_args)]
-#![allow(clippy::collapsible_if)]
 #![allow(clippy::type_complexity)]
-#![allow(clippy::vec_init_then_push)]
-#![allow(clippy::let_and_return)]
-#![allow(clippy::manual_is_ascii_check)]
 #![allow(clippy::option_if_let_else)]
 
 pub mod agent;

@@ -371,24 +371,24 @@ impl AutoAcceptEngine {
         // Additional validation checks
 
         // Check if tests still pass
-        if self.config.check_tests_pass {
-            if let Err(test_error) = self.validate_tests().await {
-                issues.push(format!("Tests failed: {}", test_error));
-            }
+        if self.config.check_tests_pass
+            && let Err(test_error) = self.validate_tests().await
+        {
+            issues.push(format!("Tests failed: {}", test_error));
         }
 
         // Verify no unexpected files were changed
-        if self.config.check_file_changes {
-            if let Err(file_error) = self.validate_file_changes(operation).await {
-                issues.push(format!("Unexpected file changes: {}", file_error));
-            }
+        if self.config.check_file_changes
+            && let Err(file_error) = self.validate_file_changes(operation).await
+        {
+            issues.push(format!("Unexpected file changes: {}", file_error));
         }
 
         // Check git status if required
-        if self.config.check_git_status {
-            if let Err(git_error) = self.validate_git_status().await {
-                issues.push(format!("Git repository issues: {}", git_error));
-            }
+        if self.config.check_git_status
+            && let Err(git_error) = self.validate_git_status().await
+        {
+            issues.push(format!("Git repository issues: {}", git_error));
         }
 
         // TODO: Validate exit codes once Operation struct has these fields
@@ -478,15 +478,15 @@ impl AutoAcceptEngine {
             }
 
             // Check file size limits
-            if let Ok(metadata) = std::fs::metadata(file_path) {
-                if metadata.len() > 10_000_000 {
-                    // 10MB limit
-                    return Err(format!(
-                        "File too large: {} ({} bytes)",
-                        path_str,
-                        metadata.len()
-                    ));
-                }
+            if let Ok(metadata) = std::fs::metadata(file_path)
+                && metadata.len() > 10_000_000
+            {
+                // 10MB limit
+                return Err(format!(
+                    "File too large: {} ({} bytes)",
+                    path_str,
+                    metadata.len()
+                ));
             }
         }
 

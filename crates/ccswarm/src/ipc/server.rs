@@ -218,7 +218,10 @@ async fn task_handler(
         let message = AgentMessage::TaskAssignment {
             task_id: task_id.clone(),
             agent_id: "auto".to_string(), // Will be auto-assigned
-            task_data: serde_json::to_value(&task).unwrap_or_default(),
+            task_data: serde_json::to_value(&task).unwrap_or_else(|e| {
+                tracing::warn!("Failed to serialize task: {e}");
+                serde_json::Value::Null
+            }),
         };
 
         if let Err(e) = bus.send_message(message).await {

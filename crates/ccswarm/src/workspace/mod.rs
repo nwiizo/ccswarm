@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use tokio::fs;
 use tracing::{info, warn};
 
-/// ワークスペース情報（Git不使用版）
+/// Workspace information (non-Git version)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceInfo {
     pub path: PathBuf,
@@ -13,19 +13,19 @@ pub struct WorkspaceInfo {
     pub is_active: bool,
 }
 
-/// シンプルワークスペース管理（Git不使用）
+/// Simple workspace manager (without Git)
 #[derive(Debug)]
 pub struct SimpleWorkspaceManager {
     base_path: PathBuf,
 }
 
 impl SimpleWorkspaceManager {
-    /// 新しいワークスペース管理を作成
+    /// Create a new workspace manager
     pub fn new(base_path: PathBuf) -> Self {
         Self { base_path }
     }
 
-    /// ベースディレクトリを初期化
+    /// Initialize the base directory
     pub async fn init_if_needed(&self) -> Result<()> {
         if !self.base_path.exists() {
             info!("Creating workspace directory: {}", self.base_path.display());
@@ -34,7 +34,7 @@ impl SimpleWorkspaceManager {
                 .context("Failed to create workspace directory")?;
         }
 
-        // agents ディレクトリを作成
+        // Create agents directory
         let agents_dir = self
             .base_path
             .parent()
@@ -49,7 +49,7 @@ impl SimpleWorkspaceManager {
         Ok(())
     }
 
-    /// エージェント用ワークスペースを作成
+    /// Create a workspace for an agent
     pub async fn create_workspace(&self, agent_id: &str) -> Result<WorkspaceInfo> {
         let workspace_path = self
             .base_path
@@ -75,13 +75,13 @@ impl SimpleWorkspaceManager {
             is_active: true,
         };
 
-        // ワークスペース情報を保存
+        // Save workspace info
         self.save_workspace_info(&workspace_info).await?;
 
         Ok(workspace_info)
     }
 
-    /// ワークスペース一覧を取得
+    /// List all workspaces
     pub async fn list_workspaces(&self) -> Result<Vec<WorkspaceInfo>> {
         let agents_dir = self
             .base_path
@@ -101,7 +101,7 @@ impl SimpleWorkspaceManager {
                 if let Ok(info) = self.load_workspace_info(&agent_id).await {
                     workspaces.push(info);
                 } else {
-                    // 情報ファイルがない場合は新規作成
+                    // Create new info if file doesn't exist
                     let workspace_info = WorkspaceInfo {
                         path: entry.path(),
                         agent_id: agent_id.clone(),
@@ -116,7 +116,7 @@ impl SimpleWorkspaceManager {
         Ok(workspaces)
     }
 
-    /// ワークスペースを削除
+    /// Remove a workspace
     pub async fn remove_workspace(&self, agent_id: &str) -> Result<()> {
         let workspace_path = self
             .base_path
@@ -135,7 +135,7 @@ impl SimpleWorkspaceManager {
         Ok(())
     }
 
-    /// ワークスペース情報を保存
+    /// Save workspace information
     async fn save_workspace_info(&self, info: &WorkspaceInfo) -> Result<()> {
         let info_file = info.path.join(".workspace_info.json");
         let content = serde_json::to_string_pretty(info)?;
@@ -145,7 +145,7 @@ impl SimpleWorkspaceManager {
         Ok(())
     }
 
-    /// ワークスペース情報を読み込み
+    /// Load workspace information
     async fn load_workspace_info(&self, agent_id: &str) -> Result<WorkspaceInfo> {
         let workspace_path = self
             .base_path
@@ -164,7 +164,7 @@ impl SimpleWorkspaceManager {
         Ok(info)
     }
 
-    /// CLAUDEの設定ファイルを配置
+    /// Set up Claude configuration files
     pub async fn setup_claude_config(&self, agent_id: &str, claude_md_content: &str) -> Result<()> {
         let workspace_path = self
             .base_path

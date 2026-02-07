@@ -262,13 +262,13 @@ impl CheckpointStore {
 
         // Remove session directory if empty
         let session_dir = self.base_path.join("sessions").join(session_id);
-        if session_dir.exists() {
-            if let Ok(mut entries) = tokio::fs::read_dir(&session_dir).await {
-                // Check if directory is empty by trying to read the first entry
-                let is_empty = entries.next_entry().await.map_or(true, |e| e.is_none());
-                if is_empty {
-                    let _ = fs::remove_dir(&session_dir).await;
-                }
+        if session_dir.exists()
+            && let Ok(mut entries) = tokio::fs::read_dir(&session_dir).await
+        {
+            // Check if directory is empty by trying to read the first entry
+            let is_empty = entries.next_entry().await.map_or(true, |e| e.is_none());
+            if is_empty {
+                let _ = fs::remove_dir(&session_dir).await;
             }
         }
 
