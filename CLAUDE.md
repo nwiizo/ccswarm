@@ -51,6 +51,32 @@ Automated validation via Claude Code hooks:
 - [benchmark-runner](.claude/skills/benchmark-runner/SKILL.md) - Performance benchmarks
 - [hitl-approval](.claude/skills/hitl-approval/SKILL.md) - Human-in-the-loop approval
 
+## Development Learnings
+
+### Error Handling
+- `CCSwarmError` variants are **struct variants** (not tuple): `CCSwarmError::Agent { agent_id, message, source }`
+- Never use `.unwrap()` in production; use `Result<T, E>` with `thiserror`
+
+### Module Patterns
+- When splitting `foo.rs` into `foo/mod.rs`: keep all `pub use` re-exports in `mod.rs` for API compatibility
+- New submodules in `orchestrator/` and `coordination/` must add re-exports in their `mod.rs`
+- The `format-code.sh` hook runs `cargo fmt` after edits; re-read files if content changes unexpectedly
+
+### Clippy Fixes
+- `.or_insert_with(Vec::new)` -> `.or_default()`
+- Boolean simplification: `(A && B) || (C && B)` -> `B && (A || C)`
+
+### CI/CD
+- Release workflow needs `permissions: contents: write` for GitHub release creation
+- Use `softprops/action-gh-release@v2` (not deprecated `actions/create-release@v1`)
+- Publish order: `ai-session` first, then `ccswarm` (dependency order)
+- `CARGO_REGISTRY_TOKEN` must be set in GitHub Secrets for CI publish
+
+### Crate Publishing
+- Workspace crates with path dependencies need version field for crates.io
+- `cargo publish -p <crate>` publishes from workspace root
+- Wait for dependency crate to be indexed before publishing dependent crate
+
 ## Documentation
 
 @docs/ARCHITECTURE.md
