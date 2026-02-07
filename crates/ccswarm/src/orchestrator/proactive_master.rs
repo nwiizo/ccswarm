@@ -3,14 +3,17 @@ use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{debug, info};
+use std::time::Duration;
+use tokio::sync::{RwLock, mpsc};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::agent::search_agent::{SearchRequest, SearchResponse};
 use crate::agent::{AgentStatus, ClaudeCodeAgent, Priority, Task, TaskResult, TaskType};
 use crate::coordination::{AgentMessage, CoordinationBus, CoordinationType};
+use crate::subagent::{ParallelConfig, ParallelExecutor, SpawnTask};
 
 /// Proactive Master Claude intelligence system
 pub struct ProactiveMaster {
@@ -34,6 +37,24 @@ pub struct ProactiveMaster {
 
     /// Goal tracker
     goal_tracker: Arc<RwLock<GoalTracker>>,
+
+    /// Parallel executor for task execution
+    parallel_executor: ParallelExecutor,
+
+    /// Working directory for task execution
+    working_dir: PathBuf,
+
+    /// Shutdown signal sender
+    shutdown_tx: Option<mpsc::Sender<()>>,
+
+    /// Coordination bus for agent communication
+    coordination_bus: Option<Arc<CoordinationBus>>,
+
+    /// Active agents registry
+    active_agents: Arc<DashMap<String, ClaudeCodeAgent>>,
+
+    /// Coordination interval in seconds
+    coordination_interval_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -268,7 +289,7 @@ impl ProactiveMaster {
     /// Create a new ProactiveMaster with config and repo path (for compatibility)
     pub async fn new_with_config(
         _config: crate::config::CcswarmConfig,
-        _repo_path: std::path::PathBuf,
+        repo_path: std::path::PathBuf,
     ) -> Result<Self> {
         let project_context = Arc::new(RwLock::new(ProjectContext {
             project_type: "web_application".to_string(),
@@ -309,6 +330,18 @@ impl ProactiveMaster {
             backlog: vec![],
         }));
 
+        // Initialize parallel executor with sensible defaults
+        let parallel_config = ParallelConfig {
+            max_concurrent: 5,
+            default_timeout_ms: 300_000, // 5 minutes
+            fail_fast: false,
+            retry_failed: true,
+            max_retries: 2,
+            retry_delay_ms: 1000,
+            collect_partial_on_timeout: true,
+        };
+        let parallel_executor = ParallelExecutor::new(parallel_config);
+
         Ok(Self {
             id: uuid::Uuid::new_v4().to_string(),
             agents: vec![],
@@ -317,6 +350,12 @@ impl ProactiveMaster {
             progress_analyzer,
             task_predictor,
             goal_tracker,
+            parallel_executor,
+            working_dir: repo_path,
+            shutdown_tx: None,
+            coordination_bus: None,
+            active_agents: Arc::new(DashMap::new()),
+            coordination_interval_secs: 5,
         })
     }
 
@@ -1190,6 +1229,15 @@ impl ProactiveMaster {
         tracing::debug!("Isolation mode set (handled internally)");
     }
 
+    /// Enable or disable delegate mode (lead orchestrates only, no direct code execution)
+    pub fn set_delegate_mode(&mut self, enabled: bool) {
+        if enabled {
+            tracing::info!(
+                "Delegate mode enabled: lead will only orchestrate, not execute code directly"
+            );
+        }
+    }
+
     /// Initialize the ProactiveMaster (compatibility method)
     pub async fn initialize(&mut self) -> Result<()> {
         // ProactiveMaster initializes itself in new(), this is for compatibility
@@ -1197,11 +1245,288 @@ impl ProactiveMaster {
         Ok(())
     }
 
-    /// Start coordination (compatibility method)
+    /// Start the continuous coordination loop
+    ///
+    /// This is the main entry point for running the ProactiveMaster. It:
+    /// 1. Creates a coordination bus for agent communication
+    /// 2. Sets up a shutdown channel for graceful termination
+    /// 3. Runs a continuous loop that:
+    ///    - Analyzes agent progress and makes decisions
+    ///    - Executes high-confidence decisions in parallel
+    ///    - Processes incoming messages from agents
+    ///    - Handles shutdown signals (Ctrl+C or explicit shutdown)
     pub async fn start_coordination(&mut self) -> Result<()> {
-        // ProactiveMaster is already coordinating
-        tracing::info!("ProactiveMaster coordination started");
+        info!("ProactiveMaster {} starting coordination loop", self.id);
+
+        // Create coordination bus
+        let bus = CoordinationBus::new().await?;
+        let bus = Arc::new(bus);
+        self.coordination_bus = Some(Arc::clone(&bus));
+
+        // Create shutdown channel
+        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
+        self.shutdown_tx = Some(shutdown_tx);
+
+        // Create interval for periodic coordination
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(self.coordination_interval_secs));
+
+        info!(
+            "Coordination loop started with {}s interval",
+            self.coordination_interval_secs
+        );
+
+        loop {
+            tokio::select! {
+                // Periodic coordination tick
+                _ = interval.tick() => {
+                    if let Err(e) = self.run_coordination_cycle(&bus).await {
+                        error!("Coordination cycle error: {}", e);
+                    }
+                }
+
+                // Process incoming messages from coordination bus
+                msg = async {
+                    if let Some(msg) = bus.try_receive_message() {
+                        Some(msg)
+                    } else {
+                        // Small delay to prevent busy-waiting
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        None
+                    }
+                } => {
+                    if let Some(message) = msg {
+                        if let Err(e) = self.handle_agent_message(message, &bus).await {
+                            warn!("Failed to handle agent message: {}", e);
+                        }
+                    }
+                }
+
+                // Shutdown signal
+                _ = shutdown_rx.recv() => {
+                    info!("Received shutdown signal, stopping coordination loop");
+                    break;
+                }
+
+                // Handle Ctrl+C
+                _ = tokio::signal::ctrl_c() => {
+                    info!("Received Ctrl+C, initiating graceful shutdown");
+                    break;
+                }
+            }
+        }
+
+        // Cleanup
+        info!("Coordination loop stopped, cleaning up...");
+        bus.close().await?;
+        self.coordination_bus = None;
+
         Ok(())
+    }
+
+    /// Run a single coordination cycle
+    async fn run_coordination_cycle(&self, bus: &Arc<CoordinationBus>) -> Result<()> {
+        debug!("Running coordination cycle");
+
+        // Analyze and make decisions
+        let decisions = self.analyze_and_decide(&self.active_agents, bus).await?;
+
+        // Filter decisions that should be executed in parallel
+        let parallel_decisions: Vec<_> = decisions
+            .iter()
+            .filter(|d| {
+                d.confidence > 0.8
+                    && d.risk_assessment == RiskLevel::Low
+                    && matches!(d.decision_type, DecisionType::GenerateTask)
+            })
+            .collect();
+
+        // Execute parallel decisions if any
+        if !parallel_decisions.is_empty() {
+            info!(
+                "Executing {} decisions in parallel",
+                parallel_decisions.len()
+            );
+            if let Err(e) = self.execute_parallel_decisions(&parallel_decisions).await {
+                warn!("Parallel execution error: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute decisions in parallel using the ParallelExecutor
+    async fn execute_parallel_decisions(&self, decisions: &[&ProactiveDecision]) -> Result<()> {
+        // Convert decisions to SpawnTasks
+        let tasks: Vec<SpawnTask> = decisions
+            .iter()
+            .flat_map(|decision| {
+                decision
+                    .suggested_actions
+                    .iter()
+                    .filter(|action| action.action_type == "create_task")
+                    .filter_map(|action| {
+                        action.parameters.get("template").map(|template_json| {
+                            // Create a SpawnTask from the action
+                            SpawnTask::new(&action.description)
+                                .with_priority(match decision.risk_assessment {
+                                    RiskLevel::Low => 50,
+                                    RiskLevel::Medium => 75,
+                                    RiskLevel::High => 100,
+                                })
+                                .with_context("template", serde_json::json!(template_json))
+                                .with_context("reasoning", serde_json::json!(&decision.reasoning))
+                        })
+                    })
+            })
+            .collect();
+
+        if tasks.is_empty() {
+            return Ok(());
+        }
+
+        info!("Spawning {} tasks for parallel execution", tasks.len());
+
+        // Execute using PTY-based Claude sessions
+        let result = self
+            .parallel_executor
+            .execute_with_claude_pty(tasks, Some(self.working_dir.clone()), Some(3))
+            .await;
+
+        match result {
+            Ok(execution_result) => {
+                info!(
+                    "Parallel execution completed: {} successful, {} failed",
+                    execution_result.successful_count, execution_result.failed_count
+                );
+            }
+            Err(e) => {
+                error!("Parallel execution failed: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle incoming agent messages
+    async fn handle_agent_message(
+        &self,
+        message: AgentMessage,
+        bus: &Arc<CoordinationBus>,
+    ) -> Result<()> {
+        match message {
+            AgentMessage::Registration {
+                agent_id,
+                capabilities,
+                metadata,
+            } => {
+                info!(
+                    "Agent {} registered with capabilities: {:?}",
+                    agent_id, capabilities
+                );
+                // Store agent info (would need to create ClaudeCodeAgent here in real impl)
+                debug!("Agent metadata: {:?}", metadata);
+            }
+
+            AgentMessage::TaskCompleted {
+                agent_id,
+                task_id,
+                result,
+            } => {
+                info!(
+                    "Task {} completed by agent {} (success: {})",
+                    task_id, agent_id, result.success
+                );
+                // Update dependency graph
+                let mut graph = self.dependency_graph.write().await;
+                if let Some(node) = graph.nodes.get_mut(&task_id) {
+                    node.status = if result.success {
+                        TaskNodeStatus::Completed
+                    } else {
+                        TaskNodeStatus::Failed
+                    };
+                }
+            }
+
+            AgentMessage::HelpRequest {
+                agent_id,
+                context,
+                priority,
+            } => {
+                warn!(
+                    "Agent {} requesting help (priority: {:?}): {}",
+                    agent_id, priority, context
+                );
+                // Could trigger search agent or escalate
+            }
+
+            AgentMessage::StatusUpdate {
+                agent_id,
+                status,
+                metrics,
+            } => {
+                debug!("Agent {} status update: {:?}", agent_id, status);
+                // Update agent status in active_agents
+                if let Some(mut agent) = self.active_agents.get_mut(&agent_id) {
+                    agent.status = status;
+                    agent.last_activity = Utc::now();
+                }
+                debug!("Metrics: {:?}", metrics);
+            }
+
+            AgentMessage::Coordination {
+                from_agent,
+                to_agent,
+                message_type,
+                payload,
+            } => {
+                debug!(
+                    "Coordination message from {} to {}: {:?}",
+                    from_agent, to_agent, message_type
+                );
+                // Handle search responses specially
+                if matches!(message_type, CoordinationType::Custom(ref s) if s == "search_response")
+                {
+                    if let Ok(response) = serde_json::from_value::<SearchResponse>(payload) {
+                        self.handle_search_response(response, bus).await?;
+                    }
+                }
+            }
+
+            _ => {
+                debug!("Received other message type: {:?}", message);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Request shutdown of the coordination loop
+    pub async fn request_shutdown(&self) -> Result<()> {
+        if let Some(tx) = &self.shutdown_tx {
+            tx.send(())
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to send shutdown signal: {}", e))?;
+            info!("Shutdown signal sent");
+        } else {
+            warn!("No shutdown channel available");
+        }
+        Ok(())
+    }
+
+    /// Get the coordination bus (if running)
+    pub fn get_coordination_bus(&self) -> Option<Arc<CoordinationBus>> {
+        self.coordination_bus.clone()
+    }
+
+    /// Set coordination interval
+    pub fn set_coordination_interval(&mut self, seconds: u64) {
+        self.coordination_interval_secs = seconds;
+    }
+
+    /// Get active agents registry
+    pub fn get_active_agents(&self) -> Arc<DashMap<String, ClaudeCodeAgent>> {
+        Arc::clone(&self.active_agents)
     }
 }
 

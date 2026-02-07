@@ -26,6 +26,7 @@ pub mod git;
 pub mod hitl;
 pub mod hooks;
 pub mod identity;
+pub mod ipc;
 pub mod mcp;
 pub mod memory;
 pub mod monitoring;
