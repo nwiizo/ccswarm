@@ -168,7 +168,7 @@ impl MailboxSystem {
                         mailbox.deliver(message.clone());
                     }
                 }
-                let _ = team_id; // Used for team lookup in production
+                let _ = team_id; // TODO: filter by team membership instead of broadcasting to all
             }
         }
     }

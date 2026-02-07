@@ -201,19 +201,19 @@ impl McpClient {
             return Err(anyhow::anyhow!("Tools discovery failed: {:?}", error));
         }
 
-        if let Some(result) = response.result {
-            if let Some(tools_array) = result.get("tools").and_then(|v| v.as_array()) {
-                let mut tools = self.tools.write().await;
+        if let Some(result) = response.result
+            && let Some(tools_array) = result.get("tools").and_then(|v| v.as_array())
+        {
+            let mut tools = self.tools.write().await;
 
-                for tool_value in tools_array {
-                    if let Ok(tool) = serde_json::from_value::<McpTool>(tool_value.clone()) {
-                        debug!("Discovered tool: {}", tool.name);
-                        tools.insert(tool.name.clone(), tool);
-                    }
+            for tool_value in tools_array {
+                if let Ok(tool) = serde_json::from_value::<McpTool>(tool_value.clone()) {
+                    debug!("Discovered tool: {}", tool.name);
+                    tools.insert(tool.name.clone(), tool);
                 }
-
-                info!("Discovered {} tools", tools.len());
             }
+
+            info!("Discovered {} tools", tools.len());
         }
 
         Ok(())

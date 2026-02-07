@@ -1,50 +1,50 @@
-//! ホワイトボード - エージェントの思考の見える化
+//! Whiteboard - Visualizing Agent Thinking
 //!
-//! 「複雑な問題を解くとき、人間は紙に書きながら考える。
-//! エージェントにも同じような場所が必要だ」という概念を実装。
+//! "When solving complex problems, humans think while writing on paper.
+//! Agents need a similar space." This module implements that concept.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
-/// ホワイトボードのエントリータイプ
+/// Whiteboard entry types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EntryType {
-    /// 計算や式の展開
+    /// Calculation or expression expansion
     Calculation {
         expression: String,
         result: Option<String>,
     },
-    /// 図やダイアグラム
+    /// Diagram or visual representation
     Diagram {
         description: String,
         elements: Vec<DiagramElement>,
     },
-    /// アイデアやメモ
+    /// Ideas or notes
     Note { content: String, tags: Vec<String> },
-    /// 仮説や推論
+    /// Hypothesis or reasoning
     Hypothesis {
         statement: String,
         confidence: f32,
         evidence: Vec<String>,
     },
-    /// TODOリスト
+    /// TODO list
     TodoList { items: Vec<TodoItem> },
-    /// 比較表
+    /// Comparison table
     ComparisonTable {
         options: Vec<String>,
         criteria: Vec<String>,
         scores: HashMap<(String, String), f32>,
     },
-    /// 思考の軌跡
+    /// Thought trace
     ThoughtTrace {
         thoughts: Vec<String>,
         conclusion: Option<String>,
     },
 }
 
-/// 図の要素
+/// Diagram element
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DiagramElement {
     pub id: String,
@@ -53,7 +53,7 @@ pub struct DiagramElement {
     pub connections: Vec<String>,
 }
 
-/// TODOアイテム
+/// TODO item
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TodoItem {
     pub id: String,
@@ -62,7 +62,7 @@ pub struct TodoItem {
     pub priority: u8,
 }
 
-/// ホワイトボードのエントリー
+/// Whiteboard entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WhiteboardEntry {
     pub id: String,
@@ -72,7 +72,7 @@ pub struct WhiteboardEntry {
     pub revisions: Vec<Revision>,
 }
 
-/// 注釈（後から追加されるメモ）
+/// Annotation (notes added later)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Annotation {
     pub id: String,
@@ -81,17 +81,17 @@ pub struct Annotation {
     pub marker: AnnotationMarker,
 }
 
-/// 注釈のマーカータイプ
+/// Annotation marker type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AnnotationMarker {
-    Important,    // 重要
-    Question,     // 疑問
-    Verification, // 要検証
-    Correction,   // 訂正
-    Insight,      // 洞察
+    Important,    // Important
+    Question,     // Question
+    Verification, // Needs verification
+    Correction,   // Correction
+    Insight,      // Insight
 }
 
-/// 修正履歴
+/// Revision history
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Revision {
     pub timestamp: DateTime<Utc>,
@@ -99,7 +99,7 @@ pub struct Revision {
     pub previous_content: Option<String>,
 }
 
-/// ホワイトボード
+/// Whiteboard
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Whiteboard {
     pub agent_id: String,
@@ -109,7 +109,7 @@ pub struct Whiteboard {
     pub sections: HashMap<String, Section>,
 }
 
-/// セクション（エントリーをグループ化）
+/// Section (groups entries together)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Section {
     pub id: String,
@@ -119,7 +119,7 @@ pub struct Section {
 }
 
 impl Whiteboard {
-    /// 新しいホワイトボードを作成
+    /// Create a new whiteboard
     pub fn new(agent_id: String) -> Self {
         Self {
             agent_id,
@@ -130,7 +130,7 @@ impl Whiteboard {
         }
     }
 
-    /// エントリーを追加
+    /// Add an entry
     pub fn add_entry(&mut self, entry_type: EntryType) -> String {
         let entry_id = Uuid::new_v4().to_string();
         let entry = WhiteboardEntry {
@@ -147,7 +147,7 @@ impl Whiteboard {
         entry_id
     }
 
-    /// 計算を記録
+    /// Record a calculation
     pub fn add_calculation(&mut self, expression: &str) -> String {
         self.add_entry(EntryType::Calculation {
             expression: expression.to_string(),
@@ -155,7 +155,7 @@ impl Whiteboard {
         })
     }
 
-    /// 計算結果を更新
+    /// Update calculation result
     pub fn update_calculation_result(&mut self, entry_id: &str, result: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
 
@@ -166,7 +166,7 @@ impl Whiteboard {
         {
             entry.revisions.push(Revision {
                 timestamp: Utc::now(),
-                description: format!("計算結果を追加: {}", result),
+                description: format!("Added calculation result: {}", result),
                 previous_content: Some(expression.clone()),
             });
             *res = Some(result.to_string());
@@ -176,7 +176,7 @@ impl Whiteboard {
         }
     }
 
-    /// メモを追加
+    /// Add a note
     pub fn add_note(&mut self, content: &str, tags: Vec<String>) -> String {
         self.add_entry(EntryType::Note {
             content: content.to_string(),
@@ -184,7 +184,7 @@ impl Whiteboard {
         })
     }
 
-    /// 仮説を追加
+    /// Add a hypothesis
     pub fn add_hypothesis(&mut self, statement: &str, confidence: f32) -> String {
         self.add_entry(EntryType::Hypothesis {
             statement: statement.to_string(),
@@ -193,7 +193,7 @@ impl Whiteboard {
         })
     }
 
-    /// 仮説に証拠を追加
+    /// Add evidence to a hypothesis
     pub fn add_evidence(&mut self, entry_id: &str, evidence: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
 
@@ -201,7 +201,7 @@ impl Whiteboard {
             ev.push(evidence.to_string());
             entry.revisions.push(Revision {
                 timestamp: Utc::now(),
-                description: format!("証拠を追加: {}", evidence),
+                description: format!("Added evidence: {}", evidence),
                 previous_content: None,
             });
             Some(())
@@ -210,7 +210,7 @@ impl Whiteboard {
         }
     }
 
-    /// 思考の軌跡を記録
+    /// Record a thought trace
     pub fn start_thought_trace(&mut self) -> String {
         self.add_entry(EntryType::ThoughtTrace {
             thoughts: Vec::new(),
@@ -218,7 +218,7 @@ impl Whiteboard {
         })
     }
 
-    /// 思考を追加
+    /// Add a thought
     pub fn add_thought(&mut self, entry_id: &str, thought: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
 
@@ -230,7 +230,7 @@ impl Whiteboard {
         }
     }
 
-    /// 結論を設定
+    /// Set conclusion
     pub fn set_conclusion(&mut self, entry_id: &str, conclusion: &str) -> Option<()> {
         let entry = self.entries.get_mut(entry_id)?;
 
@@ -241,7 +241,7 @@ impl Whiteboard {
             *conc = Some(conclusion.to_string());
             entry.revisions.push(Revision {
                 timestamp: Utc::now(),
-                description: "結論を設定".to_string(),
+                description: "Set conclusion".to_string(),
                 previous_content: None,
             });
             Some(())
@@ -250,7 +250,7 @@ impl Whiteboard {
         }
     }
 
-    /// 注釈を追加
+    /// Add annotation
     pub fn annotate(
         &mut self,
         entry_id: &str,
@@ -270,7 +270,7 @@ impl Whiteboard {
         Some(())
     }
 
-    /// セクションを作成
+    /// Create a section
     pub fn create_section(&mut self, name: &str) -> String {
         let section_id = Uuid::new_v4().to_string();
         let section = Section {
@@ -284,7 +284,7 @@ impl Whiteboard {
         section_id
     }
 
-    /// エントリーをセクションに追加
+    /// Add entry to a section
     pub fn add_to_section(&mut self, section_id: &str, entry_id: &str) -> Option<()> {
         let section = self.sections.get_mut(section_id)?;
         if self.entries.contains_key(entry_id) && !section.entry_ids.contains(&entry_id.to_string())
@@ -296,7 +296,7 @@ impl Whiteboard {
         }
     }
 
-    /// 最近のエントリーを取得
+    /// Get recent entries
     pub fn recent_entries(&self, count: usize) -> Vec<&WhiteboardEntry> {
         self.entry_order
             .iter()
@@ -306,7 +306,7 @@ impl Whiteboard {
             .collect()
     }
 
-    /// 特定のタイプのエントリーを検索
+    /// Search entries by type
     pub fn find_entries_by_type(
         &self,
         entry_type_filter: impl Fn(&EntryType) -> bool,
@@ -317,7 +317,7 @@ impl Whiteboard {
             .collect()
     }
 
-    /// ホワイトボードの要約を生成
+    /// Generate whiteboard summary
     pub fn summarize(&self) -> WhiteboardSummary {
         let mut type_counts = HashMap::new();
         let mut total_annotations = 0;
@@ -351,7 +351,7 @@ impl Whiteboard {
     }
 }
 
-/// ホワイトボードの要約
+/// Whiteboard summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WhiteboardSummary {
     pub agent_id: String,

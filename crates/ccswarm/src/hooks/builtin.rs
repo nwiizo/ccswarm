@@ -233,13 +233,12 @@ impl SecurityHook {
         }
 
         // Check for destructive git commands
-        if !self.allow_destructive_git {
-            if command.contains("git push --force")
+        if !self.allow_destructive_git
+            && (command.contains("git push --force")
                 || command.contains("git reset --hard")
-                || command.contains("git clean -f")
-            {
-                return Some("destructive git operation");
-            }
+                || command.contains("git clean -f"))
+        {
+            return Some("destructive git operation");
         }
 
         None
@@ -283,25 +282,23 @@ impl ExecutionHooks for SecurityHook {
 impl ToolHooks for SecurityHook {
     async fn pre_tool_use(&self, input: PreToolUseInput, _ctx: HookContext) -> HookResult {
         // Check for file operations on protected files
-        if input.tool_name == "Write" || input.tool_name == "Edit" {
-            if let Some(path) = input.arguments.get("file_path").and_then(|v| v.as_str()) {
-                if self.is_protected(path) {
-                    return HookResult::Deny {
-                        reason: format!("Cannot modify protected file: {}", path),
-                    };
-                }
-            }
+        if (input.tool_name == "Write" || input.tool_name == "Edit")
+            && let Some(path) = input.arguments.get("file_path").and_then(|v| v.as_str())
+            && self.is_protected(path)
+        {
+            return HookResult::Deny {
+                reason: format!("Cannot modify protected file: {}", path),
+            };
         }
 
         // Check for blocked shell commands
-        if input.tool_name == "Bash" {
-            if let Some(command) = input.arguments.get("command").and_then(|v| v.as_str()) {
-                if let Some(blocked) = self.is_blocked_command(command) {
-                    return HookResult::Deny {
-                        reason: format!("Blocked command detected: {}", blocked),
-                    };
-                }
-            }
+        if input.tool_name == "Bash"
+            && let Some(command) = input.arguments.get("command").and_then(|v| v.as_str())
+            && let Some(blocked) = self.is_blocked_command(command)
+        {
+            return HookResult::Deny {
+                reason: format!("Blocked command detected: {}", blocked),
+            };
         }
 
         HookResult::Continue

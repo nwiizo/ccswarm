@@ -201,10 +201,10 @@ impl FileSystemTemplateStorage {
                 }
 
                 // Category filter
-                if let Some(ref category) = query.category {
-                    if template.category != *category {
-                        return false;
-                    }
+                if let Some(ref category) = query.category
+                    && template.category != *category
+                {
+                    return false;
                 }
 
                 // Tags filter
@@ -215,17 +215,17 @@ impl FileSystemTemplateStorage {
                 }
 
                 // Author filter
-                if let Some(ref author) = query.author {
-                    if template.author.as_ref() != Some(author) {
-                        return false;
-                    }
+                if let Some(ref author) = query.author
+                    && template.author.as_ref() != Some(author)
+                {
+                    return false;
                 }
 
                 // Success rate filter
-                if let Some(min_rate) = query.min_success_rate {
-                    if template.success_rate.unwrap_or(0.0) < min_rate {
-                        return false;
-                    }
+                if let Some(min_rate) = query.min_success_rate
+                    && template.success_rate.unwrap_or(0.0) < min_rate
+                {
+                    return false;
                 }
 
                 true
@@ -285,10 +285,10 @@ impl TemplateStorage for FileSystemTemplateStorage {
 
     async fn load_template(&self, id: &str) -> Result<Template, TemplateError> {
         // Try cache first
-        if self.cache_valid {
-            if let Some(template) = self.cache.get(id) {
-                return Ok(template.clone());
-            }
+        if self.cache_valid
+            && let Some(template) = self.cache.get(id)
+        {
+            return Ok(template.clone());
         }
 
         // Load from file

@@ -622,7 +622,7 @@ impl ClaudeCodeAgent {
 
         let initial_note = self.whiteboard.add_note(
             &format!(
-                "タスク開始: {}. タイプ: {:?}, 優先度: {:?}",
+                "Task started: {}. Type: {:?}, Priority: {:?}",
                 task.description, task.task_type, task.priority
             ),
             vec!["task_start".to_string()],
@@ -656,7 +656,7 @@ impl ClaudeCodeAgent {
 
             let exec_note = self.whiteboard.add_note(
                 &format!(
-                    "実行試行 #{}: 出力長 {} 文字",
+                    "Execution attempt #{}: output length {} characters",
                     execution_count,
                     output.len()
                 ),
@@ -672,7 +672,7 @@ impl ClaudeCodeAgent {
             ));
 
             self.whiteboard
-                .add_thought(&thought_trace_id, &format!("観察: {}", observation));
+                .add_thought(&thought_trace_id, &format!("Observation: {}", observation));
 
             let identity_status = monitor.monitor_response(&output).await?;
             self.handle_identity_status(identity_status, &mut monitor)
@@ -690,7 +690,7 @@ impl ClaudeCodeAgent {
                 DecisionType::Continue { reason } => {
                     tracing::debug!("Continuing execution: {}", reason);
                     self.whiteboard
-                        .add_thought(&thought_trace_id, &format!("継続: {}", reason));
+                        .add_thought(&thought_trace_id, &format!("Continue: {}", reason));
                     final_output = output;
                     if execution_count >= max_executions {
                         break;
@@ -700,7 +700,7 @@ impl ClaudeCodeAgent {
                     tracing::info!("Refining approach: {} - {}", reason, refinement);
                     self.whiteboard.add_thought(
                         &thought_trace_id,
-                        &format!("改善: {} - {}", reason, refinement),
+                        &format!("Refinement: {} - {}", reason, refinement),
                     );
 
                     // Record refinement as hypothesis
@@ -714,7 +714,7 @@ impl ClaudeCodeAgent {
                 DecisionType::Complete { summary } => {
                     tracing::info!("Task completed: {}", summary);
                     self.whiteboard
-                        .add_thought(&thought_trace_id, &format!("完了: {}", summary));
+                        .add_thought(&thought_trace_id, &format!("Complete: {}", summary));
                     self.whiteboard.set_conclusion(&thought_trace_id, &summary);
                     final_output = output;
                     break;
@@ -726,27 +726,29 @@ impl ClaudeCodeAgent {
                     tracing::warn!("Pivoting approach: {} - {}", reason, new_direction);
                     self.whiteboard.add_thought(
                         &thought_trace_id,
-                        &format!("方針転換: {} - {}", reason, new_direction),
+                        &format!("Pivot: {} - {}", reason, new_direction),
                     );
                     self.whiteboard.annotate(
                         &thought_trace_id,
-                        "大幅な方針変更",
+                        "Major direction change",
                         AnnotationMarker::Important,
                     );
                     prompt = self.generate_pivot_prompt(&task, &new_direction);
                 }
                 DecisionType::RequestContext { questions } => {
                     tracing::info!("Additional context needed: {:?}", questions);
-                    self.whiteboard
-                        .add_thought(&thought_trace_id, &format!("追加情報必要: {:?}", questions));
+                    self.whiteboard.add_thought(
+                        &thought_trace_id,
+                        &format!("Additional info needed: {:?}", questions),
+                    );
                     prompt.push_str(&format!("\n\nPlease address: {}", questions.join(", ")));
                 }
                 DecisionType::Abort { reason } => {
                     self.whiteboard
-                        .add_thought(&thought_trace_id, &format!("中断: {}", reason));
+                        .add_thought(&thought_trace_id, &format!("Abort: {}", reason));
                     self.whiteboard.annotate(
                         &thought_trace_id,
-                        "タスク中断",
+                        "Task aborted",
                         AnnotationMarker::Important,
                     );
 
@@ -1395,7 +1397,7 @@ impl ClaudeCodeAgent {
     /// # }
     /// ```
     pub fn update_agent_experience(&mut self, task: &Task) {
-        // タスクタイプに基づいて経験値を付与
+        // Grant experience points based on task type
         let experience_points = match task.priority {
             Priority::Critical => 100,
             Priority::High => 50,
@@ -1403,7 +1405,7 @@ impl ClaudeCodeAgent {
             Priority::Low => 10,
         };
 
-        // タスクタイプに関連するスキルを特定して経験値を追加
+        // Identify skills related to task type and add experience points
         // Simplified: give experience to all skills, with some variation by task type
         let experience_multiplier = match task.task_type {
             TaskType::Development | TaskType::Feature | TaskType::Infrastructure => 1.0,
@@ -1427,7 +1429,7 @@ impl ClaudeCodeAgent {
             );
         }
 
-        // 個性の説明を更新してログ出力
+        // Update personality description and log output
         tracing::info!(
             "Agent {} personality update: {}",
             self.identity.agent_id,

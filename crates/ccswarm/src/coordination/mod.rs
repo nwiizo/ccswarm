@@ -231,10 +231,10 @@ impl CoordinationBus {
         let mut files = Vec::new();
 
         while let Some(entry) = entries.next_entry().await? {
-            if let Ok(metadata) = entry.metadata().await {
-                if metadata.is_file() {
-                    files.push((entry.path(), metadata.modified()?));
-                }
+            if let Ok(metadata) = entry.metadata().await
+                && metadata.is_file()
+            {
+                files.push((entry.path(), metadata.modified()?));
             }
         }
 
@@ -260,10 +260,10 @@ impl CoordinationBus {
         let mut entries = fs::read_dir(&self.message_dir).await?;
 
         while let Some(entry) = entries.next_entry().await? {
-            if let Ok(content) = fs::read_to_string(entry.path()).await {
-                if let Ok(message) = serde_json::from_str::<AgentMessage>(&content) {
-                    messages.push(message);
-                }
+            if let Ok(content) = fs::read_to_string(entry.path()).await
+                && let Ok(message) = serde_json::from_str::<AgentMessage>(&content)
+            {
+                messages.push(message);
             }
         }
 
@@ -328,10 +328,10 @@ impl TaskQueue {
         let mut entries = fs::read_dir(&self.task_dir).await?;
 
         while let Some(entry) = entries.next_entry().await? {
-            if let Ok(content) = fs::read_to_string(entry.path()).await {
-                if let Ok(task) = serde_json::from_str(&content) {
-                    tasks.push(task);
-                }
+            if let Ok(content) = fs::read_to_string(entry.path()).await
+                && let Ok(task) = serde_json::from_str(&content)
+            {
+                tasks.push(task);
             }
         }
 
@@ -413,10 +413,10 @@ impl StatusTracker {
         let mut entries = fs::read_dir(&self.status_dir).await?;
 
         while let Some(entry) = entries.next_entry().await? {
-            if let Ok(content) = fs::read_to_string(entry.path()).await {
-                if let Ok(status) = serde_json::from_str(&content) {
-                    statuses.push(status);
-                }
+            if let Ok(content) = fs::read_to_string(entry.path()).await
+                && let Ok(status) = serde_json::from_str(&content)
+            {
+                statuses.push(status);
             }
         }
 

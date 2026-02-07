@@ -452,32 +452,32 @@ impl ApprovalWorkflow {
 
     /// Escalate the workflow
     pub fn escalate(&mut self) -> bool {
-        if let Some(ref escalation) = self.config.escalation {
-            if self.state.escalation_level < escalation.max_levels {
-                self.state.escalation_level += 1;
-                self.state.status = WorkflowStatus::Escalated;
+        if let Some(ref escalation) = self.config.escalation
+            && self.state.escalation_level < escalation.max_levels
+        {
+            self.state.escalation_level += 1;
+            self.state.status = WorkflowStatus::Escalated;
 
-                // Extend timeout
-                self.state.expires_at =
-                    Utc::now() + chrono::Duration::seconds(escalation.escalate_after_secs as i64);
+            // Extend timeout
+            self.state.expires_at =
+                Utc::now() + chrono::Duration::seconds(escalation.escalate_after_secs as i64);
 
-                self.state.add_comment(WorkflowComment {
-                    author: "system".to_string(),
-                    timestamp: Utc::now(),
-                    content: format!(
-                        "Escalated to level {} ({})",
-                        self.state.escalation_level,
-                        escalation.escalate_to.join(", ")
-                    ),
-                    is_system: true,
-                });
+            self.state.add_comment(WorkflowComment {
+                author: "system".to_string(),
+                timestamp: Utc::now(),
+                content: format!(
+                    "Escalated to level {} ({})",
+                    self.state.escalation_level,
+                    escalation.escalate_to.join(", ")
+                ),
+                is_system: true,
+            });
 
-                if let Some(ref callback) = self.callbacks.on_escalated {
-                    callback(&self.state, self.state.escalation_level);
-                }
-
-                return true;
+            if let Some(ref callback) = self.callbacks.on_escalated {
+                callback(&self.state, self.state.escalation_level);
             }
+
+            return true;
         }
         false
     }

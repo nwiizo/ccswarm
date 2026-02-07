@@ -472,30 +472,29 @@ impl ResourceMonitor {
         // Pattern: ccswarm processes with agent ID in command line
         for process in system.processes().values() {
             // Try to get process name and cmd
-            if let Some(name) = process.name().to_str() {
-                if name.contains("ccswarm")
+            if let Some(name) = process.name().to_str()
+                && (name.contains("ccswarm")
                     || process
                         .exe()
                         .map(|exe| exe.to_string_lossy().contains("ccswarm"))
-                        .unwrap_or(false)
-                {
-                    // Check if this might be our agent by looking at the process
-                    let total_memory = system.total_memory();
-                    let memory_bytes = process.memory();
-                    let memory_percent = if total_memory > 0 {
-                        (memory_bytes as f32 / total_memory as f32) * 100.0
-                    } else {
-                        0.0
-                    };
+                        .unwrap_or(false))
+            {
+                // Check if this might be our agent by looking at the process
+                let total_memory = system.total_memory();
+                let memory_bytes = process.memory();
+                let memory_percent = if total_memory > 0 {
+                    (memory_bytes as f32 / total_memory as f32) * 100.0
+                } else {
+                    0.0
+                };
 
-                    return Ok(ResourceUsage {
-                        cpu_percent: process.cpu_usage(),
-                        memory_bytes,
-                        memory_percent,
-                        thread_count: 1,
-                        timestamp: Utc::now(),
-                    });
-                }
+                return Ok(ResourceUsage {
+                    cpu_percent: process.cpu_usage(),
+                    memory_bytes,
+                    memory_percent,
+                    thread_count: 1,
+                    timestamp: Utc::now(),
+                });
             }
         }
 

@@ -699,25 +699,60 @@ impl ProactiveMaster {
             let agent = entry.value();
 
             // Check last completed task
-            if let Some((last_task, last_result)) = agent.task_history.last() {
-                if last_result.success {
-                    // Find matching completion patterns
-                    for pattern in &predictor.completion_patterns {
-                        if pattern.completed_task_type == last_task.task_type
-                            && pattern.probability > 0.7
-                        {
-                            for task_template in &pattern.follow_up_tasks {
+            if let Some((last_task, last_result)) = agent.task_history.last()
+                && last_result.success
+            {
+                // Find matching completion patterns
+                for pattern in &predictor.completion_patterns {
+                    if pattern.completed_task_type == last_task.task_type
+                        && pattern.probability > 0.7
+                    {
+                        for task_template in &pattern.follow_up_tasks {
+                            decisions.push(ProactiveDecision {
+                                decision_type: DecisionType::GenerateTask,
+                                reasoning: format!(
+                                    "Pattern match: {:?} completion typically requires {}",
+                                    last_task.task_type, task_template.description_template
+                                ),
+                                confidence: pattern.probability,
+                                suggested_actions: vec![SuggestedAction {
+                                    action_type: "create_task".to_string(),
+                                    description: format!(
+                                        "Create follow-up task: {}",
+                                        task_template.description_template
+                                    ),
+                                    parameters: HashMap::from([
+                                        (
+                                            "template".to_string(),
+                                            serde_json::to_string(task_template)?,
+                                        ),
+                                        ("parent_task".to_string(), last_task.id.clone()),
+                                    ]),
+                                    expected_impact: "Maintain development momentum".to_string(),
+                                }],
+                                risk_assessment: RiskLevel::Low,
+                            });
+                        }
+                    }
+                }
+
+                // Check for pattern triggers in task description
+                let description_lower = last_task.description.to_lowercase();
+                for (pattern_id, pattern) in &predictor.pattern_library {
+                    for trigger in &pattern.trigger_conditions {
+                        if description_lower.contains(&trigger.to_lowercase()) {
+                            for task_template in &pattern.generated_tasks {
                                 decisions.push(ProactiveDecision {
                                     decision_type: DecisionType::GenerateTask,
                                     reasoning: format!(
-                                        "Pattern match: {:?} completion typically requires {}",
-                                        last_task.task_type, task_template.description_template
+                                        "Pattern '{}' triggered by: {}",
+                                        pattern_id, trigger
                                     ),
-                                    confidence: pattern.probability,
+                                    confidence: pattern.confidence,
                                     suggested_actions: vec![SuggestedAction {
                                         action_type: "create_task".to_string(),
                                         description: format!(
-                                            "Create follow-up task: {}",
+                                            "Auto-generate: {}",
                                             task_template.description_template
                                         ),
                                         parameters: HashMap::from([
@@ -725,47 +760,13 @@ impl ProactiveMaster {
                                                 "template".to_string(),
                                                 serde_json::to_string(task_template)?,
                                             ),
-                                            ("parent_task".to_string(), last_task.id.clone()),
+                                            ("trigger_task".to_string(), last_task.id.clone()),
                                         ]),
-                                        expected_impact: "Maintain development momentum"
+                                        expected_impact: "Ensure complete feature implementation"
                                             .to_string(),
                                     }],
                                     risk_assessment: RiskLevel::Low,
                                 });
-                            }
-                        }
-                    }
-
-                    // Check for pattern triggers in task description
-                    let description_lower = last_task.description.to_lowercase();
-                    for (pattern_id, pattern) in &predictor.pattern_library {
-                        for trigger in &pattern.trigger_conditions {
-                            if description_lower.contains(&trigger.to_lowercase()) {
-                                for task_template in &pattern.generated_tasks {
-                                    decisions.push(ProactiveDecision {
-                                        decision_type: DecisionType::GenerateTask,
-                                        reasoning: format!(
-                                            "Pattern '{}' triggered by: {}",
-                                            pattern_id, trigger
-                                        ),
-                                        confidence: pattern.confidence,
-                                        suggested_actions: vec![
-                                            SuggestedAction {
-                                                action_type: "create_task".to_string(),
-                                                description: format!(
-                                                    "Auto-generate: {}",
-                                                    task_template.description_template
-                                                ),
-                                                parameters: HashMap::from([
-                                                    ("template".to_string(), serde_json::to_string(task_template)?),
-                                                    ("trigger_task".to_string(), last_task.id.clone()),
-                                                ]),
-                                                expected_impact: "Ensure complete feature implementation".to_string(),
-                                            },
-                                        ],
-                                        risk_assessment: RiskLevel::Low,
-                                    });
-                                }
                             }
                         }
                     }
@@ -783,13 +784,14 @@ impl ProactiveMaster {
 
         // Check objective progress
         for objective in &goals.objectives {
-            if objective.progress < 0.5 {
-                if let Some(deadline) = objective.deadline {
-                    let time_remaining = deadline - Utc::now();
-                    let days_remaining = time_remaining.num_days();
+            if objective.progress < 0.5
+                && let Some(deadline) = objective.deadline
+            {
+                let time_remaining = deadline - Utc::now();
+                let days_remaining = time_remaining.num_days();
 
-                    if days_remaining <= 7 && objective.progress < 0.8 {
-                        decisions.push(ProactiveDecision {
+                if days_remaining <= 7 && objective.progress < 0.8 {
+                    decisions.push(ProactiveDecision {
                             decision_type: DecisionType::ChangeStrategy,
                             reasoning: format!(
                                 "Objective '{}' is behind schedule: {}% complete with {} days remaining",
@@ -808,7 +810,6 @@ impl ProactiveMaster {
                             ],
                             risk_assessment: RiskLevel::Medium,
                         });
-                    }
                 }
             }
         }
@@ -878,11 +879,11 @@ impl ProactiveMaster {
                     }
                 }
                 "request_search" => {
-                    if let Some(query) = action.parameters.get("query") {
-                        if let Some(context) = action.parameters.get("context") {
-                            self.request_search(query, context, coordination_bus)
-                                .await?;
-                        }
+                    if let Some(query) = action.parameters.get("query")
+                        && let Some(context) = action.parameters.get("context")
+                    {
+                        self.request_search(query, context, coordination_bus)
+                            .await?;
                     }
                 }
                 _ => {
@@ -1295,11 +1296,10 @@ impl ProactiveMaster {
                         None
                     }
                 } => {
-                    if let Some(message) = msg {
-                        if let Err(e) = self.handle_agent_message(message, &bus).await {
+                    if let Some(message) = msg
+                        && let Err(e) = self.handle_agent_message(message, &bus).await {
                             warn!("Failed to handle agent message: {}", e);
                         }
-                    }
                 }
 
                 // Shutdown signal
@@ -1486,10 +1486,9 @@ impl ProactiveMaster {
                 );
                 // Handle search responses specially
                 if matches!(message_type, CoordinationType::Custom(ref s) if s == "search_response")
+                    && let Ok(response) = serde_json::from_value::<SearchResponse>(payload)
                 {
-                    if let Ok(response) = serde_json::from_value::<SearchResponse>(payload) {
-                        self.handle_search_response(response, bus).await?;
-                    }
+                    self.handle_search_response(response, bus).await?;
                 }
             }
 

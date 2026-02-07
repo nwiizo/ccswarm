@@ -30,17 +30,17 @@ pub struct HttpTransport {
 
 impl HttpTransport {
     /// Create a new HTTP transport
-    pub fn new(base_url: String) -> Self {
+    pub fn new(base_url: String) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {e}"))?;
 
-        Self {
+        Ok(Self {
             base_url,
             client,
             timeout: Duration::from_secs(30),
-        }
+        })
     }
 
     /// Set request timeout

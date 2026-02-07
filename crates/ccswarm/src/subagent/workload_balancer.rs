@@ -201,14 +201,14 @@ impl WorkloadBalancer {
         }
 
         // Check sticky session first
-        if let Some(key) = sticky_key {
-            if self.config.strategy == BalancingStrategy::Sticky {
-                let sticky = self.sticky_sessions.read().await;
-                if let Some(agent_id) = sticky.get(key) {
-                    if available_agents.contains(agent_id) {
-                        return Ok(agent_id.clone());
-                    }
-                }
+        if let Some(key) = sticky_key
+            && self.config.strategy == BalancingStrategy::Sticky
+        {
+            let sticky = self.sticky_sessions.read().await;
+            if let Some(agent_id) = sticky.get(key)
+                && available_agents.contains(agent_id)
+            {
+                return Ok(agent_id.clone());
             }
         }
 

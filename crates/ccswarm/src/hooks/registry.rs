@@ -29,9 +29,8 @@ impl HookRegistry {
 
     /// Create a registry with default hooks (Logging, Security)
     pub fn with_defaults() -> Self {
-        let registry = Self::new();
         // Note: Actual registration happens asynchronously
-        registry
+        Self::new()
     }
 
     /// Register an execution hook

@@ -146,11 +146,11 @@ impl PersistentSessionManager {
         let agent_id = format!("{}-agent-{}", role.name().to_lowercase(), Uuid::new_v4());
 
         // Check if we can reuse an existing session
-        if self.config.enable_session_reuse {
-            if let Some(existing) = self.find_reusable_session(&role).await {
-                tracing::info!("Reusing existing session for role: {}", role.name());
-                return Ok(existing);
-            }
+        if self.config.enable_session_reuse
+            && let Some(existing) = self.find_reusable_session(&role).await
+        {
+            tracing::info!("Reusing existing session for role: {}", role.name());
+            return Ok(existing);
         }
 
         // Check session limits
@@ -175,17 +175,17 @@ impl PersistentSessionManager {
         let session_info = self.session_info.read().await;
 
         for (agent_id, session) in sessions.iter() {
-            if let Some(info) = session_info.get(agent_id) {
-                if info.status == PersistentSessionStatus::Idle {
-                    // Try to lock the agent, but don't block indefinitely
-                    if let Ok(agent) = session.try_lock() {
-                        if agent.identity.specialization.name() == role.name() {
-                            // Found a reusable session
-                            return Some(Arc::clone(session));
-                        }
-                    }
-                    // If we can't lock, skip this session for now
+            if let Some(info) = session_info.get(agent_id)
+                && info.status == PersistentSessionStatus::Idle
+            {
+                // Try to lock the agent, but don't block indefinitely
+                if let Ok(agent) = session.try_lock()
+                    && agent.identity.specialization.name() == role.name()
+                {
+                    // Found a reusable session
+                    return Some(Arc::clone(session));
                 }
+                // If we can't lock, skip this session for now
             }
         }
 

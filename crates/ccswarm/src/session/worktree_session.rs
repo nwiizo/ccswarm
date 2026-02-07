@@ -397,10 +397,11 @@ Always include:
         };
 
         // Auto-commit if enabled
-        if self.config.auto_commit && result.success {
-            if let Err(e) = self.auto_commit_changes(&agent_id).await {
-                tracing::warn!("Auto-commit failed for agent {}: {}", agent_id, e);
-            }
+        if self.config.auto_commit
+            && result.success
+            && let Err(e) = self.auto_commit_changes(&agent_id).await
+        {
+            tracing::warn!("Auto-commit failed for agent {}: {}", agent_id, e);
         }
 
         // Update session info
@@ -447,10 +448,10 @@ Always include:
         };
 
         // Auto-commit batch results if enabled
-        if self.config.auto_commit {
-            if let Err(e) = self.auto_commit_changes(&agent_id).await {
-                tracing::warn!("Auto-commit failed for agent {}: {}", agent_id, e);
-            }
+        if self.config.auto_commit
+            && let Err(e) = self.auto_commit_changes(&agent_id).await
+        {
+            tracing::warn!("Auto-commit failed for agent {}: {}", agent_id, e);
         }
 
         self.update_session_activity(&agent_id).await;

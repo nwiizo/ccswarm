@@ -218,12 +218,12 @@ impl<T: TemplateStorage> TemplateManager<T> {
         }
 
         // Validate choice options
-        if let VariableType::Choice(ref choices) = variable.variable_type {
-            if choices.is_empty() {
-                return Err(TemplateError::ValidationFailed {
-                    reason: format!("Choice variable '{}' has no options", variable.name),
-                });
-            }
+        if let VariableType::Choice(ref choices) = variable.variable_type
+            && choices.is_empty()
+        {
+            return Err(TemplateError::ValidationFailed {
+                reason: format!("Choice variable '{}' has no options", variable.name),
+            });
         }
 
         // Validate default value against type

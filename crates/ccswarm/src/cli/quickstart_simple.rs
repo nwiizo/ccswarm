@@ -55,8 +55,11 @@ pub async fn handle_quickstart_simple(
             std::io::stdout().flush()?;
             let mut key = String::new();
             std::io::stdin().read_line(&mut key)?;
-            // SAFETY: This is run at application startup before any threads are spawned,
-            // so setting environment variables is safe.
+            // SAFETY: `std::env::set_var` is unsafe because it is not thread-safe.
+            // This call is safe here because:
+            // 1. It runs during early CLI initialization (quickstart wizard)
+            // 2. The tokio runtime has not yet started multi-threaded execution
+            // 3. No other threads are reading environment variables concurrently
             unsafe {
                 std::env::set_var("ANTHROPIC_API_KEY", key.trim());
             }

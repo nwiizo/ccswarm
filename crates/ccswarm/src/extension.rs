@@ -426,16 +426,16 @@ impl Configurable for Extension {
 
         // Validate resource limits are reasonable
         if let Some(ref limits) = config.resource_limits {
-            if let Some(max_memory) = limits.max_memory {
-                if max_memory > 1024 * 1024 * 1024 {
-                    // 1GB
-                    return Err(CCSwarmError::config("Memory limit too high"));
-                }
+            if let Some(max_memory) = limits.max_memory
+                && max_memory > 1024 * 1024 * 1024
+            {
+                // 1GB
+                return Err(CCSwarmError::config("Memory limit too high"));
             }
-            if let Some(max_cpu) = limits.max_cpu_percent {
-                if max_cpu > 100.0 {
-                    return Err(CCSwarmError::config("CPU limit cannot exceed 100%"));
-                }
+            if let Some(max_cpu) = limits.max_cpu_percent
+                && max_cpu > 100.0
+            {
+                return Err(CCSwarmError::config("CPU limit cannot exceed 100%"));
             }
         }
 

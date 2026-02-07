@@ -142,10 +142,10 @@ impl ProgressTracker {
                 }
 
                 // Show latest sub-message if any
-                if !sub_msgs.is_empty() {
-                    if let Some(last_msg) = sub_msgs.last() {
-                        print!(" - {}", last_msg.dimmed());
-                    }
+                if !sub_msgs.is_empty()
+                    && let Some(last_msg) = sub_msgs.last()
+                {
+                    print!(" - {}", last_msg.dimmed());
                 }
 
                 let _ = io::stdout().flush();

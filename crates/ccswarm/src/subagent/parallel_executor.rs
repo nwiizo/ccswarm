@@ -742,11 +742,11 @@ impl ParallelExecutor {
     /// Cancel an active execution
     pub async fn cancel(&self, execution_id: &str) -> bool {
         let mut active = self.active_executions.write().await;
-        if let Some(status) = active.get_mut(execution_id) {
-            if *status == ExecutionStatus::Running {
-                *status = ExecutionStatus::Cancelled;
-                return true;
-            }
+        if let Some(status) = active.get_mut(execution_id)
+            && *status == ExecutionStatus::Running
+        {
+            *status = ExecutionStatus::Cancelled;
+            return true;
         }
         false
     }

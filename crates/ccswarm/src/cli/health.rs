@@ -109,11 +109,11 @@ impl SystemHealthReport {
         println!("{}", "Component Health Checks:".bold());
         for check in &self.checks {
             println!("  {}", check);
-            if let Some(details) = &check.details {
-                if let Some(obj) = details.as_object() {
-                    for (key, value) in obj {
-                        println!("    - {}: {}", key.dimmed(), value);
-                    }
+            if let Some(details) = &check.details
+                && let Some(obj) = details.as_object()
+            {
+                for (key, value) in obj {
+                    println!("    - {}: {}", key.dimmed(), value);
                 }
             }
         }
@@ -511,12 +511,10 @@ impl HealthChecker {
         // Read from task queue file if exists
         if let Ok(content) =
             tokio::fs::read_to_string(".ccswarm/coordination/task_queue.json").await
+            && let Ok(queue) = serde_json::from_str::<serde_json::Value>(&content)
+            && let Some(tasks) = queue.get("pending_tasks").and_then(|v| v.as_array())
         {
-            if let Ok(queue) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(tasks) = queue.get("pending_tasks").and_then(|v| v.as_array()) {
-                    return tasks.len();
-                }
-            }
+            return tasks.len();
         }
         0
     }

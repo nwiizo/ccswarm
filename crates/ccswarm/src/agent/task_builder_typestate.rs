@@ -117,52 +117,52 @@ impl TypedTaskBuilder<NoDescription> {
         let mut task_type = TaskType::Development;
 
         // Parse priority modifier [high], [medium], [low]
-        if let Some(start) = description.find('[') {
-            if let Some(end) = description[start..].find(']') {
-                let modifier = &description[start + 1..start + end].to_lowercase();
+        if let Some(start) = description.find('[')
+            && let Some(end) = description[start..].find(']')
+        {
+            let modifier = &description[start + 1..start + end].to_lowercase();
 
-                // Try to parse as priority
-                if let Ok(p) = modifier.parse::<Priority>() {
-                    priority = p;
-                    description = format!(
-                        "{}{}",
-                        &description[..start],
-                        &description[start + end + 1..]
-                    )
-                    .trim()
-                    .to_string();
-                }
+            // Try to parse as priority
+            if let Ok(p) = modifier.parse::<Priority>() {
+                priority = p;
+                description = format!(
+                    "{}{}",
+                    &description[..start],
+                    &description[start + end + 1..]
+                )
+                .trim()
+                .to_string();
+            }
 
-                // Try to parse as task type
-                if let Ok(t) = modifier.parse::<TaskType>() {
-                    task_type = t;
-                    description = format!(
-                        "{}{}",
-                        &description[..start],
-                        &description[start + end + 1..]
-                    )
-                    .trim()
-                    .to_string();
-                }
+            // Try to parse as task type
+            if let Ok(t) = modifier.parse::<TaskType>() {
+                task_type = t;
+                description = format!(
+                    "{}{}",
+                    &description[..start],
+                    &description[start + end + 1..]
+                )
+                .trim()
+                .to_string();
             }
         }
 
         // Check for second modifier
-        if let Some(start) = description.find('[') {
-            if let Some(end) = description[start..].find(']') {
-                let modifier = &description[start + 1..start + end].to_lowercase();
+        if let Some(start) = description.find('[')
+            && let Some(end) = description[start..].find(']')
+        {
+            let modifier = &description[start + 1..start + end].to_lowercase();
 
-                // Try to parse as task type if we haven't found one yet
-                if let Ok(t) = modifier.parse::<TaskType>() {
-                    task_type = t;
-                    description = format!(
-                        "{}{}",
-                        &description[..start],
-                        &description[start + end + 1..]
-                    )
-                    .trim()
-                    .to_string();
-                }
+            // Try to parse as task type if we haven't found one yet
+            if let Ok(t) = modifier.parse::<TaskType>() {
+                task_type = t;
+                description = format!(
+                    "{}{}",
+                    &description[..start],
+                    &description[start + end + 1..]
+                )
+                .trim()
+                .to_string();
             }
         }
 

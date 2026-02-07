@@ -193,10 +193,10 @@ impl TaskQueue {
             Priority::Medium,
             Priority::Low,
         ] {
-            if let Some(queue) = pending.get_mut(&priority) {
-                if let Some(task) = queue.pop_front() {
-                    return Some(task);
-                }
+            if let Some(queue) = pending.get_mut(&priority)
+                && let Some(task) = queue.pop_front()
+            {
+                return Some(task);
             }
         }
         None

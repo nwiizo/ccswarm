@@ -51,7 +51,7 @@ impl AutoCreateEngine {
     pub fn new() -> Self {
         let mut templates = HashMap::new();
 
-        // TODOアプリテンプレート
+        // TODO app template
         templates.insert(AppType::Todo, vec![
             TaskTemplate {
                 id: "todo-frontend".to_string(),
@@ -100,7 +100,7 @@ impl AutoCreateEngine {
             },
         ]);
 
-        // ブログアプリテンプレート
+        // Blog app template
         templates.insert(
             AppType::Blog,
             vec![
@@ -237,10 +237,10 @@ impl AutoCreateEngine {
         }
 
         // Add mobile responsiveness if mentioned
-        if desc_lower.contains("mobile") || desc_lower.contains("responsive") {
-            if let Some(frontend_task) = tasks.iter_mut().find(|t| t.target_agent == "frontend") {
-                frontend_task.description += " with mobile-responsive design";
-            }
+        if (desc_lower.contains("mobile") || desc_lower.contains("responsive"))
+            && let Some(frontend_task) = tasks.iter_mut().find(|t| t.target_agent == "frontend")
+        {
+            frontend_task.description += " with mobile-responsive design";
         }
     }
 

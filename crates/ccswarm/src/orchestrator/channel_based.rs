@@ -170,10 +170,10 @@ impl Orchestrator {
         let task = self.pending_tasks.remove(task_index);
 
         // Verify agent is available
-        if let Some(current_task) = self.active_agents.get(&agent_id) {
-            if current_task.is_some() {
-                return Err(CCSwarmError::orchestrator("Agent is busy", None));
-            }
+        if let Some(current_task) = self.active_agents.get(&agent_id)
+            && current_task.is_some()
+        {
+            return Err(CCSwarmError::orchestrator("Agent is busy", None));
         }
 
         // Assign the task

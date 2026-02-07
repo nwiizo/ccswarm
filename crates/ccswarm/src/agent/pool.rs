@@ -646,10 +646,7 @@ impl AgentPool {
         let available_agents: Vec<_> = self
             .agents
             .iter()
-            .map(|entry| {
-                let agent_type = entry.key().clone();
-                agent_type
-            })
+            .map(|entry| entry.key().clone())
             .collect();
 
         if available_agents.is_empty() {

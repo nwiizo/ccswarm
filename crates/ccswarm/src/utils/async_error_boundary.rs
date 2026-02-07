@@ -22,7 +22,11 @@ where
     type Output = Result<T, CCSwarmError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // Safety: we're not moving the future, just polling it
+        // SAFETY: This is a manual pin projection. The `future` field is structurally pinned:
+        // - It is never moved after being pinned (no mem::swap, no mem::replace)
+        // - It is never exposed via &mut after pinning
+        // - The Drop impl does not move it
+        // This is equivalent to what the `pin-project` crate generates automatically.
         unsafe {
             let this = self.get_unchecked_mut();
             let future = Pin::new_unchecked(&mut this.future);

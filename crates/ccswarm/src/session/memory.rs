@@ -692,10 +692,10 @@ impl EpisodicMemory {
 
     fn add_episode(&mut self, episode: Episode) {
         // Remove oldest episode if at capacity
-        if self.episodes.len() >= self.max_episodes {
-            if let Some(old_episode) = self.episodes.pop_front() {
-                self.emotional_markers.remove(&old_episode.id);
-            }
+        if self.episodes.len() >= self.max_episodes
+            && let Some(old_episode) = self.episodes.pop_front()
+        {
+            self.emotional_markers.remove(&old_episode.id);
         }
 
         // Add emotional marker if significant
