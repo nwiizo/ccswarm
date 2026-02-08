@@ -99,6 +99,10 @@ scripts/*.sh
 # Git worktrees
 crates/worktrees/
 
+# Test binaries (compiled outside target/)
+sangha_trait_test
+test_sangha_integration
+
 # Mutation testing output
 mutants.out/
 mutants.out.old/
