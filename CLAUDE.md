@@ -55,6 +55,7 @@ Automated validation via Claude Code hooks:
 
 ### Error Handling
 - `CCSwarmError` variants are **struct variants** (not tuple): `CCSwarmError::Agent { agent_id, message, source }`
+- Other variants: `Session { session_id, message, source }`, `Configuration { field, message }`, `Provider { provider, message, source }`
 - Never use `.unwrap()` in production; use `Result<T, E>` with `thiserror`
 
 ### Module Patterns
