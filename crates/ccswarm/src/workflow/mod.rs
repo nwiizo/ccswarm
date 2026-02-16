@@ -3,13 +3,44 @@
 //! Enables defining agent workflows as directed graphs with nodes (tasks)
 //! and edges (dependencies/transitions).
 
+pub mod arpeggio;
+pub mod cycle;
 mod execution;
+pub mod facets;
+pub mod github_issue;
 mod graph;
+pub mod i18n;
+pub mod interactive;
+pub mod judge;
 mod node;
+pub mod permissions;
+pub mod piece;
+pub mod pipeline;
+pub mod watch;
 
+pub use arpeggio::{ArpeggioConfig, ArpeggioExecutor, ArpeggioItem, ArpeggioResult};
+pub use cycle::{CycleAnalysis, CycleDetector, LoopStrategy, LoopTracker};
 pub use execution::{ExecutionContext, ExecutionResult, WorkflowExecutor};
+pub use facets::{
+    ComposedPrompt, FacetRegistry, KnowledgeFacet, PersonaFacet, PolicyFacet, builtin_personas,
+    builtin_policies,
+};
+pub use github_issue::{GitHubIssue, GitHubIssueConfig, IssueResult, IssueTaskGenerator};
 pub use graph::{Workflow, WorkflowBuilder, WorkflowError};
+pub use i18n::{I18nManager, Language};
+pub use interactive::{InteractiveAction, InteractiveConfig, InteractiveMode, InteractiveSession};
+pub use judge::{JudgeConfig, JudgeResult, MatchMethod, MovementJudge};
 pub use node::{NodeId, NodeStatus, NodeType, WorkflowNode};
+pub use permissions::PermissionEnforcer;
+pub use piece::{
+    Movement, MovementPermission, MovementRule, OutputContract, Piece, PieceEngine, PieceState,
+    PieceStatus, RuleCondition, builtin_pieces,
+};
+pub use pipeline::{
+    PipelineConfig, PipelineConfigBuilder, PipelineExitCode, PipelineOutput, PipelineRunner,
+    PipelineStatus,
+};
+pub use watch::{WatchConfig, WatchController, WatchState};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
