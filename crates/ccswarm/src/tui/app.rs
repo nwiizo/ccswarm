@@ -388,9 +388,25 @@ impl App {
     /// Delete current session
     pub async fn delete_current_session(&mut self) -> Result<()> {
         if let Some(agent) = self.agents.get(self.selected_agent) {
-            self.add_log("System", &format!("Deleting agent: {}", agent.name))
+            let agent_name = agent.name.clone();
+            self.add_log("System", &format!("Deleting agent: {}", agent_name))
                 .await;
-            // TODO: Implement actual agent deletion
+
+            // Remove agent from the list
+            self.agents.remove(self.selected_agent);
+
+            // Adjust selection index
+            if self.selected_agent >= self.agents.len() && !self.agents.is_empty() {
+                self.selected_agent = self.agents.len() - 1;
+            } else if self.agents.is_empty() {
+                self.selected_agent = 0;
+            }
+
+            self.add_log("System", &format!("Agent '{}' removed", agent_name))
+                .await;
+            self.update_system_stats().await?;
+        } else {
+            self.add_log("System", "No agent selected to delete").await;
         }
         Ok(())
     }
@@ -600,7 +616,7 @@ impl App {
                     task_type: format!("{}", task.task_type),
                     status: "Pending".to_string(),
                     assigned_agent: None,
-                    created_at: Utc::now(), // TODO: Get actual creation time
+                    created_at: Utc::now(), // Task struct has no created_at field; use current time
                 };
                 self.tasks.push(task_info);
             }
@@ -773,10 +789,44 @@ impl App {
             "frontend" | "backend" | "devops" | "qa" => {
                 self.add_log("System", &format!("Creating {} agent...", agent_type))
                     .await;
-                // TODO: Implement actual agent creation
+
+                // Create a new agent info entry for TUI display
+                let agent_id = format!(
+                    "{}-{}",
+                    agent_type,
+                    uuid::Uuid::new_v4()
+                        .to_string()
+                        .split('-')
+                        .next()
+                        .unwrap_or("0000")
+                );
+                let specialization = match agent_type.as_str() {
+                    "frontend" => "Frontend",
+                    "backend" => "Backend",
+                    "devops" => "DevOps",
+                    "qa" => "QA",
+                    _ => "General",
+                };
+
+                self.agents.push(AgentInfo {
+                    id: agent_id.clone(),
+                    name: format!("{}-specialist", agent_type),
+                    specialization: specialization.to_string(),
+                    provider_type: "claude_code".to_string(),
+                    provider_icon: "🤖".to_string(),
+                    provider_color: "blue".to_string(),
+                    status: crate::agent::AgentStatus::Available,
+                    current_task: None,
+                    tasks_completed: 0,
+                    last_activity: Utc::now(),
+                    workspace: format!(".worktrees/{}", agent_type),
+                });
+
+                self.update_system_stats().await?;
+
                 self.add_log(
                     "System",
-                    &format!("{} agent created successfully", agent_type),
+                    &format!("{} agent created: {}", agent_type, agent_id),
                 )
                 .await;
             }
@@ -1017,18 +1067,48 @@ impl App {
     /// Start orchestrator
     async fn start_orchestrator(&mut self) -> Result<()> {
         self.add_log("System", "Starting orchestrator...").await;
-        // TODO: Implement actual orchestrator start
-        self.system_status = "Running".to_string();
-        self.add_log("System", "Orchestrator started successfully")
-            .await;
+
+        // Initialize execution engine if not present
+        if self.execution_engine.is_none() {
+            let config = crate::config::CcswarmConfig::default();
+            match crate::execution::ExecutionEngine::new(&config).await {
+                Ok(engine) => {
+                    if let Err(e) = engine.start().await {
+                        self.add_log("System", &format!("Engine start failed: {}", e))
+                            .await;
+                        self.system_status = "Error".to_string();
+                        return Ok(());
+                    }
+                    self.execution_engine = Some(engine);
+                    self.system_status = "Running".to_string();
+                    self.add_log("System", "Orchestrator started with execution engine")
+                        .await;
+                }
+                Err(e) => {
+                    self.add_log("System", &format!("Failed to create engine: {}", e))
+                        .await;
+                    // Still mark as running for basic coordination
+                    self.system_status = "Running (limited)".to_string();
+                    self.add_log("System", "Orchestrator running in limited mode")
+                        .await;
+                }
+            }
+        } else {
+            self.system_status = "Running".to_string();
+            self.add_log("System", "Orchestrator already running").await;
+        }
+
         Ok(())
     }
 
     /// Stop orchestrator
     async fn stop_orchestrator(&mut self) -> Result<()> {
         self.add_log("System", "Stopping orchestrator...").await;
-        // TODO: Implement actual orchestrator stop
+
+        // Drop the execution engine to stop it
+        self.execution_engine = None;
         self.system_status = "Stopped".to_string();
+
         self.add_log("System", "Orchestrator stopped").await;
         Ok(())
     }
@@ -1036,16 +1116,62 @@ impl App {
     /// List worktrees
     async fn list_worktrees(&mut self) -> Result<()> {
         self.add_log("System", "Git worktrees:").await;
-        // TODO: Implement actual worktree listing
-        self.add_log("System", "  No worktrees found").await;
+
+        // Use git command to list worktrees
+        let output = tokio::process::Command::new("git")
+            .args(["worktree", "list"])
+            .output()
+            .await;
+
+        match output {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if stdout.trim().is_empty() {
+                    self.add_log("System", "  No worktrees found").await;
+                } else {
+                    for line in stdout.lines() {
+                        self.add_log("System", &format!("  {}", line)).await;
+                    }
+                }
+            }
+            Ok(_) => {
+                self.add_log("System", "  Failed to list worktrees (git error)")
+                    .await;
+            }
+            Err(e) => {
+                self.add_log("System", &format!("  Git not available: {}", e))
+                    .await;
+            }
+        }
+
         Ok(())
     }
 
     /// Prune worktrees
     async fn prune_worktrees(&mut self) -> Result<()> {
         self.add_log("System", "Pruning stale worktrees...").await;
-        // TODO: Implement actual worktree pruning
-        self.add_log("System", "Worktree pruning completed").await;
+
+        let output = tokio::process::Command::new("git")
+            .args(["worktree", "prune"])
+            .output()
+            .await;
+
+        match output {
+            Ok(output) if output.status.success() => {
+                self.add_log("System", "Worktree pruning completed successfully")
+                    .await;
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                self.add_log("System", &format!("Pruning failed: {}", stderr))
+                    .await;
+            }
+            Err(e) => {
+                self.add_log("System", &format!("Git not available: {}", e))
+                    .await;
+            }
+        }
+
         Ok(())
     }
 

@@ -126,6 +126,8 @@ impl AgentMailbox {
 /// Central mailbox system managing all agent mailboxes
 pub struct MailboxSystem {
     mailboxes: HashMap<String, AgentMailbox>,
+    /// Team membership: team_id -> set of agent_ids
+    team_members: HashMap<String, Vec<String>>,
     max_mailbox_size: usize,
 }
 
@@ -133,6 +135,7 @@ impl MailboxSystem {
     pub fn new() -> Self {
         Self {
             mailboxes: HashMap::new(),
+            team_members: HashMap::new(),
             max_mailbox_size: 1000,
         }
     }
@@ -142,6 +145,20 @@ impl MailboxSystem {
         self.mailboxes
             .entry(id)
             .or_insert_with(|| AgentMailbox::new(self.max_mailbox_size));
+    }
+
+    /// Add an agent to a team for team-scoped messaging
+    pub fn add_to_team(&mut self, agent_id: impl Into<String>, team_id: impl Into<String>) {
+        let agent = agent_id.into();
+        let team = team_id.into();
+        self.team_members.entry(team).or_default().push(agent);
+    }
+
+    /// Remove an agent from a team
+    pub fn remove_from_team(&mut self, agent_id: &str, team_id: &str) {
+        if let Some(members) = self.team_members.get_mut(team_id) {
+            members.retain(|id| id != agent_id);
+        }
     }
 
     pub fn send(&mut self, message: MailboxMessage) {
@@ -160,15 +177,19 @@ impl MailboxSystem {
                 }
             }
             MessageTarget::Team(team_id) => {
-                // For team messages, deliver to all team members
-                // In practice, we'd look up team membership
                 let sender = message.from.clone();
-                for (agent_id, mailbox) in &mut self.mailboxes {
-                    if *agent_id != sender {
-                        mailbox.deliver(message.clone());
+
+                // Filter delivery to team members only
+                if let Some(members) = self.team_members.get(team_id) {
+                    for member_id in members {
+                        if *member_id != sender
+                            && let Some(mailbox) = self.mailboxes.get_mut(member_id)
+                        {
+                            mailbox.deliver(message.clone());
+                        }
                     }
                 }
-                let _ = team_id; // TODO: filter by team membership instead of broadcasting to all
+                // If no team membership info, don't broadcast (fail silently)
             }
         }
     }

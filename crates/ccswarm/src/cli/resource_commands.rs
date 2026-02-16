@@ -220,10 +220,11 @@ async fn update_resource_limits(
         );
     }
 
-    // TODO: Apply these limits to the session manager
+    // SessionManager takes resource limits at construction via with_resource_monitoring().
+    // Runtime limit changes require restarting the session manager.
     println!(
         "{}",
-        "Note: Resource limits will be applied to new sessions".italic()
+        "Note: Resource limits will be applied when sessions are restarted".italic()
     );
 
     Ok(())

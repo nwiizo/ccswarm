@@ -142,6 +142,12 @@ pub struct Operation {
 
     /// Associated task information
     pub task: Option<Task>,
+
+    /// Expected exit code for command operations (None = any exit code OK)
+    pub expected_exit_code: Option<i32>,
+
+    /// Actual exit code after execution (set after operation completes)
+    pub actual_exit_code: Option<i32>,
 }
 
 /// Engine for evaluating whether operations should be auto-accepted
@@ -186,6 +192,8 @@ impl AutoAcceptEngine {
             risk_level: 5, // Default medium risk
             reversible: false,
             task: task.cloned(),
+            expected_exit_code: Some(0), // Default: expect success
+            actual_exit_code: None,      // Set after execution
         };
 
         // Analyze commands to determine operation type and risk
@@ -391,14 +399,23 @@ impl AutoAcceptEngine {
             issues.push(format!("Git repository issues: {}", git_error));
         }
 
-        // TODO: Validate exit codes once Operation struct has these fields
-        // if operation.expected_exit_code.is_some() && operation.actual_exit_code != operation.expected_exit_code {
-        //     issues.push(format!(
-        //         "Exit code mismatch: expected {:?}, got {:?}",
-        //         operation.expected_exit_code,
-        //         operation.actual_exit_code
-        //     ));
-        // }
+        // Validate exit codes if expected code is set
+        if let Some(expected) = operation.expected_exit_code {
+            match operation.actual_exit_code {
+                Some(actual) if actual != expected => {
+                    issues.push(format!(
+                        "Exit code mismatch: expected {}, got {}",
+                        expected, actual
+                    ));
+                }
+                None => {
+                    issues.push(
+                        "Exit code not recorded for operation with expected exit code".to_string(),
+                    );
+                }
+                _ => {} // Matches
+            }
+        }
 
         if issues.is_empty() {
             Ok(ValidationResult::Valid)
