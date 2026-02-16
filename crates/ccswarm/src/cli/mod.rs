@@ -2450,20 +2450,92 @@ impl CliRunner {
         Ok(())
     }
 
-    async fn run_review(&self, _agent: Option<&str>, _strict: bool) -> Result<()> {
-        // TODO: Implement quality review
+    async fn run_review(&self, agent: Option<&str>, strict: bool) -> Result<()> {
+        use crate::orchestrator::llm_quality_judge::{LLMQualityJudge, QualityRubric};
+
+        // Get execution history from the engine
+        let history = if let Some(ref engine) = self.execution_engine {
+            let executor = engine.get_executor();
+            executor.get_execution_history(None).await
+        } else {
+            Vec::new()
+        };
+
+        // Filter by agent if specified
+        let filtered: Vec<_> = if let Some(agent_filter) = agent {
+            history
+                .iter()
+                .filter(|r| {
+                    r.agent_used
+                        .as_deref()
+                        .is_some_and(|a| a.contains(agent_filter))
+                })
+                .collect()
+        } else {
+            history.iter().collect()
+        };
+
+        // Create quality judge with appropriate rubric
+        let mut rubric = QualityRubric::default();
+        if strict {
+            // Raise all thresholds by 10%
+            for threshold in rubric.thresholds.values_mut() {
+                *threshold = (*threshold + 0.1).min(1.0);
+            }
+        }
+        let _judge = LLMQualityJudge::with_rubric(rubric);
+
+        let reviewed_count = filtered.len();
+        let succeeded = filtered.iter().filter(|r| r.success).count();
+        let failed = filtered.iter().filter(|r| !r.success).count();
+
         if self.json_output {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "status": "success",
                     "message": "Quality review completed",
-                    "issues": 0,
+                    "tasks_reviewed": reviewed_count,
+                    "tasks_succeeded": succeeded,
+                    "tasks_failed": failed,
+                    "strict_mode": strict,
+                    "agent_filter": agent,
                 }))?
             );
         } else {
-            println!("🔍 Quality review completed");
-            println!("   No issues found");
+            println!(
+                "🔍 Quality Review {}",
+                if strict { "(Strict Mode)" } else { "" }
+            );
+            println!("================");
+            println!();
+
+            if let Some(agent_filter) = agent {
+                println!("   Filter: Agent '{}'", agent_filter);
+            }
+
+            if reviewed_count == 0 {
+                println!("   No completed tasks to review");
+                if self.execution_engine.is_none() {
+                    println!("   Start ccswarm with 'ccswarm start' to enable task execution");
+                }
+            } else {
+                println!("   Tasks reviewed: {}", reviewed_count);
+                println!("   Succeeded: {}", format!("{}", succeeded).bright_green());
+                println!("   Failed: {}", format!("{}", failed).bright_red());
+
+                // Show details for failed tasks
+                for result in &filtered {
+                    if !result.success {
+                        println!();
+                        println!(
+                            "   ❌ Task {}: {}",
+                            result.task_id,
+                            result.error.as_deref().unwrap_or("Unknown error")
+                        );
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -2650,21 +2722,112 @@ impl CliRunner {
         Ok(())
     }
 
-    async fn show_logs(&self, _follow: bool, _agent: Option<&str>, _lines: usize) -> Result<()> {
-        // TODO: Implement log viewing
+    async fn show_logs(&self, follow: bool, agent: Option<&str>, lines: usize) -> Result<()> {
+        use std::fs;
+        use std::io::{BufRead, BufReader};
+
+        let logs_dir = self.repo_path.join(".ccswarm/logs");
+
+        // Check if logs directory exists
+        if !logs_dir.exists() {
+            if self.json_output {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "status": "success",
+                        "message": "No logs directory found",
+                        "lines": 0,
+                    }))?
+                );
+            } else {
+                println!("📝 Logs");
+                println!("======");
+                println!("No logs directory found at {}", logs_dir.display());
+                println!("Run 'ccswarm start' to create logs");
+            }
+            return Ok(());
+        }
+
+        // Read log files
+        let mut log_entries = Vec::new();
+
+        for entry in fs::read_dir(&logs_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if !path.is_file() {
+                continue;
+            }
+
+            // Filter by agent if specified
+            if let Some(agent_filter) = agent
+                && let Some(filename) = path.file_name().and_then(|n| n.to_str())
+                && !filename.contains(agent_filter)
+            {
+                continue;
+            }
+
+            // Read log file
+            let file = fs::File::open(&path)?;
+            let reader = BufReader::new(file);
+
+            for line_content in reader.lines().map_while(Result::ok) {
+                log_entries.push((
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    line_content,
+                ));
+            }
+        }
+
+        // Get last N lines
+        let start_idx = if log_entries.len() > lines {
+            log_entries.len() - lines
+        } else {
+            0
+        };
+        let displayed_logs: Vec<_> = log_entries[start_idx..].to_vec();
+
         if self.json_output {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "status": "success",
                     "message": "Logs displayed",
-                    "lines": 0,
+                    "lines": displayed_logs.len(),
+                    "total_lines": log_entries.len(),
+                    "logs": displayed_logs.iter().map(|(file, content)| {
+                        serde_json::json!({
+                            "file": file,
+                            "content": content,
+                        })
+                    }).collect::<Vec<_>>(),
                 }))?
             );
         } else {
             println!("📝 Logs");
             println!("======");
-            println!("No logs available yet");
+            if let Some(agent_filter) = agent {
+                println!("Agent filter: {}", agent_filter);
+            }
+            println!("Showing last {} lines", lines);
+            println!();
+
+            for (file, content) in displayed_logs {
+                println!("[{}] {}", file.bright_blue(), content);
+            }
+
+            if log_entries.is_empty() {
+                println!("No logs available yet");
+            }
+
+            if follow {
+                println!();
+                println!("⚠️  Follow mode requires the TUI");
+                println!("   Run: ccswarm tui --follow-logs");
+            }
         }
 
         Ok(())
@@ -3064,20 +3227,90 @@ impl CliRunner {
             }
 
             DelegateAction::Stats { detailed, period } => {
-                // TODO: Implement delegation statistics
+                // Get stats from execution engine if available
+                let (stats, history) = if let Some(ref engine) = self.execution_engine {
+                    let executor = engine.get_executor();
+                    let s = executor.get_stats().await;
+                    let h = executor.get_execution_history(None).await;
+                    (Some(s), h)
+                } else {
+                    (None, Vec::new())
+                };
+
+                // Count delegations per agent
+                let mut agent_counts: std::collections::HashMap<String, (usize, usize)> =
+                    std::collections::HashMap::new();
+                for result in &history {
+                    if let Some(ref agent) = result.agent_used {
+                        let entry = agent_counts.entry(agent.clone()).or_default();
+                        entry.0 += 1; // total
+                        if result.success {
+                            entry.1 += 1; // succeeded
+                        }
+                    }
+                }
+
                 if self.json_output {
+                    let agent_stats: Vec<_> = agent_counts
+                        .iter()
+                        .map(|(agent, (total, succeeded))| {
+                            serde_json::json!({
+                                "agent": agent,
+                                "total_tasks": total,
+                                "succeeded": succeeded,
+                                "failed": total - succeeded,
+                            })
+                        })
+                        .collect();
+
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&serde_json::json!({
                             "status": "success",
                             "message": "Delegation statistics",
                             "period_hours": period,
-                            "detailed": detailed,
+                            "total_delegations": history.len(),
+                            "agents": agent_stats,
                         }))?
                     );
                 } else {
                     println!("📊 Delegation Statistics (last {} hours)", period);
-                    println!("   Feature not yet implemented");
+                    println!("========================================");
+                    println!();
+
+                    if let Some(ref s) = stats {
+                        println!("   Total tasks executed: {}", s.tasks_executed);
+                        println!(
+                            "   Succeeded: {}",
+                            format!("{}", s.tasks_succeeded).bright_green()
+                        );
+                        println!("   Failed: {}", format!("{}", s.tasks_failed).bright_red());
+                        println!("   Orchestration usage: {:.1}%", s.orchestration_usage);
+                        println!(
+                            "   Average duration: {:.1}s",
+                            s.average_duration.as_secs_f64()
+                        );
+                    } else {
+                        println!("   No execution engine active. Start with 'ccswarm start'");
+                    }
+
+                    if *detailed && !agent_counts.is_empty() {
+                        println!();
+                        println!("   Per-Agent Breakdown:");
+                        for (agent, (total, succeeded)) in &agent_counts {
+                            let success_rate = if *total > 0 {
+                                (*succeeded as f64 / *total as f64) * 100.0
+                            } else {
+                                0.0
+                            };
+                            println!(
+                                "     {}: {} tasks ({:.0}% success)",
+                                agent.bright_cyan(),
+                                total,
+                                success_rate
+                            );
+                        }
+                    }
                 }
             }
 
@@ -3836,8 +4069,105 @@ impl CliRunner {
 
                     if auto_deploy {
                         println!("\n🚀 Auto-deploying application...");
-                        // TODO: Implement auto-deployment
-                        println!("   ⚠️ Auto-deployment not yet implemented");
+
+                        // Check for Dockerfile
+                        let dockerfile_path = output.join("Dockerfile");
+                        if !dockerfile_path.exists() {
+                            println!("   Creating Dockerfile...");
+
+                            // Generate basic Dockerfile based on detected app type
+                            let dockerfile_content = if output.join("package.json").exists() {
+                                // Node.js application
+                                r#"FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+EXPOSE 3000
+CMD ["npm", "start"]
+"#
+                            } else if output.join("Cargo.toml").exists() {
+                                // Rust application
+                                r#"FROM rust:1.70 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bullseye-slim
+COPY --from=builder /app/target/release/app /usr/local/bin/app
+EXPOSE 8080
+CMD ["app"]
+"#
+                            } else if output.join("requirements.txt").exists() {
+                                // Python application
+                                r#"FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["python", "app.py"]
+"#
+                            } else {
+                                r#"FROM alpine:latest
+WORKDIR /app
+COPY . .
+CMD ["/bin/sh"]
+"#
+                            };
+
+                            tokio::fs::write(&dockerfile_path, dockerfile_content)
+                                .await
+                                .context("Failed to create Dockerfile")?;
+                            println!("   ✅ Dockerfile created");
+                        }
+
+                        // Build Docker image
+                        println!("   Building Docker image...");
+                        let image_name =
+                            format!("{}-app", description.to_lowercase().replace(' ', "-"));
+
+                        let build_status = tokio::process::Command::new("docker")
+                            .arg("build")
+                            .arg("-t")
+                            .arg(&image_name)
+                            .arg(output.as_path())
+                            .status()
+                            .await
+                            .context("Failed to execute docker build")?;
+
+                        if !build_status.success() {
+                            println!("   ⚠️ Docker build failed");
+                        } else {
+                            println!("   ✅ Docker image built: {}", image_name);
+
+                            // Create docker-compose.yml if needed
+                            let compose_path = output.join("docker-compose.yml");
+                            if !compose_path.exists() {
+                                println!("   Creating docker-compose.yml...");
+                                let compose_content = format!(
+                                    r#"version: '3.8'
+services:
+  app:
+    image: {}
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+"#,
+                                    image_name
+                                );
+
+                                tokio::fs::write(&compose_path, compose_content)
+                                    .await
+                                    .context("Failed to create docker-compose.yml")?;
+                                println!("   ✅ docker-compose.yml created");
+                            }
+
+                            println!("\n   🎉 Deployment ready!");
+                            println!("   Run: cd {} && docker-compose up", output.display());
+                        }
                     }
                 }
             }
@@ -5267,7 +5597,39 @@ impl CliRunner {
 
                     if *auto_assign {
                         println!("Auto-assigning to best agent...");
-                        // TODO: Implement auto-assignment logic
+
+                        use crate::orchestrator::master_delegation::{
+                            DelegationStrategy, MasterDelegationEngine,
+                        };
+                        let mut engine = MasterDelegationEngine::new(DelegationStrategy::Hybrid);
+
+                        match engine.delegate_task(task.clone()) {
+                            Ok(decision) => {
+                                println!(
+                                    "   ✅ Assigned to: {}",
+                                    decision.target_agent.name().bright_green()
+                                );
+                                println!("   Confidence: {:.1}%", decision.confidence * 100.0);
+                                println!("   Reason: {}", decision.reasoning);
+
+                                // Add to execution queue if engine is running
+                                if let Some(ref engine) = self.execution_engine {
+                                    let assigned_task = task
+                                        .clone()
+                                        .assign_to(decision.target_agent.name().to_string());
+                                    let task_id =
+                                        engine.get_executor().add_task(assigned_task).await;
+                                    println!(
+                                        "   📋 Queued for execution: {}",
+                                        task_id.bright_cyan()
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                println!("   ⚠️ Auto-assignment failed: {}", e);
+                                println!("   Task created but not assigned");
+                            }
+                        }
                     }
                 }
             }
@@ -5486,10 +5848,17 @@ impl CliRunner {
         let status_tracker = StatusTracker::new().await?;
         let health_checker = HealthChecker::new(status_tracker);
 
-        // Add monitoring system if available
-        // TODO: Get monitoring system from running orchestrator
-        // let monitoring = MonitoringSystem::new();
-        // let health_checker = health_checker.with_monitoring(monitoring);
+        // Get execution stats from execution engine if available
+        let execution_stats = if let Some(ref engine) = self.execution_engine {
+            let stats = engine.get_executor().get_stats().await;
+            Some((
+                stats.tasks_executed,
+                stats.tasks_succeeded,
+                stats.tasks_failed,
+            ))
+        } else {
+            None
+        };
 
         // Perform health checks based on flags
         let report = if check_agents && !check_sessions && !resources {
@@ -5562,13 +5931,40 @@ impl CliRunner {
         // Output results based on format
         match format {
             "json" => {
-                println!("{}", serde_json::to_string_pretty(&report)?);
+                let mut json_report = serde_json::to_value(&report)?;
+
+                // Add execution stats if available
+                if let Some((executed, succeeded, failed)) = execution_stats {
+                    json_report["execution_stats"] = serde_json::json!({
+                        "tasks_executed": executed,
+                        "tasks_succeeded": succeeded,
+                        "tasks_failed": failed,
+                    });
+                }
+
+                println!("{}", serde_json::to_string_pretty(&json_report)?);
             }
             _ => {
                 if detailed {
                     report.print_detailed();
                 } else {
                     report.print_summary();
+                }
+
+                // Print execution stats if available
+                if let Some((executed, succeeded, failed)) = execution_stats {
+                    println!();
+                    println!("{}", "Execution Statistics:".bright_cyan());
+                    println!("  Tasks executed: {}", executed);
+                    println!(
+                        "  Tasks succeeded: {}",
+                        format!("{}", succeeded).bright_green()
+                    );
+                    println!("  Tasks failed: {}", format!("{}", failed).bright_red());
+                    if executed > 0 {
+                        let success_rate = (succeeded as f64 / executed as f64) * 100.0;
+                        println!("  Success rate: {:.1}%", success_rate);
+                    }
                 }
             }
         }

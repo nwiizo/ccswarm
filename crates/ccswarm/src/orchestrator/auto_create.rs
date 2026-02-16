@@ -51,7 +51,7 @@ impl AutoCreateEngine {
     pub fn new() -> Self {
         let mut templates = HashMap::new();
 
-        // TODO app template
+        // Todo app template
         templates.insert(AppType::Todo, vec![
             TaskTemplate {
                 id: "todo-frontend".to_string(),
@@ -124,6 +124,143 @@ impl AutoCreateEngine {
                     task_type: TaskType::Feature,
                     dependencies: vec![],
                     estimated_duration: Some(3600),
+                },
+            ],
+        );
+
+        // E-commerce app template
+        templates.insert(
+            AppType::Ecommerce,
+            vec![
+                TaskTemplate {
+                    id: "ecom-frontend".to_string(),
+                    description: "Create e-commerce storefront with product listing, cart, and checkout".to_string(),
+                    target_agent: "frontend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(3600),
+                },
+                TaskTemplate {
+                    id: "ecom-backend".to_string(),
+                    description: "Create e-commerce API with product catalog, cart, orders, and payment integration".to_string(),
+                    target_agent: "backend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(4800),
+                },
+                TaskTemplate {
+                    id: "ecom-auth".to_string(),
+                    description: "Implement user authentication and account management for e-commerce".to_string(),
+                    target_agent: "backend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(2400),
+                },
+                TaskTemplate {
+                    id: "ecom-tests".to_string(),
+                    description: "Write tests for e-commerce flows including cart, checkout, and payment".to_string(),
+                    target_agent: "qa".to_string(),
+                    priority: Priority::Medium,
+                    task_type: TaskType::Testing,
+                    dependencies: vec!["ecom-frontend".to_string(), "ecom-backend".to_string()],
+                    estimated_duration: Some(2400),
+                },
+                TaskTemplate {
+                    id: "ecom-deploy".to_string(),
+                    description: "Create Docker and deployment configuration for e-commerce app".to_string(),
+                    target_agent: "devops".to_string(),
+                    priority: Priority::Low,
+                    task_type: TaskType::Infrastructure,
+                    dependencies: vec!["ecom-tests".to_string()],
+                    estimated_duration: Some(1800),
+                },
+            ],
+        );
+
+        // API app template
+        templates.insert(
+            AppType::Api,
+            vec![
+                TaskTemplate {
+                    id: "api-backend".to_string(),
+                    description:
+                        "Create RESTful API with CRUD endpoints, validation, and error handling"
+                            .to_string(),
+                    target_agent: "backend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(3600),
+                },
+                TaskTemplate {
+                    id: "api-auth".to_string(),
+                    description: "Implement API authentication with JWT tokens and rate limiting"
+                        .to_string(),
+                    target_agent: "backend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(1800),
+                },
+                TaskTemplate {
+                    id: "api-docs".to_string(),
+                    description: "Generate OpenAPI/Swagger documentation for the API".to_string(),
+                    target_agent: "backend".to_string(),
+                    priority: Priority::Medium,
+                    task_type: TaskType::Documentation,
+                    dependencies: vec!["api-backend".to_string()],
+                    estimated_duration: Some(900),
+                },
+                TaskTemplate {
+                    id: "api-tests".to_string(),
+                    description: "Write integration tests for all API endpoints".to_string(),
+                    target_agent: "qa".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Testing,
+                    dependencies: vec!["api-backend".to_string()],
+                    estimated_duration: Some(2400),
+                },
+            ],
+        );
+
+        // Dashboard app template
+        templates.insert(
+            AppType::Dashboard,
+            vec![
+                TaskTemplate {
+                    id: "dash-frontend".to_string(),
+                    description:
+                        "Create admin dashboard with data tables, charts, and user management UI"
+                            .to_string(),
+                    target_agent: "frontend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(3600),
+                },
+                TaskTemplate {
+                    id: "dash-backend".to_string(),
+                    description:
+                        "Create dashboard API with analytics, user management, and data aggregation"
+                            .to_string(),
+                    target_agent: "backend".to_string(),
+                    priority: Priority::High,
+                    task_type: TaskType::Feature,
+                    dependencies: vec![],
+                    estimated_duration: Some(3600),
+                },
+                TaskTemplate {
+                    id: "dash-tests".to_string(),
+                    description: "Write tests for dashboard components and API endpoints"
+                        .to_string(),
+                    target_agent: "qa".to_string(),
+                    priority: Priority::Medium,
+                    task_type: TaskType::Testing,
+                    dependencies: vec!["dash-frontend".to_string(), "dash-backend".to_string()],
+                    estimated_duration: Some(1800),
                 },
             ],
         );
