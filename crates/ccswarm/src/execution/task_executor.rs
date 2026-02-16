@@ -235,6 +235,27 @@ impl TaskExecutor {
             }
         };
 
+        // Verify agent exists in pool before execution
+        {
+            let pool = agent_pool.lock().await;
+            if !pool.has_agent(&agent_id) {
+                error!(
+                    "Delegated task '{}' to agent '{}' but agent not found in pool",
+                    task_id, agent_id
+                );
+                Self::record_execution_failure(
+                    &task_queue,
+                    &stats,
+                    &execution_history,
+                    &task_id,
+                    format!("Agent '{}' not found in pool", agent_id),
+                    start_time.elapsed(),
+                )
+                .await;
+                return;
+            }
+        }
+
         // Mark task as assigned
         if let Err(e) = task_queue.assign_task(&task_id, &agent_id).await {
             error!("Failed to assign task {}: {}", task_id, e);
@@ -305,14 +326,18 @@ impl TaskExecutor {
     async fn execute_with_orchestration(
         task: &Task,
         agent_pool: &Arc<Mutex<AgentPool>>,
-        _agent_id: &str,
+        agent_id: &str,
     ) -> anyhow::Result<TaskResult> {
         let pool = agent_pool.lock().await;
 
-        // Use the orchestrator interface
         match pool.orchestrate_task(task).await {
             Ok(result) => Ok(result),
-            Err(e) => Err(anyhow::anyhow!("Orchestration failed: {}", e)),
+            Err(e) => Err(anyhow::anyhow!(
+                "Orchestration failed for task '{}' (agent '{}'): {}",
+                task.id,
+                agent_id,
+                e
+            )),
         }
     }
 
@@ -326,7 +351,12 @@ impl TaskExecutor {
 
         match pool.execute_task_with_agent(agent_id, task).await {
             Ok(result) => Ok(result),
-            Err(e) => Err(anyhow::anyhow!("Direct execution failed: {}", e)),
+            Err(e) => Err(anyhow::anyhow!(
+                "Direct execution failed for task '{}' (agent '{}'): {}",
+                task.id,
+                agent_id,
+                e
+            )),
         }
     }
 

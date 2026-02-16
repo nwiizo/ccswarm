@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 use tokio::process::Command;
 use tracing::{info, warn};
 
@@ -60,15 +61,16 @@ impl PersistentClaudeSession {
         // Create working directory if needed
         tokio::fs::create_dir_all(&self.working_dir).await?;
 
-        // Establish identity
-        let identity_prompt = format!(
-            "You are a {} agent. Your workspace is {}. Your specialization is in {}.",
-            self.identity.specialization.name(),
-            self.working_dir.display(),
-            self.identity.specialization.name()
-        );
-
-        self.execute_prompt(&identity_prompt).await?;
+        // Skip identity prompt when using real API to avoid wasting API calls
+        if !self.claude_config.use_real_api {
+            let identity_prompt = format!(
+                "You are a {} agent. Your workspace is {}. Your specialization is in {}.",
+                self.identity.specialization.name(),
+                self.working_dir.display(),
+                self.identity.specialization.name()
+            );
+            self.execute_prompt(&identity_prompt).await?;
+        }
 
         Ok(())
     }
@@ -77,11 +79,15 @@ impl PersistentClaudeSession {
     pub async fn execute_task(&mut self, task: Task) -> Result<TaskResult> {
         info!("📋 Executing task {}: {}", task.id, task.description);
 
+        let start = Instant::now();
+
         // Generate task prompt
         let prompt = self.generate_task_prompt(&task);
 
         // Execute with Claude
         let response = self.execute_prompt(&prompt).await?;
+
+        let duration = start.elapsed();
 
         // Create task result
         Ok(TaskResult {
@@ -94,7 +100,7 @@ impl PersistentClaudeSession {
                 "files_modified": [],
             }),
             error: None,
-            duration: std::time::Duration::from_secs(10),
+            duration,
         })
     }
 
@@ -120,12 +126,15 @@ impl PersistentClaudeSession {
         Ok(format!("{}\n{}", stdout, stderr))
     }
 
-    /// Execute prompt with Claude (simulated for now)
+    /// Execute prompt with Claude
     async fn execute_prompt(&self, prompt: &str) -> Result<String> {
-        info!("🤖 Claude prompt: {}", prompt);
+        if self.claude_config.use_real_api {
+            return self.execute_prompt_real_api(prompt).await;
+        }
 
-        // In real implementation, this would call Claude Code CLI
-        // For now, simulate response based on task
+        info!("🤖 Claude prompt (simulated): {}", prompt);
+
+        // Simulate response based on task content
         let response = if prompt.contains("React") || prompt.contains("frontend") {
             "Created React components with TypeScript. Files: App.tsx, TodoList.tsx, TodoItem.tsx"
         } else if prompt.contains("API") || prompt.contains("backend") {
@@ -137,6 +146,45 @@ impl PersistentClaudeSession {
         };
 
         Ok(response.to_string())
+    }
+
+    /// Execute prompt using the real Claude API
+    async fn execute_prompt_real_api(&self, prompt: &str) -> Result<String> {
+        use crate::providers::claude_api::{ClaudeApiClient, Message};
+
+        info!("🤖 Claude prompt (real API): {}", prompt);
+
+        let client = ClaudeApiClient::new(None)?;
+
+        let system_prompt = format!(
+            "You are a {} specialist agent. Workspace: {}.",
+            self.identity.specialization.name(),
+            self.working_dir.display()
+        );
+
+        let messages = vec![Message {
+            role: "user".to_string(),
+            content: prompt.to_string(),
+        }];
+
+        let response = client
+            .create_completion(
+                &self.claude_config.model,
+                messages,
+                4096,
+                Some(0.0),
+                Some(system_prompt),
+            )
+            .await?;
+
+        let text = response
+            .content
+            .into_iter()
+            .map(|block| block.text)
+            .collect::<Vec<_>>()
+            .join("");
+
+        Ok(text)
     }
 
     /// Generate task prompt
