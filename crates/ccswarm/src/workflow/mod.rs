@@ -25,9 +25,11 @@ pub use facets::{
     ComposedPrompt, FacetRegistry, KnowledgeFacet, PersonaFacet, PolicyFacet, builtin_personas,
     builtin_policies,
 };
-pub use github_issue::{GitHubIssue, GitHubIssueConfig, IssueResult, IssueTaskGenerator};
+pub use github_issue::{
+    GitHubIssue, GitHubIssueConfig, IssueResult, IssueTaskGenerator, parse_gh_issue,
+};
 pub use graph::{Workflow, WorkflowBuilder, WorkflowError};
-pub use i18n::{I18nManager, Language};
+pub use i18n::{I18nManager, Language, LocaleBundle};
 pub use interactive::{InteractiveAction, InteractiveConfig, InteractiveMode, InteractiveSession};
 pub use judge::{JudgeConfig, JudgeResult, MatchMethod, MovementJudge};
 pub use node::{NodeId, NodeStatus, NodeType, WorkflowNode};
@@ -40,7 +42,7 @@ pub use pipeline::{
     PipelineConfig, PipelineConfigBuilder, PipelineExitCode, PipelineOutput, PipelineRunner,
     PipelineStatus,
 };
-pub use watch::{WatchConfig, WatchController, WatchState};
+pub use watch::{ChangeType, FileChange, WatchConfig, WatchController, WatchState};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
