@@ -521,6 +521,11 @@ impl PieceEngine {
         self.pieces.values().collect()
     }
 
+    /// Register a piece directly (for programmatic / test usage)
+    pub fn register_piece(&mut self, piece: Piece) {
+        self.pieces.insert(piece.name.clone(), piece);
+    }
+
     /// Execute a piece workflow
     pub async fn execute_piece(&self, name: &str) -> Result<PieceState> {
         let piece = self
