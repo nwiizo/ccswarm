@@ -3,6 +3,7 @@
 //! This module provides session management for AI agents, integrating with the ai-session
 //! crate for multi-agent coordination and parallel execution.
 
+pub mod bridge;
 pub mod checkpoint;
 pub mod claude_session;
 pub mod error;

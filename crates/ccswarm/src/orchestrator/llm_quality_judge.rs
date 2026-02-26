@@ -295,6 +295,8 @@ impl LLMQualityJudge {
         // Execute Claude for evaluation
         let mut cmd = Command::new("claude");
         cmd.current_dir(workspace_path)
+            .env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
             .arg("-p")
             .arg(&prompt)
             .arg("--json");

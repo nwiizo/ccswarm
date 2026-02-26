@@ -157,103 +157,52 @@ impl ClaudeCodeAgent {
     }
 
     /// Check API endpoints health
+    ///
+    /// Returns empty map when no backend agent is connected.
+    /// Will be populated when the backend agent reports real endpoint data.
     async fn check_api_endpoints(&self) -> Result<HashMap<String, EndpointStatus>> {
-        // In a real implementation, this would check actual endpoints
-        // For now, return simulated data
-        let mut endpoints = HashMap::new();
-
-        let common_endpoints = vec![
-            ("/api/health", "GET"),
-            ("/api/users", "GET"),
-            ("/api/users", "POST"),
-            ("/api/auth/login", "POST"),
-            ("/api/auth/logout", "POST"),
-        ];
-
-        for (path, method) in common_endpoints {
-            endpoints.insert(
-                format!("{}-{}", method, path),
-                EndpointStatus {
-                    path: path.to_string(),
-                    method: method.to_string(),
-                    is_healthy: true,
-                    response_time_ms: Some(rand::random::<f64>() * 100.0),
-                    last_checked: Utc::now(),
-                },
-            );
-        }
-
-        Ok(endpoints)
+        // No data available until a backend agent reports real endpoint health
+        Ok(HashMap::new())
     }
 
     /// Check database connection status
+    ///
+    /// Returns disconnected status when no backend agent is connected.
     async fn check_database_status(&self) -> Result<DatabaseStatus> {
-        // Simulated database status
         Ok(DatabaseStatus {
-            is_connected: true,
-            database_type: "PostgreSQL".to_string(),
-            connection_pool_size: 10,
-            active_connections: 3,
-            last_migration: Some("20240315_add_user_table".to_string()),
+            is_connected: false,
+            database_type: "unknown".to_string(),
+            connection_pool_size: 0,
+            active_connections: 0,
+            last_migration: None,
         })
     }
 
     /// Gather server performance metrics
+    ///
+    /// Returns zero metrics when no backend agent is connected.
     async fn gather_server_metrics(&self) -> Result<ServerMetrics> {
-        // Simulated server metrics
         Ok(ServerMetrics {
-            uptime_seconds: 86400, // 1 day
-            memory_usage_mb: 256.5,
-            cpu_usage_percent: 15.3,
-            request_count: 1234,
-            error_rate: 0.02, // 2% error rate
+            uptime_seconds: 0,
+            memory_usage_mb: 0.0,
+            cpu_usage_percent: 0.0,
+            request_count: 0,
+            error_rate: 0.0,
         })
     }
 
     /// List active backend services
+    ///
+    /// Returns empty list when no backend agent is connected.
     async fn list_active_services(&self) -> Result<Vec<ServiceInfo>> {
-        // Simulated service list
-        Ok(vec![
-            ServiceInfo {
-                name: "express-server".to_string(),
-                status: "running".to_string(),
-                port: Some(3000),
-                dependencies: vec!["postgresql".to_string(), "redis".to_string()],
-            },
-            ServiceInfo {
-                name: "websocket-server".to_string(),
-                status: "running".to_string(),
-                port: Some(3001),
-                dependencies: vec!["redis".to_string()],
-            },
-            ServiceInfo {
-                name: "background-worker".to_string(),
-                status: "running".to_string(),
-                port: None,
-                dependencies: vec!["postgresql".to_string(), "redis".to_string()],
-            },
-        ])
+        Ok(Vec::new())
     }
 
     /// Get recent API calls
+    ///
+    /// Returns empty list when no backend agent is connected.
     async fn get_recent_api_calls(&self) -> Result<Vec<ApiCallInfo>> {
-        // Return last 10 API calls (simulated)
-        let mut calls = Vec::new();
-        for i in 0..10 {
-            calls.push(ApiCallInfo {
-                timestamp: Utc::now() - chrono::Duration::minutes(i as i64),
-                endpoint: match i % 4 {
-                    0 => "/api/users".to_string(),
-                    1 => "/api/auth/login".to_string(),
-                    2 => "/api/products".to_string(),
-                    _ => "/api/health".to_string(),
-                },
-                method: if i % 3 == 0 { "POST" } else { "GET" }.to_string(),
-                status_code: if i == 7 { 500 } else { 200 },
-                response_time_ms: rand::random::<f64>() * 200.0,
-            });
-        }
-        Ok(calls)
+        Ok(Vec::new())
     }
 }
 

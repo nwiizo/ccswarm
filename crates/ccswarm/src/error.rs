@@ -599,6 +599,92 @@ impl<T, E> ResultFatalExt<T, E> for std::result::Result<T, E> {
     }
 }
 
+/// Convert CCSwarmError to user-friendly error messages with suggestions
+impl CCSwarmError {
+    /// Convert this error to a user-friendly error with actionable suggestions
+    pub fn to_user_error(&self) -> crate::utils::user_error::UserError {
+        use crate::utils::user_error::UserError;
+
+        match self {
+            Self::Configuration { message, .. } => {
+                UserError::new("Configuration Error", message.as_str())
+                    .with_suggestion("Check your ccswarm.json file. Run 'ccswarm doctor' to diagnose configuration issues.")
+            }
+            Self::Agent { agent_id, message, .. } => {
+                UserError::new(format!("Agent Error [{}]", agent_id), message.as_str())
+                    .with_suggestion(format!(
+                        "Check agent '{}' status with 'ccswarm status --agent {}'. Try 'ccswarm doctor --fix' to resolve common issues.",
+                        agent_id, agent_id
+                    ))
+            }
+            Self::Session { session_id, message, .. } => {
+                UserError::new(format!("Session Error [{}]", session_id), message.as_str())
+                    .with_suggestion("Run 'ccswarm session list' to check active sessions. Try restarting with 'ccswarm stop && ccswarm start'.")
+            }
+            Self::Task { task_id, message, .. } => {
+                UserError::new(format!("Task Error [{}]", task_id), message.as_str())
+                    .with_suggestion(format!(
+                        "Check task status with 'ccswarm task list'. Retry with 'ccswarm task retry {}'.",
+                        task_id
+                    ))
+            }
+            Self::Network { message, .. } => {
+                UserError::new("Network Error", message.as_str())
+                    .with_suggestion("Check your network connection and API keys. Run 'ccswarm doctor --check-api' to test connectivity.")
+            }
+            Self::Git { message, .. } => {
+                UserError::new("Git Error", message.as_str())
+                    .with_suggestion("Ensure you're in a Git repository. Run 'git status' to check, or 'ccswarm doctor' for diagnostics.")
+            }
+            Self::Auth { message, .. } => {
+                UserError::new("Authentication Error", message.as_str())
+                    .with_suggestion("Verify your API key is set: ANTHROPIC_API_KEY for Claude. Run 'ccswarm doctor --check-api'.")
+            }
+            Self::Orchestrator { message, .. } => {
+                UserError::new("Orchestrator Error", message.as_str())
+                    .with_suggestion("Try restarting the orchestrator: 'ccswarm stop && ccswarm start'.")
+            }
+            Self::Resource { message, resource_type, .. } => {
+                let detail = resource_type.as_deref().unwrap_or("unknown");
+                UserError::new(format!("Resource Error ({})", detail), message.as_str())
+                    .with_suggestion("Check system resources with 'ccswarm health --resources'. Close unnecessary processes and retry.")
+            }
+            Self::Io(io_err) => {
+                UserError::new("I/O Error", &io_err.to_string())
+                    .with_suggestion("Check file permissions and disk space. Ensure the target path exists.")
+            }
+            Self::SerdeJson(json_err) => {
+                UserError::new("JSON Parse Error", &json_err.to_string())
+                    .with_suggestion("Check your configuration file for syntax errors. Use a JSON validator to find issues.")
+            }
+            Self::UserError { message, suggestion } => {
+                let err = UserError::new("Error", message.as_str());
+                if let Some(s) = suggestion {
+                    err.with_suggestion(s.clone())
+                } else {
+                    err
+                }
+            }
+            Self::Template { message, template_name, .. } => {
+                let title = match template_name {
+                    Some(name) => format!("Template Error [{}]", name),
+                    None => "Template Error".to_string(),
+                };
+                UserError::new(title, message.as_str())
+                    .with_suggestion("Check available templates with 'ccswarm template list'.")
+            }
+            Self::Extension { extension_id, message, .. } => {
+                UserError::new(format!("Extension Error [{}]", extension_id), message.as_str())
+                    .with_suggestion("Run 'ccswarm extend list' to check extension status.")
+            }
+            Self::Other { message, .. } => {
+                UserError::new("Error", message.as_str())
+                    .with_suggestion("Run 'ccswarm doctor' for diagnostics. Use '--verbose' for more details.")
+            }
+        }
+    }
+}
+
 /// Determine if a CCSwarmError should be treated as fatal
 impl CCSwarmError {
     /// Check if this error should be treated as fatal

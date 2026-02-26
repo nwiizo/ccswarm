@@ -57,21 +57,7 @@ impl PersistentClaudeSession {
     /// Initialize session
     pub async fn initialize(&mut self) -> Result<()> {
         info!("🚀 Initializing session: {}", self.session_id);
-
-        // Create working directory if needed
         tokio::fs::create_dir_all(&self.working_dir).await?;
-
-        // Skip identity prompt when using real API to avoid wasting API calls
-        if !self.claude_config.use_real_api {
-            let identity_prompt = format!(
-                "You are a {} agent. Your workspace is {}. Your specialization is in {}.",
-                self.identity.specialization.name(),
-                self.working_dir.display(),
-                self.identity.specialization.name()
-            );
-            self.execute_prompt(&identity_prompt).await?;
-        }
-
         Ok(())
     }
 
@@ -128,24 +114,7 @@ impl PersistentClaudeSession {
 
     /// Execute prompt with Claude
     async fn execute_prompt(&self, prompt: &str) -> Result<String> {
-        if self.claude_config.use_real_api {
-            return self.execute_prompt_real_api(prompt).await;
-        }
-
-        info!("🤖 Claude prompt (simulated): {}", prompt);
-
-        // Simulate response based on task content
-        let response = if prompt.contains("React") || prompt.contains("frontend") {
-            "Created React components with TypeScript. Files: App.tsx, TodoList.tsx, TodoItem.tsx"
-        } else if prompt.contains("API") || prompt.contains("backend") {
-            "Created Express API with endpoints: GET /todos, POST /todos, PUT /todos/:id, DELETE /todos/:id"
-        } else if prompt.contains("test") {
-            "Created test suites with Jest. Coverage: 85%"
-        } else {
-            "Task completed successfully"
-        };
-
-        Ok(response.to_string())
+        self.execute_prompt_real_api(prompt).await
     }
 
     /// Execute prompt using the real Claude API

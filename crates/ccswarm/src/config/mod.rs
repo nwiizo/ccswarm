@@ -88,10 +88,6 @@ pub struct ClaudeConfig {
     /// MCP servers configuration
     #[serde(rename = "mcpServers", default)]
     pub mcp_servers: HashMap<String, serde_json::Value>,
-
-    /// Use real API instead of simulation (requires ANTHROPIC_API_KEY)
-    #[serde(default)]
-    pub use_real_api: bool,
 }
 
 impl Default for ClaudeConfig {
@@ -106,7 +102,6 @@ impl Default for ClaudeConfig {
             max_turns: None,
             custom_commands: Vec::new(),
             mcp_servers: HashMap::new(),
-            use_real_api: false,
         }
     }
 }
@@ -129,7 +124,6 @@ impl ClaudeConfig {
                 "ccswarm quality-gate".to_string(),
             ],
             mcp_servers: HashMap::new(),
-            use_real_api: false,
         }
     }
 
@@ -176,7 +170,6 @@ impl ClaudeConfig {
             max_turns: None,
             custom_commands,
             mcp_servers: HashMap::new(),
-            use_real_api: false,
         }
     }
 }
@@ -223,6 +216,12 @@ impl Default for ProjectConfig {
 pub struct RepositoryConfig {
     pub url: String,
     pub main_branch: String,
+    /// Local path to the repository (defaults to current directory)
+    #[serde(default)]
+    pub local_path: Option<PathBuf>,
+    /// Enable worktree isolation for task execution
+    #[serde(default)]
+    pub worktree_isolation: bool,
 }
 
 impl Default for RepositoryConfig {
@@ -230,6 +229,8 @@ impl Default for RepositoryConfig {
         Self {
             url: "https://github.com/example/repo.git".to_string(),
             main_branch: "main".to_string(),
+            local_path: None,
+            worktree_isolation: false,
         }
     }
 }
@@ -313,10 +314,16 @@ pub struct CcswarmConfig {
 }
 
 impl CcswarmConfig {
-    /// Load configuration from file
+    /// Load configuration from file with validation
     pub async fn from_file(path: PathBuf) -> anyhow::Result<Self> {
-        let contents = tokio::fs::read_to_string(path).await?;
-        let config: Self = serde_json::from_str(&contents)?;
+        let contents = tokio::fs::read_to_string(&path).await.map_err(|e| {
+            anyhow::anyhow!("Failed to read config file '{}': {}", path.display(), e)
+        })?;
+        let config: Self = serde_json::from_str(&contents)
+            .map_err(|e| anyhow::anyhow!("Invalid JSON in '{}': {}", path.display(), e))?;
+        config.validate().map_err(|e| {
+            anyhow::anyhow!("Config validation failed for '{}': {}", path.display(), e)
+        })?;
         Ok(config)
     }
 
@@ -324,6 +331,53 @@ impl CcswarmConfig {
     pub async fn to_file(&self, path: PathBuf) -> anyhow::Result<()> {
         let contents = serde_json::to_string_pretty(self)?;
         tokio::fs::write(path, contents).await?;
+        Ok(())
+    }
+
+    /// Validate configuration after deserialization
+    pub fn validate(&self) -> anyhow::Result<()> {
+        // Project name must not be empty
+        if self.project.name.trim().is_empty() {
+            anyhow::bail!("project.name must not be empty");
+        }
+
+        // Repository URL must not be empty
+        if self.project.repository.url.trim().is_empty() {
+            anyhow::bail!("project.repository.url must not be empty");
+        }
+
+        // Main branch must not be empty
+        if self.project.repository.main_branch.trim().is_empty() {
+            anyhow::bail!("project.repository.main_branch must not be empty");
+        }
+
+        // Quality threshold must be between 0.0 and 1.0
+        let threshold = self.project.master_claude.quality_threshold;
+        if !(0.0..=1.0).contains(&threshold) {
+            anyhow::bail!(
+                "project.master_claude.quality_threshold must be between 0.0 and 1.0, got {}",
+                threshold
+            );
+        }
+
+        // Validate agent configs
+        for (name, agent) in &self.agents {
+            if agent.specialization.trim().is_empty() {
+                anyhow::bail!("agents.{}.specialization must not be empty", name);
+            }
+            if agent.worktree.trim().is_empty() {
+                anyhow::bail!("agents.{}.worktree must not be empty", name);
+            }
+            if agent.branch.trim().is_empty() {
+                anyhow::bail!("agents.{}.branch must not be empty", name);
+            }
+        }
+
+        // Sync interval must be positive
+        if self.coordination.sync_interval == 0 {
+            anyhow::bail!("coordination.sync_interval must be greater than 0");
+        }
+
         Ok(())
     }
 }
@@ -337,5 +391,32 @@ mod tests {
         let config = ClaudeConfig::default();
         assert_eq!(config.model, "claude-3.5-sonnet");
         assert!(config.dangerous_skip);
+    }
+
+    #[test]
+    fn test_config_validation_valid() {
+        let config = CcswarmConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_config_validation_empty_project_name() {
+        let mut config = CcswarmConfig::default();
+        config.project.name = "".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validation_invalid_threshold() {
+        let mut config = CcswarmConfig::default();
+        config.project.master_claude.quality_threshold = 1.5;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validation_zero_sync_interval() {
+        let mut config = CcswarmConfig::default();
+        config.coordination.sync_interval = 0;
+        assert!(config.validate().is_err());
     }
 }

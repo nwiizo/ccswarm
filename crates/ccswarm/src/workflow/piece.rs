@@ -443,6 +443,10 @@ pub struct PieceEngine {
     judge: super::judge::MovementJudge,
     /// Facet registry for prompt composition
     facet_registry: super::facets::FacetRegistry,
+    /// Bridge for real Claude Code CLI execution + ai-session result management
+    bridge: Option<std::sync::Arc<crate::session::bridge::AISessionBridge>>,
+    /// Working directory for agent execution
+    working_dir: std::path::PathBuf,
 }
 
 impl PieceEngine {
@@ -455,10 +459,17 @@ impl PieceEngine {
         for policy in super::facets::builtin_policies() {
             facet_registry.register_policy(policy);
         }
+        // Register built-in pieces so they're available by default
+        let mut pieces = HashMap::new();
+        for piece in builtin_pieces() {
+            pieces.insert(piece.name.clone(), piece);
+        }
         Self {
-            pieces: HashMap::new(),
+            pieces,
             judge: super::judge::MovementJudge::default(),
             facet_registry,
+            bridge: None,
+            working_dir: std::path::PathBuf::from("."),
         }
     }
 
@@ -472,6 +483,16 @@ impl PieceEngine {
     /// Get a mutable reference to the facet registry for loading custom facets
     pub fn facet_registry_mut(&mut self) -> &mut super::facets::FacetRegistry {
         &mut self.facet_registry
+    }
+
+    /// Set the AISessionBridge for real Claude Code CLI execution
+    pub fn set_bridge(&mut self, bridge: std::sync::Arc<crate::session::bridge::AISessionBridge>) {
+        self.bridge = Some(bridge);
+    }
+
+    /// Set the working directory for agent execution
+    pub fn set_working_dir(&mut self, dir: std::path::PathBuf) {
+        self.working_dir = dir;
     }
 
     /// Load a piece from a YAML file
@@ -509,6 +530,13 @@ impl PieceEngine {
         }
 
         Ok(loaded)
+    }
+
+    /// Load all builtin pieces into the engine
+    pub fn load_builtin_pieces(&mut self) {
+        for piece in builtin_pieces() {
+            self.pieces.insert(piece.name.clone(), piece);
+        }
     }
 
     /// Get a loaded piece
@@ -624,7 +652,7 @@ impl PieceEngine {
         Ok(state)
     }
 
-    /// Execute a single movement
+    /// Execute a single movement via Claude Code CLI (through AISessionBridge) or prompt-only fallback
     async fn execute_movement(
         &self,
         movement: &Movement,
@@ -638,14 +666,55 @@ impl PieceEngine {
         // Build the prompt from instruction + persona + context
         let prompt = self.build_movement_prompt(movement, state);
 
-        // For now, return a simulated output
-        // In production, this would call the agent execution system
-        let output = serde_json::json!({
-            "movement": movement.id,
-            "instruction": movement.instruction,
-            "prompt": prompt,
-            "status": "completed",
-        });
+        let output = if let Some(ref bridge) = self.bridge {
+            // Real execution via Claude Code CLI + ai-session result management
+            let agent_id = movement.persona.as_deref().unwrap_or("default");
+
+            // Create a minimal identity for the movement
+            let identity = crate::identity::AgentIdentity {
+                agent_id: agent_id.to_string(),
+                specialization: crate::identity::AgentRole::Frontend {
+                    technologies: Vec::new(),
+                    responsibilities: Vec::new(),
+                    boundaries: Vec::new(),
+                },
+                workspace_path: self.working_dir.clone(),
+                env_vars: std::collections::HashMap::new(),
+                session_id: uuid::Uuid::new_v4().to_string(),
+                parent_process_id: std::process::id().to_string(),
+                initialized_at: chrono::Utc::now(),
+            };
+
+            match bridge
+                .execute_task(agent_id, &prompt, &identity, &self.working_dir)
+                .await
+            {
+                Ok(result) => {
+                    serde_json::json!({
+                        "movement": movement.id,
+                        "output": result.raw,
+                        "parsed": format!("{:?}", result.parsed),
+                        "status": if result.success { "completed" } else { "failed" },
+                    })
+                }
+                Err(e) => {
+                    warn!("Movement '{}' execution failed: {}", movement.id, e);
+                    serde_json::json!({
+                        "movement": movement.id,
+                        "error": e.to_string(),
+                        "status": "failed",
+                    })
+                }
+            }
+        } else {
+            // No bridge configured - return prompt as output (for testing/offline use)
+            serde_json::json!({
+                "movement": movement.id,
+                "instruction": movement.instruction,
+                "prompt": prompt,
+                "status": "completed",
+            })
+        };
 
         // Validate output contract if specified
         if let Some(ref contract) = movement.output_contract {

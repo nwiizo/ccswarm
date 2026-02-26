@@ -1,15 +1,17 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{interval, sleep};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use super::task_queue::{QueuedTask, TaskQueue};
 use crate::agent::orchestrator::AgentOrchestrator;
 use crate::agent::pool::AgentPool;
 use crate::agent::{Task, TaskResult};
 use crate::config::CcswarmConfig;
+use crate::git::shell::ShellWorktreeManager;
 use crate::orchestrator::master_delegation::MasterDelegationEngine;
 
 /// Result of task execution
@@ -35,6 +37,26 @@ pub struct ExecutionStats {
     pub orchestration_usage: f64, // Percentage of tasks that used orchestration
 }
 
+/// Worktree isolation configuration for task execution
+#[derive(Clone)]
+struct WorktreeConfig {
+    /// Repository path for creating worktrees
+    repo_path: Option<PathBuf>,
+    /// Whether worktree isolation is enabled
+    enabled: bool,
+}
+
+/// Information about a task-specific worktree
+#[allow(dead_code)]
+struct TaskWorktreeInfo {
+    /// Path to the worktree
+    path: PathBuf,
+    /// Branch name created for this task (used for merge operations)
+    branch: String,
+    /// Path to the parent repository
+    repo_path: PathBuf,
+}
+
 /// Main task execution engine
 pub struct TaskExecutor {
     /// Task queue for managing tasks
@@ -51,6 +73,10 @@ pub struct TaskExecutor {
     max_concurrent_tasks: usize,
     /// Currently executing tasks
     active_executions: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// Repository path for worktree isolation
+    repo_path: Option<PathBuf>,
+    /// Whether worktree isolation is enabled
+    worktree_isolation: bool,
 }
 
 impl TaskExecutor {
@@ -82,6 +108,15 @@ impl TaskExecutor {
             orchestration_usage: 0.0,
         }));
 
+        // Determine repo path for worktree isolation
+        let repo_path = config
+            .project
+            .repository
+            .local_path
+            .clone()
+            .or_else(|| std::env::current_dir().ok());
+        let worktree_isolation = config.project.repository.worktree_isolation;
+
         Ok(Self {
             task_queue,
             agent_pool,
@@ -90,6 +125,8 @@ impl TaskExecutor {
             execution_history: Arc::new(RwLock::new(Vec::new())),
             max_concurrent_tasks: 5, // Configurable
             active_executions: Arc::new(RwLock::new(HashMap::new())),
+            repo_path,
+            worktree_isolation,
         })
     }
 
@@ -97,6 +134,12 @@ impl TaskExecutor {
     pub async fn add_task(&self, task: Task) -> String {
         info!("Adding task to execution queue: {}", task.description);
         self.task_queue.add_task(task).await
+    }
+
+    /// Enable worktree isolation for this executor
+    pub fn enable_worktree_isolation(&mut self, repo_path: PathBuf) {
+        self.repo_path = Some(repo_path);
+        self.worktree_isolation = true;
     }
 
     /// Start the execution engine
@@ -111,6 +154,10 @@ impl TaskExecutor {
         let execution_history = self.execution_history.clone();
         let active_executions = self.active_executions.clone();
         let max_concurrent = self.max_concurrent_tasks;
+        let wt_config = Arc::new(WorktreeConfig {
+            repo_path: self.repo_path.clone(),
+            enabled: self.worktree_isolation,
+        });
 
         tokio::spawn(async move {
             Self::execution_loop(
@@ -121,6 +168,7 @@ impl TaskExecutor {
                 execution_history,
                 active_executions,
                 max_concurrent,
+                wt_config,
             )
             .await;
         });
@@ -129,6 +177,7 @@ impl TaskExecutor {
     }
 
     /// Main execution loop
+    #[allow(clippy::too_many_arguments)]
     async fn execution_loop(
         task_queue: Arc<TaskQueue>,
         agent_pool: Arc<Mutex<AgentPool>>,
@@ -137,6 +186,7 @@ impl TaskExecutor {
         execution_history: Arc<RwLock<Vec<ExecutionResult>>>,
         active_executions: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
         max_concurrent: usize,
+        wt_config: Arc<WorktreeConfig>,
     ) {
         let mut interval = interval(Duration::from_secs(1)); // Check every second
 
@@ -167,6 +217,7 @@ impl TaskExecutor {
                 let stats_clone = stats.clone();
                 let execution_history_clone = execution_history.clone();
                 let task_clone = queued_task.clone();
+                let wt_config_clone = wt_config.clone();
 
                 // Spawn execution task
                 let handle = tokio::spawn(async move {
@@ -177,6 +228,7 @@ impl TaskExecutor {
                         delegation_engine_clone,
                         stats_clone,
                         execution_history_clone,
+                        &wt_config_clone,
                     )
                     .await;
                 });
@@ -193,7 +245,7 @@ impl TaskExecutor {
         }
     }
 
-    /// Execute a single task
+    /// Execute a single task with optional worktree isolation
     async fn execute_single_task(
         queued_task: QueuedTask,
         task_queue: Arc<TaskQueue>,
@@ -201,6 +253,7 @@ impl TaskExecutor {
         delegation_engine: Arc<Mutex<MasterDelegationEngine>>,
         stats: Arc<RwLock<ExecutionStats>>,
         execution_history: Arc<RwLock<Vec<ExecutionResult>>>,
+        wt_config: &WorktreeConfig,
     ) {
         let task_id = queued_task.task.id.clone();
         let start_time = Instant::now();
@@ -209,6 +262,34 @@ impl TaskExecutor {
             "Executing task: {} - {}",
             task_id, queued_task.task.description
         );
+
+        // Setup worktree isolation if enabled
+        let worktree_info = if wt_config.enabled {
+            if let Some(ref repo) = wt_config.repo_path {
+                match Self::setup_task_worktree(repo, &task_id).await {
+                    Ok(info) => {
+                        info!(
+                            "Created worktree for task {}: {}",
+                            task_id,
+                            info.path.display()
+                        );
+                        Some(info)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to create worktree for task {}, continuing without isolation: {}",
+                            task_id, e
+                        );
+                        None
+                    }
+                }
+            } else {
+                warn!("Worktree isolation enabled but no repo_path configured, skipping");
+                None
+            }
+        } else {
+            None
+        };
 
         // Determine best agent for the task
         let (agent_id, use_orchestration) = {
@@ -221,6 +302,10 @@ impl TaskExecutor {
                 }
                 Err(e) => {
                     error!("Delegation failed for task {}: {}", task_id, e);
+                    // Cleanup worktree on failure
+                    if let Some(ref wt) = worktree_info {
+                        Self::cleanup_task_worktree(wt).await;
+                    }
                     Self::record_execution_failure(
                         &task_queue,
                         &stats,
@@ -243,6 +328,10 @@ impl TaskExecutor {
                     "Delegated task '{}' to agent '{}' but agent not found in pool",
                     task_id, agent_id
                 );
+                // Cleanup worktree on failure
+                if let Some(ref wt) = worktree_info {
+                    Self::cleanup_task_worktree(wt).await;
+                }
                 Self::record_execution_failure(
                     &task_queue,
                     &stats,
@@ -299,6 +388,12 @@ impl TaskExecutor {
                     use_orchestration,
                 )
                 .await;
+
+                // Auto-create PR if task ran in a worktree
+                if let Some(ref wt) = worktree_info {
+                    Self::auto_create_pr(&wt.branch, &queued_task.task.description, &wt.repo_path)
+                        .await;
+                }
             }
             Err(e) => {
                 error!("Task {} failed: {}", task_id, e);
@@ -318,6 +413,134 @@ impl TaskExecutor {
                     duration,
                 )
                 .await;
+            }
+        }
+
+        // Cleanup worktree after execution
+        if let Some(ref wt) = worktree_info {
+            Self::cleanup_task_worktree(wt).await;
+        }
+    }
+
+    /// Setup a git worktree for isolated task execution
+    async fn setup_task_worktree(
+        repo_path: &Path,
+        task_id: &str,
+    ) -> anyhow::Result<TaskWorktreeInfo> {
+        let manager = ShellWorktreeManager::new(repo_path.to_path_buf())?;
+
+        // Sanitize task_id for branch name
+        let safe_id: String = task_id
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect();
+        let branch_name = format!("task/{}", safe_id);
+
+        // Determine worktree path
+        let worktrees_base = repo_path
+            .parent()
+            .map(|p| p.join(".ccswarm-worktrees"))
+            .unwrap_or_else(|| repo_path.join(".ccswarm-worktrees"));
+
+        let worktree_path = worktrees_base.join(&safe_id);
+
+        // Create worktrees directory if needed
+        tokio::fs::create_dir_all(&worktrees_base).await?;
+
+        // Create the worktree
+        let _wt = manager
+            .create_worktree(&worktree_path, &branch_name)
+            .await?;
+
+        Ok(TaskWorktreeInfo {
+            path: worktree_path,
+            branch: branch_name,
+            repo_path: repo_path.to_path_buf(),
+        })
+    }
+
+    /// Cleanup a task worktree after execution
+    async fn cleanup_task_worktree(info: &TaskWorktreeInfo) {
+        if let Ok(manager) = ShellWorktreeManager::new(info.repo_path.clone()) {
+            if let Err(e) = manager.remove_worktree(&info.path).await {
+                warn!(
+                    "Failed to remove worktree at {}: {}",
+                    info.path.display(),
+                    e
+                );
+            } else {
+                info!("Cleaned up worktree at {}", info.path.display());
+            }
+        }
+    }
+
+    /// Auto-create a pull request for a completed task's branch
+    async fn auto_create_pr(branch: &str, task_description: &str, repo_path: &Path) {
+        // First check if `gh` CLI is available
+        let gh_available = tokio::process::Command::new("gh")
+            .arg("--version")
+            .output()
+            .await
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if !gh_available {
+            info!(
+                "GitHub CLI not available, skipping auto-PR for branch '{}'",
+                branch
+            );
+            return;
+        }
+
+        // Push the branch first
+        let push_result = tokio::process::Command::new("git")
+            .args(["push", "-u", "origin", branch])
+            .current_dir(repo_path)
+            .output()
+            .await;
+
+        if let Err(e) = push_result {
+            warn!("Failed to push branch '{}': {}", branch, e);
+            return;
+        }
+
+        // Truncate description for PR title
+        let title = if task_description.len() > 70 {
+            format!("{}...", &task_description[..67])
+        } else {
+            task_description.to_string()
+        };
+
+        let body = format!(
+            "## Summary\n\n- {}\n\n## Notes\n\nAuto-created by ccswarm task executor.\nBranch: `{}`",
+            task_description, branch
+        );
+
+        let pr_result = tokio::process::Command::new("gh")
+            .args([
+                "pr", "create", "--title", &title, "--body", &body, "--head", branch,
+            ])
+            .current_dir(repo_path)
+            .output()
+            .await;
+
+        match pr_result {
+            Ok(output) if output.status.success() => {
+                let url = String::from_utf8_lossy(&output.stdout);
+                info!("Auto-created PR for task: {}", url.trim());
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                warn!("Failed to create PR: {}", stderr.trim());
+            }
+            Err(e) => {
+                warn!("Failed to run gh pr create: {}", e);
             }
         }
     }

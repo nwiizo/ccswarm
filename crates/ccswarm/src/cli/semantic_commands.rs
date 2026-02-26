@@ -579,10 +579,9 @@ async fn monitor_operations(
         println!("  Indexed Symbols: {}", symbols.len());
         println!("  Project Memories: {}", memories.len());
         
-        // Show recent operations (simulated)
         println!("\n🔄 Recent Operations:");
-        println!("  [{}] Symbol analysis completed", chrono::Local::now().format("%H:%M:%S"));
-        println!("  [{}] Memory stored: architecture_decision", chrono::Local::now().format("%H:%M:%S"));
+        println!("  [{}] Symbol index refreshed ({} symbols)", chrono::Local::now().format("%H:%M:%S"), symbols.len());
+        println!("  [{}] Memory index refreshed ({} entries)", chrono::Local::now().format("%H:%M:%S"), memories.len());
         
         println!("\n  Press Ctrl+C to exit");
         

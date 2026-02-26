@@ -67,8 +67,8 @@ impl CommandRegistry {
         );
 
         register_command!(self, "start", runner, cmd,
-            Commands::Start { daemon, port, isolation, use_real_api, delegate, enable_acp, .. } =>
-            runner.start_orchestrator(*daemon, *port, isolation, *use_real_api, *delegate, *enable_acp)
+            Commands::Start { daemon, port, isolation, delegate, enable_acp, .. } =>
+            runner.start_orchestrator(*daemon, *port, isolation, *delegate, *enable_acp)
         );
 
         register_command!(self, "status", runner, cmd,
@@ -181,6 +181,16 @@ impl CommandRegistry {
             runner.handle_tutorial(*chapter)
         );
 
+        register_command!(self, "interactive", runner, cmd,
+            Commands::Interactive { mode, piece } =>
+            runner.handle_interactive(mode, piece.as_deref())
+        );
+
+        register_command!(self, "pipeline", runner, cmd,
+            Commands::Pipeline { task, piece, output_format, timeout, verbose, output_file } =>
+            runner.handle_pipeline(task, piece, output_format, *timeout, *verbose, output_file.as_deref())
+        );
+
         register_command!(self, "help", runner, cmd,
             Commands::HelpTopic { topic, search } =>
             runner.handle_help(topic.as_deref(), search.as_deref())
@@ -204,6 +214,16 @@ impl CommandRegistry {
         register_command!(self, "verify", runner, cmd,
             Commands::Verify { path, backend_port, skip_deps } =>
             runner.handle_verify(path, *backend_port, *skip_deps)
+        );
+
+        register_command!(self, "piece", runner, cmd,
+            Commands::Piece { action } =>
+            runner.handle_piece(action)
+        );
+
+        register_command!(self, "repertoire", runner, cmd,
+            Commands::Repertoire { action } =>
+            runner.handle_repertoire(action)
         );
     }
 
@@ -260,10 +280,14 @@ impl CommandRegistry {
             Commands::Subagent { .. } => "subagent",
             Commands::Setup => "setup",
             Commands::Tutorial { .. } => "tutorial",
+            Commands::Interactive { .. } => "interactive",
             Commands::HelpTopic { .. } => "help",
             Commands::Health { .. } => "health",
             Commands::Doctor { .. } => "doctor",
             Commands::Quickstart { .. } => "quickstart",
+            Commands::Pipeline { .. } => "pipeline",
+            Commands::Piece { .. } => "piece",
+            Commands::Repertoire { .. } => "repertoire",
             Commands::Verify { .. } => "verify",
         }
     }

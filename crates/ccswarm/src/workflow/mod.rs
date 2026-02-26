@@ -16,6 +16,7 @@ mod node;
 pub mod permissions;
 pub mod piece;
 pub mod pipeline;
+pub mod repertoire;
 pub mod watch;
 
 pub use arpeggio::{ArpeggioConfig, ArpeggioExecutor, ArpeggioItem, ArpeggioResult};
