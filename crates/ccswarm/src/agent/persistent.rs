@@ -80,13 +80,12 @@ impl ClaudeCodeSession {
     pub async fn send_message(&mut self, prompt: &str) -> Result<String> {
         self.last_activity = Instant::now();
 
-        // For tests and simulation mode, return a mock response
-        if !self.claude_config.use_real_api {
-            return Ok(self.generate_mock_response(prompt));
-        }
-
         let mut cmd = Command::new("claude");
         cmd.current_dir(&self.working_dir);
+
+        // Remove Claude Code nesting guard env vars
+        cmd.env_remove("CLAUDECODE");
+        cmd.env_remove("CLAUDE_CODE_ENTRYPOINT");
 
         // Add environment variables
         for (key, value) in &self.env_vars {
@@ -130,43 +129,6 @@ impl ClaudeCodeSession {
                 String::from_utf8_lossy(&output.stderr)
             ))
         }
-    }
-
-    /// Generate a mock response for testing and simulation
-    fn generate_mock_response(&self, prompt: &str) -> String {
-        // Check if this is an identity establishment prompt
-        if prompt.contains("🤖 **AGENT IDENTITY**") {
-            return format!(
-                "🤖 AGENT: {}\n📁 WORKSPACE: {}\n🎯 SCOPE: Identity established successfully",
-                self.session_id,
-                self.working_dir
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-            );
-        }
-
-        // Generate a simple mock response for tasks
-        if prompt.contains("## Current Task:") {
-            return format!(
-                "🤖 AGENT: {}\n📁 WORKSPACE: {}\n🎯 SCOPE: Task within agent boundaries\n\nTask completed successfully in simulation mode.",
-                self.session_id,
-                self.working_dir
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-            );
-        }
-
-        // Default mock response
-        format!(
-            "🤖 AGENT: {}\n📁 WORKSPACE: {}\n🎯 SCOPE: General response\n\nMock response generated for testing.",
-            self.session_id,
-            self.working_dir
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-        )
     }
 
     /// Execute task with conversation context

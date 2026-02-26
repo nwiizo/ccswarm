@@ -19,8 +19,7 @@
         "append_system_prompt": null,
         "max_turns": null,
         "custom_commands": [],
-        "mcpServers": {},
-        "use_real_api": false
+        "mcpServers": {}
       },
       "enable_proactive_mode": true,
       "proactive_frequency": 30,
@@ -45,8 +44,7 @@
           "npm run lint",
           "npm run build"
         ],
-        "mcpServers": {},
-        "use_real_api": false
+        "mcpServers": {}
       },
       "claude_md_template": "default"
     },
@@ -67,8 +65,7 @@
           "npm run migrate",
           "npm run api-test"
         ],
-        "mcpServers": {},
-        "use_real_api": false
+        "mcpServers": {}
       },
       "claude_md_template": "default"
     }

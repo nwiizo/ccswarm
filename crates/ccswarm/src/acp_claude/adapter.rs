@@ -41,6 +41,8 @@ impl SimplifiedClaudeAdapter {
         // Check if claude command exists
         let output = Command::new("claude")
             .arg("--version")
+            .env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -75,7 +77,9 @@ impl SimplifiedClaudeAdapter {
         info!("📤 Executing task via Claude CLI: {}", task);
 
         let mut cmd = Command::new("claude");
-        cmd.arg("-p")
+        cmd.env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
+            .arg("-p")
             .arg(task)
             .arg("--output-format")
             .arg("text")

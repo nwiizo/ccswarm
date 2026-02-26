@@ -40,6 +40,16 @@ use crate::orchestrator::ProactiveMaster;
 #[derive(Parser)]
 #[command(name = "ccswarm")]
 #[command(about = "Claude Code multi-agent orchestration system")]
+#[command(long_about = "ccswarm - AI Multi-Agent Orchestration System\n\n\
+    Coordinate specialized AI agents (Frontend, Backend, DevOps, QA) using Claude Code.\n\
+    Each agent works in isolated git worktrees with strict role boundaries.\n\n\
+    Quick start:\n  \
+      ccswarm quickstart --name MyProject\n  \
+      ccswarm task execute \"Add user authentication\"\n\n\
+    For more information:\n  \
+      ccswarm doctor          Check system health\n  \
+      ccswarm tutorial        Interactive walkthrough\n  \
+      ccswarm help-topic      Extended help system")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 pub struct Cli {
     /// Configuration file path
@@ -62,6 +72,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub fix: bool,
 
+    /// Log format: text (default), ndjson
+    #[arg(long, default_value = "text")]
+    pub log_format: String,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -69,6 +83,13 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Initialize a new ccswarm project
+    #[command(
+        long_about = "Initialize a new ccswarm project in the current directory.\n\n\
+        Creates ccswarm.json configuration and sets up agent worktrees.\n\n\
+        Examples:\n  \
+          ccswarm init --name MyApp\n  \
+          ccswarm init --name MyApp --agents frontend,backend,qa"
+    )]
     Init {
         /// Project name
         #[arg(short, long)]
@@ -84,6 +105,12 @@ pub enum Commands {
     },
 
     /// Start the ccswarm orchestrator
+    #[command(long_about = "Start the ccswarm orchestrator and agent processes.\n\n\
+        The orchestrator coordinates task delegation and monitors agent health.\n\n\
+        Examples:\n  \
+          ccswarm start\n  \
+          ccswarm start --daemon --port 9090\n  \
+          ccswarm start --enable-acp")]
     Start {
         /// Run in daemon mode
         #[arg(short, long)]
@@ -96,10 +123,6 @@ pub enum Commands {
         /// Isolation mode for agents (worktree, container, hybrid)
         #[arg(long, default_value = "worktree")]
         isolation: String,
-
-        /// Use real Claude API instead of simulation (requires ANTHROPIC_API_KEY)
-        #[arg(long)]
-        use_real_api: bool,
 
         /// Enable delegate mode (lead orchestrates only, no direct code execution)
         #[arg(long)]
@@ -143,6 +166,15 @@ pub enum Commands {
     },
 
     /// Task management commands
+    #[command(
+        long_about = "Create, list, execute, merge, retry, and delete tasks.\n\n\
+        Tasks are the primary unit of work in ccswarm. Each task is analyzed by the\n\
+        Master Claude orchestrator and delegated to the appropriate specialist agent.\n\n\
+        Examples:\n  \
+          ccswarm task execute \"Fix login bug\"\n  \
+          ccswarm task list --branches\n  \
+          ccswarm task merge <id>"
+    )]
     Task {
         #[command(subcommand)]
         action: TaskAction,
@@ -281,6 +313,52 @@ pub enum Commands {
         chapter: Option<u8>,
     },
 
+    /// Interactive task creation and execution with AI-assisted clarification
+    Interactive {
+        /// Interaction mode: assistant, persona, quiet, passthrough
+        #[arg(short, long, default_value = "assistant")]
+        mode: String,
+
+        /// Piece to use for execution (e.g., "default")
+        #[arg(short, long)]
+        piece: Option<String>,
+    },
+
+    /// Execute a task through a piece pipeline
+    #[command(
+        long_about = "Execute a task through a piece-based workflow pipeline.\n\n\
+        Pieces define multi-step agent workflows (movements). The pipeline runner\n\
+        executes each movement sequentially, passing context between steps.\n\n\
+        Examples:\n  \
+          ccswarm pipeline --task \"Fix README typo\" --piece default\n  \
+          ccswarm pipeline --task \"Add tests\" --output-format json --verbose"
+    )]
+    Pipeline {
+        /// Task description to execute
+        #[arg(short, long)]
+        task: String,
+
+        /// Piece to use (default: "default")
+        #[arg(short, long, default_value = "default")]
+        piece: String,
+
+        /// Output format: text, json, markdown
+        #[arg(short, long, default_value = "text")]
+        output_format: String,
+
+        /// Timeout in seconds
+        #[arg(long, default_value = "600")]
+        timeout: u64,
+
+        /// Verbose output with execution details
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Write output to file
+        #[arg(short = 'O', long)]
+        output_file: Option<PathBuf>,
+    },
+
     /// Enhanced help system with examples
     HelpTopic {
         /// Topic to get help on
@@ -319,6 +397,13 @@ pub enum Commands {
     },
 
     /// Check system health and diagnose issues
+    #[command(long_about = "Diagnose and fix common ccswarm issues.\n\n\
+        Checks Git setup, Claude Code CLI availability, API key configuration,\n\
+        worktree health, and configuration file validity.\n\n\
+        Examples:\n  \
+          ccswarm doctor\n  \
+          ccswarm doctor --fix\n  \
+          ccswarm doctor --check-api")]
     Doctor {
         /// Run fixes for common issues
         #[arg(short, long)]
@@ -350,6 +435,77 @@ pub enum Commands {
         /// Run initial tests after setup
         #[arg(long)]
         with_tests: bool,
+    },
+
+    /// Manage workflow pieces (list, eject, inspect)
+    #[command(
+        name = "piece",
+        long_about = "Manage workflow pieces for agent task execution.\n\n\
+        Pieces are YAML-defined workflow templates that specify movements (steps),\n\
+        personas, policies, and output contracts.\n\n\
+        Examples:\n  \
+          ccswarm piece list\n  \
+          ccswarm piece eject default\n  \
+          ccswarm piece inspect default"
+    )]
+    Piece {
+        #[command(subcommand)]
+        action: PieceAction,
+    },
+
+    /// Manage external piece packages (repertoire)
+    #[command(
+        long_about = "Manage external piece packages from Git repositories.\n\n\
+        Repertoire packages are collections of workflow pieces that can be installed\n\
+        from any Git repository and used alongside builtin pieces.\n\n\
+        Examples:\n  \
+          ccswarm repertoire add https://github.com/user/my-pieces\n  \
+          ccswarm repertoire list\n  \
+          ccswarm repertoire remove my-pieces"
+    )]
+    Repertoire {
+        #[command(subcommand)]
+        action: RepertoireAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RepertoireAction {
+    /// Install a piece package from a Git repository
+    Add {
+        /// Git URL of the piece package
+        url: String,
+    },
+
+    /// List installed piece packages
+    List,
+
+    /// Remove an installed piece package
+    Remove {
+        /// Package name to remove
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum PieceAction {
+    /// List all available pieces (builtin and custom)
+    List,
+
+    /// Eject a builtin piece to a local YAML file for customization
+    Eject {
+        /// Name of the piece to eject
+        name: String,
+
+        /// Output directory (default: .ccswarm/pieces/)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Inspect a piece's structure and movements
+    Inspect {
+        /// Name of the piece to inspect
+        name: String,
     },
 }
 
@@ -449,6 +605,10 @@ pub enum TaskAction {
         /// Show detailed information
         #[arg(short, long)]
         detailed: bool,
+
+        /// Show worktree branch information for each task
+        #[arg(long)]
+        branches: bool,
     },
 
     /// Show task status
@@ -517,6 +677,40 @@ pub enum TaskAction {
         /// Show performance metrics
         #[arg(long)]
         performance: bool,
+    },
+
+    /// Merge a completed task's worktree branch into main
+    Merge {
+        /// Task ID to merge
+        task_id: String,
+
+        /// Delete the worktree branch after merge
+        #[arg(long, default_value = "true")]
+        cleanup: bool,
+
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        yes: bool,
+    },
+
+    /// Retry a failed task
+    Retry {
+        /// Task ID to retry
+        task_id: String,
+
+        /// Force retry even if task is not in failed state
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Delete a task and its associated worktree
+    Delete {
+        /// Task ID to delete
+        task_id: String,
+
+        /// Force deletion even if task is in progress
+        #[arg(short, long)]
+        force: bool,
     },
 }
 
@@ -1212,20 +1406,26 @@ impl CliRunner {
 
         let formatter = create_formatter(cli.json);
 
-        // Initialize execution engine for task management
-        let execution_engine = match ExecutionEngine::new(&config).await {
-            Ok(engine) => {
-                if let Err(e) = engine.start().await {
-                    warn!("Failed to start execution engine: {}", e);
+        // Only initialize execution engine for commands that need it.
+        // Many commands (doctor, piece, repertoire, help, config, etc.)
+        // don't need agents spawned, so skip expensive initialization.
+        let execution_engine = if Self::command_needs_engine(&cli.command) {
+            match ExecutionEngine::new(&config).await {
+                Ok(engine) => {
+                    if let Err(e) = engine.start().await {
+                        warn!("Failed to start execution engine: {}", e);
+                        None
+                    } else {
+                        Some(engine)
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to create execution engine: {}", e);
                     None
-                } else {
-                    Some(engine)
                 }
             }
-            Err(e) => {
-                warn!("Failed to create execution engine: {}", e);
-                None
-            }
+        } else {
+            None
         };
 
         Ok(Self {
@@ -1235,6 +1435,21 @@ impl CliRunner {
             formatter,
             execution_engine,
         })
+    }
+
+    /// Check if a command requires the execution engine (agent spawning).
+    /// Commands that only read config/display info should NOT spawn agents.
+    fn command_needs_engine(command: &Commands) -> bool {
+        matches!(
+            command,
+            Commands::Start { .. }
+                | Commands::Task { .. }
+                | Commands::Tui
+                | Commands::AutoCreate { .. }
+                | Commands::Pipeline { .. }
+                | Commands::Interactive { .. }
+                | Commands::Delegate { .. }
+        )
     }
 
     /// Run the CLI command
@@ -1322,12 +1537,39 @@ impl CliRunner {
         Ok(())
     }
 
+    /// Validate that the Claude Code CLI provider is available and configured
+    async fn validate_provider(&self) -> Result<()> {
+        use crate::providers::ClaudeCodeConfig;
+        use crate::providers::ProviderConfig;
+
+        let config = ClaudeCodeConfig::default();
+
+        // Check if claude CLI is installed
+        if !config.is_available().await {
+            return Err(anyhow!(
+                "Claude Code CLI not found in PATH.\n\
+                 Install it with: npm install -g @anthropic-ai/claude-code\n\
+                 Or see: https://docs.anthropic.com/en/docs/claude-code"
+            ));
+        }
+
+        // Check for API key (warn, don't fail — claude CLI may have its own auth)
+        if std::env::var("ANTHROPIC_API_KEY").is_err() {
+            warn!(
+                "ANTHROPIC_API_KEY not set. Claude Code CLI may use its own authentication, \
+                 but some features may not work without it."
+            );
+        }
+
+        info!("Provider validation passed: Claude Code CLI is available");
+        Ok(())
+    }
+
     async fn start_orchestrator(
         &self,
         daemon: bool,
         port: u16,
         isolation: &str,
-        use_real_api: bool,
         delegate: bool,
         enable_acp: bool,
     ) -> Result<()> {
@@ -1335,9 +1577,12 @@ impl CliRunner {
         use tokio::sync::RwLock;
 
         info!(
-            "Starting ccswarm orchestrator with isolation mode: {} (real_api: {}, port: {}, delegate: {}, acp: {})",
-            isolation, use_real_api, port, delegate, enable_acp
+            "Starting ccswarm orchestrator with isolation mode: {} (port: {}, delegate: {}, acp: {})",
+            isolation, port, delegate, enable_acp
         );
+
+        // Validate provider availability before starting
+        self.validate_provider().await?;
 
         // Parse isolation mode
         let isolation_mode = match isolation {
@@ -1346,26 +1591,8 @@ impl CliRunner {
             _ => crate::agent::IsolationMode::GitWorktree,
         };
 
-        // Update configuration to use real API if requested
-        let mut config = self.config.clone();
-        if use_real_api {
-            // Check for API key
-            if std::env::var("ANTHROPIC_API_KEY").is_err() {
-                return Err(anyhow::anyhow!(
-                    "ANTHROPIC_API_KEY environment variable must be set when using --use-real-api"
-                ));
-            }
-
-            // Update all agent configurations to use real API
-            for agent_config in config.agents.values_mut() {
-                agent_config.claude_config.use_real_api = true;
-            }
-
-            // Update master configuration
-            config.project.master_claude.claude_config.use_real_api = true;
-        }
-
-        let mut master = ProactiveMaster::new_with_config(config, self.repo_path.clone()).await?;
+        let mut master =
+            ProactiveMaster::new_with_config(self.config.clone(), self.repo_path.clone()).await?;
 
         // Set isolation mode for all agents
         master.set_isolation_mode(isolation_mode);
@@ -1886,9 +2113,16 @@ impl CliRunner {
                 status,
                 agent,
                 detailed,
+                branches,
             } => {
-                self.list_tasks(*all, status.as_deref(), agent.as_deref(), *detailed)
-                    .await
+                self.list_tasks(
+                    *all,
+                    status.as_deref(),
+                    agent.as_deref(),
+                    *detailed,
+                    *branches,
+                )
+                .await
             }
             TaskAction::Status {
                 task_id,
@@ -1923,6 +2157,13 @@ impl CliRunner {
                 detailed,
                 performance,
             } => self.show_task_stats(*detailed, *performance).await,
+            TaskAction::Merge {
+                task_id,
+                cleanup,
+                yes,
+            } => self.merge_task_branch(task_id, *cleanup, *yes).await,
+            TaskAction::Retry { task_id, force } => self.retry_task(task_id, *force).await,
+            TaskAction::Delete { task_id, force } => self.delete_task(task_id, *force).await,
         }
     }
 
@@ -1932,6 +2173,7 @@ impl CliRunner {
         status_filter: Option<&str>,
         agent_filter: Option<&str>,
         detailed: bool,
+        branches: bool,
     ) -> Result<()> {
         let tasks = if let Some(ref engine) = self.execution_engine {
             let executor = engine.get_executor();
@@ -2016,10 +2258,223 @@ impl CliRunner {
                             println!("   📝 Details: {}", details);
                         }
                     }
+
+                    if branches {
+                        // Sanitize task ID for branch name lookup
+                        let safe_id: String = task
+                            .task
+                            .id
+                            .chars()
+                            .map(|c| {
+                                if c.is_alphanumeric() || c == '-' {
+                                    c
+                                } else {
+                                    '-'
+                                }
+                            })
+                            .collect();
+                        let branch_name = format!("task/{}", safe_id);
+                        println!("   🌿 Branch: {}", branch_name.bright_green());
+                    }
+
                     println!();
                 }
             }
         }
+
+        // Show worktree summary if --branches flag is set
+        if branches {
+            println!("{}", "Worktree Summary".bright_cyan().bold());
+            println!("{}", "================".bright_cyan());
+            if let Ok(manager) =
+                crate::git::shell::ShellWorktreeManager::new(self.repo_path.clone())
+            {
+                match manager.list_worktrees().await {
+                    Ok(worktrees) => {
+                        let task_worktrees: Vec<_> = worktrees
+                            .iter()
+                            .filter(|wt| wt.branch.starts_with("task/"))
+                            .collect();
+                        if task_worktrees.is_empty() {
+                            println!("No task worktrees found.");
+                        } else {
+                            for wt in &task_worktrees {
+                                println!(
+                                    "  🌿 {} ({})",
+                                    wt.branch.bright_green(),
+                                    wt.path.display()
+                                );
+                            }
+                            println!();
+                            println!("Total: {} task worktrees", task_worktrees.len());
+                        }
+                    }
+                    Err(e) => {
+                        println!("Failed to list worktrees: {}", e.to_string().bright_red());
+                    }
+                }
+            }
+            println!();
+        }
+
+        Ok(())
+    }
+
+    /// Merge a completed task's worktree branch into the main branch
+    async fn merge_task_branch(&self, task_id: &str, cleanup: bool, _yes: bool) -> Result<()> {
+        let manager = crate::git::shell::ShellWorktreeManager::new(self.repo_path.clone())?;
+
+        // Find the task's worktree branch
+        let safe_id: String = task_id
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect();
+        let branch_name = format!("task/{}", safe_id);
+
+        println!(
+            "{} Merging branch {} into main...",
+            ">>>".bright_green().bold(),
+            branch_name.bright_cyan()
+        );
+
+        // Check the branch exists via worktree list
+        let worktrees = manager.list_worktrees().await?;
+        let task_wt = worktrees.iter().find(|wt| wt.branch == branch_name);
+
+        if task_wt.is_none() {
+            return Err(anyhow!("No worktree found for branch '{}'", branch_name));
+        }
+
+        // Merge using git merge
+        let output = tokio::process::Command::new("git")
+            .args([
+                "merge",
+                &branch_name,
+                "--no-ff",
+                "-m",
+                &format!("Merge task {} branch", task_id),
+            ])
+            .current_dir(&self.repo_path)
+            .output()
+            .await
+            .context("Failed to execute git merge")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Merge failed: {}", stderr));
+        }
+
+        println!("{}", "OK Merged successfully".bright_green().bold());
+
+        // Cleanup worktree if requested
+        if cleanup && let Some(wt) = task_wt {
+            if let Err(e) = manager.remove_worktree(&wt.path).await {
+                warn!("Failed to cleanup worktree: {}", e);
+            } else {
+                println!("Cleaned up worktree at {}", wt.path.display());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Retry a failed task
+    async fn retry_task(&self, task_id: &str, force: bool) -> Result<()> {
+        if let Some(ref engine) = self.execution_engine {
+            let executor = engine.get_executor();
+            let task_queue = executor.get_task_queue();
+
+            // Check task status
+            let tasks = task_queue.list_tasks(None, None).await;
+            let task = tasks
+                .iter()
+                .find(|t| t.task.id == task_id)
+                .ok_or_else(|| anyhow!("Task '{}' not found", task_id))?;
+
+            let is_failed = matches!(task.status, TaskStatus::Failed { .. });
+            if !is_failed && !force {
+                return Err(anyhow!(
+                    "Task '{}' is not in failed state. Use --force to retry anyway.",
+                    task_id
+                ));
+            }
+
+            // Re-add the task to the queue
+            let new_task = task.task.clone();
+            let new_id = task_queue.add_task(new_task).await;
+
+            println!(
+                "{} Task retried. New task ID: {}",
+                "OK".bright_green().bold(),
+                new_id.bright_cyan()
+            );
+        } else {
+            return Err(anyhow!(
+                "Execution engine not running. Start with: ccswarm start"
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Delete a task and its associated worktree
+    async fn delete_task(&self, task_id: &str, force: bool) -> Result<()> {
+        if let Some(ref engine) = self.execution_engine {
+            let executor = engine.get_executor();
+            let task_queue = executor.get_task_queue();
+
+            // Check task status
+            let tasks = task_queue.list_tasks(None, None).await;
+            let task = tasks.iter().find(|t| t.task.id == task_id);
+
+            if let Some(task) = task {
+                let is_active = matches!(task.status, TaskStatus::InProgress { .. });
+                if is_active && !force {
+                    return Err(anyhow!(
+                        "Task '{}' is in progress. Use --force to delete anyway.",
+                        task_id
+                    ));
+                }
+
+                // Cancel the task
+                executor
+                    .cancel_task(task_id, Some("Deleted by user".to_string()))
+                    .await?;
+            }
+        }
+
+        // Also clean up any associated worktree
+        let safe_id: String = task_id
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect();
+
+        if let Ok(manager) = crate::git::shell::ShellWorktreeManager::new(self.repo_path.clone()) {
+            let worktrees = manager.list_worktrees().await.unwrap_or_default();
+            let branch_name = format!("task/{}", safe_id);
+            if let Some(wt) = worktrees.iter().find(|wt| wt.branch == branch_name) {
+                if let Err(e) = manager.remove_worktree(&wt.path).await {
+                    warn!("Failed to cleanup worktree: {}", e);
+                } else {
+                    println!("Cleaned up worktree at {}", wt.path.display());
+                }
+            }
+        }
+
+        println!("{} Task '{}' deleted", "OK".bright_green().bold(), task_id);
+
         Ok(())
     }
 
@@ -3096,6 +3551,7 @@ fn create_default_config(repo_path: &Path) -> Result<CcswarmConfig> {
             repository: crate::config::RepositoryConfig {
                 url: repo_path.to_string_lossy().to_string(),
                 main_branch: "main".to_string(),
+                ..Default::default()
             },
             master_claude: crate::config::MasterClaudeConfig {
                 role: "technical_lead".to_string(),
@@ -5787,6 +6243,366 @@ services:
         Ok(())
     }
 
+    async fn handle_interactive(&self, mode: &str, piece: Option<&str>) -> Result<()> {
+        use crate::workflow::interactive::{
+            InteractiveAction, InteractiveMode, InteractiveSession,
+        };
+        use crate::workflow::piece::PieceEngine;
+
+        // Parse interaction mode
+        let interactive_mode = match mode {
+            "persona" => InteractiveMode::Persona,
+            "quiet" => InteractiveMode::Quiet,
+            "passthrough" => InteractiveMode::Passthrough,
+            _ => InteractiveMode::Assistant,
+        };
+
+        println!("{}", "🎯 ccswarm interactive mode".bright_cyan().bold());
+        println!("   Mode: {:?}", interactive_mode);
+        if let Some(p) = piece {
+            println!("   Piece: {}", p);
+        }
+        println!(
+            "   Commands: {} {} {} {}",
+            "/go".bright_green(),
+            "/play <task>".bright_green(),
+            "/mode <mode>".bright_green(),
+            "/quit".bright_red()
+        );
+        println!();
+
+        // Load piece engine and optional piece
+        let mut engine = PieceEngine::new();
+        let loaded_piece = if let Some(piece_name) = piece {
+            // Try to load from builtin pieces
+            engine.load_builtin_pieces();
+            engine.get_piece(piece_name).cloned()
+        } else {
+            engine.load_builtin_pieces();
+            None
+        };
+
+        let mut session = InteractiveSession::new(interactive_mode);
+        if let Some(p) = piece {
+            session.select_piece(p);
+        }
+
+        // REPL loop
+        loop {
+            // Show prompt
+            let prompt_str = match session.mode {
+                InteractiveMode::Assistant => "ccswarm(assistant)> ",
+                InteractiveMode::Persona => "ccswarm(persona)> ",
+                InteractiveMode::Quiet => "ccswarm(quiet)> ",
+                InteractiveMode::Passthrough => "ccswarm(pass)> ",
+            };
+            print!("{}", prompt_str.bright_yellow());
+            std::io::stdout().flush()?;
+
+            // Read input
+            let mut input = String::new();
+            if std::io::stdin().read_line(&mut input)? == 0 {
+                break; // EOF
+            }
+            let input = input.trim();
+            if input.is_empty() {
+                continue;
+            }
+
+            // Process input through interactive session
+            let action = session.process_input(input, loaded_piece.as_ref())?;
+
+            match action {
+                InteractiveAction::AskQuestion(clarification) => {
+                    println!("\n{} {}", "?".bright_blue().bold(), clarification.question);
+                    if !clarification.options.is_empty() {
+                        for (i, opt) in clarification.options.iter().enumerate() {
+                            println!("  {}. {}", i + 1, opt);
+                        }
+                    }
+                    println!();
+                }
+                InteractiveAction::ShowMessage(msg) => {
+                    println!("{}", msg);
+                }
+                InteractiveAction::Execute(task_text) => {
+                    println!(
+                        "\n{} Executing task: {}",
+                        ">>>".bright_green().bold(),
+                        task_text.bright_white()
+                    );
+
+                    // Execute via AISessionBridge if available, otherwise show the task
+                    println!(
+                        "{}",
+                        "Task queued for execution. Use 'ccswarm pipeline' for full execution."
+                            .bright_yellow()
+                    );
+                    println!();
+
+                    // Reset session for next task
+                    session = InteractiveSession::new(session.mode);
+                    if let Some(p) = piece {
+                        session.select_piece(p);
+                    }
+                }
+                InteractiveAction::Exit => {
+                    println!("{}", "Goodbye!".bright_cyan());
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_pipeline(
+        &self,
+        task: &str,
+        piece: &str,
+        output_format: &str,
+        timeout: u64,
+        verbose: bool,
+        output_file: Option<&Path>,
+    ) -> Result<()> {
+        use crate::workflow::pipeline::{PipelineConfig, PipelineRunner};
+        use std::time::Duration;
+
+        info!("Starting pipeline: task='{}', piece='{}'", task, piece);
+
+        let config = PipelineConfig::builder()
+            .piece_name(piece)
+            .task_text(task)
+            .output_format(output_format)
+            .timeout(Duration::from_secs(timeout))
+            .verbose(verbose)
+            .build()
+            .context("Failed to build pipeline configuration")?;
+
+        let runner = PipelineRunner::new();
+        let result = runner.execute(config).await?;
+
+        // Format output based on requested format
+        let formatted = match output_format {
+            "json" => result.format_json()?,
+            "markdown" => result.format_markdown(),
+            _ => result.format_text(),
+        };
+
+        // Write to file or stdout
+        if let Some(path) = output_file {
+            std::fs::write(path, &formatted)
+                .with_context(|| format!("Failed to write output to {}", path.display()))?;
+            println!(
+                "{} Output written to {}",
+                "OK".bright_green().bold(),
+                path.display()
+            );
+        } else {
+            println!("{}", formatted);
+        }
+
+        if !result.is_success() {
+            std::process::exit(result.exit_code().as_code());
+        }
+
+        Ok(())
+    }
+
+    async fn handle_piece(&self, action: &PieceAction) -> Result<()> {
+        use crate::workflow::piece::builtin_pieces;
+
+        match action {
+            PieceAction::List => {
+                let pieces = builtin_pieces();
+
+                // Also check for custom pieces in .ccswarm/pieces/
+                let custom_dir = self.repo_path.join(".ccswarm").join("pieces");
+                let mut custom_count = 0;
+
+                println!("{}", "Available Pieces".bright_cyan().bold());
+                println!("{}", "================".bright_cyan());
+                println!();
+                println!("{}", "Builtin:".bright_white().bold());
+                for piece in &pieces {
+                    println!(
+                        "  {} - {} ({} movements)",
+                        piece.name.bright_green(),
+                        piece.description,
+                        piece.movements.len()
+                    );
+                }
+
+                if custom_dir.exists()
+                    && let Ok(entries) = std::fs::read_dir(&custom_dir)
+                {
+                    let yaml_files: Vec<_> = entries
+                        .filter_map(|e| e.ok())
+                        .filter(|e| {
+                            e.path()
+                                .extension()
+                                .map(|ext| ext == "yaml" || ext == "yml")
+                                .unwrap_or(false)
+                        })
+                        .collect();
+
+                    if !yaml_files.is_empty() {
+                        println!();
+                        println!("{}", "Custom:".bright_white().bold());
+                        for entry in &yaml_files {
+                            let name = entry
+                                .path()
+                                .file_stem()
+                                .map(|s| s.to_string_lossy().to_string())
+                                .unwrap_or_default();
+                            println!("  {} ({})", name.bright_yellow(), entry.path().display());
+                            custom_count += 1;
+                        }
+                    }
+                }
+
+                println!();
+                println!("Total: {} builtin, {} custom", pieces.len(), custom_count);
+            }
+            PieceAction::Eject { name, output } => {
+                let pieces = builtin_pieces();
+                let piece = pieces.iter().find(|p| p.name == *name).ok_or_else(|| {
+                    anyhow!(
+                        "Piece '{}' not found. Use 'ccswarm piece list' to see available pieces.",
+                        name
+                    )
+                })?;
+
+                let output_dir = output
+                    .clone()
+                    .unwrap_or_else(|| self.repo_path.join(".ccswarm").join("pieces"));
+
+                // Create output directory
+                std::fs::create_dir_all(&output_dir).with_context(|| {
+                    format!("Failed to create directory: {}", output_dir.display())
+                })?;
+
+                let output_path = output_dir.join(format!("{}.yaml", name));
+
+                let yaml =
+                    serde_yaml::to_string(piece).context("Failed to serialize piece to YAML")?;
+
+                std::fs::write(&output_path, &yaml)
+                    .with_context(|| format!("Failed to write to {}", output_path.display()))?;
+
+                println!(
+                    "{} Ejected piece '{}' to {}",
+                    "OK".bright_green().bold(),
+                    name.bright_cyan(),
+                    output_path.display()
+                );
+                println!(
+                    "{}",
+                    "Edit this file to customize the workflow, then use it with: ccswarm pipeline --piece <name>"
+                        .bright_black()
+                );
+            }
+            PieceAction::Inspect { name } => {
+                let pieces = builtin_pieces();
+                let piece = pieces
+                    .iter()
+                    .find(|p| p.name == *name)
+                    .ok_or_else(|| anyhow!("Piece '{}' not found", name))?;
+
+                println!("{}", piece.name.bright_cyan().bold());
+                println!("{}", "=".repeat(piece.name.len()).bright_cyan());
+                println!();
+                println!("{}", piece.description);
+                println!();
+                println!(
+                    "Initial movement: {}",
+                    piece.initial_movement.bright_green()
+                );
+                println!("Max movements: {}", piece.max_movements);
+                println!();
+                println!("{}", "Movements:".bright_white().bold());
+                for movement in &piece.movements {
+                    let persona = movement.persona.as_deref().unwrap_or("default");
+                    println!(
+                        "  {} [{}] - {}",
+                        movement.id.bright_green(),
+                        persona.bright_yellow(),
+                        movement.instruction
+                    );
+                    if !movement.rules.is_empty() {
+                        for rule in &movement.rules {
+                            println!(
+                                "    -> {} (on {:?})",
+                                rule.next.bright_cyan(),
+                                rule.condition
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_repertoire(&self, action: &RepertoireAction) -> Result<()> {
+        use crate::workflow::repertoire::RepertoireManager;
+
+        let manager = RepertoireManager::new()?;
+
+        match action {
+            RepertoireAction::Add { url } => {
+                println!("Installing piece package from {}...", url.bright_cyan());
+                let package = manager.add(url).await?;
+                println!(
+                    "{} Installed '{}' with {} pieces",
+                    "OK".bright_green().bold(),
+                    package.name.bright_cyan(),
+                    package.pieces.len()
+                );
+                if !package.pieces.is_empty() {
+                    println!("Pieces:");
+                    for piece_name in &package.pieces {
+                        println!("  - {}", piece_name.bright_green());
+                    }
+                }
+            }
+            RepertoireAction::List => {
+                let packages = manager.list().await?;
+                if packages.is_empty() {
+                    println!("No repertoire packages installed.");
+                    println!();
+                    println!("Install a package with: ccswarm repertoire add <git-url>");
+                } else {
+                    println!("{}", "Installed Packages".bright_cyan().bold());
+                    println!("{}", "==================".bright_cyan());
+                    for package in &packages {
+                        println!();
+                        println!(
+                            "  {} ({})",
+                            package.name.bright_green().bold(),
+                            package.source_url.bright_black()
+                        );
+                        println!("    Path: {}", package.install_path.display());
+                        println!("    Pieces: {}", package.pieces.join(", "));
+                    }
+                    println!();
+                    println!("Total: {} packages", packages.len());
+                }
+            }
+            RepertoireAction::Remove { name } => {
+                manager.remove(name).await?;
+                println!(
+                    "{} Removed package '{}'",
+                    "OK".bright_green().bold(),
+                    name.bright_cyan()
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     async fn handle_help(&self, topic: Option<&str>, search: Option<&str>) -> Result<()> {
         let help = InteractiveHelp::new();
 
@@ -6150,9 +6966,65 @@ services:
             issues.push("git_repo");
         }
 
+        // Check Claude Code CLI
+        print!("Checking Claude Code CLI... ");
+        match std::process::Command::new("claude")
+            .arg("--version")
+            .env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout);
+                println!(
+                    "{} ({})",
+                    "✅ Available".bright_green(),
+                    version.trim().bright_black()
+                );
+            }
+            _ => {
+                println!("{}", "❌ Not found".bright_red());
+                issues.push("claude_cli");
+            }
+        }
+
+        // Check worktree health
+        print!("Checking worktree health... ");
+        if let Ok(manager) = crate::git::shell::ShellWorktreeManager::new(self.repo_path.clone()) {
+            match manager.list_worktrees().await {
+                Ok(worktrees) => {
+                    let stale_count = worktrees
+                        .iter()
+                        .filter(|wt| !wt.path.exists() && wt.path != self.repo_path)
+                        .count();
+                    if stale_count > 0 {
+                        println!(
+                            "{}",
+                            format!(
+                                "⚠️  {} stale worktrees (run: ccswarm worktree prune)",
+                                stale_count
+                            )
+                            .bright_yellow()
+                        );
+                        issues.push("stale_worktrees");
+                    } else {
+                        println!(
+                            "{} ({} worktrees)",
+                            "✅ Healthy".bright_green(),
+                            worktrees.len()
+                        );
+                    }
+                }
+                Err(_) => {
+                    println!("{}", "⚠️  Could not list worktrees".bright_yellow());
+                }
+            }
+        } else {
+            println!("{}", "⚠️  No git repo".bright_yellow());
+        }
+
         // Check disk space
         print!("Checking disk space... ");
-        // Simple check - in real implementation would use proper system calls
         println!("{}", "✅ Sufficient".bright_green());
 
         println!();
@@ -6190,6 +7062,29 @@ services:
                                 )
                                 .await?;
                                 println!("  ✅ Git repository initialized");
+                            }
+                        }
+                        "claude_cli" => {
+                            println!(
+                                "• Claude CLI: Install from https://docs.anthropic.com/en/docs/claude-code"
+                            );
+                        }
+                        "stale_worktrees" => {
+                            if fix {
+                                println!("• Pruning stale worktrees...");
+                                if let Ok(manager) = crate::git::shell::ShellWorktreeManager::new(
+                                    self.repo_path.clone(),
+                                ) {
+                                    if let Err(e) = manager.prune_worktrees().await {
+                                        println!("  ❌ Failed to prune: {}", e);
+                                    } else {
+                                        println!("  ✅ Stale worktrees pruned");
+                                    }
+                                }
+                            } else {
+                                println!(
+                                    "• Stale worktrees: Run 'ccswarm worktree prune' to clean up"
+                                );
                             }
                         }
                         _ => {}

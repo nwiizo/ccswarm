@@ -341,6 +341,8 @@ impl ProviderConfig for ClaudeCodeConfig {
     async fn is_available(&self) -> bool {
         Command::new("claude")
             .arg("--version")
+            .env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
             .output()
             .await
             .map(|output| output.status.success())

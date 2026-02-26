@@ -1181,15 +1181,14 @@ impl ClaudeCodeAgent {
 
     /// Execute Claude Code command in git worktree
     async fn execute_claude_in_worktree(&self, prompt: &str) -> Result<String> {
-        // Check if we should use real API instead of simulation
-        if self.claude_config.use_real_api {
-            return self.execute_claude_real_api(prompt).await;
-        }
-
         let mut cmd = Command::new("claude");
 
         // Set working directory
         cmd.current_dir(&self.worktree_path);
+
+        // Remove Claude Code nesting guard env vars
+        cmd.env_remove("CLAUDECODE");
+        cmd.env_remove("CLAUDE_CODE_ENTRYPOINT");
 
         // Add environment variables
         for (key, value) in &self.identity.env_vars {

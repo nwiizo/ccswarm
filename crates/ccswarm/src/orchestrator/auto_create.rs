@@ -2,14 +2,12 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::agent::{Priority, Task, TaskType};
 use crate::config::CcswarmConfig;
-use crate::orchestrator::master_delegation::{
-    DelegationDecision, DelegationStrategy, MasterDelegationEngine,
-};
+use crate::orchestrator::master_delegation::{DelegationStrategy, MasterDelegationEngine};
 use crate::orchestrator::verification::{VerificationAgent, VerificationConfig};
 
 /// Application types that can be auto-created
@@ -448,35 +446,6 @@ impl AutoCreateEngine {
         Ok(())
     }
 
-    /// Simulate agent execution by creating actual files
-    async fn simulate_agent_execution(
-        &self,
-        decision: &DelegationDecision,
-        _task: &Task,
-        output_path: &Path,
-    ) -> Result<()> {
-        match decision.target_agent.name() {
-            "Frontend" => {
-                self.create_frontend_files(output_path).await?;
-                info!("      ✅ Created frontend files");
-            }
-            "Backend" => {
-                self.create_backend_files(output_path).await?;
-                info!("      ✅ Created backend files");
-            }
-            "DevOps" => {
-                self.create_devops_files(output_path).await?;
-                info!("      ✅ Created deployment files");
-            }
-            "QA" => {
-                self.create_test_files(output_path).await?;
-                info!("      ✅ Created test files");
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
     /// Execute tasks with real Claude API agents (sequential fallback)
     #[allow(dead_code)]
     async fn execute_with_real_agents(
@@ -567,15 +536,15 @@ impl AutoCreateEngine {
                     task_outputs.push((task.clone(), decision.target_agent.clone(), output));
                 }
                 Err(e) => {
-                    info!("      ❌ Execution error: {}", e);
-                    // Continue with simulation fallback
-                    self.simulate_agent_execution(&decision, &task, output_path)
-                        .await?;
-                    // Add simulated output for review
+                    warn!(
+                        "      Task execution failed for {}: {}",
+                        decision.target_agent.name(),
+                        e
+                    );
                     task_outputs.push((
                         task.clone(),
                         decision.target_agent.clone(),
-                        format!("Simulated output for {} task", decision.target_agent.name()),
+                        format!("Error: {}", e),
                     ));
                 }
             }
@@ -682,14 +651,15 @@ impl AutoCreateEngine {
         }
 
         if result.failed_count > 0 {
-            info!("\n⚠️  Some tasks failed, attempting fallback simulation...");
-            // Fallback to simulation for failed tasks
+            warn!(
+                "{} tasks failed during parallel execution. Check logs for details.",
+                result.failed_count
+            );
             for task_result in result.failed_results() {
-                if let Some(task) = tasks.iter().find(|t| t.id == task_result.task_id) {
-                    let decision = self.delegation_engine.delegate_task(task.clone())?;
-                    self.simulate_agent_execution(&decision, task, output_path)
-                        .await?;
-                }
+                warn!(
+                    "   Failed task {}: {:?}",
+                    task_result.task_id, task_result.status
+                );
             }
         }
 
@@ -797,7 +767,8 @@ impl AutoCreateEngine {
         Ok(())
     }
 
-    /// Create frontend files
+    /// Create frontend scaffold files (used by scaffolding workflows)
+    #[allow(dead_code)]
     async fn create_frontend_files(&self, output_path: &Path) -> Result<()> {
         // Create index.html
         let html_content = r#"<!DOCTYPE html>
@@ -1028,7 +999,7 @@ input[type="text"] {
         Ok(())
     }
 
-    /// Create backend files
+    #[allow(dead_code)]
     async fn create_backend_files(&self, output_path: &Path) -> Result<()> {
         // Create server.js
         let server_content = r#"const express = require('express');
@@ -1102,7 +1073,7 @@ app.listen(PORT, () => {
         Ok(())
     }
 
-    /// Create DevOps files
+    #[allow(dead_code)]
     async fn create_devops_files(&self, output_path: &Path) -> Result<()> {
         // Create package.json
         let package_content = r#"{
@@ -1160,7 +1131,7 @@ services:
         Ok(())
     }
 
-    /// Create test files
+    #[allow(dead_code)]
     async fn create_test_files(&self, output_path: &Path) -> Result<()> {
         // Create basic test file
         let test_content = r#"// Basic tests for TODO app

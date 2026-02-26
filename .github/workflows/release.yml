@@ -28,15 +28,21 @@ jobs:
         generate_release_notes: true
 
   build-release:
-    name: Build Release
+    name: Build Release (${{ matrix.asset_name }})
     needs: create-release
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: ccswarm
             asset_name: ccswarm-linux-amd64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: ccswarm
+            asset_name: ccswarm-linux-arm64
+            use_cross: true
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: ccswarm
@@ -56,14 +62,40 @@ jobs:
       with:
         targets: ${{ matrix.target }}
 
-    - name: Build
+    - name: Install cross (for cross-compilation)
+      if: matrix.use_cross
+      run: cargo install cross --git https://github.com/cross-rs/cross
+
+    - name: Build with cargo
+      if: ${{ !matrix.use_cross }}
       run: cargo build --release --target ${{ matrix.target }}
 
-    - name: Upload Release Asset
+    - name: Build with cross
+      if: matrix.use_cross
+      run: cross build --release --target ${{ matrix.target }}
+
+    - name: Package binary (Unix)
+      run: |
+        cd target/${{ matrix.target }}/release
+        chmod +x ${{ matrix.artifact_name }}
+        tar czf ../../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+        cd ../../..
+
+    - name: Generate SHA256
+      run: |
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          shasum -a 256 ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+        else
+          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+        fi
+
+    - name: Upload Release Assets
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.ref_name }}
-        files: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+        files: |
+          ${{ matrix.asset_name }}.tar.gz
+          ${{ matrix.asset_name }}.tar.gz.sha256
 
   publish-crate:
     name: Publish to crates.io

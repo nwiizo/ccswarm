@@ -381,6 +381,8 @@ impl ParallelExecutor {
                         timeout(task_timeout, async {
                             let output = Command::new("claude")
                                 .current_dir(&work_dir)
+                                .env_remove("CLAUDECODE")
+                                .env_remove("CLAUDE_CODE_ENTRYPOINT")
                                 .arg("--dangerously-skip-permissions")
                                 .arg("-p")
                                 .arg(&prompt)

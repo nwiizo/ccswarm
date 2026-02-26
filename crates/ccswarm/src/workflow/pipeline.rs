@@ -816,7 +816,8 @@ mod tests {
     #[test]
     fn test_pipeline_runner_creation() {
         let runner = PipelineRunner::new();
-        assert!(runner.engine().list_pieces().is_empty());
+        // PieceEngine::new() now loads builtin pieces by default
+        assert!(!runner.engine().list_pieces().is_empty());
     }
 
     #[test]

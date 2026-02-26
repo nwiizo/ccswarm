@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde_json::json;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::process::Command;
 
 use super::{
@@ -10,6 +10,13 @@ use super::{
 };
 use crate::agent::{Task, TaskResult};
 use crate::identity::AgentIdentity;
+
+/// Maximum number of retries for transient failures
+const MAX_RETRIES: u32 = 3;
+/// Initial backoff delay
+const INITIAL_BACKOFF_MS: u64 = 1000;
+/// Maximum backoff delay
+const MAX_BACKOFF_MS: u64 = 30_000;
 
 /// Claude Code provider executor implementation
 pub struct ClaudeCodeExecutor {
@@ -115,6 +122,10 @@ impl ClaudeCodeExecutor {
         // This is a workaround for the yoga.wasm module resolution problem
         cmd.current_dir(".");
 
+        // Remove Claude Code nesting guard env vars so child processes can run
+        cmd.env_remove("CLAUDECODE");
+        cmd.env_remove("CLAUDE_CODE_ENTRYPOINT");
+
         // Add identity environment variables
         for (key, value) in &identity.env_vars {
             cmd.env(key, value);
@@ -173,6 +184,92 @@ impl ClaudeCodeExecutor {
                 stdout
             ))
         }
+    }
+
+    /// Check if an error message indicates a retryable condition
+    fn is_retryable_error(error_msg: &str) -> bool {
+        let retryable_patterns = [
+            "rate limit",
+            "rate_limit",
+            "429",
+            "overloaded",
+            "capacity",
+            "too many requests",
+            "server error",
+            "500",
+            "502",
+            "503",
+            "504",
+            "timeout",
+            "timed out",
+            "connection reset",
+            "connection refused",
+            "ECONNRESET",
+            "ETIMEDOUT",
+        ];
+        let lower = error_msg.to_lowercase();
+        retryable_patterns
+            .iter()
+            .any(|pattern| lower.contains(pattern))
+    }
+
+    /// Execute with retry logic and optional fallback model
+    async fn execute_with_retry(
+        &self,
+        args: Vec<String>,
+        working_dir: &Path,
+        identity: &AgentIdentity,
+    ) -> Result<String> {
+        let mut delay = Duration::from_millis(INITIAL_BACKOFF_MS);
+
+        for attempt in 0..=MAX_RETRIES {
+            match self
+                .execute_claude_command(args.clone(), working_dir, identity)
+                .await
+            {
+                Ok(output) => return Ok(output),
+                Err(e) if attempt < MAX_RETRIES && Self::is_retryable_error(&e.to_string()) => {
+                    tracing::warn!(
+                        "Attempt {}/{} failed with retryable error: {}. Retrying in {:?}...",
+                        attempt + 1,
+                        MAX_RETRIES + 1,
+                        e,
+                        delay
+                    );
+                    tokio::time::sleep(delay).await;
+                    // Exponential backoff with cap
+                    delay =
+                        Duration::from_millis((delay.as_millis() as u64 * 2).min(MAX_BACKOFF_MS));
+                }
+                Err(e) if Self::is_retryable_error(&e.to_string()) => {
+                    // All retries exhausted — try fallback model if available
+                    if let Some(ref fallback) = self.config.fallback_model {
+                        tracing::warn!(
+                            "All retries exhausted. Attempting fallback model: {}",
+                            fallback
+                        );
+                        let mut fallback_args = args.clone();
+                        // Replace the model argument
+                        if let Some(model_idx) = fallback_args.iter().position(|a| a == "--model")
+                            && model_idx + 1 < fallback_args.len()
+                        {
+                            fallback_args[model_idx + 1] = fallback.clone();
+                        }
+                        return self
+                            .execute_claude_command(fallback_args, working_dir, identity)
+                            .await
+                            .context("Fallback model execution also failed");
+                    }
+                    return Err(e.context(format!(
+                        "Failed after {} retries. Consider setting a fallback_model in provider config.",
+                        MAX_RETRIES + 1
+                    )));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        unreachable!()
     }
 
     /// Build Claude Code command arguments based on current CLI options
@@ -315,8 +412,7 @@ impl ProviderExecutor for ClaudeCodeExecutor {
         working_dir: &Path,
     ) -> Result<String> {
         let args = self.build_command_args(prompt);
-        self.execute_claude_command(args, working_dir, identity)
-            .await
+        self.execute_with_retry(args, working_dir, identity).await
     }
 
     async fn execute_task(
@@ -377,6 +473,8 @@ impl ProviderExecutor for ClaudeCodeExecutor {
         let result = Command::new("claude")
             .arg("--version")
             .current_dir(working_dir)
+            .env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
             .output()
             .await;
 

@@ -59,7 +59,7 @@ impl SetupWizard {
         println!("  3. Custom - Your own provider");
 
         let provider_choice = Self::prompt_number("Select provider", 1, 1, 3)?;
-        let _use_real_api = provider_choice != 3;
+        let _ = provider_choice;
 
         // Advanced options
         println!();
@@ -161,6 +161,7 @@ impl SetupWizard {
                 repository: RepositoryConfig {
                     url: repo_url,
                     main_branch: "main".to_string(),
+                    ..Default::default()
                 },
                 master_claude: MasterClaudeConfig {
                     role: "technical_lead".to_string(),
