@@ -1,5 +1,6 @@
 use colored::Colorize;
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -20,7 +21,7 @@ pub struct ProgressTracker {
     current_step: usize,
     total_steps: Option<usize>,
     sub_messages: Vec<String>,
-    is_running: Arc<Mutex<bool>>,
+    is_running: Arc<AtomicBool>,
 }
 
 impl ProgressTracker {
@@ -32,7 +33,7 @@ impl ProgressTracker {
             current_step: 0,
             total_steps: None,
             sub_messages: Vec::new(),
-            is_running: Arc::new(Mutex::new(true)),
+            is_running: Arc::new(AtomicBool::new(true)),
         }))
     }
 
@@ -44,7 +45,7 @@ impl ProgressTracker {
             current_step: 0,
             total_steps: Some(total),
             sub_messages: Vec::new(),
-            is_running: Arc::new(Mutex::new(true)),
+            is_running: Arc::new(AtomicBool::new(true)),
         };
         Arc::new(Mutex::new(tracker))
     }
@@ -59,7 +60,7 @@ impl ProgressTracker {
             let spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
             let mut frame_idx = 0;
 
-            while *is_running.lock().await {
+            while is_running.load(Ordering::Relaxed) {
                 let (message, style, elapsed, current, total, sub_msgs) = {
                     let t = tracker.lock().await;
                     (
@@ -168,7 +169,7 @@ impl ProgressTracker {
     pub async fn complete(tracker: Arc<Mutex<Self>>, success: bool, final_message: Option<String>) {
         let (message, elapsed, _is_running) = {
             let t = tracker.lock().await;
-            *t.is_running.lock().await = false;
+            t.is_running.store(false, Ordering::Relaxed);
             (
                 t.message.clone(),
                 t.start_time.elapsed(),

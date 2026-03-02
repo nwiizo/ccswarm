@@ -2,9 +2,6 @@ use thiserror::Error;
 
 /// Main error type for ccswarm with structured error handling
 ///
-/// This enum provides comprehensive error types for all ccswarm operations,
-/// with detailed context and proper error chaining using `thiserror`.
-///
 /// # Examples
 ///
 /// ```rust
@@ -61,14 +58,6 @@ pub enum CCSwarmError {
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    /// Network communication error
-    #[error("Network error: {message}")]
-    Network {
-        message: String,
-        #[source]
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    },
-
     /// Orchestrator coordination error
     #[error("Orchestrator error: {message}")]
     Orchestrator {
@@ -81,41 +70,6 @@ pub enum CCSwarmError {
     /// Git operation error
     #[error("Git error: {message}")]
     Git {
-        message: String,
-        #[source]
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    },
-
-    /// Template processing error
-    #[error("Template error: {message}")]
-    Template {
-        message: String,
-        template_name: Option<String>,
-        #[source]
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    },
-
-    /// Extension system error
-    #[error("Extension error [{extension_id}]: {message}")]
-    Extension {
-        extension_id: String,
-        message: String,
-        #[source]
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    },
-
-    /// Resource management error
-    #[error("Resource error: {message}")]
-    Resource {
-        message: String,
-        resource_type: Option<String>,
-        #[source]
-        source: Option<Box<dyn std::error::Error + Send + Sync>>,
-    },
-
-    /// Authentication/authorization error
-    #[error("Authentication error: {message}")]
-    Auth {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
@@ -200,7 +154,6 @@ where
 
 /// Convenience methods for creating specific error types
 impl CCSwarmError {
-    /// Create a configuration error
     pub fn config<S: Into<String>>(message: S) -> Self {
         Self::Configuration {
             message: message.into(),
@@ -208,7 +161,6 @@ impl CCSwarmError {
         }
     }
 
-    /// Create an agent error
     pub fn agent<S: Into<String>, I: Into<String>>(agent_id: I, message: S) -> Self {
         Self::Agent {
             agent_id: agent_id.into(),
@@ -217,7 +169,6 @@ impl CCSwarmError {
         }
     }
 
-    /// Create a session error
     pub fn session<S: Into<String>, I: Into<String>>(session_id: I, message: S) -> Self {
         Self::Session {
             session_id: session_id.into(),
@@ -226,7 +177,6 @@ impl CCSwarmError {
         }
     }
 
-    /// Create an orchestrator error
     pub fn orchestrator<S: Into<String>>(message: S, task_id: Option<String>) -> Self {
         Self::Orchestrator {
             message: message.into(),
@@ -235,7 +185,6 @@ impl CCSwarmError {
         }
     }
 
-    /// Create a task error
     pub fn task<S: Into<String>, I: Into<String>>(task_id: I, message: S) -> Self {
         Self::Task {
             task_id: task_id.into(),
@@ -244,15 +193,6 @@ impl CCSwarmError {
         }
     }
 
-    /// Create a network error
-    pub fn network<S: Into<String>>(message: S) -> Self {
-        Self::Network {
-            message: message.into(),
-            source: None,
-        }
-    }
-
-    /// Create a git error
     pub fn git<S: Into<String>>(message: S) -> Self {
         Self::Git {
             message: message.into(),
@@ -260,66 +200,6 @@ impl CCSwarmError {
         }
     }
 
-    /// Create a template error
-    pub fn template<S: Into<String>>(message: S) -> Self {
-        Self::Template {
-            message: message.into(),
-            template_name: None,
-            source: None,
-        }
-    }
-
-    /// Create a template error with template name
-    pub fn template_with_name<S: Into<String>, N: Into<String>>(
-        message: S,
-        template_name: N,
-    ) -> Self {
-        Self::Template {
-            message: message.into(),
-            template_name: Some(template_name.into()),
-            source: None,
-        }
-    }
-
-    /// Create an extension error
-    pub fn extension<S: Into<String>, I: Into<String>>(extension_id: I, message: S) -> Self {
-        Self::Extension {
-            extension_id: extension_id.into(),
-            message: message.into(),
-            source: None,
-        }
-    }
-
-    /// Create a resource error
-    pub fn resource<S: Into<String>>(message: S) -> Self {
-        Self::Resource {
-            message: message.into(),
-            resource_type: None,
-            source: None,
-        }
-    }
-
-    /// Create a resource error with type
-    pub fn resource_with_type<S: Into<String>, T: Into<String>>(
-        message: S,
-        resource_type: T,
-    ) -> Self {
-        Self::Resource {
-            message: message.into(),
-            resource_type: Some(resource_type.into()),
-            source: None,
-        }
-    }
-
-    /// Create an authentication error
-    pub fn auth<S: Into<String>>(message: S) -> Self {
-        Self::Auth {
-            message: message.into(),
-            source: None,
-        }
-    }
-
-    /// Create a user-friendly error with suggestion
     pub fn user_error<S: Into<String>>(message: S) -> Self {
         Self::UserError {
             message: message.into(),
@@ -327,7 +207,6 @@ impl CCSwarmError {
         }
     }
 
-    /// Create a user-friendly error with suggestion
     pub fn user_error_with_suggestion<S: Into<String>, T: Into<String>>(
         message: S,
         suggestion: T,
@@ -348,12 +227,8 @@ impl CCSwarmError {
             | Self::Agent { source: s, .. }
             | Self::Session { source: s, .. }
             | Self::Task { source: s, .. }
-            | Self::Network { source: s, .. }
             | Self::Git { source: s, .. }
-            | Self::Template { source: s, .. }
-            | Self::Extension { source: s, .. }
-            | Self::Resource { source: s, .. }
-            | Self::Auth { source: s, .. }
+            | Self::Orchestrator { source: s, .. }
             | Self::Other { source: s, .. } => {
                 *s = Some(Box::new(source));
             }
@@ -364,23 +239,13 @@ impl CCSwarmError {
 
     /// Check if this is a recoverable error
     pub fn is_recoverable(&self) -> bool {
-        matches!(
-            self,
-            Self::Network { .. } | Self::Io(_) | Self::Task { .. } | Self::Resource { .. }
-        )
+        matches!(self, Self::Io(_) | Self::Task { .. })
     }
 
     /// Check if this error should be retried
-    ///
-    /// Returns true for transient errors that may succeed on retry:
-    /// - Network errors (connection issues, timeouts)
-    /// - Resource errors (temporary resource exhaustion)
-    /// - Certain IO errors (connection reset, broken pipe, etc.)
     pub fn should_retry(&self) -> bool {
         match self {
-            Self::Network { .. } | Self::Resource { .. } => true,
             Self::Io(io_err) => {
-                // Retry transient IO errors
                 matches!(
                     io_err.kind(),
                     std::io::ErrorKind::ConnectionReset
@@ -396,34 +261,19 @@ impl CCSwarmError {
     }
 
     /// Get the suggested delay before retrying this error
-    ///
-    /// Returns a duration based on the error type:
-    /// - Network errors: 1 second (allow network recovery)
-    /// - Resource errors: 2 seconds (allow resource cleanup)
-    /// - IO errors: 500ms (quick retry for transient issues)
     pub fn suggested_retry_delay(&self) -> std::time::Duration {
         match self {
-            Self::Network { .. } => std::time::Duration::from_secs(1),
-            Self::Resource { .. } => std::time::Duration::from_secs(2),
             Self::Io(_) => std::time::Duration::from_millis(500),
             _ => std::time::Duration::from_secs(1),
         }
     }
 
     /// Get the maximum number of retries recommended for this error
-    ///
-    /// Returns different limits based on error type:
-    /// - Network errors: 3 retries
-    /// - Resource errors: 5 retries (may need more time to recover)
-    /// - IO errors: 2 retries
-    /// - Non-retryable errors: 0 retries
     pub fn max_retries(&self) -> u32 {
         if !self.should_retry() {
             return 0;
         }
         match self {
-            Self::Network { .. } => 3,
-            Self::Resource { .. } => 5,
             Self::Io(_) => 2,
             _ => 0,
         }
@@ -432,32 +282,30 @@ impl CCSwarmError {
     /// Get error severity level
     pub fn severity(&self) -> ErrorSeverity {
         match self {
-            Self::Auth { .. } | Self::Configuration { .. } => ErrorSeverity::Critical,
-            Self::Agent { .. }
-            | Self::Session { .. }
-            | Self::Extension { .. }
-            | Self::Orchestrator { .. } => ErrorSeverity::High,
-            Self::Task { .. } | Self::Git { .. } | Self::Template { .. } => ErrorSeverity::Medium,
-            Self::Network { .. } | Self::Resource { .. } => ErrorSeverity::Low,
+            Self::Configuration { .. } => ErrorSeverity::Critical,
+            Self::Agent { .. } | Self::Session { .. } | Self::Orchestrator { .. } => {
+                ErrorSeverity::High
+            }
+            Self::Task { .. } | Self::Git { .. } => ErrorSeverity::Medium,
             Self::Io(_) | Self::SerdeJson(_) => ErrorSeverity::Medium,
             Self::UserError { .. } => ErrorSeverity::Info,
             Self::Other { .. } => ErrorSeverity::Medium,
         }
     }
+
+    /// Check if this error should be treated as fatal
+    pub fn is_fatal(&self) -> bool {
+        matches!(self, Self::Configuration { .. } | Self::Orchestrator { .. })
+    }
 }
 
-/// Error severity levels for monitoring and alerting
+/// Error severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ErrorSeverity {
-    /// Informational - no action needed
     Info,
-    /// Low severity - monitoring recommended
     Low,
-    /// Medium severity - investigation needed
     Medium,
-    /// High severity - immediate attention required
     High,
-    /// Critical severity - system failure
     Critical,
 }
 
@@ -473,135 +321,8 @@ impl std::fmt::Display for ErrorSeverity {
     }
 }
 
-// ============================================================================
-// FatalError Trait - Inspired by Zellij's error classification pattern
-// ============================================================================
-
-/// Trait for classifying errors as fatal or non-fatal.
-///
-/// Fatal errors indicate unrecoverable conditions that should cause the
-/// operation to abort completely. Non-fatal errors can be handled gracefully
-/// with fallback behavior.
-///
-/// # Example
-/// ```rust
-/// use ccswarm::error::{FatalError, ClassifiedError};
-///
-/// fn process() -> Result<(), ClassifiedError<std::io::Error>> {
-///     // Mark an error as fatal
-///     std::fs::read("critical_config.json")
-///         .map_err(|e| ClassifiedError::fatal(e))?;
-///     Ok(())
-/// }
-/// ```
-pub trait FatalError: Sized {
-    /// Mark this error as fatal (unrecoverable)
-    fn fatal(self) -> ClassifiedError<Self>;
-
-    /// Mark this error as non-fatal (recoverable)
-    fn non_fatal(self) -> ClassifiedError<Self>;
-}
-
-/// An error wrapper that classifies the error as fatal or non-fatal.
-///
-/// This enables graceful degradation by allowing callers to handle
-/// non-fatal errors differently from fatal ones.
-#[derive(Debug)]
-pub struct ClassifiedError<E> {
-    /// The underlying error
-    pub error: E,
-    /// Whether this error is fatal
-    pub is_fatal: bool,
-}
-
-impl<E> ClassifiedError<E> {
-    /// Create a fatal error
-    pub fn fatal(error: E) -> Self {
-        Self {
-            error,
-            is_fatal: true,
-        }
-    }
-
-    /// Create a non-fatal error
-    pub fn non_fatal(error: E) -> Self {
-        Self {
-            error,
-            is_fatal: false,
-        }
-    }
-
-    /// Check if this error is fatal
-    pub fn is_fatal(&self) -> bool {
-        self.is_fatal
-    }
-
-    /// Get the underlying error
-    pub fn into_inner(self) -> E {
-        self.error
-    }
-
-    /// Map the error to a different type
-    pub fn map<F, O>(self, f: F) -> ClassifiedError<O>
-    where
-        F: FnOnce(E) -> O,
-    {
-        ClassifiedError {
-            error: f(self.error),
-            is_fatal: self.is_fatal,
-        }
-    }
-}
-
-impl<E: std::fmt::Display> std::fmt::Display for ClassifiedError<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_fatal {
-            write!(f, "[FATAL] {}", self.error)
-        } else {
-            write!(f, "{}", self.error)
-        }
-    }
-}
-
-impl<E: std::error::Error + 'static> std::error::Error for ClassifiedError<E> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.error)
-    }
-}
-
-/// Implement FatalError for any error type
-impl<E> FatalError for E {
-    fn fatal(self) -> ClassifiedError<Self> {
-        ClassifiedError::fatal(self)
-    }
-
-    fn non_fatal(self) -> ClassifiedError<Self> {
-        ClassifiedError::non_fatal(self)
-    }
-}
-
-/// Extension trait for Result types to easily classify errors
-pub trait ResultFatalExt<T, E> {
-    /// Mark the error as fatal if Result is Err
-    fn fatal_on_err(self) -> std::result::Result<T, ClassifiedError<E>>;
-
-    /// Mark the error as non-fatal if Result is Err
-    fn non_fatal_on_err(self) -> std::result::Result<T, ClassifiedError<E>>;
-}
-
-impl<T, E> ResultFatalExt<T, E> for std::result::Result<T, E> {
-    fn fatal_on_err(self) -> std::result::Result<T, ClassifiedError<E>> {
-        self.map_err(ClassifiedError::fatal)
-    }
-
-    fn non_fatal_on_err(self) -> std::result::Result<T, ClassifiedError<E>> {
-        self.map_err(ClassifiedError::non_fatal)
-    }
-}
-
 /// Convert CCSwarmError to user-friendly error messages with suggestions
 impl CCSwarmError {
-    /// Convert this error to a user-friendly error with actionable suggestions
     pub fn to_user_error(&self) -> crate::utils::user_error::UserError {
         use crate::utils::user_error::UserError;
 
@@ -628,26 +349,13 @@ impl CCSwarmError {
                         task_id
                     ))
             }
-            Self::Network { message, .. } => {
-                UserError::new("Network Error", message.as_str())
-                    .with_suggestion("Check your network connection and API keys. Run 'ccswarm doctor --check-api' to test connectivity.")
-            }
             Self::Git { message, .. } => {
                 UserError::new("Git Error", message.as_str())
                     .with_suggestion("Ensure you're in a Git repository. Run 'git status' to check, or 'ccswarm doctor' for diagnostics.")
             }
-            Self::Auth { message, .. } => {
-                UserError::new("Authentication Error", message.as_str())
-                    .with_suggestion("Verify your API key is set: ANTHROPIC_API_KEY for Claude. Run 'ccswarm doctor --check-api'.")
-            }
             Self::Orchestrator { message, .. } => {
                 UserError::new("Orchestrator Error", message.as_str())
                     .with_suggestion("Try restarting the orchestrator: 'ccswarm stop && ccswarm start'.")
-            }
-            Self::Resource { message, resource_type, .. } => {
-                let detail = resource_type.as_deref().unwrap_or("unknown");
-                UserError::new(format!("Resource Error ({})", detail), message.as_str())
-                    .with_suggestion("Check system resources with 'ccswarm health --resources'. Close unnecessary processes and retry.")
             }
             Self::Io(io_err) => {
                 UserError::new("I/O Error", &io_err.to_string())
@@ -665,48 +373,10 @@ impl CCSwarmError {
                     err
                 }
             }
-            Self::Template { message, template_name, .. } => {
-                let title = match template_name {
-                    Some(name) => format!("Template Error [{}]", name),
-                    None => "Template Error".to_string(),
-                };
-                UserError::new(title, message.as_str())
-                    .with_suggestion("Check available templates with 'ccswarm template list'.")
-            }
-            Self::Extension { extension_id, message, .. } => {
-                UserError::new(format!("Extension Error [{}]", extension_id), message.as_str())
-                    .with_suggestion("Run 'ccswarm extend list' to check extension status.")
-            }
             Self::Other { message, .. } => {
                 UserError::new("Error", message.as_str())
                     .with_suggestion("Run 'ccswarm doctor' for diagnostics. Use '--verbose' for more details.")
             }
-        }
-    }
-}
-
-/// Determine if a CCSwarmError should be treated as fatal
-impl CCSwarmError {
-    /// Check if this error should be treated as fatal
-    ///
-    /// Fatal errors are those that indicate system-level failures
-    /// that cannot be recovered from:
-    /// - Authentication failures
-    /// - Critical configuration errors
-    /// - Orchestrator failures
-    pub fn is_fatal(&self) -> bool {
-        matches!(
-            self,
-            Self::Auth { .. } | Self::Configuration { .. } | Self::Orchestrator { .. }
-        )
-    }
-
-    /// Convert to a ClassifiedError based on error type
-    pub fn classify(self) -> ClassifiedError<Self> {
-        if self.is_fatal() {
-            ClassifiedError::fatal(self)
-        } else {
-            ClassifiedError::non_fatal(self)
         }
     }
 }

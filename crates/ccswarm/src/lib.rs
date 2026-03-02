@@ -8,36 +8,22 @@
 
 pub mod agent;
 pub mod auto_accept;
-pub mod benchmark;
 pub mod cli;
 pub mod config;
-// Temporarily disabled due to Docker dependency issues
-// pub mod container;
 pub mod coordination;
 pub mod error;
 pub mod execution;
-pub mod extension;
-pub mod extension_stub;
 pub mod git;
-pub mod hitl;
 pub mod hooks;
 pub mod identity;
 pub mod ipc;
 pub mod mcp;
-pub mod memory;
-pub mod monitoring;
 pub mod orchestrator;
 pub mod providers;
 pub mod resource;
-pub mod sangha;
-pub mod security;
-pub mod semantic;
 pub mod session;
-pub mod streaming;
 pub mod subagent;
 pub mod template;
-pub mod tracing;
-pub mod traits;
 pub mod tui;
 pub mod utils;
 pub mod workflow;

@@ -15,14 +15,6 @@ categories = ["development-tools", "command-line-utilities"]
 name = "ccswarm"
 path = "src/main.rs"
 
-# [[example]]
-# name = "search_agent_sangha_demo"
-# path = "examples/search_agent_sangha_demo.rs"
-
-[[example]]
-name = "backend_status_demo"
-path = "examples/backend_status_demo.rs"
-
 [dependencies]
 # Async runtime - minimal features for reduced binary size
 tokio = { version = "1.40", features = [
@@ -50,9 +42,6 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 # Date/Time
 chrono = { version = "0.4", features = ["serde"] }
 
-# Macro utilities
-paste = "1.0"
-
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
@@ -77,17 +66,12 @@ config = "0.15"
 # Async channels
 async-channel = "2.3"
 
-# Crossbeam channels for ai-session integration
-crossbeam-channel = "0.5"
-
 # State management
 dashmap = "6.1"
 
 # TUI
 ratatui = "0.29"
 crossterm = "0.29"
-tokio-util = "0.7"
-
 # HTTP client for API providers
 reqwest = { version = "0.12", features = ["json"] }
 
@@ -123,9 +107,8 @@ rand = "0.9"
 # System information for resource monitoring
 sysinfo = "0.33"
 
-# Secure secret handling (zeroize feature for memory safety)
+# Secure secret handling
 secrecy = { version = "0.10", features = ["serde"] }
-zeroize = "1.8"
 
 # AI Session Management - core session management library
 ai-session = { version = "0.5.0", path = "../ai-session" }
