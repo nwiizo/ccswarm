@@ -139,9 +139,6 @@ pub use native_portable as native;
 pub mod output;
 pub mod persistence;
 pub mod session_persistence;
-/// TMux compatibility layer (optional, use native SessionManager instead)
-#[cfg(feature = "tmux-compat")]
-pub mod tmux_bridge;
 
 // Re-export main types
 pub use context::{

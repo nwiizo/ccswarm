@@ -126,41 +126,6 @@ impl CommandRegistry {
             runner.handle_auto_create(description, None, *auto_deploy, output)
         );
 
-        self.register("sangha", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Sangha { action } = cmd {
-                    runner.handle_sangha(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
-
-        self.register("extend", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Extend { action } = cmd {
-                    runner.handle_extend(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
-
-        self.register("search", |runner, cmd| {
-            Box::pin(async move {
-                if let Commands::Search { action } = cmd {
-                    runner.handle_search(action).await
-                } else {
-                    anyhow::bail!("Command type mismatch in registry handler")
-                }
-            })
-        });
-
-        register_command!(self, "evolution", runner, cmd,
-            Commands::Evolution { action } =>
-            runner.handle_evolution(action)
-        );
-
         register_command!(self, "quality", runner, cmd,
             Commands::Quality { action } =>
             runner.handle_quality(action)
@@ -232,12 +197,12 @@ impl CommandRegistry {
         &mut self,
         name: &'static str,
         handler: impl for<'a> Fn(
-            &'a CliRunner,
-            &'a Commands,
-        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
-        + Send
-        + Sync
-        + 'static,
+                &'a CliRunner,
+                &'a Commands,
+            ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
+            + Send
+            + Sync
+            + 'static,
     ) {
         self.handlers.insert(name, Box::new(handler));
     }
@@ -271,10 +236,6 @@ impl CommandRegistry {
             Commands::Session { .. } => "session",
             Commands::Resource { .. } => "resource",
             Commands::AutoCreate { .. } => "auto-create",
-            Commands::Sangha { .. } => "sangha",
-            Commands::Extend { .. } => "extend",
-            Commands::Search { .. } => "search",
-            Commands::Evolution { .. } => "evolution",
             Commands::Quality { .. } => "quality",
             Commands::Template { .. } => "template",
             Commands::Subagent { .. } => "subagent",

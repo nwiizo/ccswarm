@@ -7,7 +7,6 @@ use std::fmt;
 use tokio::time::Instant;
 
 use crate::coordination::StatusTracker;
-use crate::monitoring::MonitoringSystem;
 
 /// Health status levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -194,15 +193,11 @@ impl SystemHealthReport {
 /// Health checker for the ccswarm system
 pub struct HealthChecker {
     status_tracker: StatusTracker,
-    monitoring_system: Option<MonitoringSystem>,
 }
 
 impl HealthChecker {
     pub fn new(status_tracker: StatusTracker) -> Self {
-        Self {
-            status_tracker,
-            monitoring_system: None,
-        }
+        Self { status_tracker }
     }
 
     /// Perform all health checks
@@ -225,11 +220,6 @@ impl HealthChecker {
         let session_checks = self.check_sessions().await?;
         let session_count = session_checks.len();
         checks.extend(session_checks);
-
-        // Check monitoring system
-        if self.monitoring_system.is_some() {
-            checks.push(self.check_monitoring_system().await);
-        }
 
         // Check coordination bus
         checks.push(self.check_coordination_bus().await);
@@ -437,34 +427,6 @@ impl HealthChecker {
         }
 
         Ok(results)
-    }
-
-    async fn check_monitoring_system(&self) -> HealthCheckResult {
-        let start = Instant::now();
-
-        if let Some(monitoring) = &self.monitoring_system {
-            let stats = monitoring.get_stats();
-
-            HealthCheckResult {
-                component: "monitoring_system".to_string(),
-                status: HealthStatus::Healthy,
-                message: "Monitoring system is active".to_string(),
-                details: Some(serde_json::json!({
-                    "total_entries": stats.total_entries,
-                    "entries_per_agent": stats.entries_per_agent,
-                    "entries_per_type": stats.entries_per_type,
-                })),
-                response_time_ms: start.elapsed().as_millis() as u64,
-            }
-        } else {
-            HealthCheckResult {
-                component: "monitoring_system".to_string(),
-                status: HealthStatus::Down,
-                message: "Monitoring system not initialized".to_string(),
-                details: None,
-                response_time_ms: start.elapsed().as_millis() as u64,
-            }
-        }
     }
 
     async fn check_coordination_bus(&self) -> HealthCheckResult {

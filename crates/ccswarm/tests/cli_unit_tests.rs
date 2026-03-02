@@ -462,69 +462,11 @@ fn test_codex_config_default() {
 // ============================================================================
 
 #[test]
-fn test_error_should_retry_network() {
-    use ccswarm::error::CCSwarmError;
-
-    let error = CCSwarmError::network("Connection timeout");
-    assert!(error.should_retry());
-}
-
-#[test]
-fn test_error_should_retry_resource() {
-    use ccswarm::error::CCSwarmError;
-
-    let error = CCSwarmError::resource("Memory exhausted");
-    assert!(error.should_retry());
-}
-
-#[test]
 fn test_error_should_not_retry_config() {
     use ccswarm::error::CCSwarmError;
 
     let error = CCSwarmError::config("Invalid configuration");
     assert!(!error.should_retry());
-}
-
-#[test]
-fn test_error_should_not_retry_auth() {
-    use ccswarm::error::CCSwarmError;
-
-    let error = CCSwarmError::auth("Invalid API key");
-    assert!(!error.should_retry());
-}
-
-#[test]
-fn test_error_retry_delay_network() {
-    use ccswarm::error::CCSwarmError;
-    use std::time::Duration;
-
-    let error = CCSwarmError::network("Connection timeout");
-    assert_eq!(error.suggested_retry_delay(), Duration::from_secs(1));
-}
-
-#[test]
-fn test_error_retry_delay_resource() {
-    use ccswarm::error::CCSwarmError;
-    use std::time::Duration;
-
-    let error = CCSwarmError::resource("Resource exhausted");
-    assert_eq!(error.suggested_retry_delay(), Duration::from_secs(2));
-}
-
-#[test]
-fn test_error_max_retries_network() {
-    use ccswarm::error::CCSwarmError;
-
-    let error = CCSwarmError::network("Connection timeout");
-    assert_eq!(error.max_retries(), 3);
-}
-
-#[test]
-fn test_error_max_retries_resource() {
-    use ccswarm::error::CCSwarmError;
-
-    let error = CCSwarmError::resource("Resource exhausted");
-    assert_eq!(error.max_retries(), 5);
 }
 
 #[test]
@@ -539,7 +481,7 @@ fn test_error_max_retries_non_retryable() {
 fn test_error_severity_critical() {
     use ccswarm::error::{CCSwarmError, ErrorSeverity};
 
-    let error = CCSwarmError::auth("Invalid credentials");
+    let error = CCSwarmError::config("Invalid configuration");
     assert_eq!(error.severity(), ErrorSeverity::Critical);
 }
 
@@ -552,22 +494,12 @@ fn test_error_severity_high() {
 }
 
 #[test]
-fn test_error_severity_low() {
-    use ccswarm::error::{CCSwarmError, ErrorSeverity};
-
-    let error = CCSwarmError::network("Temporary network issue");
-    assert_eq!(error.severity(), ErrorSeverity::Low);
-}
-
-#[test]
 fn test_error_is_recoverable() {
     use ccswarm::error::CCSwarmError;
 
-    let network_error = CCSwarmError::network("Connection reset");
     let task_error = CCSwarmError::task("task-1", "Task failed");
     let config_error = CCSwarmError::config("Bad config");
 
-    assert!(network_error.is_recoverable());
     assert!(task_error.is_recoverable());
     assert!(!config_error.is_recoverable());
 }

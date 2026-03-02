@@ -8,13 +8,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use ccswarm::workflow::{
-    ArpeggioConfig, ArpeggioExecutor, ArpeggioItem, ChangeType, CycleDetector, FacetRegistry,
-    FileChange, GitHubIssue, GitHubIssueConfig, I18nManager, InteractiveAction, InteractiveMode,
-    InteractiveSession, IssueResult, IssueTaskGenerator, Language, LocaleBundle, LoopStrategy,
-    MatchMethod, Movement, MovementJudge, MovementPermission, MovementRule, PermissionEnforcer,
-    Piece, PieceEngine, PieceStatus, PipelineConfig, PipelineExitCode, PipelineRunner,
-    PipelineStatus, RuleCondition, WatchConfig, WatchController, WatchState, builtin_personas,
-    builtin_pieces, builtin_policies, parse_gh_issue,
+    builtin_personas, builtin_pieces, builtin_policies, parse_gh_issue, ArpeggioConfig,
+    ArpeggioExecutor, ArpeggioItem, ChangeType, CycleDetector, FacetRegistry, FileChange,
+    GitHubIssue, GitHubIssueConfig, InteractiveAction, InteractiveMode, InteractiveSession,
+    IssueResult, IssueTaskGenerator, LoopStrategy, MatchMethod, Movement, MovementJudge,
+    MovementPermission, MovementRule, PermissionEnforcer, Piece, PieceEngine, PieceStatus,
+    PipelineConfig, PipelineExitCode, PipelineRunner, PipelineStatus, RuleCondition, WatchConfig,
+    WatchController, WatchState,
 };
 
 // ---------------------------------------------------------------------------
@@ -435,34 +435,11 @@ async fn test_github_issue_to_pipeline_workflow() {
 }
 
 // ---------------------------------------------------------------------------
-// 8. watch + cycle + i18n + piece
+// 8. watch + cycle + piece
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_watch_cycle_i18n_integration() {
-    // Set up i18n with Japanese
-    let mut i18n = I18nManager::new();
-    let mut ja_strings = HashMap::new();
-    ja_strings.insert(
-        "watch.change_detected".to_string(),
-        "変更検出: {count}ファイル".to_string(),
-    );
-    i18n.register_bundle(LocaleBundle {
-        language: Language::Ja,
-        strings: ja_strings,
-    });
-    i18n.set_language(Language::Ja);
-
-    // Verify localized message
-    let mut vars = HashMap::new();
-    vars.insert("count".to_string(), "3".to_string());
-    let msg = i18n.format("watch.change_detected", &vars);
-    assert_eq!(msg, "変更検出: 3ファイル");
-
-    // Language instruction for agents
-    let lang_instruction = i18n.agent_language_instruction();
-    assert!(lang_instruction.contains("日本語"));
-
+fn test_watch_cycle_integration() {
     // Cycle analysis on a piece that the watch mode would trigger
     let piece = Piece {
         name: "watched-workflow".to_string(),
@@ -575,11 +552,11 @@ async fn test_arpeggio_batch_from_issues() {
 }
 
 // ---------------------------------------------------------------------------
-// 10. facets + i18n + judge + piece
+// 10. facets + judge + piece
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_facets_i18n_judge_prompt_composition() {
+fn test_facets_judge_prompt_composition() {
     // Set up FacetRegistry with builtins
     let mut registry = FacetRegistry::new();
     for persona in builtin_personas() {
@@ -589,17 +566,12 @@ fn test_facets_i18n_judge_prompt_composition() {
         registry.register_policy(policy);
     }
 
-    // Set up i18n for Japanese
-    let mut i18n = I18nManager::new();
-    i18n.set_language(Language::Ja);
-    let lang_instruction = i18n.agent_language_instruction();
-
-    // Compose prompt with persona=coder, policy=coding, + i18n instruction
+    // Compose prompt with persona=coder, policy=coding
     let composed = registry.compose(
         Some("coder"),
         Some("coding"),
         None,
-        &format!("Implement feature X\n\n{}", lang_instruction),
+        "Implement feature X",
         Some("Return JSON with {status, files_changed}"),
     );
 
@@ -621,10 +593,6 @@ fn test_facets_i18n_judge_prompt_composition() {
     assert!(
         composed.user.contains("Implement feature X"),
         "should contain instruction"
-    );
-    assert!(
-        composed.user.contains("日本語"),
-        "should contain i18n language instruction"
     );
     assert!(
         composed.user.contains("## Constraints"),
