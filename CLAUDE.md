@@ -4,7 +4,7 @@
 
 ccswarm v0.4.5 - AI Multi-Agent Orchestration System with **ai-session** integration.
 
-> **Implementation Status**: ~75% complete. See `.claude/reference/version-notes.md` for details.
+> **Implementation Status**: ~75% complete.
 
 ## Quick Commands
 
@@ -36,12 +36,6 @@ Automated validation via Claude Code hooks:
 - [rust-fix-agent](.claude/agents/rust-fix-agent.md) - Rust build/clippy fixes
 - [code-refactor-agent](.claude/agents/code-refactor-agent.md) - Code refactoring
 - [architecture-reviewer](.claude/agents/architecture-reviewer.md) - Architecture review
-
-## Reference (Load On-Demand)
-
-- [commands](.claude/reference/commands.md) - All CLI commands
-- [file-structure](.claude/reference/file-structure.md) - Project structure
-- [version-notes](.claude/reference/version-notes.md) - Implementation status, v0.3.8/v0.4.0 features
 
 ## Skills
 

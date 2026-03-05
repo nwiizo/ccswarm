@@ -273,13 +273,7 @@ let compressed_context = session.get_compressed_context().await?;
 
 ### Documentation References
 
-For comprehensive ai-session documentation:
-
-- **[AI-Session README](../crates/ai-session/README.md)** - Overview and quick start
-- **[AI-Session Architecture](../crates/ai-session/docs/ARCHITECTURE.md)** - Detailed system design
-- **[AI-Session API Guide](../crates/ai-session/docs/API_GUIDE.md)** - Complete API reference
-- **[AI-Session CLI Guide](../crates/ai-session/docs/CLI_GUIDE.md)** - Command-line interface
-- **[Integration Examples](../crates/ai-session/examples/)** - Practical usage examples
+- **[AI-Session README](../crates/ai-session/README.md)** - Overview and API reference
 
 ## Configuration
 
