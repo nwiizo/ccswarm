@@ -50,7 +50,7 @@ The workspace configuration enables:
 │  - Message bus for inter-agent communication                 │
 │  - Resource manager for file locking                         │
 │  - Session persistence and recovery                          │
-│  📖 See: ../crates/ai-session/docs/ARCHITECTURE.md          │
+│  See: crates/ai-session/README.md                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -95,14 +95,11 @@ Specialized AI agents with strict role boundaries.
 ### 3. AI-Session Integration (`crates/ccswarm/src/session/`)
 Revolutionary session management powered by the ai-session crate, replacing tmux entirely.
 
-📖 **For complete AI-Session documentation**: [../crates/ai-session/docs/README.md](../crates/ai-session/docs/README.md)
-
 #### AI-Session Adapter (`ai_session_adapter.rs`)
 - **Bridge Layer**: Connects ccswarm orchestrator with ai-session crate (located in `crates/ai-session/`)
 - **Session Lifecycle**: Creates, manages, and terminates ai-session instances for each agent
 - **Context Management**: Token-efficient conversation history management
 - **Cross-Platform PTY**: Uses ai-session's native PTY implementation
-- **Integration API**: See [../crates/ai-session/docs/ccswarm-integration-api.md](../crates/ai-session/docs/ccswarm-integration-api.md)
 - **Message Bus Integration**: Coordinates multi-agent communication via ai-session's coordination layer
 
 #### AI-Session Features Used by ccswarm
@@ -424,7 +421,5 @@ let adapter = AISessionAdapter::new(agent_config);
 let session = adapter.create_specialized_session().await?;
 ```
 
-#### Documentation Cross-References
-- **[AI-Session Architecture](../crates/ai-session/docs/ARCHITECTURE.md)** - Detailed ai-session system design
-- **[AI-Session API Guide](../crates/ai-session/docs/API_GUIDE.md)** - Complete API reference
-- **[Integration Examples](../crates/ai-session/examples/)** - Practical usage patterns
+#### Documentation
+- **[AI-Session README](../crates/ai-session/README.md)** - Overview and API reference
