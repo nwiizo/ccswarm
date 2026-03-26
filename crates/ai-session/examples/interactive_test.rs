@@ -14,10 +14,12 @@ async fn main() -> Result<()> {
     println!("✓ Session manager created");
 
     // Create session with AI features for demonstration
-    let mut config = SessionConfig::default();
-    config.enable_ai_features = true;
+    let mut config = SessionConfig {
+        enable_ai_features: true,
+        pty_size: (24, 80),
+        ..Default::default()
+    };
     config.context_config.max_tokens = 2048;
-    config.pty_size = (24, 80);
 
     let session = manager.create_session_with_config(config).await?;
     println!("✓ AI-enabled session created: {}", session.id);

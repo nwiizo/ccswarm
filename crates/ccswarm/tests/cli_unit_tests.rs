@@ -494,3 +494,144 @@ fn test_cli_parse_approve_list() {
         _ => panic!("Expected Approve command"),
     }
 }
+
+// ============================================================================
+// Session CLI Parse Tests
+// ============================================================================
+
+#[test]
+fn test_cli_parse_session_list() {
+    let cli = Cli::try_parse_from(["ccswarm", "session", "list"]).unwrap();
+
+    match cli.command {
+        Commands::Session { .. } => {}
+        _ => panic!("Expected Session command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_session_list_all() {
+    let cli = Cli::try_parse_from(["ccswarm", "session", "list", "--all"]).unwrap();
+
+    match cli.command {
+        Commands::Session {
+            action: ccswarm::cli::SessionAction::List { all },
+        } => {
+            assert!(all, "Expected --all flag to be true");
+        }
+        _ => panic!("Expected Session List command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_session_view() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "session",
+        "view",
+        "6182e5fe-bca3-4286-a921-0390e805a4d3",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Commands::Session {
+            action: ccswarm::cli::SessionAction::View { id },
+        } => {
+            assert_eq!(id, "6182e5fe-bca3-4286-a921-0390e805a4d3");
+        }
+        _ => panic!("Expected Session View command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_session_create() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "session",
+        "create",
+        "--agent",
+        "frontend",
+        "--background",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Commands::Session {
+            action:
+                ccswarm::cli::SessionAction::Create {
+                    agent, background, ..
+                },
+        } => {
+            assert_eq!(agent, "frontend");
+            assert!(background);
+        }
+        _ => panic!("Expected Session Create command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_session_pause() {
+    let cli = Cli::try_parse_from(["ccswarm", "session", "pause", "session-abc"]).unwrap();
+
+    match cli.command {
+        Commands::Session {
+            action: ccswarm::cli::SessionAction::Pause { session_id },
+        } => {
+            assert_eq!(session_id, "session-abc");
+        }
+        _ => panic!("Expected Session Pause command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_session_resume() {
+    let cli = Cli::try_parse_from(["ccswarm", "session", "resume", "session-abc"]).unwrap();
+
+    match cli.command {
+        Commands::Session {
+            action: ccswarm::cli::SessionAction::Resume { session_id },
+        } => {
+            assert_eq!(session_id, "session-abc");
+        }
+        _ => panic!("Expected Session Resume command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_session_kill() {
+    let cli =
+        Cli::try_parse_from(["ccswarm", "session", "kill", "session-abc", "--force"]).unwrap();
+
+    match cli.command {
+        Commands::Session {
+            action:
+                ccswarm::cli::SessionAction::Kill {
+                    session_id, force, ..
+                },
+        } => {
+            assert_eq!(session_id, "session-abc");
+            assert!(force);
+        }
+        _ => panic!("Expected Session Kill command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_session_no_subcommand() {
+    let result = Cli::try_parse_from(["ccswarm", "session"]);
+    assert!(
+        result.is_err(),
+        "Session without subcommand should fail to parse"
+    );
+}
+
+#[test]
+fn test_cli_parse_session_with_json_flag() {
+    let cli = Cli::try_parse_from(["ccswarm", "--json", "session", "list"]).unwrap();
+
+    assert!(cli.json);
+    match cli.command {
+        Commands::Session { .. } => {}
+        _ => panic!("Expected Session command"),
+    }
+}

@@ -390,11 +390,14 @@ fn test_json_output_flag() {
 // ============================================================================
 
 #[test]
-fn test_invalid_command() {
-    let output = run_ccswarm(&["invalid-command-that-does-not-exist"], None);
+fn test_invalid_flag() {
+    // Test that unrecognized CLI flags are rejected by the argument parser.
+    // Note: unknown positional args are now treated as direct task descriptions
+    // by the "direct task mode" feature, so we test with an invalid flag instead.
+    let output = run_ccswarm(&["--not-a-real-flag"], None);
 
-    // Should fail gracefully
-    assert!(!output.status.success(), "Invalid command should fail");
+    // Should fail gracefully with a non-zero exit code
+    assert!(!output.status.success(), "Invalid flag should fail");
 }
 
 #[test]

@@ -9,7 +9,18 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     let is_direct_task = args.len() >= 2
         && !args[1].starts_with('-')
-        && !is_known_subcommand(&args[1]);
+        && !is_known_subcommand(&args[1])
+        && !looks_like_subcommand(&args[1]);
+
+    if args.len() == 1 {
+        // Interactive mode: ccswarm (no args)
+        init_logging(false, "text");
+        if let Err(e) = run_interactive().await {
+            display_error(&e, false);
+            std::process::exit(1);
+        }
+        return;
+    }
 
     if is_direct_task {
         // Direct task mode: ccswarm "タスクを書くだけ"
@@ -35,13 +46,54 @@ async fn main() {
 fn is_known_subcommand(arg: &str) -> bool {
     matches!(
         arg,
-        "runs" | "pieces" | "doctor" | "help"
-            | "init" | "task" | "agents" | "agent-gen" | "worktree"
-            | "logs" | "config" | "setup" | "tutorial" | "interactive"
-            | "pipeline" | "help-topic" | "health" | "quickstart"
-            | "piece" | "repertoire" | "sangha" | "extend" | "search"
-            | "evolution" | "harness" | "approve" | "session" | "run" | "scaffold"
+        "doctor"
+            | "help"
+            | "init"
+            | "task"
+            | "agents"
+            | "agent-gen"
+            | "worktree"
+            | "logs"
+            | "config"
+            | "setup"
+            | "tutorial"
+            | "interactive"
+            | "pipeline"
+            | "help-topic"
+            | "health"
+            | "quickstart"
+            | "piece"
+            | "repertoire"
+            | "sangha"
+            | "extend"
+            | "search"
+            | "evolution"
+            | "harness"
+            | "approve"
+            | "session"
+            | "run"
+            | "scaffold"
     )
+}
+
+/// Detect if a single argument looks like a CLI subcommand attempt rather than
+/// a natural language task description. Command-like strings are all-lowercase
+/// with optional dashes/underscores (e.g., "invalid-command", "my_cmd").
+/// Natural language tasks typically contain uppercase letters, spaces, or
+/// non-ASCII characters (e.g., "Fix the bug", "Snakeゲームを作って").
+fn looks_like_subcommand(arg: &str) -> bool {
+    // Multiple args joined by shell means it's clearly a task description
+    // (this function is only called for args[1], but we check anyway)
+    if arg.contains(' ') {
+        return false;
+    }
+
+    // If it contains uppercase, digits at start, or non-ASCII, it's likely a task
+    // Command names are typically: lowercase letters, dashes, underscores
+    !arg.is_empty()
+        && arg
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c == '-' || c == '_')
 }
 
 fn init_logging(verbose: bool, format: &str) {
@@ -78,6 +130,28 @@ fn init_logging(verbose: bool, format: &str) {
     }
 }
 
+/// Interactive mode: `ccswarm` with no arguments
+/// Asks what to build, then runs the full pipeline with OK/NG flow.
+async fn run_interactive() -> anyhow::Result<()> {
+    use colored::Colorize;
+
+    eprintln!("{}", "ccswarm".bright_cyan().bold());
+    eprintln!();
+    eprint!("What do you want to build? > ");
+    let _ = std::io::Write::flush(&mut std::io::stderr());
+
+    let mut task = String::new();
+    std::io::stdin().read_line(&mut task)?;
+    let task = task.trim();
+
+    if task.is_empty() {
+        eprintln!("No task specified. Exiting.");
+        return Ok(());
+    }
+
+    run_direct_task(task).await
+}
+
 /// Direct task mode: `ccswarm "Snakeゲームを作って"`
 /// Auto-detects new project vs existing, runs full pipeline with OK/NG flow.
 async fn run_direct_task(task: &str) -> anyhow::Result<()> {
@@ -93,7 +167,10 @@ async fn run_direct_task(task: &str) -> anyhow::Result<()> {
 
     if is_new_project {
         // New project: scaffold first
-        eprintln!("{}", colored::Colorize::bright_cyan(colored::Colorize::bold("ccswarm")));
+        eprintln!(
+            "{}",
+            colored::Colorize::bright_cyan(colored::Colorize::bold("ccswarm"))
+        );
         eprintln!();
 
         // Initialize project files
@@ -122,27 +199,37 @@ async fn run_direct_task(task: &str) -> anyhow::Result<()> {
             .args(["commit", "-m", "init"])
             .output()
             .await;
-        eprintln!("  {} Project initialized", colored::Colorize::bright_green("\u{2713}"));
+        eprintln!(
+            "  {} Project initialized",
+            colored::Colorize::bright_green("\u{2713}")
+        );
     }
 
     // Build a minimal Cli for CliRunner
-    let cli = Cli::parse_from(["ccswarm", "--repo", ".", "pipeline", "--task", task, "--piece", "default", "--timeout", "600"]);
+    let cli = Cli::parse_from([
+        "ccswarm",
+        "--repo",
+        ".",
+        "pipeline",
+        "--task",
+        task,
+        "--piece",
+        "default",
+        "--timeout",
+        "600",
+    ]);
     let runner = CliRunner::new(&cli).await?;
 
     // Run pipeline with full OK/NG flow
-    runner.handle_pipeline(
-        task,
-        "default",
-        "text",
-        600,
-        false,
-        None,
-        false,   // isolate
-        None,    // budget
-        None,    // model
-        false,   // auto_commit (ask instead)
-        false,   // create_pr (ask instead)
-    ).await
+    runner
+        .handle_pipeline(
+            task, "default", "text", 600, false, None, false, // isolate
+            None,  // budget
+            None,  // model
+            false, // auto_commit (ask instead)
+            false, // create_pr (ask instead)
+        )
+        .await
 }
 
 async fn run_cli(cli: &Cli) -> anyhow::Result<()> {

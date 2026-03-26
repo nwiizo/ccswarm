@@ -135,7 +135,7 @@ impl CliRunner {
         timeout: u64,
         verbose: bool,
         output_file: Option<&Path>,
-        _isolate: bool,      // TODO: pass to MovementExecOptions.worktree_name
+        _isolate: bool,       // TODO: pass to MovementExecOptions.worktree_name
         _budget: Option<f64>, // TODO: pass to MovementExecOptions.max_budget
         _model_override: Option<&str>, // TODO: pass to MovementExecOptions.model
         auto_commit: bool,
@@ -297,10 +297,8 @@ impl CliRunner {
         while !test_passed && fix_attempts < MAX_FIX_ATTEMPTS {
             fix_attempts += 1;
             eprintln!(
-                "\n  {} Auto-fix attempt {}/{}...",
-                "\u{1f527}".to_string(),
-                fix_attempts,
-                MAX_FIX_ATTEMPTS
+                "\n  \u{1f527} Auto-fix attempt {}/{}...",
+                fix_attempts, MAX_FIX_ATTEMPTS
             );
 
             // Run fix via Claude Code CLI directly (no pipeline recursion)
@@ -345,12 +343,8 @@ impl CliRunner {
         };
 
         // Step 3: PR (auto or ask)
-        if committed {
-            if create_pr {
-                self.do_create_pr(repo, task, piece, result, run_id).await;
-            } else if ask_yn("Create pull request?") {
-                self.do_create_pr(repo, task, piece, result, run_id).await;
-            }
+        if committed && (create_pr || ask_yn("Create pull request?")) {
+            self.do_create_pr(repo, task, piece, result, run_id).await;
         }
 
         let short_id = &run_id[..8.min(run_id.len())];
@@ -363,23 +357,22 @@ impl CliRunner {
     /// Detect and run tests automatically. Returns true if tests pass.
     async fn auto_run_tests(&self, repo: &std::path::Path) -> bool {
         // Detect test runner
-        let (cmd, args): (&str, &[&str]) =
-            if repo.join("playwright.config.ts").exists()
-                || repo.join("playwright.config.js").exists()
-            {
-                ("npx", &["playwright", "test"])
-            } else if repo.join("Cargo.toml").exists() {
-                ("cargo", &["test"])
-            } else if repo.join("package.json").exists() {
-                ("npm", &["test"])
-            } else if repo.join("go.mod").exists() {
-                ("go", &["test", "./..."])
-            } else if repo.join("pyproject.toml").exists() {
-                ("uv", &["run", "--frozen", "pytest"])
-            } else {
-                eprintln!("  {} No test runner detected", "-".bright_yellow());
-                return true; // No tests = pass
-            };
+        let (cmd, args): (&str, &[&str]) = if repo.join("playwright.config.ts").exists()
+            || repo.join("playwright.config.js").exists()
+        {
+            ("npx", &["playwright", "test"])
+        } else if repo.join("Cargo.toml").exists() {
+            ("cargo", &["test"])
+        } else if repo.join("package.json").exists() {
+            ("npm", &["test"])
+        } else if repo.join("go.mod").exists() {
+            ("go", &["test", "./..."])
+        } else if repo.join("pyproject.toml").exists() {
+            ("uv", &["run", "--frozen", "pytest"])
+        } else {
+            eprintln!("  {} No test runner detected", "-".bright_yellow());
+            return true; // No tests = pass
+        };
 
         eprintln!(
             "  {} Running: {} {}",
@@ -405,17 +398,20 @@ impl CliRunner {
                 eprintln!("  {} Tests failed", "\u{2717}".bright_red());
                 // Show last few lines of output
                 let combined = format!("{}{}", stdout, stderr);
-                for line in combined.lines().rev().take(5).collect::<Vec<_>>().into_iter().rev() {
+                for line in combined
+                    .lines()
+                    .rev()
+                    .take(5)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                {
                     eprintln!("    {}", line);
                 }
                 false
             }
             Err(e) => {
-                eprintln!(
-                    "  {} Could not run tests: {}",
-                    "\u{2717}".bright_red(),
-                    e
-                );
+                eprintln!("  {} Could not run tests: {}", "\u{2717}".bright_red(), e);
                 true // Can't run = skip
             }
         }

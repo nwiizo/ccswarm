@@ -1,0 +1,1 @@
+{"rustc":10088478398040096810,"features":"[]","declared_features":"[\"loom\"]","target":9855717379987801857,"profile":5347358027863023418,"path":9134156298210272257,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/parking-1fd22394b19dafe9/dep-lib-parking","checksum":false}}],"rustflags":["-C","target-cpu=native"],"config":8247474407144887393,"compile_kind":0}

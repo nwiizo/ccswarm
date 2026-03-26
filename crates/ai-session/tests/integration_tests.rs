@@ -14,10 +14,12 @@ async fn test_ai_session_lifecycle() -> Result<()> {
     let manager = SessionManager::new();
 
     // Create session with AI features enabled
-    let mut config = SessionConfig::default();
-    config.enable_ai_features = true;
+    let mut config = SessionConfig {
+        enable_ai_features: true,
+        force_headless: true,
+        ..Default::default()
+    };
     config.context_config.max_tokens = 8192;
-    config.force_headless = true;
 
     let session = manager.create_session_with_config(config).await?;
     assert_eq!(session.status().await, core::SessionStatus::Initializing);
@@ -50,20 +52,18 @@ async fn test_multi_agent_coordination() -> Result<()> {
     let manager = SessionManager::new();
 
     // Create multiple agent sessions
-    let frontend_config = {
-        let mut config = SessionConfig::default();
-        config.agent_role = Some("frontend".to_string());
-        config.enable_ai_features = true;
-        config.force_headless = true;
-        config
+    let frontend_config = SessionConfig {
+        agent_role: Some("frontend".to_string()),
+        enable_ai_features: true,
+        force_headless: true,
+        ..Default::default()
     };
 
-    let backend_config = {
-        let mut config = SessionConfig::default();
-        config.agent_role = Some("backend".to_string());
-        config.enable_ai_features = true;
-        config.force_headless = true;
-        config
+    let backend_config = SessionConfig {
+        agent_role: Some("backend".to_string()),
+        enable_ai_features: true,
+        force_headless: true,
+        ..Default::default()
     };
 
     let frontend_session = manager.create_session_with_config(frontend_config).await?;
@@ -221,11 +221,13 @@ async fn test_complete_workflow() -> Result<()> {
     let manager = SessionManager::new();
 
     // Create AI-enabled session
-    let mut config = SessionConfig::default();
-    config.enable_ai_features = true;
-    config.agent_role = Some("test-agent".to_string());
+    let mut config = SessionConfig {
+        enable_ai_features: true,
+        agent_role: Some("test-agent".to_string()),
+        force_headless: true,
+        ..Default::default()
+    };
     config.context_config.max_tokens = 4096;
-    config.force_headless = true;
 
     let session = manager.create_session_with_config(config).await?;
 

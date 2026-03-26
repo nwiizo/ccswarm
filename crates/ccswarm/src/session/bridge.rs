@@ -144,7 +144,14 @@ impl AISessionBridge {
             }
 
             match self
-                .execute_once(agent_id, prompt, _identity, working_dir, agent_name, options)
+                .execute_once(
+                    agent_id,
+                    prompt,
+                    _identity,
+                    working_dir,
+                    agent_name,
+                    options,
+                )
                 .await
             {
                 Ok(result) => return Ok(result),
