@@ -1,0 +1,12 @@
+name: "basic-pipeline-test"
+tags: ["smoke", "pipeline"]
+
+piece: "default"
+task: "List the files in the current directory and describe the project structure"
+
+timeout_secs: 60
+output_format: text
+
+assert:
+  expect_success: true
+  expect_text: ["Plan", "Completed"]
