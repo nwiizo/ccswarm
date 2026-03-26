@@ -486,12 +486,10 @@ impl PipelineRunner {
             config.piece_name, config.task_text
         );
 
-        // Execute the piece
-        // Note: This is a simplified implementation. In a real implementation,
-        // you would inject the task_text and env_vars into the piece execution.
+        // Execute the piece with task text injected as context
         let state = self
             .engine
-            .execute_piece(&config.piece_name)
+            .execute_piece_with_task(&config.piece_name, &config.task_text)
             .await
             .context("Failed to execute piece")?;
 

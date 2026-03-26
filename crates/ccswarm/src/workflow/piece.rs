@@ -588,6 +588,22 @@ impl PieceEngine {
         }
     }
 
+    /// Execute a piece workflow with a task description injected as context
+    pub async fn execute_piece_with_task(&self, name: &str, task_text: &str) -> Result<PieceState> {
+        let piece = self
+            .pieces
+            .get(name)
+            .ok_or_else(|| anyhow::anyhow!("Piece '{}' not found", name))?;
+
+        let mut state = piece.create_state();
+        // Inject task text as a variable so movements can reference it
+        state
+            .variables
+            .insert("task".to_string(), serde_json::json!(task_text));
+        state.status = PieceStatus::Running;
+        self.execute_piece_state(name, piece, state).await
+    }
+
     /// Execute a piece workflow
     pub async fn execute_piece(&self, name: &str) -> Result<PieceState> {
         let piece = self
@@ -597,7 +613,16 @@ impl PieceEngine {
 
         let mut state = piece.create_state();
         state.status = PieceStatus::Running;
+        self.execute_piece_state(name, piece, state).await
+    }
 
+    /// Internal piece execution with pre-configured state
+    async fn execute_piece_state(
+        &self,
+        name: &str,
+        piece: &Piece,
+        mut state: PieceState,
+    ) -> Result<PieceState> {
         let run_id = self
             .event_recorder
             .as_ref()
@@ -887,6 +912,11 @@ impl PieceEngine {
         // System prompt (persona)
         if !composed.system.is_empty() {
             parts.push(composed.system);
+        }
+
+        // Inject task description if available
+        if let Some(task_text) = state.variables.get("task").and_then(|v| v.as_str()) {
+            parts.push(format!("## Task\n\n{}", task_text));
         }
 
         // User message (knowledge → instruction → policy → output contract)
