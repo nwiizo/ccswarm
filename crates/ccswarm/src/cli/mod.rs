@@ -211,6 +211,10 @@ pub enum Commands {
         /// Write output to file
         #[arg(short = 'O', long)]
         output_file: Option<PathBuf>,
+
+        /// Continue from a previous run (reuse Claude Code session)
+        #[arg(long, name = "continue")]
+        continue_from: Option<String>,
     },
 
     /// Enhanced help system with examples
@@ -412,6 +416,31 @@ pub enum Commands {
     Run {
         #[command(subcommand)]
         action: RunAction,
+    },
+
+    /// Create a new project and run pipeline in one command
+    #[command(
+        long_about = "Scaffold a new project: create directory, git init, run pipeline.\n\n\
+        Examples:\n  \
+          ccswarm scaffold --dir /tmp/myapp --task \"Create a todo app\"\n  \
+          ccswarm scaffold --dir ./myapp --task \"Build a REST API\" --piece quick"
+    )]
+    Scaffold {
+        /// Directory to create
+        #[arg(short, long)]
+        dir: PathBuf,
+
+        /// Task description
+        #[arg(short, long)]
+        task: String,
+
+        /// Piece to use (default: "default")
+        #[arg(short, long, default_value = "default")]
+        piece: String,
+
+        /// Timeout in seconds
+        #[arg(long, default_value = "600")]
+        timeout: u64,
     },
 }
 
@@ -1413,6 +1442,17 @@ impl CliRunner {
         // Use the command registry for centralized command handling
         let registry = self::command_registry::get_command_registry();
         registry.execute(self, command).await
+    }
+
+    /// Handle scaffold command
+    pub async fn handle_scaffold(
+        &self,
+        dir: &std::path::Path,
+        task: &str,
+        piece: &str,
+        timeout: u64,
+    ) -> Result<()> {
+        handlers::scaffold::handle_scaffold(dir, task, piece, timeout).await
     }
 
     /// Handle agent-gen subcommands

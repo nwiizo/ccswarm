@@ -105,7 +105,7 @@ impl CommandRegistry {
         );
 
         register_command!(self, "pipeline", runner, cmd,
-            Commands::Pipeline { task, piece, output_format, timeout, verbose, output_file } =>
+            Commands::Pipeline { task, piece, output_format, timeout, verbose, output_file, .. } =>
             runner.handle_pipeline(task, piece, output_format, *timeout, *verbose, output_file.as_deref())
         );
 
@@ -173,6 +173,11 @@ impl CommandRegistry {
             Commands::Run { action } =>
             runner.handle_run(action)
         );
+
+        register_command!(self, "scaffold", runner, cmd,
+            Commands::Scaffold { dir, task, piece, timeout } =>
+            runner.handle_scaffold(dir, task, piece, *timeout)
+        );
     }
 
     /// Register a command handler
@@ -228,6 +233,7 @@ impl CommandRegistry {
             Commands::Harness { .. } => "harness",
             Commands::Approve { .. } => "approve",
             Commands::Run { .. } => "run",
+            Commands::Scaffold { .. } => "scaffold",
         }
     }
 }
