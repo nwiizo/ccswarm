@@ -919,6 +919,24 @@ impl PieceEngine {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| self.working_dir.clone());
 
+            // Build MovementExecOptions from Movement fields → Claude CLI flags
+            let exec_options = crate::session::bridge::MovementExecOptions {
+                tools: movement.tools.clone(),
+                model: movement.model.clone(),
+                system_prompt: movement.persona.as_ref().and_then(|p| {
+                    self.facet_registry.get_persona(p).and_then(|f| {
+                        if f.system_prompt.is_empty() {
+                            None
+                        } else {
+                            Some(f.system_prompt.clone())
+                        }
+                    })
+                }),
+                max_budget: None,
+                worktree_name: None,
+                session_id: None,
+            };
+
             match bridge
                 .execute_with_retry(
                     agent_id,
@@ -928,6 +946,7 @@ impl PieceEngine {
                     movement.agent.as_deref(),
                     movement.max_retries,
                     movement.retry_delay_ms,
+                    &exec_options,
                 )
                 .await
             {
