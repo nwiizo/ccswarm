@@ -12,7 +12,6 @@ mod interactive_help;
 mod output;
 mod progress;
 mod quickstart_simple;
-mod resource_commands;
 mod setup_wizard;
 mod tutorial;
 
@@ -29,7 +28,6 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::agent::{Priority, Task, TaskType};
@@ -103,67 +101,6 @@ pub enum Commands {
         agents: Vec<String>,
     },
 
-    /// Start the ccswarm orchestrator
-    #[command(long_about = "Start the ccswarm orchestrator and agent processes.\n\n\
-        The orchestrator coordinates task delegation and monitors agent health.\n\n\
-        Examples:\n  \
-          ccswarm start\n  \
-          ccswarm start --daemon --port 9090\n  \
-          ccswarm start --enable-acp")]
-    Start {
-        /// Run in daemon mode
-        #[arg(short, long)]
-        daemon: bool,
-
-        /// Port for status server
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
-
-        /// Isolation mode for agents (worktree, container, hybrid)
-        #[arg(long, default_value = "worktree")]
-        isolation: String,
-
-        /// Enable delegate mode (lead orchestrates only, no direct code execution)
-        #[arg(long)]
-        delegate: bool,
-
-        /// Enable ACP (Agent Communication Protocol) WebSocket server
-        #[arg(long)]
-        enable_acp: bool,
-    },
-
-    /// Verify an auto-created application
-    Verify {
-        /// Path to the application to verify
-        #[arg(default_value = "./")]
-        path: PathBuf,
-
-        /// Backend port for health checks
-        #[arg(long, default_value = "3000")]
-        backend_port: u16,
-
-        /// Skip dependency installation
-        #[arg(long)]
-        skip_deps: bool,
-    },
-
-    /// Start TUI (Terminal User Interface)
-    Tui,
-
-    /// Stop the running orchestrator
-    Stop,
-
-    /// Show status of orchestrator and agents
-    Status {
-        /// Show detailed status
-        #[arg(short, long)]
-        detailed: bool,
-
-        /// Specific agent to check
-        #[arg(short, long)]
-        agent: Option<String>,
-    },
-
     /// Task management commands
     #[command(
         long_about = "Create, list, execute, merge, retry, and delete tasks.\n\n\
@@ -193,17 +130,6 @@ pub enum Commands {
         action: AgentGenAction,
     },
 
-    /// Run quality review
-    Review {
-        /// Agent to review
-        #[arg(short, long)]
-        agent: Option<String>,
-
-        /// Strict quality checks
-        #[arg(short, long)]
-        strict: bool,
-    },
-
     /// Manage Git worktrees
     Worktree {
         #[command(subcommand)]
@@ -229,54 +155,6 @@ pub enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigAction,
-    },
-
-    /// Master delegation commands
-    Delegate {
-        #[command(subcommand)]
-        action: DelegateAction,
-    },
-
-    /// Session management commands
-    Session {
-        #[command(subcommand)]
-        action: SessionAction,
-    },
-
-    /// Resource monitoring and management
-    Resource {
-        #[command(subcommand)]
-        action: resource_commands::ResourceSubcommand,
-    },
-
-    /// Auto-create application with AI agents
-    AutoCreate {
-        /// Application description
-        description: String,
-
-        /// Use template
-        #[arg(short, long)]
-        template: Option<String>,
-
-        /// Auto deploy after creation
-        #[arg(long)]
-        auto_deploy: bool,
-
-        /// Output directory
-        #[arg(short, long, default_value = "./")]
-        output: PathBuf,
-    },
-
-    /// Agent-managed quality checks
-    Quality {
-        #[command(subcommand)]
-        action: QualityAction,
-    },
-
-    /// Template management commands
-    Template {
-        #[command(subcommand)]
-        action: TemplateAction,
     },
 
     /// Interactive setup wizard for new users

@@ -343,6 +343,9 @@ mod tests {
             output_contract: None,
             timeout: None,
             max_retries: 0,
+            agent: None,
+            working_dir: None,
+            retry_delay_ms: 1000,
         }
     }
 

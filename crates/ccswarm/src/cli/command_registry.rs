@@ -56,24 +56,12 @@ impl CommandRegistry {
     /// Register all command handlers
     fn register_commands(&mut self) {
         // Simple commands without parameters
-        register_command!(self, "tui", runner, runner.start_tui());
-        register_command!(self, "stop", runner, runner.stop_orchestrator());
         register_command!(self, "setup", runner, runner.handle_setup());
 
-        // Commands with parameters - use macro for cleaner registration
+        // Commands with parameters
         register_command!(self, "init", runner, cmd,
             Commands::Init { name, repo_url, agents } =>
             runner.init_project(name, repo_url.as_deref(), agents)
-        );
-
-        register_command!(self, "start", runner, cmd,
-            Commands::Start { daemon, port, isolation, delegate, enable_acp, .. } =>
-            runner.start_orchestrator(*daemon, *port, isolation, *delegate, *enable_acp)
-        );
-
-        register_command!(self, "status", runner, cmd,
-            Commands::Status { detailed, agent } =>
-            runner.show_status(*detailed, agent.as_deref())
         );
 
         register_command!(self, "task", runner, cmd,
@@ -91,11 +79,6 @@ impl CommandRegistry {
             runner.handle_agent_gen(action)
         );
 
-        register_command!(self, "review", runner, cmd,
-            Commands::Review { agent, strict } =>
-            runner.run_review(agent.as_deref(), *strict)
-        );
-
         register_command!(self, "worktree", runner, cmd,
             Commands::Worktree { action } =>
             runner.handle_worktree(action)
@@ -109,36 +92,6 @@ impl CommandRegistry {
         register_command!(self, "config", runner, cmd,
             Commands::Config { action } =>
             runner.handle_config(action)
-        );
-
-        register_command!(self, "delegate", runner, cmd,
-            Commands::Delegate { action } =>
-            runner.handle_delegate(action)
-        );
-
-        register_command!(self, "session", runner, cmd,
-            Commands::Session { action } =>
-            runner.handle_session(action)
-        );
-
-        register_command!(self, "resource", runner, cmd,
-            Commands::Resource { action } =>
-            runner.handle_resource(action)
-        );
-
-        register_command!(self, "auto-create", runner, cmd,
-            Commands::AutoCreate { description, template: _, auto_deploy, output } =>
-            runner.handle_auto_create(description, None, *auto_deploy, output)
-        );
-
-        register_command!(self, "quality", runner, cmd,
-            Commands::Quality { action } =>
-            runner.handle_quality(action)
-        );
-
-        register_command!(self, "template", runner, cmd,
-            Commands::Template { action } =>
-            runner.handle_template(action)
         );
 
         register_command!(self, "tutorial", runner, cmd,
@@ -174,11 +127,6 @@ impl CommandRegistry {
         register_command!(self, "quickstart", runner, cmd,
             Commands::Quickstart { name, no_prompt, all_agents, with_tests } =>
             runner.handle_quickstart(name.as_deref(), *no_prompt, *all_agents, *with_tests)
-        );
-
-        register_command!(self, "verify", runner, cmd,
-            Commands::Verify { path, backend_port, skip_deps } =>
-            runner.handle_verify(path, *backend_port, *skip_deps)
         );
 
         register_command!(self, "piece", runner, cmd,
@@ -252,23 +200,12 @@ impl CommandRegistry {
     fn get_command_name(command: &Commands) -> &'static str {
         match command {
             Commands::Init { .. } => "init",
-            Commands::Start { .. } => "start",
-            Commands::Tui => "tui",
-            Commands::Stop => "stop",
-            Commands::Status { .. } => "status",
             Commands::Task { .. } => "task",
             Commands::Agents { .. } => "agents",
             Commands::AgentGen { .. } => "agent-gen",
-            Commands::Review { .. } => "review",
             Commands::Worktree { .. } => "worktree",
             Commands::Logs { .. } => "logs",
             Commands::Config { .. } => "config",
-            Commands::Delegate { .. } => "delegate",
-            Commands::Session { .. } => "session",
-            Commands::Resource { .. } => "resource",
-            Commands::AutoCreate { .. } => "auto-create",
-            Commands::Quality { .. } => "quality",
-            Commands::Template { .. } => "template",
             Commands::Setup => "setup",
             Commands::Tutorial { .. } => "tutorial",
             Commands::Interactive { .. } => "interactive",
@@ -279,7 +216,6 @@ impl CommandRegistry {
             Commands::Pipeline { .. } => "pipeline",
             Commands::Piece { .. } => "piece",
             Commands::Repertoire { .. } => "repertoire",
-            Commands::Verify { .. } => "verify",
             Commands::Sangha { .. } => "sangha",
             Commands::Extend { .. } => "extend",
             Commands::Search { .. } => "search",

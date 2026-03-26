@@ -433,7 +433,7 @@ pub fn builtin_personas() -> Vec<PersonaFacet> {
                 "Identify dependencies and risks".to_string(),
                 "Break complex tasks into manageable steps".to_string(),
             ],
-            system_prompt: String::new(),
+            system_prompt: "You are a technical planner. Analyze requirements, identify risks and dependencies, and create detailed step-by-step implementation plans. Consider edge cases, testing strategy, and rollback plans.".to_string(),
         },
         PersonaFacet {
             name: "coder".to_string(),
@@ -449,7 +449,7 @@ pub fn builtin_personas() -> Vec<PersonaFacet> {
                 "Test what you implement".to_string(),
                 "Keep changes minimal and focused".to_string(),
             ],
-            system_prompt: String::new(),
+            system_prompt: "You are an expert software engineer. Write clean, well-tested, production-quality code. Follow existing project patterns and conventions. Handle errors explicitly and add tests for new functionality.".to_string(),
         },
         PersonaFacet {
             name: "reviewer".to_string(),
@@ -465,7 +465,7 @@ pub fn builtin_personas() -> Vec<PersonaFacet> {
                 "Provide actionable feedback".to_string(),
                 "Distinguish critical issues from nits".to_string(),
             ],
-            system_prompt: String::new(),
+            system_prompt: "You are a thorough code reviewer. Check for correctness, security vulnerabilities, performance issues, and adherence to project conventions. Provide specific, actionable feedback with line references.".to_string(),
         },
         PersonaFacet {
             name: "researcher".to_string(),
@@ -480,7 +480,7 @@ pub fn builtin_personas() -> Vec<PersonaFacet> {
                 "Cite sources and evidence".to_string(),
                 "Distinguish facts from assumptions".to_string(),
             ],
-            system_prompt: String::new(),
+            system_prompt: "You are a technical researcher. Investigate solutions, evaluate tradeoffs, and provide evidence-based recommendations. Cite sources and examples. Focus on practical applicability.".to_string(),
         },
     ]
 }

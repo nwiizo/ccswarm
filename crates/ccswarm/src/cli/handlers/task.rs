@@ -438,49 +438,4 @@ impl CliRunner {
         );
         Ok(())
     }
-
-    pub(crate) fn create_task_from_args(
-        &self,
-        description: &str,
-        priority: &str,
-        task_type: &str,
-        details: Option<&str>,
-        duration: Option<u32>,
-    ) -> Result<Task> {
-        let priority = match priority.to_lowercase().as_str() {
-            "low" => Priority::Low,
-            "medium" => Priority::Medium,
-            "high" => Priority::High,
-            _ => Priority::Medium,
-        };
-
-        let task_type = match task_type.to_lowercase().as_str() {
-            "development" => TaskType::Development,
-            "testing" => TaskType::Testing,
-            "infrastructure" => TaskType::Infrastructure,
-            "documentation" => TaskType::Documentation,
-            "bugfix" => TaskType::Bugfix,
-            "feature" => TaskType::Feature,
-            "review" => TaskType::Review,
-            "coordination" => TaskType::Coordination,
-            _ => TaskType::Development,
-        };
-
-        let estimated_duration = duration.map(|d| std::time::Duration::from_secs(d as u64));
-
-        let mut task = Task::new(
-            uuid::Uuid::new_v4().to_string(),
-            description.to_string(),
-            priority,
-            task_type,
-        );
-
-        if let Some(details) = details {
-            task = task.with_details(details.to_string());
-        }
-
-        task.estimated_duration = estimated_duration.map(|d| d.as_secs() as u32);
-
-        Ok(task)
-    }
 }
