@@ -2,10 +2,10 @@
 
 ## Project Overview
 
-ccswarm v0.5.0 - AI Multi-Agent Orchestration System with native ai-session integration.
+ccswarm v0.6.0 - AI Agent Workflow DevOps toolchain complementing Claude Code Agent Teams.
 
 Cargo workspace with 2 crates:
-- **ccswarm** (`crates/ccswarm/`) - Multi-agent orchestration, CLI, TUI, workflow engine
+- **ccswarm** (`crates/ccswarm/`) - Agent workflow engine, CLI, bridge to Claude Code, event recording
 - **ai-session** (`crates/ai-session/`) - Token-efficient terminal session management (standalone-capable)
 
 ## Quick Commands
@@ -19,27 +19,27 @@ cargo run -p ai-session -- --help                       # Run ai-session CLI
 ## Workspace Architecture
 
 ```
-ccswarm (orchestration) ──depends on──> ai-session (terminal management)
-                                            ──depends on──> portable-pty, tokio, zstd
+ccswarm (workflow DevOps) ──depends on──> ai-session (terminal management)
+                                              ──depends on──> portable-pty, tokio, zstd
 ```
 
-### ccswarm crate — Orchestration Layer
+### ccswarm crate — Workflow DevOps Layer
 
 | Module | Purpose |
 |--------|---------|
-| `orchestrator/` | ProactiveMaster, DelegateOrchestrator, LLMQualityJudge, AutoCreateEngine |
-| `agent/` | ClaudeCodeAgent, AgentRole (Frontend/Backend/DevOps/QA/Master/Search), Type-State TaskBuilder |
-| `cli/` | 35+ commands via CommandRegistry pattern, interactive help, setup wizard |
+| `agent/` | ClaudeCodeAgent, AgentRole (Frontend/Backend/DevOps/QA/Master), Type-State TaskBuilder |
+| `cli/` | ~23 commands via CommandRegistry pattern, interactive help, setup wizard |
 | `workflow/` | Piece engine (YAML movements), Pipeline runner, Faceted prompting, DAG workflows |
 | `coordination/` | AgentMailbox, MessageBus bridge, conversion layer to ai-session |
-| `events/` | NDJSON EventRecorder to `.ccswarm/runs/{run-id}/events.ndjson` |
-| `identity/` | AgentIdentity, role boundaries, TaskBoundaryChecker |
-| `session/` | AISessionAdapter bridge to ai-session crate |
-| `subagent/` | SubagentDefinition, ParallelExecutor with aggregation strategies |
+| `events/` | NDJSON EventRecorder to `.ccswarm/runs/{run-id}/events.ndjson`, duration tracking |
+| `identity/` | AgentIdentity, role boundaries |
+| `session/` | SessionManager, AISessionBridge (Claude Code CLI execution with --resume, --agent routing, retry with exponential backoff) |
 | `hooks/` | HookRegistry, SecurityHook, LoggingHook |
-| `ipc/` | Axum HTTP IPC server for CLI/daemon communication |
-| `mcp/` | McpClient, JSON-RPC 2.0, HttpTransport, UnixSocketTransport |
-| `tui/` | Ratatui-based terminal UI (partially implemented) |
+| `config/` | CcswarmConfig loader |
+| `git/` | Git worktree operations |
+| `resource/` | ResourceMonitor, session resource integration |
+| `utils/` | Error recovery, error templates, diagnostics |
+| `workspace/` | Workspace management |
 
 ### ai-session crate — Session Management Layer
 
@@ -117,8 +117,8 @@ Review agents run as subagents (not teams):
 ## Development Learnings
 
 ### Error Handling
-- `CCSwarmError` uses struct variants: `Agent { agent_id, message, source }`, `Session { session_id, message, source }`, `Configuration { field, message }`, `Provider { provider, message, source }`
-- Helper constructors: `CCSwarmError::config()`, `agent()`, `session()`, `task()`, `orchestrator()`, `git()`, `user_error()`
+- `CCSwarmError` uses struct variants: `Agent { agent_id, message, source }`, `Session { session_id, message, source }`, `Configuration { field, message }`
+- Helper constructors: `CCSwarmError::config()`, `agent()`, `session()`, `task()`, `git()`, `user_error()`
 
 ### Module Patterns
 - Splitting `foo.rs` → `foo/mod.rs`: keep all `pub use` re-exports in `mod.rs`

@@ -1,9 +1,9 @@
 [package]
 name = "ccswarm"
-version = "0.5.0"
+version = "0.6.0"
 edition.workspace = true
 authors.workspace = true
-description = "AI-powered multi-agent orchestration system with proactive intelligence, security monitoring, and session management"
+description = "AI Agent Workflow DevOps toolchain complementing Claude Code Agent Teams"
 license = "MIT"
 readme = "../../README.md"
 repository = "https://github.com/nwiizo/ccswarm"
