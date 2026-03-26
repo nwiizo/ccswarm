@@ -345,7 +345,9 @@ impl CliRunner {
 
     /// Retry a failed task
     pub(crate) async fn retry_task(&self, _task_id: &str, _force: bool) -> Result<()> {
-        println!("Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution.");
+        println!(
+            "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
+        );
         Ok(())
     }
 
@@ -410,7 +412,9 @@ impl CliRunner {
         _force: bool,
         _reason: Option<&str>,
     ) -> Result<()> {
-        println!("Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution.");
+        println!(
+            "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
+        );
         Ok(())
     }
 
@@ -421,13 +425,17 @@ impl CliRunner {
         _agent_filter: Option<&str>,
         _failed_only: bool,
     ) -> Result<()> {
-        println!("Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution.");
+        println!(
+            "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
+        );
         Ok(())
     }
 
     /// Show task queue statistics
     pub(crate) async fn show_task_stats(&self, _detailed: bool, _performance: bool) -> Result<()> {
-        println!("Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution.");
+        println!(
+            "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
+        );
         Ok(())
     }
 

@@ -10,7 +10,7 @@ impl CliRunner {
         detailed: bool,
         format: &str,
     ) -> Result<()> {
-        use crate::cli::health::{run_diagnostics, HealthChecker};
+        use crate::cli::health::{HealthChecker, run_diagnostics};
         use crate::coordination::StatusTracker;
 
         // Run diagnostics if requested
