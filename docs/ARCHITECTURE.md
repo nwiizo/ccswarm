@@ -216,6 +216,23 @@ ai-session exec myproject "python train.py" --capture
 - Protected file patterns
 - Emergency stop capability
 
+## Known Limitations and Practical Constraints
+
+### Pipeline Timeout
+- Complex tasks (>500 word descriptions) can cause the implement movement to exceed 600s
+- Workaround: split tasks, use shorter descriptions, or increase `--timeout`
+- The `complete` movement now uses local summary (no Claude call) to avoid wasted time
+
+### Movement Context Passing
+- Context between movements is injected via prompt text, not Claude Code session state
+- The `--resume` flag is sent but Claude Code CLI session continuity is version-dependent
+- Template variables `{key}` in instructions expand from state.variables
+
+### Output Parsing
+- ai-session's OutputParser uses regex heuristics (not structured parsing)
+- Works well for cargo test/build, basic for Playwright/npm test output
+- Complex multi-line outputs may fall through to PlainText
+
 ## Performance Optimizations
 
 ### Session Reuse
