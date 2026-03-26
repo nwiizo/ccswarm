@@ -2,141 +2,98 @@
 
 ## Project Overview
 
-ccswarm v0.6.0 - AI Agent Workflow DevOps toolchain complementing Claude Code Agent Teams.
+ccswarm v0.6.0 — AI Agent Workflow Engine. OK/NG駆動設計。
 
-Cargo workspace with 2 crates:
-- **ccswarm** (`crates/ccswarm/`) - Agent workflow engine, CLI, bridge to Claude Code, event recording
-- **ai-session** (`crates/ai-session/`) - Token-efficient terminal session management (standalone-capable)
+ユーザーは `y` か `n` しか押さない。ccswarmが検出・実行・提案し、ユーザーは承認/拒否するだけ。
 
-## Quick Commands
+## Usage
+
+```bash
+ccswarm                            # 対話モード: 何を作るか聞いてくれる
+ccswarm "勤怠管理アプリを作って"      # 即実行: pipeline → test → commit → PR
+ccswarm runs                       # 過去のrun一覧
+ccswarm pieces                     # 利用可能なワークフロー
+ccswarm doctor                     # 環境チェック
+```
+
+## Post-Pipeline Flow (自動)
+
+```
+Pipeline完了 → テスト自動実行 → 失敗なら自動修復(最大3回)
+→ "Commit? [Y/n]" → "Create PR? [Y/n]"
+```
+
+## Quick Commands (development)
 
 ```bash
 cargo fmt && cargo clippy -- -D warnings && cargo test  # Before commit
-cargo run -p ccswarm -- --help                          # Run ccswarm
-cargo run -p ai-session -- --help                       # Run ai-session CLI
+cargo run -p ccswarm -- --help                          # Full CLI
 ```
 
 ## Workspace Architecture
 
 ```
-ccswarm (workflow DevOps) ──depends on──> ai-session (terminal management)
+ccswarm (workflow engine) ──depends on──> ai-session (session management)
                                               ──depends on──> portable-pty, tokio, zstd
 ```
 
-### ccswarm crate — Workflow DevOps Layer
+### ccswarm crate
 
 | Module | Purpose |
 |--------|---------|
-| `agent/` | ClaudeCodeAgent, AgentRole (Frontend/Backend/DevOps/QA/Master), Type-State TaskBuilder |
-| `cli/` | ~23 commands via CommandRegistry pattern, interactive help, setup wizard |
-| `workflow/` | Piece engine (YAML movements), Pipeline runner, Faceted prompting, DAG workflows |
-| `coordination/` | AgentMailbox, MessageBus bridge, conversion layer to ai-session |
-| `events/` | NDJSON EventRecorder to `.ccswarm/runs/{run-id}/events.ndjson`, duration tracking |
+| `cli/` | 3 entry modes (interactive / direct task / subcommands) |
+| `workflow/` | PieceEngine, Pipeline, Faceted prompting, movement reports |
+| `session/` | AISessionBridge (Claude CLI execution, --dangerously-skip-permissions, --allowed-tools, --system-prompt, retry) |
+| `events/` | NDJSON EventRecorder, duration tracking, run summaries |
+| `agent/` | AgentRole, Type-State TaskBuilder |
 | `identity/` | AgentIdentity, role boundaries |
-| `session/` | SessionManager, AISessionBridge (Claude Code CLI execution with --resume, --agent routing, retry with exponential backoff) |
-| `hooks/` | HookRegistry, SecurityHook, LoggingHook |
-| `config/` | CcswarmConfig loader |
-| `git/` | Git worktree operations |
-| `resource/` | ResourceMonitor, session resource integration |
-| `utils/` | Error recovery, error templates, diagnostics |
-| `workspace/` | Workspace management |
+| `hooks/` | HookRegistry |
+| `coordination/` | AgentMailbox, conversion layer |
 
-### ai-session crate — Session Management Layer
+### ai-session crate
 
 | Module | Purpose |
 |--------|---------|
-| `core/` | AISession, SessionManager, PTY/headless terminal, lifecycle |
-| `context/` | TokenEfficientHistory with zstd compression, sliding window (20 recent) |
-| `coordination/` | MessageBus (crossbeam channels), TaskDistributor, ResourceManager, RateLimit |
-| `output/` | OutputParser (regex heuristics), SemanticCompressor, highlight extraction |
-| `persistence/` | JSON + zstd session snapshots, restore by ID |
-| `mcp/` | JSON-RPC server, tool registry, stdio transport |
-| `integration/` | Tmux migration compat layer |
+| `core/` | AISession, SessionManager, PTY/headless |
+| `context/` | TokenEfficientHistory (zstd compression) |
+| `output/` | OutputParser (cargo/Playwright/npm/Jest patterns) |
+| `persistence/` | Session snapshots |
 
-Binaries: `ai-session` (CLI), `ai-session-server` (MCP HTTP API on port 3000)
+## Key Design Decisions
 
-## Agent Teams
+- **OK/NG駆動**: ユーザーの操作を y/n に削減。テスト自動実行、自動修復ループ。
+- **Claude Code CLI フラグ自動マッピング**: Movement YAML → --allowed-tools, --model, --system-prompt
+- **--dangerously-skip-permissions**: 全movement共通（non-interactiveパイプライン実行のため）
+- **ローカルcomplete**: 終端movementはClaude呼び出し不要（instant）
+- **部分成功**: タイムアウトでもmovements完了分は成功扱い
 
-The 4 domain agents are designed for parallel execution via Claude Code Agent Teams:
+## Builtin Pieces
 
-```bash
-claude --agent-team                          # Interactive team setup
-claude --team "frontend-specialist" "backend-specialist" "qa-specialist"
-```
+| Piece | Description |
+|-------|-------------|
+| `default` | plan → implement → review → complete (4 steps) |
+| `quick` | single-shot execution (1 step, 3-5x faster) |
+| `review-fix` | review → fix loop (3 steps) |
+| `research` | investigate → report (2 steps) |
 
-Each domain agent has `isolation: worktree` — they work in independent git worktrees and communicate via direct messaging (`@agent-name`).
+Custom: `.ccswarm/pieces/*.yaml`
 
-| Agent | Isolation | Model | Coordinates With |
-|-------|-----------|-------|------------------|
-| frontend-specialist | worktree | sonnet | backend (API contracts), qa (test readiness) |
-| backend-specialist | worktree | sonnet | frontend (contracts), devops (CI/CD) |
-| devops-specialist | worktree | sonnet | backend/frontend (build reqs), qa (deploy verify) |
-| qa-specialist | worktree | sonnet | all (quality gates, test coverage) |
+## Personas (builtin)
 
-Review agents run as subagents (not teams):
+planner, coder, reviewer, researcher, supervisor, ai-antipattern-reviewer
 
-| Agent | Model | Invoked By |
-|-------|-------|------------|
-| rust-fix-agent | opus | Proactively on build/clippy errors |
-| code-refactor-agent | opus | Proactively on suspected duplication |
-| architecture-reviewer | sonnet | `/review-architecture` skill |
-| all-reviewer | sonnet | `/review-all` skill |
+## Pipeline Learnings
+
+- タスク記述は簡潔に（500語以下）。長いとimplementがタイムアウト。
+- `{task}`, `{plan_output}` テンプレート変数で movement 間コンテキスト受け渡し。
+- `pass_previous_response: false` で fix movement のコンテキストをリセット。
 
 ## Rules
 
-- [development-standards](.claude/rules/development-standards.md) - Code quality, testing, language convention
-- [architecture-patterns](.claude/rules/architecture-patterns.md) - Rust patterns, Claude ACP integration
-- [security-guidelines](.claude/rules/security-guidelines.md) - Security, agent roles, environment
-- [performance](.claude/rules/performance.md) - Optimization guidelines
-
-## Skills
-
-| Skill | Description |
-|-------|-------------|
-| `/review-all` | Full review (design compliance, quality, architecture) |
-| `/review-architecture` | Architecture pattern compliance check |
-| `/review-duplicates` | Duplicate code detection via similarity-rs |
-| `/check-impl` | Build, lint, test verification |
-| `/check-production-ready` | Production readiness audit |
-| `/mutation-test` | Mutation testing execution |
-| `/git-worktree` | Parallel development with git worktrees |
-| `/rust-agent-specialist` | Rust-native pattern guidance |
-| `/deploy-workflow` | Release deployment process |
-| `/benchmark-runner` | Performance benchmark execution |
-| `/hitl-approval` | Human-in-the-loop approval workflows |
-
-## Hooks
-
-| Event | Script | Purpose |
-|-------|--------|---------|
-| PreToolUse (Edit/Write) | `validate-agent-scope.sh` | Enforce agent role boundaries on file edits |
-| PostToolUse (Edit/Write) | `format-code.sh` | Auto-format Rust/Go/TS/Python after edits |
-| SubagentStop | `audit-trail.sh` | Log agent team lifecycle to NDJSON audit trail |
-| Stop | `audit-trail.sh` | Log session completion |
-
-## Development Learnings
-
-### Pipeline Usage (from real-world testing)
-- **Task description size**: Large task descriptions (>500 words) cause implement movement to exceed 600s timeout. Split complex tasks into multiple pipeline runs or use the `develop-and-verify` piece with smaller steps.
-- **Complete movement**: Use empty instruction (`""`) for terminal movements to skip Claude CLI call. Local summary is instant vs ~12s for Claude.
-- **Template variables**: Use `{task}`, `{plan_output}`, `{verify_output}` in movement instructions for inter-step context. Variables auto-expand from `state.variables`.
-- **Custom pieces**: Place YAML files in `.ccswarm/pieces/` for auto-loading. Builtin pieces: `default`, `research`, `review-fix`.
-- **data-testid**: Include data-testid requirements in the task description for Playwright-testable output. Claude generates them if explicitly asked.
-- **Timeout tuning**: Default 600s is often not enough for complex implement movements. Consider `--timeout 900` or splitting tasks.
-- **AI-Session context**: The `--resume` flag is sent to Claude Code CLI but may not work as expected in all versions. Context passing between movements uses the prompt injection approach (state.variables).
-
-### Error Handling
-- `CCSwarmError` uses struct variants: `Agent { agent_id, message, source }`, `Session { session_id, message, source }`, `Configuration { field, message }`
-- Helper constructors: `CCSwarmError::config()`, `agent()`, `session()`, `task()`, `git()`, `user_error()`
-
-### Module Patterns
-- Splitting `foo.rs` → `foo/mod.rs`: keep all `pub use` re-exports in `mod.rs`
-- The `format-code.sh` hook runs formatters after edits; re-read files if content changes
-
-### CI/CD
-- Publish order: `ai-session` first, then `ccswarm` (dependency order)
-- Release workflow needs `permissions: contents: write`
-- `CARGO_REGISTRY_TOKEN` required in GitHub Secrets
+- [development-standards](.claude/rules/development-standards.md)
+- [architecture-patterns](.claude/rules/architecture-patterns.md)
+- [security-guidelines](.claude/rules/security-guidelines.md)
+- [performance](.claude/rules/performance.md)
 
 ## Documentation
 
