@@ -2,16 +2,18 @@
 
 ## Overview
 
-ccswarm is an AI Multi-Agent Orchestration System that coordinates specialized AI agents (Frontend, Backend, DevOps, QA) using a Master Claude coordinator. Built in Rust for performance and reliability with native ai-session terminal management.
+ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Agent Teams. It provides piece-based workflow pipelines, NDJSON event recording, AISessionBridge for Claude Code CLI execution, and agent definition generation. Built in Rust for performance and reliability with native ai-session terminal management.
 
 ## Key Features
 
 ### Core Capabilities
-- **Multi-Agent Orchestration**: Master Claude analyzes tasks and delegates to specialized agents
-- **Native AI-Session Management**: 93% token savings through intelligent session reuse
+- **Piece-Based Workflows**: YAML-driven multi-step pipelines with movement context passing
+- **AISessionBridge**: Claude Code CLI execution with --resume, --agent routing, retry with exponential backoff
+- **NDJSON Event Recording**: Observability via `.ccswarm/runs/{run-id}/events.ndjson` with duration tracking
+- **Agent Definition Generation**: `agent-gen` command generates/validates `.claude/agents/*.md` from facets
 - **Cross-Platform Support**: Native PTY implementation for Linux, macOS (Windows not supported)
-- **Model Context Protocol (MCP)**: Standardized AI tool integration via JSON-RPC 2.0
 - **Git Worktree Isolation**: Each agent works in isolated git worktrees for safety
+- **Harness Testing**: Scenario-driven validation of workflow pipelines
 
 ### Agent Specializations
 1. **Frontend Agent**: React, Vue, UI/UX, CSS, client-side development
@@ -21,9 +23,9 @@ ccswarm is an AI Multi-Agent Orchestration System that coordinates specialized A
 
 ### Advanced Features
 - **Sangha Collective Intelligence**: Democratic decision-making for agent swarms
-- **Self-Extension Framework**: Agents autonomously propose new capabilities
-- **Quality Review System**: Automatic code quality evaluation with remediation
-- **Auto-Create**: Generate complete applications from natural language descriptions
+- **Self-Extension Framework**: Agents propose new capabilities via `extend` command
+- **HITL Approvals**: Human-in-the-loop gates for plan/deploy/merge operations
+- **Faceted Prompting**: Composable persona/policy/knowledge/instruction facets
 - **Session Persistence**: Automatic recovery from crashes and restarts
 
 ## System Requirements
@@ -36,7 +38,7 @@ ccswarm is an AI Multi-Agent Orchestration System that coordinates specialized A
 ### Dependencies
 - Rust 1.70+
 - Git 2.20+
-- API keys for AI providers (Anthropic, OpenAI, etc.)
+- Claude Code CLI (for AISessionBridge execution)
 
 ### Build Requirements
 The project uses a Cargo workspace structure:
@@ -58,9 +60,8 @@ The project uses a Cargo workspace structure:
 ### Resource Usage
 - Git worktrees require ~100MB disk space per agent
 - JSON coordination adds <100ms latency
-- TUI monitoring adds <3% overhead
-- Quality review runs async, minimal impact
 - Session persistence adds <5ms per command
+- NDJSON event recording adds negligible overhead
 
 ## Project Structure
 
@@ -89,7 +90,7 @@ ccswarm/
 ```
 
 ### Binary Outputs
-- `ccswarm`: Main orchestration CLI (from `crates/ccswarm/src/main.rs`)
+- `ccswarm`: Main workflow DevOps CLI (from `crates/ccswarm/src/main.rs`)
 - `ai-session`: Session management CLI (from `crates/ai-session/src/bin/ai-session.rs`)
 - `ai-session-server`: MCP HTTP API server (from `crates/ai-session/src/bin/server.rs`)
 
@@ -208,9 +209,6 @@ The ai-session crate includes an MCP (Model Context Protocol) HTTP API server fo
 ```bash
 # Start the MCP server (runs independently)
 ai-session-server --port 3000 --host 0.0.0.0
-
-# Or from ccswarm
-ccswarm session start-mcp-server --port 3000
 ```
 
 #### Core Endpoints
@@ -256,19 +254,18 @@ curl http://localhost:3000/sessions/ai-agent-1/context
 
 ### Integration with ccswarm
 
-ccswarm integrates ai-session through the `AISessionAdapter`:
+ccswarm integrates ai-session through the `AISessionBridge`:
 
 ```rust
 // In ccswarm codebase
-use crate::session::ai_session_adapter::AISessionAdapter;
+use crate::session::bridge::AISessionBridge;
 
-// ccswarm creates ai-session instances for each agent
-let session = AISessionAdapter::create_session(&agent_config).await?;
-session.execute_command("cargo build").await?;
+// ccswarm creates bridge instances for workflow execution
+let bridge = AISessionBridge::new(config);
 
-// Automatic token optimization and context management
-let compressed_context = session.get_compressed_context().await?;
-// This achieves the 93% token savings ccswarm advertises
+// Execute via Claude Code CLI with session resumption and agent routing
+let result = bridge.execute(task_prompt, agent_identity).await?;
+// Result includes parsed output, success status, and duration
 ```
 
 ### Documentation References
@@ -297,9 +294,9 @@ This section formalizes multi-agent behavior in ccswarm, aligning with widely us
 ccswarm can instantiate specialized agents (Frontend/Backend/DevOps/QA) and also overlay these roles per agent.
 
 ### Interaction Protocols
-- Centralized Orchestrator (current): ProactiveMaster issues assignments and collects results.
+- Piece Pipeline (current): Workflow engine executes movements, routing to agents via AISessionBridge.
 - Contract Net/Auction (planned): Agents bid on tasks using capability/cost/latency scores.
-- Vote/Consensus (planned): Sangha voting on competing proposals; quorum and tie‑break rules.
+- Vote/Consensus (planned): Sangha voting on competing proposals; quorum and tie-break rules.
 - Blackboard Bus: Shared topics for proposals, status, and decisions, with retention and replay.
 
 ### Task Contract (Canonical Schema)
@@ -360,7 +357,7 @@ Message envelope fields (common): { id, ts, sender, topic, payload, correlation_
 
 ## Acceptance Criteria (Multi-Agent Extensions)
 - Agents can register capabilities and receive assignments filtered by required skills.
-- Orchestrator can defer to auction/vote when multiple agents are eligible (planned).
+- Workflow engine can route movements to specific agents via the `agent` field (planned: auction/vote).
 - Critic can block completion until all acceptance items pass.
 - Bus retains messages long enough for late joiners to catch up and reconcile.
 
@@ -378,6 +375,9 @@ Movement fields:
 - name: string
 - persona: string (who acts; maps to agent prompt/facets)
 - edit: boolean (whether file edits are permitted)
+- agent: string (optional; routes to specific .claude/agents/*.md via --agent flag)
+- working_dir: string (optional; working directory for the movement)
+- retry_delay_ms: number (optional; base delay for exponential backoff on retry)
 - required_permission_mode: enum (e.g., view|edit|exec; planned)
 - rules: [{ condition: string, next: string|COMPLETE|ABORT }]
 
@@ -454,12 +454,6 @@ See docs/HARNESS_ENGINEERING.md for scenario format and CLI. Harness executes pi
 - Types: movement.start|end, task.enqueue|start|end, review.request|result, hitl.request|decision, provider.call|error.
 - Storage: `.ccswarm/runs/<run-id>/{events.ndjson, summary.json}`.
 
-## TUI UX
-
-- Views: Overview, Runs, Logs, Queue, Review.
-- Hotkeys: q (quit), f (filter), r (refresh), o (open), h (help).
-
-
 ## Sangha/Extend/Search/Evolution (CLI Spec)
 
 This section re‑introduces four CLI surfaces with takt‑aligned patterns. They are designed as thin handlers that delegate business logic to coordination modules, store state as JSON files, and support dual output (text/JSON).
@@ -529,15 +523,12 @@ Project configurations are stored in the project directory, not within the ccswa
 ```json
 {
   "project": {
-    "name": "MyProject",
-    "master_claude_instructions": "Custom orchestration instructions"
+    "name": "MyProject"
   },
   "agents": [
     {
       "name": "frontend-specialist",
-      "role": "Frontend",
-      "provider": "claude_code",
-      "auto_accept": { "enabled": true, "risk_threshold": 5 }
+      "role": "Frontend"
     }
   ]
 }
@@ -546,8 +537,7 @@ Project configurations are stored in the project directory, not within the ccswa
 Example configurations can be found in `crates/ccswarm/examples_disabled/`.
 
 ### Environment Variables
-- `ANTHROPIC_API_KEY`: Required for Claude-based providers
-- `OPENAI_API_KEY`: Required for OpenAI-based providers
+- `ANTHROPIC_API_KEY`: Required for Claude Code CLI
 - `RUST_LOG`: Control logging verbosity
 - `CCSWARM_HOME`: Configuration directory (default: ~/.ccswarm)
 
@@ -571,39 +561,37 @@ cargo run --package ccswarm -- init --name "TodoApp"
 
 ### Basic Workflow
 ```bash
-# Initialize project (creates ai-session configurations)
+# Initialize project
 ccswarm init --name "TodoApp" --agents frontend,backend
 
-# Start system (spawns ai-session instances for each agent)
-ccswarm start
+# Execute a task through a piece pipeline
+ccswarm pipeline --task "Add user authentication" --piece default
 
-# Create task (delegated to agents via ai-session)
-ccswarm task "Create user authentication system [high] [feature]"
+# Generate agent definitions from facets
+ccswarm agent-gen generate
 
-# Monitor progress (shows ai-session statistics)
-ccswarm tui
+# Run harness scenarios
+ccswarm harness run
 
-# View ai-session details
-ccswarm session list --show-savings
-ccswarm session stats --detailed
+# Check system health
+ccswarm doctor
 ```
 
 ### Advanced Usage
 ```bash
-# Auto-create complete application (uses ai-session for all agent interactions)
-ccswarm auto-create "Create a real-time chat application with React and WebSockets"
+# Sangha proposal and voting
+ccswarm sangha propose --title "Add GraphQL support" --description "..."
+ccswarm sangha vote <proposal-id> --approve --reason "Improves API flexibility"
 
-# Autonomous agent extension (agents use ai-session for coordination)
-ccswarm extend autonomous --continuous
+# Agent extension proposals
+ccswarm extend propose --title "GraphQL resolver" --description "..." --agent backend
 
-# Sangha proposal and voting (coordination via ai-session message bus)
-ccswarm sangha propose --type feature --title "Add GraphQL support"
-ccswarm sangha vote <proposal-id> aye --reason "Improves API flexibility"
+# HITL approval workflow
+ccswarm approve plan --id run-abc123
+ccswarm approve deploy --id task-456 --reject --reason "needs more tests"
 
-# Direct ai-session usage for advanced workflows
-ai-session create --name experimental --multi-agent
-ai-session coordinate --from frontend --to backend --message "api-ready"
-ai-session compress --session experimental --threshold 0.9
+# Evolution metrics and analysis
+ccswarm evolution report --format json
 ```
 
 ### Development Commands
@@ -627,32 +615,27 @@ cargo run --package ai-session --bin server
 
 ## Version History
 
-### v0.3.8 (Current)
+### v0.6.0 (Current)
+- Major restructuring: project identity shifted from "AI multi-agent orchestrator" to "AI Agent Workflow DevOps toolchain"
+- Deleted ~22.6k LOC: orchestrator/, providers/, acp_claude/, subagent/, execution/, tui/, template/, mcp/, ipc/, auto_accept/
+- Wired EventRecorder into PieceEngine with NDJSON events at .ccswarm/runs/
+- Added AISessionBridge with --resume, --agent routing, retry with exponential backoff
+- Added agent-gen command for generating/validating .claude/agents/*.md from facets
+- Enriched builtin persona system prompts
+- Added Movement fields: agent, working_dir, retry_delay_ms
+- Movement context passing between steps
+- Duration tracking in events
+- Harness scenarios added
+- Removed CLI commands: Start, Stop, Status, Tui, Verify, Review, Delegate, Session, Resource, AutoCreate, Quality, Template
+
+### v0.5.0
+- Large-scale codebase reduction (~22.8k LOC deleted in 6 phases)
+- Workspace restructuring
+
+### v0.3.8
 - Observability/Tracing with OpenTelemetry and Langfuse support
 - Human-in-the-Loop approval workflows
-- Long-term Memory/RAG with vector embeddings
 - Graph Workflow Engine with DAG-based execution
-- Benchmark Integration with SWE-Bench style evaluation
-
-### v0.3.7
-- Search Agent with Gemini CLI integration
-- Enhanced Sangha participation for agents
-- Improved inter-agent communication
-
-### v0.3.5
-- Proactive Master Claude with goal tracking
-- Security agent integration
-- Enhanced auto-create capabilities
-
-### v0.3.2
-- MCP protocol integration
-- Session HTTP API server
-- Improved error recovery
-
-### v0.3.1
-- Autonomous agent reasoning
-- Self-reflection engine
-- Continuous improvement mode
 
 ### v0.3.0
 - Sangha collective intelligence

@@ -2,7 +2,7 @@
 
 ## System Architecture Overview
 
-ccswarm follows a microkernel architecture with pluggable providers and a central orchestration layer.
+ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Agent Teams. It provides workflow orchestration via piece/movement pipelines, NDJSON event recording, and an AISessionBridge for Claude Code CLI execution with session resumption and retry.
 
 ## Workspace Structure
 
@@ -28,211 +28,129 @@ The workspace configuration enables:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Master Claude (Orchestrator)              │
-│  - Task analysis and delegation                              │
-│  - Quality review coordination                               │
-│  - Sangha consensus management                               │
+│                  CLI (~23 commands)                          │
+│  init, task, pipeline, piece, harness, agent-gen, approve,  │
+│  sangha, extend, search, evolution, doctor, ...             │
 └─────────────────────┬───────────────────────────────────────┘
                       │
-        ┌─────────────┴─────────────┬─────────────┬────────────┬────────────┐
-        │                           │             │            │            │
-┌───────▼────────┐  ┌──────────────▼──┐  ┌──────▼─────┐  ┌───▼────┐  ┌────▼────┐
-│Frontend Agent  │  │Backend Agent    │  │DevOps Agent│  │QA Agent│  │Search   │
-│- React/Vue     │  │- APIs/Database  │  │- Docker    │  │- Tests │  │Agent    │
-│- UI/UX         │  │- Business Logic │  │- CI/CD     │  │- QA    │  │- Gemini │
-└────────────────┘  └─────────────────┘  └────────────┘  └────────┘  └─────────┘
-        │                           │             │            │            │
-        └─────────────┬─────────────┴─────────────┴────────────┴────────────┘
+┌─────────────────────▼───────────────────────────────────────┐
+│              Workflow Engine (Pieces + Movements)            │
+│  - PieceEngine: YAML-driven multi-step pipelines            │
+│  - FacetRegistry: persona/policy/knowledge composition      │
+│  - Movement fields: agent, working_dir, retry_delay_ms      │
+│  - Context passing between steps                            │
+└─────────────────────┬───────────────────────────────────────┘
                       │
 ┌─────────────────────▼───────────────────────────────────────┐
-│                    AI-Session Management Layer               │
-│  - True parallel execution via MultiAgentExecutor            │
-│  - Message bus for inter-agent communication                 │
-│  - Resource manager for file locking                         │
-│  - Session persistence and recovery                          │
+│              AISessionBridge (session/bridge.rs)             │
+│  - Claude Code CLI subprocess execution                     │
+│  - --resume flag for session continuation                   │
+│  - --agent routing to .claude/agents/*.md                   │
+│  - Retry with exponential backoff                           │
+│  - Semantic output parsing via ai-session                   │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│              Events + Hooks                                  │
+│  - NDJSON EventRecorder (.ccswarm/runs/{run-id}/)           │
+│  - Duration tracking per movement                           │
+│  - HookRegistry for pre/post actions                        │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│              AI-Session Management Layer                     │
+│  - Context compression, output parsing, persistence         │
+│  - Message bus for inter-agent communication                │
+│  - Session persistence and recovery                         │
 │  See: crates/ai-session/README.md                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## Core Components
 
-### 1. Orchestrator (`crates/ccswarm/src/orchestrator/`)
-The brain of the system that coordinates all agent activities.
+### 1. Workflow Engine (`crates/ccswarm/src/workflow/`)
+The core of ccswarm, driving piece-based workflow pipelines.
 
-#### Master Claude (`master_claude.rs`)
-- Analyzes incoming tasks
-- Determines optimal agent assignment
-- Monitors task progress
-- Handles cross-agent dependencies
+#### PieceEngine
+- Loads YAML piece definitions with movements (steps)
+- Executes movements sequentially with context passing between steps
+- Supports movement-level fields: `agent`, `working_dir`, `retry_delay_ms`
+- Integrates with EventRecorder for NDJSON audit trail
 
-#### Quality Judge (`llm_quality_judge.rs`)
-- Evaluates code on 8 dimensions
-- Generates remediation tasks for failures
-- Runs every 30 seconds on completed tasks
-- Confidence scoring 0.0-1.0
+#### FacetRegistry
+- Composes prompts from independent facets (persona, policy, knowledge, instruction)
+- Builtin personas with enriched system prompts
+- Resolution order: builtin < project < user
 
 ### 2. Agent System (`crates/ccswarm/src/agent/`)
-Specialized AI agents with strict role boundaries.
+Agent definitions and task modeling for Claude Code Agent Teams.
 
-#### Agent Types
-- **Simple Agent**: Basic task execution
-- **Persistent Agent**: Maintains context across tasks
-- **Pool Agent**: Load-balanced agent groups
-- **Search Agent**: Web search and information gathering
+#### Agent Roles
+- **Frontend**: React, Vue, UI/UX development
+- **Backend**: APIs, databases, server logic
+- **DevOps**: Docker, CI/CD, infrastructure
+- **QA**: Testing, quality assurance
+- **Master**: Coordination role
 
-#### Specialized Agents
-- **Frontend Agent**: React, Vue, UI/UX development
-- **Backend Agent**: APIs, databases, server logic
-- **DevOps Agent**: Docker, CI/CD, infrastructure
-- **QA Agent**: Testing, quality assurance
-- **Search Agent**: Web search via Gemini CLI, research, Sangha participation
+#### agent-gen command
+- Generates `.claude/agents/*.md` from facet definitions
+- Validates existing agent definitions against facet registry
 
 #### Identity System (`crates/ccswarm/src/identity/`)
-- Enforces strict role boundaries
-- Prevents scope creep
-- Monitors agent responses for violations
+- AgentIdentity with role boundaries
+- Enforces agent scope constraints
 
-### 3. AI-Session Integration (`crates/ccswarm/src/session/`)
-Revolutionary session management powered by the ai-session crate, replacing tmux entirely.
-
-#### AI-Session Adapter (`ai_session_adapter.rs`)
-- **Bridge Layer**: Connects ccswarm orchestrator with ai-session crate (located in `crates/ai-session/`)
-- **Session Lifecycle**: Creates, manages, and terminates ai-session instances for each agent
-- **Context Management**: Token-efficient conversation history management
-- **Cross-Platform PTY**: Uses ai-session's native PTY implementation
-- **Message Bus Integration**: Coordinates multi-agent communication via ai-session's coordination layer
-
-#### AI-Session Features Used by ccswarm
-- **Token-Efficient Context**: Context window management with FIFO eviction
-- **Semantic Output Parsing**: Intelligent analysis of build results, test outputs, and error messages
-- **Multi-Agent Coordination**: Message bus architecture for agent-to-agent communication
-- **Session Persistence**: Automatic crash recovery and state restoration
-- **MCP Protocol Support**: HTTP API server for external tool integration
-- **Performance Monitoring**: Real-time metrics and token usage tracking
-
-### 3.1 Parallel Execution (`crates/ccswarm/src/subagent/parallel_executor.rs`)
-True multi-agent parallel execution using ai-session's coordination layer.
-
-#### MultiAgentExecutor
-```rust
-// Create executor with ai-session integration
-let executor = MultiAgentExecutor::new(ParallelConfig::default());
-
-// Execute tasks in parallel with message bus access
-executor.execute_parallel(tasks, |task, message_bus, resource_manager| async move {
-    // Agents can communicate through message_bus
-    // Resource conflicts handled by resource_manager
-    execute_task(task).await
-}).await?;
-```
+### 3. AISessionBridge (`crates/ccswarm/src/session/bridge.rs`)
+Bridge between ccswarm workflows and Claude Code CLI execution.
 
 #### Key Features
-- **True Parallel Execution**: Multiple Claude CLI sessions run concurrently
-- **Message Bus Communication**: Agents can communicate during execution
-- **Resource Locking**: File locking prevents conflicts on shared resources
-- **Semaphore-Based Concurrency**: Configurable max concurrent executions
-- **Result Aggregation**: Collect, merge, or select from parallel results
+- **Claude Code CLI Execution**: Spawns `claude` subprocess with task prompts
+- **Session Resumption**: Uses `--resume` flag to continue existing sessions
+- **Agent Routing**: Routes to `.claude/agents/*.md` via `--agent` flag
+- **Retry with Exponential Backoff**: Automatic retry on transient failures
+- **Semantic Output Parsing**: Uses ai-session's OutputParser for structured results
+- **Context Compression**: Leverages ai-session for token-efficient context management
+- **Message Bus Integration**: Inter-agent communication via ai-session coordination layer
 
-#### Session Types in ccswarm
-- **Agent Session**: Specialized ai-session instance per agent (frontend, backend, devops, qa)
-- **Worktree Session**: Git worktree integration with ai-session persistence
-- **Persistent Session**: Long-running contexts with ai-session state management
-- **Pool Session**: Load-balanced ai-session instances for high-throughput scenarios
+### 4. Events (`crates/ccswarm/src/events/`)
+NDJSON event recording for observability.
 
-#### Integration Architecture
-```rust
-// ccswarm creates specialized ai-session configurations
-let session_config = SessionConfig {
-    enable_ai_features: true,
-    agent_role: AgentRole::Frontend,
-    context_config: ContextConfig {
-        max_tokens: 4096,
-        compression_threshold: 0.8,
-    },
-    coordination_config: CoordinationConfig {
-        enable_message_bus: true,
-        agent_id: "frontend-specialist".to_string(),
-    },
-};
+#### EventRecorder
+- Writes events to `.ccswarm/runs/{run-id}/events.ndjson`
+- Duration tracking per movement
+- Produces `summary.json` at run completion
+- Event types: movement.start/end, task.enqueue/start/end, hitl.request/decision
 
-// ai-session handles the low-level terminal management
-let ai_session = ai_session::SessionManager::new()
-    .create_session_with_config(session_config).await?;
-```
-
-### 4. Coordination Layer (`crates/ccswarm/src/coordination/`)
+### 5. Coordination Layer (`crates/ccswarm/src/coordination/`)
 Inter-agent communication and task management.
 
 #### Components
 - **Task Queue**: Async task distribution
-- **Message Bus**: Agent communication
+- **Message Bus**: Agent communication bridge to ai-session
 - **Dialogue System**: Structured conversations
-
-### 5. Extension Framework (`crates/ccswarm/src/extension/`)
-Self-improvement and capability expansion.
-
-#### Autonomous Extension (`autonomous_agent_extension.rs`)
-- Analyzes agent experiences
-- Identifies capability gaps
-- Proposes improvements via Sangha
-
-#### Search Integration (`agent_extension.rs`)
-- GitHub API for code patterns
-- MDN for web standards
-- Stack Overflow for solutions
-
-### 6. Sangha System (`crates/ccswarm/src/sangha/`)
-Democratic decision-making inspired by Buddhist principles.
-
-#### Consensus Algorithms
-- **Simple Majority**: 51% approval
-- **Byzantine Fault Tolerant**: 67% approval
-- **Proof of Stake**: Weighted by contribution
 
 ## Data Flow
 
-### Task Execution Flow
+### Pipeline Execution Flow
 ```
-User Input → CLI Parser → Task Queue → Master Claude Analysis
+User Input → CLI Parser → PieceEngine loads YAML
     ↓
-Agent Assignment → Session Creation → Task Execution
+Movement Iteration → FacetRegistry composes prompt
     ↓
-Output Streaming → Quality Review → Task Completion
+AISessionBridge → Claude Code CLI (--resume, --agent)
     ↓
-Session Persistence → Knowledge Base Update
-```
-
-### Extension Proposal Flow
-```
-Agent Experience Analysis → Capability Assessment
+Output Parsing → EventRecorder (NDJSON) → Next Movement or COMPLETE
     ↓
-Need Identification → Proposal Generation
-    ↓
-Sangha Submission → Democratic Voting
-    ↓
-Consensus Achievement → Implementation
+RunSummary written → .ccswarm/runs/{run-id}/summary.json
 ```
 
-### Search Agent Message Flow
+### Harness Execution Flow
 ```
-Agent/Master Claude → Search Request → Coordination Bus
+Scenario YAML → Harness Runner → PieceEngine
     ↓
-Search Agent Receives → Query Validation → Filter Application
+Assertions verified → Consolidated report (JSON)
     ↓
-Gemini CLI Execution → Result Parsing → Relevance Scoring
-    ↓
-Response Generation → Coordination Bus → Requesting Agent
-```
-
-### Search Agent Sangha Participation
-```
-Proposal Detection → Key Term Extraction → Query Generation
-    ↓
-Web Search Execution → Result Analysis → Evidence Generation
-    ↓
-Opinion Formation → Vote Calculation → Informed Voting
-    ↓
-Knowledge Gap Detection → Initiative Proposal → Sangha Submission
+Baseline diff → Approve/reject
 ```
 
 ## Module Dependencies
@@ -240,18 +158,11 @@ Knowledge Gap Detection → Initiative Proposal → Sangha Submission
 ### Core Dependencies
 - `tokio`: Async runtime
 - `serde`: Serialization
-- `portable-pty`: Cross-platform PTY
-- `ai-session`: Advanced AI-optimized session management (workspace crate at `crates/ai-session/`)
-  - Provides 93% token reduction through intelligent context compression
-  - Native cross-platform PTY implementation
-  - Multi-agent coordination and message bus architecture
+- `clap`: CLI framework
+- `ai-session`: Session management (workspace crate at `crates/ai-session/`)
+  - Context compression and output parsing
+  - Multi-agent coordination and message bus
   - Can be used independently as a standalone library or CLI tool
-
-### Provider Dependencies
-- `claude_code`: Anthropic integration
-- `aider`: Aider tool integration
-- `codex`: OpenAI integration
-- `custom`: Custom tool support
 
 ### Workspace Dependencies and Integration
 
@@ -302,21 +213,14 @@ ai-session exec myproject "python train.py" --capture
 - Sandboxed execution environment
 
 ### Risk Assessment
-- Auto-accept patterns with risk scoring
 - Protected file patterns
 - Emergency stop capability
-
-### Security Agent Integration
-- OWASP vulnerability scanning
-- Real-time security monitoring
-- Automated remediation
 
 ## Performance Optimizations
 
 ### Session Reuse
-- 93% token reduction through context caching
-- Intelligent session pooling
-- Automatic garbage collection
+- Token reduction through context compression via ai-session
+- Session resumption via --resume flag
 
 ### Memory Management
 - Context compression with zstd
@@ -331,7 +235,7 @@ ai-session exec myproject "python train.py" --capture
 ## Testing Strategy
 
 ### Unit Tests
-- 267 core tests
+- Minimal focused tests (~10 core tests)
 - Module-level isolation
 - Mocked dependencies
 
@@ -348,23 +252,17 @@ Tests that may fail in CI due to timing or environment:
 
 ## Extension Points
 
-### Adding New Providers
-1. Implement `Provider` trait in `crates/ccswarm/src/providers/`
-2. Add to `ProviderType` enum
-3. Update configuration schema
-4. Add integration tests in `crates/ccswarm/tests/`
-
 ### Adding New Agent Roles
 1. Define role in `AgentRole` enum in `crates/ccswarm/src/agent/`
 2. Create identity constraints in `crates/ccswarm/src/identity/`
-3. Add CLAUDE.md template in `crates/ccswarm/templates/`
-4. Update delegation logic in `crates/ccswarm/src/orchestrator/`
+3. Add facet definitions for the new role
+4. Use `ccswarm agent-gen generate` to create `.claude/agents/*.md`
 
-### Custom Extensions
-1. Implement extension trait in `crates/ccswarm/src/extension/`
-2. Register with Sangha in `crates/ccswarm/src/sangha/`
-3. Define consensus requirements
-4. Add migration logic
+### Adding New Workflow Pieces
+1. Create YAML piece definition with movements
+2. Define facets (persona, policy, knowledge, instruction)
+3. Place in `.ccswarm/pieces/` (project) or `~/.ccswarm/pieces/` (user)
+4. Or install via `ccswarm repertoire add <git-url>`
 
 ### AI-Session Crate Structure and Integration
 
