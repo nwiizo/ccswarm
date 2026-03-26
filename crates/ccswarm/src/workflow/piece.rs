@@ -660,11 +660,13 @@ impl PieceEngine {
             )
             .await;
 
-            // Execute the movement
+            // Execute the movement with timing
+            let movement_start = std::time::Instant::now();
             let output = self.execute_movement(&movement, &state).await?;
+            let movement_duration_ms = movement_start.elapsed().as_millis() as u64;
             state.movement_count += 1;
 
-            // Record movement end
+            // Record movement end with duration metadata
             self.record_event(
                 crate::events::Event::new(
                     &run_id,
@@ -672,7 +674,10 @@ impl PieceEngine {
                     crate::events::EventType::MovementEnd,
                     format!("Movement '{}' completed", movement.id),
                 )
-                .with_movement(&movement.id),
+                .with_movement(&movement.id)
+                .with_metadata(serde_json::json!({
+                    "duration_ms": movement_duration_ms,
+                })),
             )
             .await;
 
@@ -792,8 +797,23 @@ impl PieceEngine {
                 initialized_at: chrono::Utc::now(),
             };
 
+            // Determine working directory (movement override or engine default)
+            let work_dir = movement
+                .working_dir
+                .as_ref()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| self.working_dir.clone());
+
             match bridge
-                .execute_task(agent_id, &prompt, &identity, &self.working_dir)
+                .execute_with_retry(
+                    agent_id,
+                    &prompt,
+                    &identity,
+                    &work_dir,
+                    movement.agent.as_deref(),
+                    movement.max_retries,
+                    movement.retry_delay_ms,
+                )
                 .await
             {
                 Ok(result) => {
@@ -802,6 +822,7 @@ impl PieceEngine {
                         "output": result.raw,
                         "parsed": format!("{:?}", result.parsed),
                         "status": if result.success { "completed" } else { "failed" },
+                        "duration_ms": result.duration_ms,
                     })
                 }
                 Err(e) => {
