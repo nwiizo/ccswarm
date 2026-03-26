@@ -1,3 +1,4 @@
+pub mod agent_gen;
 mod analytics;
 mod approve;
 mod config;

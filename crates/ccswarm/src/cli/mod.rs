@@ -186,6 +186,13 @@ pub enum Commands {
         all: bool,
     },
 
+    /// Generate .claude/agents/*.md from facets or validate existing definitions
+    #[command(name = "agent-gen")]
+    AgentGen {
+        #[command(subcommand)]
+        action: AgentGenAction,
+    },
+
     /// Run quality review
     Review {
         /// Agent to review
@@ -688,6 +695,35 @@ pub enum ApproveAction {
     List {
         #[arg(short, long)]
         status: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AgentGenAction {
+    /// Generate a .claude/agents/*.md file from facets
+    Generate {
+        /// Agent name (used as filename)
+        name: String,
+        /// Persona facet to use (e.g. "coder", "reviewer")
+        #[arg(short, long)]
+        persona: Option<String>,
+        /// Policy facet to use (e.g. "coding", "security")
+        #[arg(long)]
+        policy: Option<String>,
+        /// Short description for the agent
+        #[arg(short, long)]
+        description: Option<String>,
+        /// Model to use (default: sonnet)
+        #[arg(short, long, default_value = "sonnet")]
+        model: String,
+        /// Output directory (default: .claude/agents/)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Validate existing .claude/agents/*.md files
+    Validate {
+        /// Specific file to validate (default: all in .claude/agents/)
+        path: Option<PathBuf>,
     },
 }
 
@@ -1474,6 +1510,69 @@ impl CliRunner {
         // Use the command registry for centralized command handling
         let registry = self::command_registry::get_command_registry();
         registry.execute(self, command).await
+    }
+
+    /// Handle agent-gen subcommands
+    pub async fn handle_agent_gen(&self, action: &AgentGenAction) -> Result<()> {
+        match action {
+            AgentGenAction::Generate {
+                name,
+                persona,
+                policy,
+                description,
+                model,
+                output,
+            } => {
+                let output_dir = output
+                    .clone()
+                    .unwrap_or_else(|| self.repo_path.join(".claude/agents"));
+                let path = handlers::agent_gen::generate_agent_definition(
+                    name,
+                    persona.as_deref(),
+                    policy.as_deref(),
+                    description.as_deref(),
+                    model,
+                    &output_dir,
+                )
+                .await?;
+                println!("Generated agent definition: {}", path.display());
+                Ok(())
+            }
+            AgentGenAction::Validate { path } => {
+                let agents_dir = self.repo_path.join(".claude/agents");
+                let paths: Vec<PathBuf> = if let Some(p) = path {
+                    vec![p.clone()]
+                } else {
+                    let mut entries = Vec::new();
+                    let mut dir = tokio::fs::read_dir(&agents_dir).await?;
+                    while let Some(entry) = dir.next_entry().await? {
+                        let p = entry.path();
+                        if p.extension().is_some_and(|ext| ext == "md") {
+                            entries.push(p);
+                        }
+                    }
+                    entries
+                };
+
+                let mut all_valid = true;
+                for p in &paths {
+                    let issues = handlers::agent_gen::validate_agent_definition(p).await?;
+                    if issues.is_empty() {
+                        println!("  {} OK", p.display());
+                    } else {
+                        all_valid = false;
+                        println!("  {} {} issue(s):", p.display(), issues.len());
+                        for issue in &issues {
+                            println!("    - {}", issue);
+                        }
+                    }
+                }
+                if all_valid {
+                    println!("All agent definitions are valid.");
+                }
+                Ok(())
+            }
+        }
     }
 }
 
