@@ -219,56 +219,84 @@ impl CliRunner {
         Ok(())
     }
 
-    /// Suggest next commands after successful pipeline execution
+    /// Suggest next commands after successful pipeline execution.
+    /// Uses AI to analyze generated files and provide context-aware suggestions.
     async fn suggest_next_steps(&self, run_id: &str) {
         let repo = &self.repo_path;
-        let mut suggestions = Vec::new();
 
-        // Detect project type and suggest appropriate commands
-        if repo.join("playwright.config.ts").exists() || repo.join("playwright.config.js").exists()
-        {
-            suggestions.push(format!(
-                "cd {} && npx playwright test           # Run E2E tests",
-                repo.display()
-            ));
-        }
-        if repo.join("package.json").exists() && repo.join("public").exists() {
-            suggestions.push(format!(
-                "cd {} && npx serve public -l 3000       # Open http://localhost:3000",
-                repo.display()
-            ));
-        }
-        if repo.join("Cargo.toml").exists() {
-            suggestions.push(format!(
-                "cd {} && cargo run                         # Run the app",
-                repo.display()
-            ));
-        }
-        if repo.join("go.mod").exists() {
-            suggestions.push(format!(
-                "cd {} && go run .                          # Run the app",
-                repo.display()
-            ));
-        }
-        if repo.join("requirements.txt").exists() || repo.join("pyproject.toml").exists() {
-            suggestions.push(format!(
-                "cd {} && python main.py                    # Run the app",
-                repo.display()
-            ));
-        }
-        let short_id = &run_id[..8.min(run_id.len())];
-        suggestions.push(format!("ccswarm run view {short_id}   # View run details"));
-        suggestions.push(
-            "ccswarm pipeline --piece review-fix --task \"Review and fix issues\"   # Iterate"
-                .to_string(),
-        );
+        // Try AI-powered suggestions first
+        let ai_suggestions = self.get_ai_suggestions(repo).await;
 
-        if !suggestions.is_empty() {
-            eprintln!();
-            eprintln!("{}", "Next steps:".bright_cyan().bold());
+        eprintln!();
+        eprintln!("{}", "Next steps:".bright_cyan().bold());
+
+        if let Some(ai_text) = ai_suggestions {
+            // AI-generated suggestions
+            for line in ai_text.lines().take(8) {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    eprintln!("  {}", trimmed);
+                }
+            }
+        } else {
+            // Fallback: static file-based detection
+            let mut suggestions = Vec::new();
+            if repo.join("playwright.config.ts").exists()
+                || repo.join("playwright.config.js").exists()
+            {
+                suggestions.push(format!("cd {} && npx playwright test", repo.display()));
+            }
+            if repo.join("package.json").exists() && repo.join("public").exists() {
+                suggestions.push(format!("cd {} && npx serve public -l 3000", repo.display()));
+            }
+            if repo.join("Cargo.toml").exists() {
+                suggestions.push(format!("cd {} && cargo run", repo.display()));
+            }
             for s in &suggestions {
                 eprintln!("  {}", s);
             }
+        }
+
+        let short_id = &run_id[..8.min(run_id.len())];
+        eprintln!("  ccswarm run view {short_id}   # View run details");
+    }
+
+    /// Ask Claude to suggest next steps based on generated files
+    async fn get_ai_suggestions(&self, repo: &std::path::Path) -> Option<String> {
+        // List generated files (non-hidden, non-node_modules)
+        let mut files = Vec::new();
+        if let Ok(mut entries) = tokio::fs::read_dir(repo).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if !name.starts_with('.') && name != "node_modules" {
+                    files.push(name);
+                }
+            }
+        }
+        if files.is_empty() {
+            return None;
+        }
+
+        let prompt = format!(
+            "You are a helpful assistant. A project was just generated at {}. \
+             Files: {}. \
+             Suggest 3-5 shell commands the user should run next to test, run, or deploy this project. \
+             Output ONLY the commands, one per line, with a short # comment. No markdown, no explanation.",
+            repo.display(),
+            files.join(", ")
+        );
+
+        let output = tokio::process::Command::new("claude")
+            .args(["-p", &prompt, "--output-format", "text"])
+            .current_dir(repo)
+            .output()
+            .await
+            .ok()?;
+
+        if output.status.success() {
+            Some(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            None
         }
     }
 
