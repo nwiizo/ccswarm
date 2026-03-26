@@ -88,7 +88,7 @@ impl AISessionBridge {
     /// Execute a task via Claude Code CLI and manage results with ai-session.
     ///
     /// Flow:
-    /// 1. Execute `claude -p <prompt>` via subprocess
+    /// 1. Execute `claude -p <prompt>` via subprocess (with optional --agent/--team)
     /// 2. Parse output with ai-session's `OutputParser`
     /// 3. Store in context history (zstd compressed when threshold reached)
     /// 4. Broadcast result to other agents via message bus
@@ -100,9 +100,29 @@ impl AISessionBridge {
         _identity: &AgentIdentity,
         working_dir: &Path,
     ) -> Result<BridgeResult> {
+        self.execute_task_with_options(agent_id, prompt, _identity, working_dir, None)
+            .await
+    }
+
+    /// Execute with optional Claude Code agent/team routing
+    pub async fn execute_task_with_options(
+        &self,
+        agent_id: &str,
+        prompt: &str,
+        _identity: &AgentIdentity,
+        working_dir: &Path,
+        agent_name: Option<&str>,
+    ) -> Result<BridgeResult> {
         // 1. Execute Claude Code CLI via subprocess
-        let output = tokio::process::Command::new("claude")
-            .args(["-p", prompt, "--output-format", "text"])
+        let mut cmd = tokio::process::Command::new("claude");
+        cmd.args(["-p", prompt, "--output-format", "text"]);
+
+        // Route to specific agent if specified
+        if let Some(name) = agent_name {
+            cmd.args(["--agent", name]);
+        }
+
+        let output = cmd
             .current_dir(working_dir)
             .output()
             .await

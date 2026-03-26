@@ -633,12 +633,15 @@ impl PieceEngine {
             );
 
             // Record movement start
-            self.record_event(crate::events::Event::new(
-                &run_id,
-                crate::events::EventLevel::Info,
-                crate::events::EventType::MovementStart,
-                format!("Movement '{}' started", movement.id),
-            ).with_movement(&movement.id))
+            self.record_event(
+                crate::events::Event::new(
+                    &run_id,
+                    crate::events::EventLevel::Info,
+                    crate::events::EventType::MovementStart,
+                    format!("Movement '{}' started", movement.id),
+                )
+                .with_movement(&movement.id),
+            )
             .await;
 
             // Execute the movement
@@ -646,12 +649,15 @@ impl PieceEngine {
             state.movement_count += 1;
 
             // Record movement end
-            self.record_event(crate::events::Event::new(
-                &run_id,
-                crate::events::EventLevel::Info,
-                crate::events::EventType::MovementEnd,
-                format!("Movement '{}' completed", movement.id),
-            ).with_movement(&movement.id))
+            self.record_event(
+                crate::events::Event::new(
+                    &run_id,
+                    crate::events::EventLevel::Info,
+                    crate::events::EventType::MovementEnd,
+                    format!("Movement '{}' completed", movement.id),
+                )
+                .with_movement(&movement.id),
+            )
             .await;
 
             // Store output in variables
@@ -703,7 +709,11 @@ impl PieceEngine {
         let completed = state.status == PieceStatus::Completed;
         self.record_event(crate::events::Event::new(
             &run_id,
-            if completed { crate::events::EventLevel::Info } else { crate::events::EventLevel::Warn },
+            if completed {
+                crate::events::EventLevel::Info
+            } else {
+                crate::events::EventLevel::Warn
+            },
             crate::events::EventType::TaskEnd,
             format!("Piece '{}' finished with status {:?}", name, state.status),
         ))
@@ -717,7 +727,13 @@ impl PieceEngine {
                 total_events: recorder.event_count(),
                 tasks_completed: if completed { 1 } else { 0 },
                 tasks_failed: if completed { 0 } else { 1 },
-                agents_used: state.history.iter().map(|t| t.from.clone()).collect::<std::collections::HashSet<_>>().into_iter().collect(),
+                agents_used: state
+                    .history
+                    .iter()
+                    .map(|t| t.from.clone())
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect(),
             };
             if let Err(e) = recorder.write_summary(&summary).await {
                 warn!("Failed to write run summary: {}", e);

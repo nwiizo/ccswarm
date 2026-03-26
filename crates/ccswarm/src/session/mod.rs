@@ -99,7 +99,6 @@ pub struct AgentSession {
     pub tasks_processed: usize,
     /// Number of tasks currently in queue
     pub tasks_queued: usize,
-
 }
 
 impl AgentSession {
@@ -177,7 +176,6 @@ impl AgentSession {
     pub fn is_auto_accept_ready(&self) -> bool {
         self.auto_accept && self.auto_accept_config.is_some()
     }
-
 }
 
 /// Manages multiple agent sessions with native session management
