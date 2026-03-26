@@ -169,6 +169,11 @@ impl CommandRegistry {
             runner.handle_approve(action)
         );
 
+        register_command!(self, "session", runner, cmd,
+            Commands::Session { action } =>
+            runner.handle_session(action)
+        );
+
         register_command!(self, "run", runner, cmd,
             Commands::Run { action } =>
             runner.handle_run(action)
@@ -232,6 +237,7 @@ impl CommandRegistry {
             Commands::Evolution { .. } => "evolution",
             Commands::Harness { .. } => "harness",
             Commands::Approve { .. } => "approve",
+            Commands::Session { .. } => "session",
             Commands::Run { .. } => "run",
             Commands::Scaffold { .. } => "scaffold",
         }

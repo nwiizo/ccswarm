@@ -5,19 +5,55 @@ use ccswarm::cli::{Cli, CliRunner};
 
 #[tokio::main]
 async fn main() {
+    // Check if first arg looks like a task (not a subcommand or flag)
+    let args: Vec<String> = std::env::args().collect();
+    let is_direct_task = args.len() >= 2
+        && !args[1].starts_with('-')
+        && !is_known_subcommand(&args[1]);
+
+    if is_direct_task {
+        // Direct task mode: ccswarm "タスクを書くだけ"
+        init_logging(false, "text");
+        let task = args[1..].join(" ");
+        if let Err(e) = run_direct_task(&task).await {
+            display_error(&e, false);
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let cli = Cli::parse();
 
-    // Initialize logging
-    let log_level = if cli.verbose {
+    init_logging(cli.verbose, &cli.log_format);
+
+    if let Err(e) = run_cli(&cli).await {
+        display_error(&e, cli.verbose);
+        std::process::exit(1);
+    }
+}
+
+fn is_known_subcommand(arg: &str) -> bool {
+    matches!(
+        arg,
+        "runs" | "pieces" | "doctor" | "help"
+            | "init" | "task" | "agents" | "agent-gen" | "worktree"
+            | "logs" | "config" | "setup" | "tutorial" | "interactive"
+            | "pipeline" | "help-topic" | "health" | "quickstart"
+            | "piece" | "repertoire" | "sangha" | "extend" | "search"
+            | "evolution" | "harness" | "approve" | "session" | "run" | "scaffold"
+    )
+}
+
+fn init_logging(verbose: bool, format: &str) {
+    let log_level = if verbose {
         tracing::Level::DEBUG
     } else {
         tracing::Level::INFO
     };
-
     let filter_layer =
         tracing_subscriber::EnvFilter::from_default_env().add_directive(log_level.into());
 
-    match cli.log_format.as_str() {
+    match format {
         "ndjson" | "json" => {
             let json_layer = tracing_subscriber::fmt::layer()
                 .json()
@@ -25,7 +61,6 @@ async fn main() {
                 .with_thread_ids(false)
                 .with_file(false)
                 .with_line_number(false);
-
             tracing_subscriber::registry()
                 .with(filter_layer)
                 .with(json_layer)
@@ -35,19 +70,79 @@ async fn main() {
             let fmt_layer = tracing_subscriber::fmt::layer()
                 .with_target(false)
                 .compact();
-
             tracing_subscriber::registry()
                 .with(filter_layer)
                 .with(fmt_layer)
                 .init();
         }
     }
+}
 
-    // Create and run CLI with user-friendly error display
-    if let Err(e) = run_cli(&cli).await {
-        display_error(&e, cli.verbose);
-        std::process::exit(1);
+/// Direct task mode: `ccswarm "Snakeゲームを作って"`
+/// Auto-detects new project vs existing, runs full pipeline with OK/NG flow.
+async fn run_direct_task(task: &str) -> anyhow::Result<()> {
+    use ccswarm::cli::CliRunner;
+    use std::path::PathBuf;
+
+    let repo = PathBuf::from(".");
+    let is_new_project = !repo.join("package.json").exists()
+        && !repo.join("Cargo.toml").exists()
+        && !repo.join("go.mod").exists()
+        && !repo.join("pyproject.toml").exists()
+        && !repo.join("index.html").exists();
+
+    if is_new_project {
+        // New project: scaffold first
+        eprintln!("{}", colored::Colorize::bright_cyan(colored::Colorize::bold("ccswarm")));
+        eprintln!();
+
+        // Initialize project files
+        if !repo.join(".git").exists() {
+            let _ = tokio::process::Command::new("git")
+                .arg("init")
+                .output()
+                .await;
+            let _ = tokio::process::Command::new("git")
+                .args(["config", "user.email", "ccswarm@local"])
+                .output()
+                .await;
+            let _ = tokio::process::Command::new("git")
+                .args(["config", "user.name", "ccswarm"])
+                .output()
+                .await;
+        }
+        tokio::fs::write("package.json", "{}\n").await?;
+        let _ = tokio::fs::create_dir_all("public").await;
+        let _ = tokio::fs::create_dir_all("e2e").await;
+        let _ = tokio::process::Command::new("git")
+            .args(["add", "-A"])
+            .output()
+            .await;
+        let _ = tokio::process::Command::new("git")
+            .args(["commit", "-m", "init"])
+            .output()
+            .await;
+        eprintln!("  {} Project initialized", colored::Colorize::bright_green("\u{2713}"));
     }
+
+    // Build a minimal Cli for CliRunner
+    let cli = Cli::parse_from(["ccswarm", "--repo", ".", "pipeline", "--task", task, "--piece", "default", "--timeout", "600"]);
+    let runner = CliRunner::new(&cli).await?;
+
+    // Run pipeline with full OK/NG flow
+    runner.handle_pipeline(
+        task,
+        "default",
+        "text",
+        600,
+        false,
+        None,
+        false,   // isolate
+        None,    // budget
+        None,    // model
+        false,   // auto_commit (ask instead)
+        false,   // create_pr (ask instead)
+    ).await
 }
 
 async fn run_cli(cli: &Cli) -> anyhow::Result<()> {

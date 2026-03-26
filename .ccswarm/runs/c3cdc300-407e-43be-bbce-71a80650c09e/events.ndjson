@@ -1,0 +1,2 @@
+{"ts":"2026-03-26T15:35:12.411796Z","level":"info","run_id":"c3cdc300-407e-43be-bbce-71a80650c09e","event_type":"task_start","message":"Starting piece 'default'"}
+{"ts":"2026-03-26T15:35:12.412037Z","level":"info","run_id":"c3cdc300-407e-43be-bbce-71a80650c09e","event_type":"movement_start","movement":"plan","message":"Movement 'plan' started"}
