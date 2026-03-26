@@ -6,6 +6,7 @@ mod diagnostics;
 mod harness;
 mod init;
 mod misc;
+pub mod run;
 mod sangha;
 mod task;
 mod workflow;
