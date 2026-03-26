@@ -1,0 +1,12 @@
+name: "piece-validation-test"
+tags: ["smoke", "piece"]
+
+piece: "review-fix"
+task: "Review the current CLAUDE.md file and suggest improvements"
+
+timeout_secs: 30
+output_format: text
+
+assert:
+  expect_success: true
+  files_exist: ["CLAUDE.md"]
