@@ -86,6 +86,11 @@ impl CommandRegistry {
             runner.list_agents(*all)
         );
 
+        register_command!(self, "agent-gen", runner, cmd,
+            Commands::AgentGen { action } =>
+            runner.handle_agent_gen(action)
+        );
+
         register_command!(self, "review", runner, cmd,
             Commands::Review { agent, strict } =>
             runner.run_review(agent.as_deref(), *strict)
@@ -253,6 +258,7 @@ impl CommandRegistry {
             Commands::Status { .. } => "status",
             Commands::Task { .. } => "task",
             Commands::Agents { .. } => "agents",
+            Commands::AgentGen { .. } => "agent-gen",
             Commands::Review { .. } => "review",
             Commands::Worktree { .. } => "worktree",
             Commands::Logs { .. } => "logs",

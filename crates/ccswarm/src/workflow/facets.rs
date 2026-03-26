@@ -108,6 +108,28 @@ impl FacetRegistry {
         Self::default()
     }
 
+    /// Create a registry pre-loaded with built-in personas and policies
+    pub fn new_with_builtins() -> Self {
+        let mut registry = Self::new();
+        for persona in builtin_personas() {
+            registry.register_persona(persona);
+        }
+        for policy in builtin_policies() {
+            registry.register_policy(policy);
+        }
+        registry
+    }
+
+    /// Get a persona by name
+    pub fn get_persona(&self, name: &str) -> Option<&PersonaFacet> {
+        self.personas.get(name)
+    }
+
+    /// Get a policy by name
+    pub fn get_policy(&self, name: &str) -> Option<&PolicyFacet> {
+        self.policies.get(name)
+    }
+
     /// Set base directory for file references
     pub fn with_base_dir(mut self, dir: PathBuf) -> Self {
         self.base_dir = Some(dir);
