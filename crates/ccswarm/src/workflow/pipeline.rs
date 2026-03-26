@@ -34,7 +34,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
-use super::piece::{PieceEngine, PieceStatus};
+use super::piece::{PieceEngine, PieceState, PieceStatus};
 
 /// Configuration for pipeline execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -440,8 +440,19 @@ impl PipelineRunner {
                     self.create_error_output(started_at, e.to_string())
                 }
                 Err(_) => {
-                    warn!("Pipeline execution timed out after {:?}", config.timeout);
-                    self.create_timeout_output(started_at, config.timeout)
+                    // Check if movements completed before timeout
+                    let partial = self.engine.get_last_state().await;
+                    let movements_done = partial.as_ref().map(|s| s.movement_count).unwrap_or(0);
+                    if movements_done > 0 {
+                        warn!(
+                            "Pipeline timed out after {:?} but {} movements completed",
+                            config.timeout, movements_done
+                        );
+                        self.create_partial_success_output(started_at, config.timeout, partial)
+                    } else {
+                        warn!("Pipeline execution timed out after {:?}", config.timeout);
+                        self.create_timeout_output(started_at, config.timeout)
+                    }
                 }
             };
 
@@ -589,6 +600,56 @@ impl PipelineRunner {
             warnings: vec![],
             error: Some(error),
             details: None,
+        }
+    }
+
+    /// Create partial success output when timeout occurs after some movements completed
+    fn create_partial_success_output(
+        &self,
+        started_at: DateTime<Utc>,
+        timeout: Duration,
+        partial_state: Option<PieceState>,
+    ) -> PipelineOutput {
+        let completed_at = Utc::now();
+        let movements = partial_state
+            .as_ref()
+            .map(|s| s.movement_count)
+            .unwrap_or(0);
+        let piece_name = partial_state
+            .as_ref()
+            .map(|s| s.piece_name.clone())
+            .unwrap_or_default();
+
+        PipelineOutput {
+            exit_code: PipelineExitCode::Success, // Partial success = still usable
+            status: PipelineStatus::Success,
+            output: format!(
+                "Piece: {}\nStatus: Partial (timed out after {} movements)\nMovements: {}",
+                piece_name, movements, movements
+            ),
+            duration: timeout,
+            movement_count: movements,
+            started_at,
+            completed_at,
+            warnings: vec![format!(
+                "Pipeline timed out after {:?} but {} movements completed successfully. Generated files may be usable.",
+                timeout, movements
+            )],
+            error: None,
+            details: partial_state.map(|s| PipelineDetails {
+                piece_name: s.piece_name,
+                transitions: s
+                    .history
+                    .iter()
+                    .map(|t| MovementTransitionSummary {
+                        from: t.from.clone(),
+                        to: t.to.clone(),
+                        condition: t.condition.clone(),
+                        timestamp: t.timestamp,
+                    })
+                    .collect(),
+                variables: s.variables,
+            }),
         }
     }
 

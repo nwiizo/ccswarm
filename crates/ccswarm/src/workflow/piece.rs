@@ -465,6 +465,8 @@ pub struct PieceEngine {
     working_dir: std::path::PathBuf,
     /// Optional event recorder for NDJSON observability
     event_recorder: Option<crate::events::EventRecorder>,
+    /// Last known execution state (for partial result recovery on timeout)
+    last_state: std::sync::Arc<tokio::sync::RwLock<Option<PieceState>>>,
 }
 
 impl PieceEngine {
@@ -489,6 +491,7 @@ impl PieceEngine {
             bridge: None,
             working_dir: std::path::PathBuf::from("."),
             event_recorder: None,
+            last_state: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
         }
     }
 
@@ -517,6 +520,11 @@ impl PieceEngine {
     /// Set the event recorder for NDJSON observability
     pub fn set_event_recorder(&mut self, recorder: crate::events::EventRecorder) {
         self.event_recorder = Some(recorder);
+    }
+
+    /// Get the last known execution state (for partial result recovery on timeout)
+    pub async fn get_last_state(&self) -> Option<PieceState> {
+        self.last_state.read().await.clone()
     }
 
     /// Load a piece from a YAML file
@@ -685,11 +693,33 @@ impl PieceEngine {
             )
             .await;
 
-            // Execute the movement with timing
+            // Execute the movement with timing and optional per-movement timeout
             let movement_start = std::time::Instant::now();
-            let output = self.execute_movement(&movement, &state).await?;
+            let output = if let Some(timeout_secs) = movement.timeout {
+                let timeout = std::time::Duration::from_secs(timeout_secs as u64);
+                match tokio::time::timeout(timeout, self.execute_movement(&movement, &state)).await
+                {
+                    Ok(result) => result?,
+                    Err(_) => {
+                        warn!(
+                            "Movement '{}' timed out after {}s",
+                            movement.id, timeout_secs
+                        );
+                        serde_json::json!({
+                            "movement": movement.id,
+                            "status": "timeout",
+                            "error": format!("Movement timed out after {}s", timeout_secs),
+                        })
+                    }
+                }
+            } else {
+                self.execute_movement(&movement, &state).await?
+            };
             let movement_duration_ms = movement_start.elapsed().as_millis() as u64;
             state.movement_count += 1;
+
+            // Save intermediate state for timeout recovery
+            *self.last_state.write().await = Some(state.clone());
 
             // Record movement end with duration metadata
             self.record_event(
