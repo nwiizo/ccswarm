@@ -1,6 +1,0 @@
-{"ts":"2026-03-26T15:52:09.813203Z","level":"info","run_id":"3c6477ae-86a3-4648-b1df-fdc8b5784874","event_type":"task_start","message":"Starting piece 'default'"}
-{"ts":"2026-03-26T15:52:09.823279Z","level":"info","run_id":"3c6477ae-86a3-4648-b1df-fdc8b5784874","event_type":"movement_start","movement":"plan","message":"Movement 'plan' started"}
-{"ts":"2026-03-26T15:52:14.298541Z","level":"info","run_id":"3c6477ae-86a3-4648-b1df-fdc8b5784874","event_type":"movement_end","movement":"plan","message":"Movement 'plan' completed","metadata":{"duration_ms":4470,"output_preview":"","status":"failed"}}
-{"ts":"2026-03-26T15:52:14.308686Z","level":"info","run_id":"3c6477ae-86a3-4648-b1df-fdc8b5784874","event_type":"movement_start","movement":"implement","message":"Movement 'implement' started"}
-{"ts":"2026-03-26T15:52:29.122838Z","level":"info","run_id":"3c6477ae-86a3-4648-b1df-fdc8b5784874","event_type":"movement_end","movement":"implement","message":"Movement 'implement' completed","metadata":{"duration_ms":14808,"output_preview":"","status":"failed"}}
-{"ts":"2026-03-26T15:52:29.125745Z","level":"info","run_id":"3c6477ae-86a3-4648-b1df-fdc8b5784874","event_type":"movement_start","movement":"fix","message":"Movement 'fix' started"}
