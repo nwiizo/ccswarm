@@ -171,15 +171,31 @@ impl CliRunner {
         engine.set_progress_channel(progress_tx);
 
         // Spawn progress display task
+        let piece_name = piece.to_string();
         let progress_handle = tokio::spawn(async move {
+            let mut total_ms: u64 = 0;
+            eprintln!(
+                "{}",
+                format!("Pipeline: {}", piece_name).bright_cyan().bold()
+            );
             while let Some(progress) = progress_rx.recv().await {
-                let status = if progress.success {
+                total_ms += progress.duration_ms;
+                let icon = if progress.success {
                     "\u{2713}"
                 } else {
                     "\u{2717}"
                 };
                 let secs = progress.duration_ms as f64 / 1000.0;
-                eprintln!("  {} {} ({:.1}s)", status, progress.movement_id, secs);
+                let total_secs = total_ms as f64 / 1000.0;
+                let line = format!(
+                    "  {} {} ({:.0}s, total {:.0}s)",
+                    icon, progress.movement_id, secs, total_secs
+                );
+                if progress.success {
+                    eprintln!("{}", line.bright_green());
+                } else {
+                    eprintln!("{}", line.bright_red());
+                }
             }
         });
 

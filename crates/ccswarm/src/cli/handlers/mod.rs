@@ -8,5 +8,6 @@ mod init;
 mod misc;
 pub mod run;
 mod sangha;
+pub mod scaffold;
 mod task;
 mod workflow;

@@ -2,16 +2,14 @@
 //!
 //! This module bridges the gap between ccswarm's orchestration layer and the ai-session
 //! crate. It uses direct CLI subprocess execution and ai-session's subsystems for context
-//! compression, output parsing, inter-agent messaging, and persistence.
+//! compression, output parsing, and persistence.
 
 use anyhow::{Context as _, Result};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use ai_session::context::{MessageRole, SessionContext};
-use ai_session::coordination::{AgentId, AgentMessage, MessageBus};
 use ai_session::core::SessionId;
 use ai_session::output::{OutputParser, ParsedOutput};
 use ai_session::persistence::PersistenceManager;
@@ -41,19 +39,14 @@ pub struct BridgeResult {
 /// - Direct Claude Code CLI execution via subprocess
 /// - zstd context compression via ai-session's `TokenEfficientHistory` (93% token reduction)
 /// - Semantic output parsing via ai-session's `OutputParser`
-/// - Inter-agent messaging via ai-session's `MessageBus`
 /// - Session persistence via ai-session's `PersistenceManager`
 pub struct AISessionBridge {
     /// Per-agent context histories (zstd compressed)
     context_histories: DashMap<String, SessionContext>,
-    /// Inter-agent message bus
-    message_bus: Arc<MessageBus>,
     /// Semantic output parser
     output_parser: OutputParser,
     /// Session persistence manager
     persistence: PersistenceManager,
-    /// Agent ID mappings (ccswarm agent_id -> ai-session AgentId)
-    agent_mappings: DashMap<String, AgentId>,
 }
 
 impl AISessionBridge {
@@ -61,31 +54,18 @@ impl AISessionBridge {
     pub fn new(storage_path: PathBuf) -> Self {
         Self {
             context_histories: DashMap::new(),
-            message_bus: Arc::new(MessageBus::new()),
             output_parser: OutputParser::new(),
             persistence: PersistenceManager::new(storage_path),
-            agent_mappings: DashMap::new(),
         }
     }
 
-    /// Register an agent context for tracking conversation history and messages.
+    /// Register an agent context for tracking conversation history.
     ///
-    /// This creates:
-    /// - A `SessionContext` with zstd-compressed `TokenEfficientHistory`
-    /// - A message bus registration for inter-agent communication
+    /// This creates a `SessionContext` with zstd-compressed `TokenEfficientHistory`.
     pub fn register_agent(&self, agent_id: &str) -> Result<()> {
-        // Create ai-session context for this agent
         let session_id = SessionId::new();
         let context = SessionContext::new(session_id);
         self.context_histories.insert(agent_id.to_string(), context);
-
-        // Register on message bus
-        let ai_agent_id = AgentId::new();
-        self.message_bus
-            .register_agent(ai_agent_id.clone())
-            .context("Failed to register agent on message bus")?;
-        self.agent_mappings
-            .insert(agent_id.to_string(), ai_agent_id);
 
         tracing::info!("Registered agent '{}' with AISessionBridge", agent_id);
         Ok(())
@@ -97,8 +77,7 @@ impl AISessionBridge {
     /// 1. Execute `claude -p <prompt>` via subprocess (with optional --agent/--team)
     /// 2. Parse output with ai-session's `OutputParser`
     /// 3. Store in context history (zstd compressed when threshold reached)
-    /// 4. Broadcast result to other agents via message bus
-    /// 5. Persist session state for crash recovery
+    /// 4. Persist session state for crash recovery
     pub async fn execute_task(
         &self,
         agent_id: &str,
@@ -230,42 +209,7 @@ impl AISessionBridge {
             context.compress_context().await;
         }
 
-        // 4. Notify other agents via message bus
-        if let Some(ai_agent_id) = self.agent_mappings.get(agent_id) {
-            let task_id = ai_session::coordination::TaskId::new();
-            let _msg = AgentMessage::TaskCompleted {
-                agent_id: ai_agent_id.clone(),
-                task_id,
-                result: serde_json::json!({
-                    "agent": agent_id,
-                    "success": success,
-                    "output_preview": truncate_output(&raw_output, 500),
-                }),
-            };
-            // Broadcast is best-effort; log errors for debugging
-            if let Err(e) = self.message_bus.broadcast(
-                ai_agent_id.clone(),
-                ai_session::BroadcastMessage {
-                    id: uuid::Uuid::new_v4(),
-                    from: ai_agent_id.clone(),
-                    content: serde_json::json!({
-                        "agent": agent_id,
-                        "success": success,
-                    })
-                    .to_string(),
-                    priority: ai_session::MessagePriority::Normal,
-                    timestamp: chrono::Utc::now(),
-                },
-            ) {
-                tracing::debug!(
-                    "MessageBus broadcast failed for agent '{}': {}",
-                    agent_id,
-                    e
-                );
-            }
-        }
-
-        // 5. Persist session state (best-effort)
+        // 4. Persist session state (best-effort)
         if let Some(context) = self.context_histories.get(agent_id) {
             let session_id = context.session_id.clone();
             let state = ai_session::persistence::SessionState {
@@ -305,11 +249,6 @@ impl AISessionBridge {
             .map(|ctx| ctx.get_compression_stats())
     }
 
-    /// Get the message bus for direct inter-agent communication
-    pub fn message_bus(&self) -> &Arc<MessageBus> {
-        &self.message_bus
-    }
-
     /// Get the number of registered agents
     pub fn agent_count(&self) -> usize {
         self.context_histories.len()
@@ -344,15 +283,6 @@ fn is_parsed_success(parsed: &ParsedOutput) -> bool {
     }
 }
 
-/// Truncate output for message bus previews
-fn truncate_output(output: &str, max_len: usize) -> String {
-    if output.len() <= max_len {
-        output.to_string()
-    } else {
-        format!("{}...", &output[..max_len])
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,12 +299,6 @@ mod tests {
         let bridge = AISessionBridge::new(PathBuf::from("/tmp/ccswarm-test"));
         bridge.register_agent("frontend-agent").unwrap();
         assert_eq!(bridge.agent_count(), 1);
-    }
-
-    #[test]
-    fn test_truncate_output() {
-        assert_eq!(truncate_output("short", 10), "short");
-        assert_eq!(truncate_output("this is longer text", 10), "this is lo...");
     }
 
     #[test]

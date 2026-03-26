@@ -941,4 +941,64 @@ mod tests {
         let all = history.get_all_messages();
         assert_eq!(all.len(), 5);
     }
+
+    #[tokio::test]
+    async fn test_compress_context_with_stats() {
+        let session_id = SessionId::new();
+        let mut context = SessionContext::new(session_id);
+
+        // Use a low token limit so compression triggers with ~50 messages.
+        // Each message below is ~30 tokens; threshold = 500 * 0.5 = 250 tokens,
+        // so 50 messages * 30 tokens = ~1500 tokens >> 250, guaranteeing compression.
+        context.config.max_tokens = 500;
+        context.config.compression_threshold = 0.5;
+        context.conversation_history.max_tokens = 500;
+        context.conversation_history.keep_recent = 5;
+
+        // Use substantive repeated content so zstd achieves a positive compression ratio
+        let long_content = "The quick brown fox jumps over the lazy dog. \
+            This is a representative sentence used in compression benchmarks.";
+        for i in 0..50 {
+            context.add_message_raw(
+                MessageRole::User,
+                format!("Message {}: {}", i, long_content),
+            );
+        }
+
+        // At this point auto-compression may already have fired via add_message.
+        // Call compress_context() explicitly to also exercise the threshold-check path.
+        context.compress_context().await;
+
+        let stats = context.get_compression_stats();
+
+        // Compression must have occurred: some messages moved to compressed storage
+        assert!(
+            stats.compressed_messages > 0,
+            "Expected compressed_messages > 0, got {}",
+            stats.compressed_messages
+        );
+
+        // Compressed bytes must be non-zero
+        assert!(
+            stats.compressed_bytes > 0,
+            "Expected compressed_bytes > 0, got {}",
+            stats.compressed_bytes
+        );
+
+        // With repetitive content zstd reliably achieves a positive ratio
+        assert!(
+            stats.compression_ratio > 0.0,
+            "Expected compression_ratio > 0.0, got {}",
+            stats.compression_ratio
+        );
+
+        // All 50 messages must still be accessible after compression
+        let all_messages = context.conversation_history.get_all_messages();
+        assert_eq!(
+            all_messages.len(),
+            50,
+            "Expected all 50 messages to be accessible after compression, got {}",
+            all_messages.len()
+        );
+    }
 }
