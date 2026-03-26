@@ -34,7 +34,14 @@ use uuid::Uuid;
 
 use self::error::{SessionError, SessionResult};
 
-use crate::auto_accept::AutoAcceptConfig;
+/// Configuration for auto-accept mode (replaces removed auto_accept module)
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutoAcceptConfig {
+    /// Whether auto-accept is enabled
+    pub enabled: bool,
+    /// Risk threshold for auto-acceptance (0-10)
+    pub risk_threshold: u8,
+}
 use crate::identity::AgentRole;
 use crate::resource::{ResourceMonitor, SessionResourceIntegration};
 use memory::{

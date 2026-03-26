@@ -1,44 +1,24 @@
-# Claude Code Commands
+# Claude Code Commands (DEPRECATED)
 
-Slash commands for the ccswarm project.
+> **Migrated to Skills**: All commands have been migrated to `.claude/skills/`.
+> The `commands/` directory is kept for backward compatibility but will be removed in a future version.
 
-## Command List
+## Migration Map
 
-| Command | Description |
-|---------|-------------|
-| `/review-all` | Full review (design compliance, quality, duplicate detection) |
-| `/review-duplicates` | Duplicate code detection (refactoring candidate identification via similarity-rs) |
-| `/review-architecture` | Architecture review (Type-State, Channel-Based pattern compliance) |
-| `/check-impl` | Implementation check (fmt, clippy, test) |
-| `/check-production-ready` | Production readiness check (Rust best practices) |
+| Old Command | New Skill | Location |
+|-------------|-----------|----------|
+| `/review-all` | `/review-all` | `.claude/skills/review-all/SKILL.md` |
+| `/review-duplicates` | `/review-duplicates` | `.claude/skills/review-duplicates/SKILL.md` |
+| `/review-architecture` | `/review-architecture` | `.claude/skills/review-architecture/SKILL.md` |
+| `/check-impl` | `/check-impl` | `.claude/skills/check-impl/SKILL.md` |
+| `/check-production-ready` | `/check-production-ready` | `.claude/skills/check-production-ready/SKILL.md` |
+| `/mutation-test` | `/mutation-test` | `.claude/skills/mutation-test/SKILL.md` |
 
-## Usage
+## Why Skills?
 
-Execute in Claude Code as follows:
-
-```
-/review-all
-```
-
-## Flow
-
-### Development Flow
-
-1. Development work
-2. `/check-impl` - Basic checks
-3. `/review-duplicates` - Duplicate code detection
-4. `/review-all` - Full review
-
-### Review Flow
-
-`/review-all` executes the following:
-- CLAUDE.md design compliance check
-- Rust best practices check
-- Duplicate code detection (`/review-duplicates`)
-- Architecture pattern compliance check
-
-## Related
-
-- `.claude/agents/` - Agent definitions
-- `CLAUDE.md` - Project guidelines
-- `docs/ARCHITECTURE.md` - Architecture design
+Skills are the modern Claude Code standard, replacing commands. Benefits:
+- YAML frontmatter for metadata (name, description, agent, context)
+- `context: fork` runs in a subagent to protect main context
+- `agent:` binds to specific subagent types
+- `argument-hint:` for autocomplete
+- Directory structure supports reference docs and scripts

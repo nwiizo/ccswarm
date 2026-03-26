@@ -17,7 +17,7 @@ use crate::agent::orchestrator::task_plan::{ParallelTask, ParallelTaskResult};
 use crate::agent::orchestrator::{AgentOrchestrator, StepResult, StepType, TaskPlan, TaskStep};
 use crate::agent::{AgentStatus, Task, TaskResult, TaskType};
 use crate::config::ClaudeConfig;
-use crate::identity::{AgentIdentity, IdentityMonitor, IdentityStatus};
+use crate::identity::AgentIdentity;
 
 /// Message in conversation history
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -377,7 +377,6 @@ You are a specialized {} agent. Maintain strict boundaries and provide concise, 
         self.establish_identity_once().await?;
 
         let start_time = Instant::now();
-        let mut identity_monitor = IdentityMonitor::new(&self.identity.agent_id);
 
         // Execute task with conversation context
         let history = self.conversation_history.lock().await;
@@ -388,23 +387,7 @@ You are a specialized {} agent. Maintain strict boundaries and provide concise, 
         let response = session.execute_with_context(&task, &history_clone).await?;
         drop(session); // Release lock
 
-        // Monitor identity in response
-        let identity_status = identity_monitor.monitor_response(&response).await?;
-        match identity_status {
-            IdentityStatus::Healthy => {
-                tracing::debug!("Identity maintained during task execution");
-            }
-            IdentityStatus::DriftDetected(msg) => {
-                tracing::warn!("Identity drift detected: {}", msg);
-                self.send_identity_reminder().await?;
-            }
-            IdentityStatus::BoundaryViolation(msg) => {
-                return Err(anyhow::anyhow!("Boundary violation detected: {}", msg));
-            }
-            IdentityStatus::CriticalFailure(msg) => {
-                return Err(anyhow::anyhow!("Critical identity failure: {}", msg));
-            }
-        }
+        // Identity monitoring is now handled by Claude Code hooks
 
         // Record conversation
         let mut history = self.conversation_history.lock().await;
@@ -497,33 +480,6 @@ You are a specialized {} agent. Maintain strict boundaries and provide concise, 
             self.identity.agent_id
         );
         Ok(results)
-    }
-
-    /// Send lightweight identity reminder instead of full re-establishment
-    async fn send_identity_reminder(&self) -> Result<()> {
-        let reminder_prompt = format!(
-            "🤖 IDENTITY REMINDER: You are a {} agent working in {}. Maintain specialization boundaries.",
-            self.identity.specialization.name(),
-            self.identity
-                .workspace_path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-        );
-
-        let mut session = self.session.lock().await;
-        let _response = session.send_message(&reminder_prompt).await?;
-
-        let mut history = self.conversation_history.lock().await;
-        history.push_back(ConversationMessage {
-            timestamp: Utc::now(),
-            message_type: MessageType::IdentityReminder,
-            content: reminder_prompt,
-            task_id: None,
-        });
-        self.trim_history(&mut history);
-
-        Ok(())
     }
 
     /// Trim conversation history to prevent unbounded growth

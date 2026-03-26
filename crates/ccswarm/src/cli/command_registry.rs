@@ -190,6 +190,36 @@ impl CommandRegistry {
             Commands::Repertoire { action } =>
             runner.handle_repertoire(action)
         );
+
+        register_command!(self, "sangha", runner, cmd,
+            Commands::Sangha { action } =>
+            runner.handle_sangha(action)
+        );
+
+        register_command!(self, "extend", runner, cmd,
+            Commands::Extend { action } =>
+            runner.handle_extend(action)
+        );
+
+        register_command!(self, "search", runner, cmd,
+            Commands::Search { action } =>
+            runner.handle_search_cmd(action)
+        );
+
+        register_command!(self, "evolution", runner, cmd,
+            Commands::Evolution { action } =>
+            runner.handle_evolution(action)
+        );
+
+        register_command!(self, "harness", runner, cmd,
+            Commands::Harness { action } =>
+            runner.handle_harness(action)
+        );
+
+        register_command!(self, "approve", runner, cmd,
+            Commands::Approve { action } =>
+            runner.handle_approve(action)
+        );
     }
 
     /// Register a command handler
@@ -197,12 +227,12 @@ impl CommandRegistry {
         &mut self,
         name: &'static str,
         handler: impl for<'a> Fn(
-                &'a CliRunner,
-                &'a Commands,
-            ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
-            + Send
-            + Sync
-            + 'static,
+            &'a CliRunner,
+            &'a Commands,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
+        + Send
+        + Sync
+        + 'static,
     ) {
         self.handlers.insert(name, Box::new(handler));
     }
@@ -250,6 +280,12 @@ impl CommandRegistry {
             Commands::Piece { .. } => "piece",
             Commands::Repertoire { .. } => "repertoire",
             Commands::Verify { .. } => "verify",
+            Commands::Sangha { .. } => "sangha",
+            Commands::Extend { .. } => "extend",
+            Commands::Search { .. } => "search",
+            Commands::Evolution { .. } => "evolution",
+            Commands::Harness { .. } => "harness",
+            Commands::Approve { .. } => "approve",
         }
     }
 }

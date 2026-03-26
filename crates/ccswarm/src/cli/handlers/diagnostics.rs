@@ -460,7 +460,12 @@ impl CliRunner {
         Ok(())
     }
 
-    pub(crate) async fn handle_verify(&self, path: &Path, backend_port: u16, skip_deps: bool) -> Result<()> {
+    pub(crate) async fn handle_verify(
+        &self,
+        path: &Path,
+        backend_port: u16,
+        skip_deps: bool,
+    ) -> Result<()> {
         use crate::orchestrator::{VerificationAgent, VerificationConfig};
 
         let config = VerificationConfig {
@@ -491,5 +496,4 @@ impl CliRunner {
 
         Ok(())
     }
-
 }

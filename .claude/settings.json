@@ -1,72 +1,82 @@
 {
-  "name": "ccswarm",
-  "version": "0.4.5",
-  "description": "AI Multi-Agent Orchestration System with Native AI-Session",
   "permissions": {
-    "file_write": true,
-    "file_read": true,
-    "bash": true,
-    "web_fetch": true,
-    "todo_write": true
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(cargo *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git worktree *)",
+      "Bash(ls *)",
+      "Bash(wc *)",
+      "Bash(similarity-rs *)",
+      "mcp__serena__*",
+      "Agent(Explore)",
+      "Agent(frontend-specialist)",
+      "Agent(backend-specialist)",
+      "Agent(devops-specialist)",
+      "Agent(qa-specialist)",
+      "Agent(rust-fix-agent)",
+      "Agent(code-refactor-agent)",
+      "Agent(architecture-reviewer)",
+      "Agent(all-reviewer)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)*",
+      "Bash(cargo publish*)",
+      "Edit(.git/***)",
+      "Edit(.env*)"
+    ]
   },
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Edit|Write",
-        "hooks": [{"type": "command", "command": ".claude/hooks/validate-agent-scope.sh"}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-agent-scope.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "hooks": [{"type": "command", "command": ".claude/hooks/format-code.sh"}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/format-code.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/audit-trail.sh"
+          }
+        ]
       }
     ],
     "Stop": [
       {
-        "hooks": [{"type": "command", "command": ".claude/hooks/audit-trail.sh"}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/audit-trail.sh"
+          }
+        ]
       }
     ]
   },
-  "build_commands": {
-    "test": "cargo test --workspace",
-    "test_lib": "cargo test --lib -p ccswarm",
-    "test_ai_session": "cargo test --lib -p ai-session",
-    "build": "cargo build --release --workspace",
-    "build_ccswarm": "cargo build --release -p ccswarm",
-    "build_ai_session": "cargo build --release -p ai-session",
-    "check": "cargo fmt --all && cargo clippy --workspace -- -D warnings && cargo test --workspace",
-    "format": "cargo fmt --all",
-    "lint": "cargo clippy --workspace -- -D warnings"
-  },
-  "run_commands": {
-    "init": "cargo run -p ccswarm -- init --name",
-    "start": "cargo run -p ccswarm -- start",
-    "tui": "cargo run -p ccswarm -- tui",
-    "task": "cargo run -p ccswarm -- task",
-    "session_list": "cargo run -p ccswarm -- session list",
-    "auto_create": "cargo run -p ccswarm -- auto-create",
-    "ai_session": "cargo run -p ai-session",
-    "ai_session_server": "cargo run --bin ai-session-server"
-  },
-  "environment": {
-    "required": ["ANTHROPIC_API_KEY"],
-    "optional": ["OPENAI_API_KEY", "RUST_LOG", "CCSWARM_HOME"]
-  },
-  "project_structure": {
-    "workspace_root": ".",
-    "crates": ["crates/ccswarm", "crates/ai-session"],
-    "source_directories": ["crates/ccswarm/src", "crates/ai-session/src"],
-    "test_directories": ["crates/ccswarm/tests", "crates/ai-session/tests"],
-    "documentation": "docs",
-    "examples": "crates/ai-session/examples",
-    "demos": "demos",
-    "binaries": ["ccswarm", "ai-session", "ai-session-server", "test_isolated_proactive", "demo_proactive_workflow"]
-  },
-  "development_guidelines": {
-    "test_coverage_threshold": 85,
-    "complexity_threshold": 10,
-    "enforce_documentation": true,
-    "enforce_error_handling": true
+  "env": {
+    "RUST_LOG": "info",
+    "CCSWARM_AUDIT_ENABLED": "true"
   }
 }

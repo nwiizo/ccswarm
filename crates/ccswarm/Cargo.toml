@@ -55,6 +55,9 @@ walkdir = "2.5"
 # Regular expressions
 regex = "1.10"
 
+# Glob patterns
+glob = "0.3"
+
 
 # Process management
 [target.'cfg(unix)'.dependencies]
@@ -69,16 +72,8 @@ async-channel = "2.3"
 # State management
 dashmap = "6.1"
 
-# TUI
-ratatui = "0.29"
-crossterm = "0.29"
 # HTTP client for API providers
 reqwest = { version = "0.12", features = ["json"] }
-
-# HTTP server for IPC
-axum = { version = "0.7", features = ["json"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors"] }
 
 # Testing utilities
 tempfile = "3.8"

@@ -2,16 +2,85 @@
 
 ## Project Overview
 
-ccswarm v0.4.5 - AI Multi-Agent Orchestration System with **ai-session** integration.
+ccswarm v0.5.0 - AI Multi-Agent Orchestration System with native ai-session integration.
 
-> **Implementation Status**: ~75% complete.
+Cargo workspace with 2 crates:
+- **ccswarm** (`crates/ccswarm/`) - Multi-agent orchestration, CLI, TUI, workflow engine
+- **ai-session** (`crates/ai-session/`) - Token-efficient terminal session management (standalone-capable)
 
 ## Quick Commands
 
 ```bash
 cargo fmt && cargo clippy -- -D warnings && cargo test  # Before commit
 cargo run -p ccswarm -- --help                          # Run ccswarm
+cargo run -p ai-session -- --help                       # Run ai-session CLI
 ```
+
+## Workspace Architecture
+
+```
+ccswarm (orchestration) ──depends on──> ai-session (terminal management)
+                                            ──depends on──> portable-pty, tokio, zstd
+```
+
+### ccswarm crate — Orchestration Layer
+
+| Module | Purpose |
+|--------|---------|
+| `orchestrator/` | ProactiveMaster, DelegateOrchestrator, LLMQualityJudge, AutoCreateEngine |
+| `agent/` | ClaudeCodeAgent, AgentRole (Frontend/Backend/DevOps/QA/Master/Search), Type-State TaskBuilder |
+| `cli/` | 35+ commands via CommandRegistry pattern, interactive help, setup wizard |
+| `workflow/` | Piece engine (YAML movements), Pipeline runner, Faceted prompting, DAG workflows |
+| `coordination/` | AgentMailbox, MessageBus bridge, conversion layer to ai-session |
+| `events/` | NDJSON EventRecorder to `.ccswarm/runs/{run-id}/events.ndjson` |
+| `identity/` | AgentIdentity, role boundaries, TaskBoundaryChecker |
+| `session/` | AISessionAdapter bridge to ai-session crate |
+| `subagent/` | SubagentDefinition, ParallelExecutor with aggregation strategies |
+| `hooks/` | HookRegistry, SecurityHook, LoggingHook |
+| `ipc/` | Axum HTTP IPC server for CLI/daemon communication |
+| `mcp/` | McpClient, JSON-RPC 2.0, HttpTransport, UnixSocketTransport |
+| `tui/` | Ratatui-based terminal UI (partially implemented) |
+
+### ai-session crate — Session Management Layer
+
+| Module | Purpose |
+|--------|---------|
+| `core/` | AISession, SessionManager, PTY/headless terminal, lifecycle |
+| `context/` | TokenEfficientHistory with zstd compression, sliding window (20 recent) |
+| `coordination/` | MessageBus (crossbeam channels), TaskDistributor, ResourceManager, RateLimit |
+| `output/` | OutputParser (regex heuristics), SemanticCompressor, highlight extraction |
+| `persistence/` | JSON + zstd session snapshots, restore by ID |
+| `mcp/` | JSON-RPC server, tool registry, stdio transport |
+| `integration/` | Tmux migration compat layer |
+
+Binaries: `ai-session` (CLI), `ai-session-server` (MCP HTTP API on port 3000)
+
+## Agent Teams
+
+The 4 domain agents are designed for parallel execution via Claude Code Agent Teams:
+
+```bash
+claude --agent-team                          # Interactive team setup
+claude --team "frontend-specialist" "backend-specialist" "qa-specialist"
+```
+
+Each domain agent has `isolation: worktree` — they work in independent git worktrees and communicate via direct messaging (`@agent-name`).
+
+| Agent | Isolation | Model | Coordinates With |
+|-------|-----------|-------|------------------|
+| frontend-specialist | worktree | sonnet | backend (API contracts), qa (test readiness) |
+| backend-specialist | worktree | sonnet | frontend (contracts), devops (CI/CD) |
+| devops-specialist | worktree | sonnet | backend/frontend (build reqs), qa (deploy verify) |
+| qa-specialist | worktree | sonnet | all (quality gates, test coverage) |
+
+Review agents run as subagents (not teams):
+
+| Agent | Model | Invoked By |
+|-------|-------|------------|
+| rust-fix-agent | opus | Proactively on build/clippy errors |
+| code-refactor-agent | opus | Proactively on suspected duplication |
+| architecture-reviewer | sonnet | `/review-architecture` skill |
+| all-reviewer | sonnet | `/review-all` skill |
 
 ## Rules
 
@@ -20,60 +89,47 @@ cargo run -p ccswarm -- --help                          # Run ccswarm
 - [security-guidelines](.claude/rules/security-guidelines.md) - Security, agent roles, environment
 - [performance](.claude/rules/performance.md) - Optimization guidelines
 
-## Hooks
-
-Automated validation via Claude Code hooks:
-- `validate-agent-scope.sh` - Pre-edit agent scope validation
-- `format-code.sh` - Post-edit auto-formatting
-- `audit-trail.sh` - Session activity logging
-
-## Agents (Subagents)
-
-- [frontend-specialist](.claude/agents/frontend-specialist.md) - React, Vue, UI/UX
-- [backend-specialist](.claude/agents/backend-specialist.md) - APIs, databases
-- [devops-specialist](.claude/agents/devops-specialist.md) - Docker, CI/CD
-- [qa-specialist](.claude/agents/qa-specialist.md) - Testing, quality
-- [rust-fix-agent](.claude/agents/rust-fix-agent.md) - Rust build/clippy fixes
-- [code-refactor-agent](.claude/agents/code-refactor-agent.md) - Code refactoring
-- [architecture-reviewer](.claude/agents/architecture-reviewer.md) - Architecture review
-
 ## Skills
 
-- [git-worktree](.claude/skills/git-worktree/SKILL.md) - Parallel development workflow
-- [rust-agent-specialist](.claude/skills/rust-agent-specialist/SKILL.md) - Rust-native patterns
-- [deploy-workflow](.claude/skills/deploy-workflow/SKILL.md) - Release deployment
-- [benchmark-runner](.claude/skills/benchmark-runner/SKILL.md) - Performance benchmarks
-- [hitl-approval](.claude/skills/hitl-approval/SKILL.md) - Human-in-the-loop approval
+| Skill | Description |
+|-------|-------------|
+| `/review-all` | Full review (design compliance, quality, architecture) |
+| `/review-architecture` | Architecture pattern compliance check |
+| `/review-duplicates` | Duplicate code detection via similarity-rs |
+| `/check-impl` | Build, lint, test verification |
+| `/check-production-ready` | Production readiness audit |
+| `/mutation-test` | Mutation testing execution |
+| `/git-worktree` | Parallel development with git worktrees |
+| `/rust-agent-specialist` | Rust-native pattern guidance |
+| `/deploy-workflow` | Release deployment process |
+| `/benchmark-runner` | Performance benchmark execution |
+| `/hitl-approval` | Human-in-the-loop approval workflows |
+
+## Hooks
+
+| Event | Script | Purpose |
+|-------|--------|---------|
+| PreToolUse (Edit/Write) | `validate-agent-scope.sh` | Enforce agent role boundaries on file edits |
+| PostToolUse (Edit/Write) | `format-code.sh` | Auto-format Rust/Go/TS/Python after edits |
+| SubagentStop | `audit-trail.sh` | Log agent team lifecycle to NDJSON audit trail |
+| Stop | `audit-trail.sh` | Log session completion |
 
 ## Development Learnings
 
 ### Error Handling
-- `CCSwarmError` variants are **struct variants** (not tuple): `CCSwarmError::Agent { agent_id, message, source }`
-- Other variants: `Session { session_id, message, source }`, `Configuration { field, message }`, `Provider { provider, message, source }`
-- Never use `.unwrap()` in production; use `Result<T, E>` with `thiserror`
+- `CCSwarmError` uses struct variants: `Agent { agent_id, message, source }`, `Session { session_id, message, source }`, `Configuration { field, message }`, `Provider { provider, message, source }`
+- Helper constructors: `CCSwarmError::config()`, `agent()`, `session()`, `task()`, `orchestrator()`, `git()`, `user_error()`
 
 ### Module Patterns
-- When splitting `foo.rs` into `foo/mod.rs`: keep all `pub use` re-exports in `mod.rs` for API compatibility
-- New submodules in `orchestrator/` and `coordination/` must add re-exports in their `mod.rs`
-- The `format-code.sh` hook runs `cargo fmt` after edits; re-read files if content changes unexpectedly
-
-### Clippy Fixes
-- `.or_insert_with(Vec::new)` -> `.or_default()`
-- Boolean simplification: `(A && B) || (C && B)` -> `B && (A || C)`
+- Splitting `foo.rs` → `foo/mod.rs`: keep all `pub use` re-exports in `mod.rs`
+- The `format-code.sh` hook runs formatters after edits; re-read files if content changes
 
 ### CI/CD
-- Release workflow needs `permissions: contents: write` for GitHub release creation
-- Use `softprops/action-gh-release@v2` (not deprecated `actions/create-release@v1`)
 - Publish order: `ai-session` first, then `ccswarm` (dependency order)
-- `CARGO_REGISTRY_TOKEN` must be set in GitHub Secrets for CI publish
-
-### Crate Publishing
-- Workspace crates with path dependencies need version field for crates.io
-- `cargo publish -p <crate>` publishes from workspace root
-- Wait for dependency crate to be indexed before publishing dependent crate
+- Release workflow needs `permissions: contents: write`
+- `CARGO_REGISTRY_TOKEN` required in GitHub Secrets
 
 ## Documentation
 
 @docs/ARCHITECTURE.md
 @docs/APPLICATION_SPEC.md
-@.claude/settings.json

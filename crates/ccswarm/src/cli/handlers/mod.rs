@@ -1,9 +1,13 @@
+mod analytics;
+mod approve;
 mod config;
 mod delegate;
 mod diagnostics;
+mod harness;
 mod init;
 mod misc;
 mod orchestrator;
+mod sangha;
 mod session;
 mod task;
 mod workflow;

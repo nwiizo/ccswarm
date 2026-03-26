@@ -1,90 +1,80 @@
 # Claude Code Agents
 
-Sub-agents for the ccswarm project.
+Sub-agents for the ccswarm project. Designed for both individual invocation and Agent Teams parallel execution.
 
-## Agent List
+## Agent Teams (Parallel Execution)
 
-| Agent | Description | Command |
-|-------|-------------|---------|
-| `all-reviewer` | Integrated review (design compliance, quality, architecture) | `/review-all` |
-| `architecture-reviewer` | Architecture pattern compliance review | `/review-architecture` |
-| `rust-fix-agent` | Rust build/clippy error fixing | `/check-impl` |
-| `code-refactor-agent` | Duplicate code detection and refactoring | `/review-duplicates` |
+The 4 domain agents support Agent Teams for parallel multi-agent work:
+
+```bash
+claude --agent-team                          # Interactive team setup
+claude --team "frontend-specialist" "backend-specialist" "qa-specialist"
+```
+
+Each domain agent has `isolation: worktree` — they work in independent git worktrees and communicate via `@agent-name` direct messaging.
+
+### Domain Agents (Agent Teams compatible)
+
+| Agent | Model | Isolation | Focus |
+|-------|-------|-----------|-------|
+| `frontend-specialist` | sonnet | worktree | React, Vue, UI/UX, CSS |
+| `backend-specialist` | sonnet | worktree | APIs, databases, Rust server logic |
+| `devops-specialist` | sonnet | worktree | Docker, CI/CD, infrastructure |
+| `qa-specialist` | sonnet | worktree | Testing, quality, coverage |
+
+### Review Agents (Subagent invocation)
+
+| Agent | Model | Skill | Purpose |
+|-------|-------|-------|---------|
+| `all-reviewer` | sonnet | `/review-all` | Integrated review (design, quality, architecture) |
+| `architecture-reviewer` | sonnet | `/review-architecture` | Architecture pattern compliance |
+| `rust-fix-agent` | opus | Proactive | Build/clippy error fixing (YAGNI) |
+| `code-refactor-agent` | opus | `/review-duplicates` | Duplicate detection and refactoring (DRY) |
 
 ## Usage
 
-Invoke via Task tool:
+### As Agent Team
+```bash
+# Start a team of frontend + backend + QA working in parallel
+claude --team "frontend-specialist" "backend-specialist" "qa-specialist"
+
+# Each agent gets its own worktree and context window
+# Communicate between agents: @backend-specialist status?
+```
+
+### As Individual Subagent
+```
+subagent_type: "rust-fix-agent"
+prompt: "Fix all clippy warnings in crates/ccswarm/"
+```
+
+### Via Skill
+```
+/review-all              # Triggers all-reviewer agent
+/review-architecture     # Triggers architecture-reviewer agent
+/review-duplicates       # Triggers code-refactor-agent
+/check-production-ready  # Triggers rust-fix-agent
+```
+
+## Agent Coordination Flow
 
 ```
-subagent_type: "agent-name"
-prompt: "[task content]"
+                     ┌─────────────────┐
+                     │  Orchestrator    │
+                     │  (Main Claude)   │
+                     └────────┬────────┘
+                              │
+            ┌─────────────────┼─────────────────┐
+            │                 │                  │
+   ┌────────▼────────┐ ┌─────▼──────┐ ┌────────▼────────┐
+   │ Domain Agents    │ │ Review     │ │ Fix Agents      │
+   │ (Agent Teams)    │ │ Agents     │ │ (Proactive)     │
+   │                  │ │            │ │                  │
+   │ frontend ◄──────►│ │ all-review │ │ rust-fix-agent   │
+   │ backend  ◄──────►│ │ arch-review│ │ code-refactor    │
+   │ devops   ◄──────►│ └────────────┘ └─────────────────┘
+   │ qa       ◄──────►│
+   └──────────────────┘
+     (worktree isolated,
+      direct messaging)
 ```
-
-## Agent Details
-
-### all-reviewer
-
-Integrated agent that runs all reviews at once.
-
-**Check Items:**
-- CLAUDE.md design compliance
-- docs/ARCHITECTURE.md architecture compliance
-- Rust best practices
-- Duplicate code detection
-
-**Output**: Integrated report (JSON) covering design compliance, code quality, and architecture
-
-### architecture-reviewer
-
-Specialized architecture pattern review.
-
-**Check Items:**
-- Type-State Pattern usage
-- Channel-Based vs Arc<Mutex> ratio
-- Iterator Pipelines utilization
-- Actor Model implementation
-- Minimal Testing compliance
-
-**Output**: Evaluation and score for each pattern (JSON)
-
-### rust-fix-agent
-
-Specialized agent for fixing Rust build errors and clippy warnings.
-
-**Features:**
-- Compile error fixes
-- Clippy warning resolution
-- Rust 2024 Edition support
-
-**Principle**: YAGNI (You Aren't Gonna Need It) - minimal necessary fixes
-
-### code-refactor-agent
-
-Agent for duplicate code detection and refactoring.
-
-**Features:**
-- Semantic similarity detection using similarity-rs
-- Refactoring proposals based on DRY principle
-- Conversion to ccswarm patterns
-
-**Detection Categories:**
-| Category | Detection Pattern |
-|----------|-------------------|
-| Common function extraction | 95%+ similarity, 10+ lines |
-| Trait conversion | 90-95% similarity, 5+ lines |
-| Channel conversion | Arc<Mutex> shared state |
-
-## Model Settings
-
-| Agent | Model | Reason |
-|-------|-------|--------|
-| all-reviewer | sonnet | Balanced review |
-| architecture-reviewer | sonnet | Suitable for pattern analysis |
-| rust-fix-agent | opus | High precision for complex fixes |
-| code-refactor-agent | opus | High precision for semantic analysis |
-
-## Related
-
-- `.claude/commands/` - Slash command definitions
-- `CLAUDE.md` - Project guidelines
-- `docs/ARCHITECTURE.md` - Architecture design
