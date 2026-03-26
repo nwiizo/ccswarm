@@ -8,13 +8,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use ccswarm::workflow::{
-    builtin_personas, builtin_pieces, builtin_policies, parse_gh_issue, ArpeggioConfig,
-    ArpeggioExecutor, ArpeggioItem, ChangeType, CycleDetector, FacetRegistry, FileChange,
-    GitHubIssue, GitHubIssueConfig, InteractiveAction, InteractiveMode, InteractiveSession,
-    IssueResult, IssueTaskGenerator, LoopStrategy, MatchMethod, Movement, MovementJudge,
-    MovementPermission, MovementRule, PermissionEnforcer, Piece, PieceEngine, PieceStatus,
-    PipelineConfig, PipelineExitCode, PipelineRunner, PipelineStatus, RuleCondition, WatchConfig,
-    WatchController, WatchState,
+    ArpeggioConfig, ArpeggioExecutor, ArpeggioItem, ChangeType, CycleDetector, FacetRegistry,
+    FileChange, GitHubIssue, GitHubIssueConfig, InteractiveAction, InteractiveMode,
+    InteractiveSession, IssueResult, IssueTaskGenerator, LoopStrategy, MatchMethod, Movement,
+    MovementJudge, MovementPermission, MovementRule, PermissionEnforcer, Piece, PieceEngine,
+    PieceStatus, PipelineConfig, PipelineExitCode, PipelineRunner, PipelineStatus, RuleCondition,
+    WatchConfig, WatchController, WatchState, builtin_personas, builtin_pieces, builtin_policies,
+    parse_gh_issue,
 };
 
 // ---------------------------------------------------------------------------

@@ -445,6 +445,84 @@ pub enum Commands {
         #[command(subcommand)]
         action: RepertoireAction,
     },
+
+    /// Sangha collective intelligence - propose and vote on changes
+    #[command(long_about = "Democratic decision-making for agent swarms.\n\
+        Proposals are persisted to coordination/proposals/ as JSON.\n\n\
+        Examples:\n  \
+          ccswarm sangha propose --title \"Add GraphQL\" --description \"...\"\n  \
+          ccswarm sangha vote abc-123 --approve\n  \
+          ccswarm sangha list\n  \
+          ccswarm sangha status abc-123")]
+    Sangha {
+        #[command(subcommand)]
+        action: SanghaAction,
+    },
+
+    /// Agent self-extension - propose and track capability extensions
+    #[command(
+        long_about = "Agents propose new capabilities tracked in coordination/extensions/.\n\n\
+        Examples:\n  \
+          ccswarm extend propose --title \"GraphQL resolver\" --agent backend\n  \
+          ccswarm extend list\n  \
+          ccswarm extend status ext-456\n  \
+          ccswarm extend history"
+    )]
+    Extend {
+        #[command(subcommand)]
+        action: ExtendAction,
+    },
+
+    /// Search documentation and code
+    #[command(long_about = "Search project documentation and source code.\n\n\
+        Examples:\n  \
+          ccswarm search docs \"authentication patterns\"\n  \
+          ccswarm search code \"error handling\" --glob \"*.rs\"")]
+    Search {
+        #[command(subcommand)]
+        action: SearchAction,
+    },
+
+    /// Agent evolution metrics and pattern analysis
+    #[command(
+        long_about = "Analyze agent performance from coordination/ history.\n\n\
+        Examples:\n  \
+          ccswarm evolution metrics\n  \
+          ccswarm evolution patterns --agent frontend\n  \
+          ccswarm evolution report --format json"
+    )]
+    Evolution {
+        #[command(subcommand)]
+        action: EvolutionAction,
+    },
+
+    /// Test harness to execute predefined scenarios and verify outcomes
+    #[command(
+        long_about = "Run harness scenarios to validate workflows end-to-end.\n\n\
+        Scenarios are YAML files under .ccswarm/harness/ describing task, piece, and assertions.\n\n\
+        Examples:\n  \
+          ccswarm harness run\n  \
+          ccswarm harness run --scenario .ccswarm/harness/add-login.yaml --report report.json --format json\n  \
+          ccswarm harness list\n  \
+          ccswarm harness plan\n  \
+          ccswarm harness diff --baseline baseline.json\n  \
+          ccswarm harness approve --report report.json --baseline baseline.json"
+    )]
+    Harness {
+        #[command(subcommand)]
+        action: HarnessAction,
+    },
+
+    /// Human-in-the-loop approval workflow
+    #[command(long_about = "Approve or reject gated operations.\n\n\
+        Examples:\n  \
+          ccswarm approve plan --id run-abc123\n  \
+          ccswarm approve deploy --id task-456 --reject --reason \"needs more tests\"\n  \
+          ccswarm approve list --status pending")]
+    Approve {
+        #[command(subcommand)]
+        action: ApproveAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -461,6 +539,237 @@ pub enum RepertoireAction {
     /// Remove an installed piece package
     Remove {
         /// Package name to remove
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SanghaAction {
+    /// Create a proposal for collective voting
+    Propose {
+        #[arg(short, long)]
+        title: String,
+        #[arg(short, long)]
+        description: String,
+        /// feature | refactor | policy | tooling
+        #[arg(long, default_value = "feature")]
+        proposal_type: String,
+    },
+    /// Vote on a proposal
+    Vote {
+        /// Proposal ID
+        id: String,
+        /// Approve (omit to reject)
+        #[arg(long)]
+        approve: bool,
+        #[arg(short, long)]
+        reason: Option<String>,
+    },
+    /// List proposals
+    List {
+        /// Filter: open | accepted | rejected
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+    /// Show proposal details and vote tally
+    Status {
+        /// Proposal ID
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ExtendAction {
+    /// Propose a capability extension
+    Propose {
+        #[arg(short, long)]
+        title: String,
+        #[arg(short, long)]
+        description: String,
+        /// Target agent: frontend | backend | devops | qa | all
+        #[arg(short, long, default_value = "all")]
+        agent: String,
+    },
+    /// List extensions
+    List {
+        /// Filter: proposed | approved | active | deprecated
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+    /// Show extension details
+    Status {
+        /// Extension ID
+        id: String,
+    },
+    /// Show recent extension history
+    History {
+        /// Max entries to show
+        #[arg(default_value = "20")]
+        limit: usize,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SearchAction {
+    /// Search documentation files
+    Docs {
+        /// Search query
+        query: String,
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+    /// Search source code
+    Code {
+        /// Search query
+        query: String,
+        /// File glob filter (e.g. "*.rs")
+        #[arg(short, long)]
+        glob: Option<String>,
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum EvolutionAction {
+    /// Show agent performance metrics from coordination/agent-status/
+    Metrics {
+        #[arg(short, long)]
+        agent: Option<String>,
+        /// text | json
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Analyze task success/failure patterns from coordination/task-queue/
+    Patterns {
+        #[arg(short, long)]
+        agent: Option<String>,
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+    },
+    /// Generate evolution report
+    Report {
+        /// text | json | markdown
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ApproveAction {
+    /// Approve or reject a plan gate
+    Plan {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        reject: bool,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Approve or reject a risky edit gate
+    RiskyEdit {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        reject: bool,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Approve or reject a deploy gate
+    Deploy {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        reject: bool,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Approve or reject a merge gate
+    Merge {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        reject: bool,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// List approval requests
+    List {
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum HarnessAction {
+    /// Run scenarios from a file or directory (defaults to .ccswarm/harness/)
+    Run {
+        /// Scenario YAML file
+        #[arg(short, long)]
+        scenario: Option<PathBuf>,
+        /// Directory containing scenarios
+        #[arg(short, long)]
+        dir: Option<PathBuf>,
+        /// Write report to file
+        #[arg(short, long)]
+        report: Option<PathBuf>,
+        /// Report format (json|text|markdown)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Parallel jobs (0 or omitted = auto)
+        #[arg(short = 'j', long, default_value_t = 0)]
+        jobs: usize,
+    },
+
+    /// List discovered scenarios under .ccswarm/harness/
+    List,
+
+    /// Show expanded execution plan without running
+    Plan {
+        /// Scenario YAML file
+        #[arg(short, long)]
+        scenario: Option<PathBuf>,
+        /// Directory containing scenarios
+        #[arg(short, long)]
+        dir: Option<PathBuf>,
+    },
+
+    /// Compare current results against a baseline report
+    Diff {
+        /// Baseline JSON file (created by harness run --report)
+        #[arg(long)]
+        baseline: PathBuf,
+        /// Scenario YAML file (optional; if omitted, use .ccswarm/harness/)
+        #[arg(short, long)]
+        scenario: Option<PathBuf>,
+        /// Directory containing scenarios (optional)
+        #[arg(short, long)]
+        dir: Option<PathBuf>,
+        /// Output format (json|text|markdown)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+    },
+
+    /// Approve current results as new baseline
+    Approve {
+        /// Source report JSON (current run)
+        #[arg(long)]
+        report: PathBuf,
+        /// Destination baseline JSON
+        #[arg(long)]
+        baseline: PathBuf,
+        /// Overwrite without prompt
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Create a sample harness scenario file
+    Init {
+        /// Output file path (default: .ccswarm/harness/sample.yaml)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Scenario name to embed
+        #[arg(short, long, default_value = "sample-task")]
         name: String,
     },
 }
@@ -1214,8 +1523,6 @@ impl CliRunner {
         let registry = self::command_registry::get_command_registry();
         registry.execute(self, command).await
     }
-
-
 }
 
 fn create_default_config(repo_path: &Path) -> Result<CcswarmConfig> {
@@ -1307,9 +1614,4 @@ fn create_frontend_only_config(repo_path: &Path) -> Result<CcswarmConfig> {
     );
 
     Ok(config)
-}
-
-impl CliRunner {
-
-
 }

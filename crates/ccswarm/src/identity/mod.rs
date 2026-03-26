@@ -1,12 +1,7 @@
-pub mod boundary;
-
-use anyhow::Result;
 use chrono::{DateTime, Utc};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 /// Core agent identity information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,163 +172,6 @@ pub enum IdentityStatus {
     CriticalFailure(String),
 }
 
-/// Identity monitor for tracking agent behavior
-#[derive(Debug)]
-pub struct IdentityMonitor {
-    pub agent_id: String,
-    pub last_identity_check: Instant,
-    pub identity_drift_threshold: Duration,
-    pub response_parser: ResponseParser,
-}
-
-impl IdentityMonitor {
-    pub fn new(agent_id: &str) -> Self {
-        Self {
-            agent_id: agent_id.to_string(),
-            last_identity_check: Instant::now(),
-            identity_drift_threshold: Duration::from_secs(300), // 5 minutes
-            response_parser: ResponseParser::new(),
-        }
-    }
-
-    /// Monitor a response for identity compliance
-    pub async fn monitor_response(&mut self, response: &str) -> Result<IdentityStatus> {
-        // Check for identity header
-        let has_identity_header = self.check_identity_header(response);
-
-        // Check boundary compliance
-        let boundary_compliance = self.check_boundary_compliance(response);
-
-        // Check delegation behavior
-        let _delegation_behavior = self.check_delegation_behavior(response);
-
-        if !has_identity_header {
-            return Ok(IdentityStatus::DriftDetected(
-                "Missing identity header".to_string(),
-            ));
-        }
-
-        if !boundary_compliance {
-            return Ok(IdentityStatus::BoundaryViolation(
-                "Response indicates work outside specialization".to_string(),
-            ));
-        }
-
-        self.last_identity_check = Instant::now();
-        Ok(IdentityStatus::Healthy)
-    }
-
-    pub fn check_identity_header(&self, response: &str) -> bool {
-        let required_pattern = format!("🤖 AGENT: {}", self.agent_id);
-        response.contains(&required_pattern)
-    }
-
-    fn check_boundary_compliance(&self, response: &str) -> bool {
-        // Check for indicators of boundary violations
-        let violation_patterns = vec![
-            r"working on backend code",
-            r"modifying infrastructure",
-            r"changing database schema",
-        ];
-
-        for pattern in violation_patterns {
-            // These patterns are hardcoded and safe, so we use expect with a clear message
-            let re = Regex::new(pattern).expect("Hardcoded regex pattern should always be valid");
-            if re.is_match(response) {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn check_delegation_behavior(&self, response: &str) -> bool {
-        // Check for proper delegation patterns
-        response.contains("DELEGATING TO:")
-            || response.contains("outside my specialization")
-            || !response.contains("I'll handle this")
-    }
-
-    /// Generate correction prompt for identity drift
-    pub fn generate_correction_prompt(&self, workspace: &str, specialization: &str) -> String {
-        format!(
-            r#"
-⚠️ IDENTITY DRIFT DETECTED
-
-You seem to have forgotten your role. Let me remind you:
-
-## YOUR IDENTITY
-- You are the {} Agent
-- Your workspace is {}
-- You specialize ONLY in {}
-- You must include identity headers in all responses
-
-Please acknowledge your identity and continue with the current task while staying within your boundaries.
-
-Remember to start your response with:
-```
-🤖 AGENT: {}
-📁 WORKSPACE: {}
-🎯 SCOPE: [Task assessment]
-```
-"#,
-            self.agent_id, workspace, specialization, self.agent_id, workspace
-        )
-    }
-}
-
-/// Response parser for analyzing agent outputs
-#[derive(Debug)]
-pub struct ResponseParser {
-    identity_regex: Regex,
-    workspace_regex: Regex,
-    scope_regex: Regex,
-}
-
-impl Default for ResponseParser {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ResponseParser {
-    pub fn new() -> Self {
-        Self {
-            identity_regex: Regex::new(r"🤖 AGENT: (.+)")
-                .expect("Identity regex pattern should be valid"),
-            workspace_regex: Regex::new(r"📁 WORKSPACE: (.+)")
-                .expect("Workspace regex pattern should be valid"),
-            scope_regex: Regex::new(r"🎯 SCOPE: (.+)")
-                .expect("Scope regex pattern should be valid"),
-        }
-    }
-
-    /// Parse identity information from response
-    pub fn parse_identity(&self, response: &str) -> Option<(String, String, String)> {
-        let agent = self
-            .identity_regex
-            .captures(response)
-            .and_then(|cap| cap.get(1))
-            .map(|m| m.as_str().to_string());
-
-        let workspace = self
-            .workspace_regex
-            .captures(response)
-            .and_then(|cap| cap.get(1))
-            .map(|m| m.as_str().to_string());
-
-        let scope = self
-            .scope_regex
-            .captures(response)
-            .and_then(|cap| cap.get(1))
-            .map(|m| m.as_str().to_string());
-
-        match (agent, workspace, scope) {
-            (Some(a), Some(w), Some(s)) => Some((a, w, s)),
-            _ => None,
-        }
-    }
-}
-
 /// Default role configurations
 pub fn default_frontend_role() -> AgentRole {
     AgentRole::Frontend {
@@ -469,9 +307,8 @@ mod tests {
     fn test_basic_role_functionality() {
         let frontend = default_frontend_role();
         assert_eq!(frontend.name(), "Frontend");
-
-        let monitor = IdentityMonitor::new("Frontend");
-        let valid_response = "🤖 AGENT: Frontend\n📁 WORKSPACE: /test\n🎯 SCOPE: UI work";
-        assert!(monitor.check_identity_header(valid_response));
+        assert!(!frontend.technologies().is_empty());
+        assert!(!frontend.responsibilities().is_empty());
+        assert!(!frontend.boundaries().is_empty());
     }
 }

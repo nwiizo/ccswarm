@@ -181,7 +181,12 @@ services:
         Ok(())
     }
 
-    pub(crate) async fn show_logs(&self, follow: bool, agent: Option<&str>, lines: usize) -> Result<()> {
+    pub(crate) async fn show_logs(
+        &self,
+        follow: bool,
+        agent: Option<&str>,
+        lines: usize,
+    ) -> Result<()> {
         use std::fs;
         use std::io::{BufRead, BufReader};
 
@@ -604,407 +609,18 @@ services:
         Ok(())
     }
 
-    pub(crate) async fn handle_template(&self, action: &TemplateAction) -> Result<()> {
-        use crate::template::{
-            FileSystemTemplateStorage, PredefinedTemplates, TemplateCategory, TemplateContext,
-            TemplateManager, TemplateQuery,
-        };
-        use colored::Colorize;
-        use std::io::{self, Write};
-        use std::str::FromStr;
-
-        // Initialize template storage
-        let templates_dir = self.repo_path.join(".ccswarm").join("templates");
-        let storage = FileSystemTemplateStorage::new(&templates_dir)
-            .await
-            .context("Failed to initialize template storage")?;
-        let mut manager = TemplateManager::new(storage);
-
-        match action {
-            TemplateAction::List {
-                all: _,
-                category,
-                tags,
-                search,
-                popular,
-                quality,
-                detailed,
-            } => {
-                let mut query = TemplateQuery::new();
-
-                if let Some(cat_str) = category {
-                    let cat = TemplateCategory::from_str(cat_str).context("Invalid category")?;
-                    query = query.with_category(cat);
-                }
-
-                if !tags.is_empty() {
-                    query = query.with_tags(tags.clone());
-                }
-
-                if let Some(search_term) = search {
-                    query = query.with_search_term(search_term);
-                }
-
-                if *popular {
-                    query = query.sort_by_popularity();
-                } else if *quality {
-                    query = query.sort_by_success_rate();
-                }
-
-                let templates = manager
-                    .search_templates(query)
-                    .await
-                    .context("Failed to search templates")?;
-
-                if templates.is_empty() {
-                    println!("No templates found.");
-                    return Ok(());
-                }
-
-                println!("Available Templates:");
-                println!();
-
-                for template in templates {
-                    if *detailed {
-                        println!(
-                            "📋 {} ({})",
-                            template.name.bright_cyan(),
-                            template.id.as_str().bright_black()
-                        );
-                        println!("   Category: {}", template.category);
-                        println!("   Description: {}", template.description);
-                        if !template.tags.is_empty() {
-                            println!(
-                                "   Tags: {}",
-                                template.tags.join(", ").as_str().bright_black()
-                            );
-                        }
-                        if let Some(author) = &template.author {
-                            println!("   Author: {}", author.as_str().bright_black());
-                        }
-                        println!("   Usage: {} times", template.usage_count);
-                        if let Some(rate) = template.success_rate {
-                            println!("   Success Rate: {:.1}%", rate * 100.0);
-                        }
-                        println!();
-                    } else {
-                        println!(
-                            "  {} ({}) - {}",
-                            template.name.bright_cyan(),
-                            template.id.bright_black(),
-                            template.description.chars().take(80).collect::<String>()
-                        );
-                    }
-                }
-            }
-
-            TemplateAction::Show {
-                template,
-                source,
-                stats,
-            } => {
-                let tmpl = manager
-                    .get_template_by_name(template)
-                    .await
-                    .context("Template not found")?;
-
-                println!(
-                    "Template: {} ({})",
-                    tmpl.name.bright_cyan(),
-                    tmpl.id.bright_black()
-                );
-                println!("Category: {}", tmpl.category);
-                println!("Description: {}", tmpl.description);
-                println!("Version: {}", tmpl.version);
-
-                if let Some(author) = &tmpl.author {
-                    println!("Author: {}", author);
-                }
-
-                if !tmpl.tags.is_empty() {
-                    println!("Tags: {}", tmpl.tags.join(", "));
-                }
-
-                println!("Priority: {:?}", tmpl.default_priority);
-                println!("Task Type: {:?}", tmpl.default_task_type);
-
-                if let Some(duration) = tmpl.estimated_duration {
-                    println!("Estimated Duration: {} minutes", duration);
-                }
-
-                if !tmpl.variables.is_empty() {
-                    println!();
-                    println!("Variables:");
-                    for var in &tmpl.variables {
-                        let required = if var.required { " (required)" } else { "" };
-                        println!(
-                            "  • {}{}: {}",
-                            var.name.bright_green(),
-                            required,
-                            var.description
-                        );
-                        if let Some(default) = &var.default_value {
-                            println!("    Default: {}", default.clone().bright_black());
-                        }
-                    }
-                }
-
-                if *source {
-                    println!();
-                    println!("Task Description Template:");
-                    println!("{}", tmpl.task_description.bright_white());
-
-                    if let Some(details) = &tmpl.task_details {
-                        println!();
-                        println!("Task Details Template:");
-                        println!("{}", details.bright_white());
-                    }
-                }
-
-                if *stats {
-                    println!();
-                    println!("Statistics:");
-                    println!("  Usage Count: {}", tmpl.usage_count);
-                    if let Some(rate) = tmpl.success_rate {
-                        println!("  Success Rate: {:.1}%", rate * 100.0);
-                    }
-                    println!("  Created: {}", tmpl.created_at.format("%Y-%m-%d %H:%M"));
-                    println!("  Updated: {}", tmpl.updated_at.format("%Y-%m-%d %H:%M"));
-                }
-            }
-
-            TemplateAction::Apply {
-                template,
-                vars,
-                interactive,
-                preview,
-                auto_assign,
-            } => {
-                let tmpl = manager
-                    .get_template_by_name(template)
-                    .await
-                    .context("Template not found")?;
-
-                let mut context = TemplateContext::new();
-
-                // Parse provided variables
-                for var_str in vars {
-                    if let Some((key, value)) = var_str.split_once('=') {
-                        context = context.with_variable(key.trim(), value.trim());
-                    }
-                }
-
-                // Interactive mode for missing variables
-                if *interactive {
-                    for var in &tmpl.variables {
-                        if var.required
-                            && !context.variables.contains_key(&var.name)
-                            && var.default_value.is_none()
-                        {
-                            print!("{} ({}): ", var.name, var.description);
-                            io::stdout().flush()?;
-
-                            let mut input = String::new();
-                            io::stdin().read_line(&mut input)?;
-                            let value = input.trim();
-
-                            if !value.is_empty() {
-                                context = context.with_variable(&var.name, value);
-                            }
-                        }
-                    }
-                }
-
-                // Apply template
-                let applied = manager
-                    .apply_template(&tmpl.id, context)
-                    .await
-                    .context("Failed to apply template")?;
-
-                if *preview {
-                    println!("Preview of generated task:");
-                    println!();
-                    println!("Description: {}", applied.description.bright_cyan());
-                    if let Some(details) = &applied.details {
-                        println!("Details: {}", details);
-                    }
-                    println!("Priority: {:?}", applied.priority);
-                    println!("Type: {:?}", applied.task_type);
-                    if let Some(duration) = applied.estimated_duration {
-                        println!("Duration: {} minutes", duration);
-                    }
-                    if !applied.target_files.is_empty() {
-                        println!("Target Files: {}", applied.target_files.join(", "));
-                    }
-                } else {
-                    // Create the actual task
-                    use crate::agent::TaskBuilder;
-
-                    let task = TaskBuilder::new(applied.description.clone())
-                        .priority(applied.priority)
-                        .task_type(applied.task_type);
-
-                    let task = if let Some(details) = &applied.details {
-                        task.details(details.clone())
-                    } else {
-                        task
-                    };
-
-                    let task = if let Some(duration) = applied.estimated_duration {
-                        task.estimated_duration(duration as u64)
-                    } else {
-                        task
-                    };
-
-                    let task = task.build();
-
-                    println!(
-                        "Created task from template: {}",
-                        applied.description.bright_green()
-                    );
-                    println!("Task ID: {}", task.id.bright_cyan());
-
-                    if *auto_assign {
-                        println!("Auto-assigning to best agent...");
-
-                        use crate::orchestrator::master_delegation::{
-                            DelegationStrategy, MasterDelegationEngine,
-                        };
-                        let mut engine = MasterDelegationEngine::new(DelegationStrategy::Hybrid);
-
-                        match engine.delegate_task(task.clone()) {
-                            Ok(decision) => {
-                                println!(
-                                    "   ✅ Assigned to: {}",
-                                    decision.target_agent.name().bright_green()
-                                );
-                                println!("   Confidence: {:.1}%", decision.confidence * 100.0);
-                                println!("   Reason: {}", decision.reasoning);
-
-                                // Add to execution queue if engine is running
-                                if let Some(ref engine) = self.execution_engine {
-                                    let assigned_task = task
-                                        .clone()
-                                        .assign_to(decision.target_agent.name().to_string());
-                                    let task_id =
-                                        engine.get_executor().add_task(assigned_task).await;
-                                    println!(
-                                        "   📋 Queued for execution: {}",
-                                        task_id.bright_cyan()
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                println!("   ⚠️ Auto-assignment failed: {}", e);
-                                println!("   Task created but not assigned");
-                            }
-                        }
-                    }
-                }
-            }
-
-            TemplateAction::Install {
-                all,
-                categories,
-                force,
-            } => {
-                let predefined_templates = PredefinedTemplates::get_all();
-                let mut installed = 0;
-                let mut skipped = 0;
-
-                for template in predefined_templates {
-                    // Filter by categories if specified
-                    if !categories.is_empty() && !*all {
-                        let cat_str = template.category.to_string();
-                        if !categories.iter().any(|c| c.eq_ignore_ascii_case(&cat_str)) {
-                            continue;
-                        }
-                    }
-
-                    match manager.save_template(template.clone()).await {
-                        Ok(()) => {
-                            println!("✅ Installed: {}", template.name.bright_green());
-                            installed += 1;
-                        }
-                        Err(e) if e.to_string().contains("already exists") => {
-                            if *force {
-                                if let Err(e) = manager.update_template(template.clone()).await {
-                                    println!("❌ Failed to update {}: {}", template.name.red(), e);
-                                } else {
-                                    println!("✅ Updated: {}", template.name.bright_green());
-                                    installed += 1;
-                                }
-                            } else {
-                                println!("⚠️  Skipped (exists): {}", template.name.bright_yellow());
-                                skipped += 1;
-                            }
-                        }
-                        Err(e) => {
-                            println!("❌ Failed to install {}: {}", template.name.red(), e);
-                        }
-                    }
-                }
-
-                println!();
-                println!(
-                    "Installation complete: {} installed, {} skipped",
-                    installed, skipped
-                );
-                if skipped > 0 && !*force {
-                    println!("Use --force to overwrite existing templates");
-                }
-            }
-
-            TemplateAction::Stats {
-                global: _,
-                template,
-            } => {
-                if let Some(tmpl_name) = template {
-                    let tmpl = manager
-                        .get_template_by_name(tmpl_name)
-                        .await
-                        .context("Template not found")?;
-
-                    println!("Template Statistics: {}", tmpl.name.bright_cyan());
-                    println!("Usage Count: {}", tmpl.usage_count);
-                    if let Some(rate) = tmpl.success_rate {
-                        println!("Success Rate: {:.1}%", rate * 100.0);
-                    }
-                    println!("Created: {}", tmpl.created_at.format("%Y-%m-%d %H:%M"));
-                    println!("Updated: {}", tmpl.updated_at.format("%Y-%m-%d %H:%M"));
-                } else {
-                    let stats = manager
-                        .get_template_stats()
-                        .await
-                        .context("Failed to get template statistics")?;
-
-                    println!("Global Template Statistics:");
-                    println!("Total Templates: {}", stats.total_templates);
-                    println!("Total Usage: {}", stats.total_usage);
-                    println!(
-                        "Average Success Rate: {:.1}%",
-                        stats.average_success_rate * 100.0
-                    );
-
-                    println!();
-                    println!("By Category:");
-                    for (category, count) in &stats.by_category {
-                        println!("  {}: {}", category, count);
-                    }
-
-                    if !stats.most_popular.is_empty() {
-                        println!();
-                        println!("Most Popular:");
-                        for (name, count) in stats.most_popular.iter().take(5) {
-                            println!("  {}: {} uses", name, count);
-                        }
-                    }
-                }
-            }
-
-            _ => {
-                println!("Template command not yet implemented: {:?}", action);
-            }
+    pub(crate) async fn handle_template(&self, _action: &TemplateAction) -> Result<()> {
+        if self.json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "status": "removed",
+                    "message": "Template system has been removed. Use 'ccswarm task' directly.",
+                }))?
+            );
+        } else {
+            println!("Template system has been removed.");
+            println!("Use 'ccswarm task execute <description>' to create tasks directly.");
         }
 
         Ok(())
@@ -1339,7 +955,11 @@ services:
         Ok(())
     }
 
-    pub(crate) async fn handle_help(&self, topic: Option<&str>, search: Option<&str>) -> Result<()> {
+    pub(crate) async fn handle_help(
+        &self,
+        topic: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<()> {
         let help = InteractiveHelp::new();
 
         if let Some(query) = search {
@@ -1379,7 +999,10 @@ services:
         Ok(())
     }
 
-    pub(crate) async fn handle_resource(&self, action: &resource_commands::ResourceSubcommand) -> Result<()> {
+    pub(crate) async fn handle_resource(
+        &self,
+        action: &resource_commands::ResourceSubcommand,
+    ) -> Result<()> {
         // Get or create session manager
         let session_manager = Arc::new(
             crate::session::SessionManager::with_resource_monitoring(
@@ -1423,5 +1046,4 @@ services:
         info!("Provider validation passed: Claude Code CLI is available");
         Ok(())
     }
-
 }

@@ -9,7 +9,6 @@ impl CliRunner {
         delegate: bool,
         enable_acp: bool,
     ) -> Result<()> {
-        use crate::ipc::{DEFAULT_IPC_HOST, start_ipc_server};
         use tokio::sync::RwLock;
 
         info!(
@@ -46,10 +45,7 @@ impl CliRunner {
         let agent_count = master.agents.len();
 
         // Wrap master in Arc<RwLock> for shared access
-        let master = Arc::new(RwLock::new(master));
-
-        // Start IPC server
-        let _ipc_shutdown = start_ipc_server(DEFAULT_IPC_HOST, port, Arc::clone(&master)).await?;
+        let _master = Arc::new(RwLock::new(master));
 
         // Start ACP WebSocket server if enabled
         if enable_acp {
@@ -83,10 +79,10 @@ impl CliRunner {
                 }))?
             );
         } else {
-            println!("🚀 ccswarm orchestrator started");
+            println!("ccswarm orchestrator started");
             println!("   Master ID: {}", master_id);
             println!("   Agents: {}", agent_count);
-            println!("   IPC Port: {}", port);
+            println!("   Port: {}", port);
             if delegate {
                 println!("   Delegate Mode: enabled");
             }
@@ -97,13 +93,8 @@ impl CliRunner {
                 println!("   Mode: daemon (background)");
             } else {
                 println!("   Mode: foreground (Ctrl+C to stop)");
+                println!("   Note: IPC server has been removed. Use Claude Code directly.");
             }
-        }
-
-        // Start coordination loop (blocks until shutdown)
-        {
-            let mut master_guard = master.write().await;
-            master_guard.start_coordination().await?;
         }
 
         // Cleanup PID file on exit
@@ -115,142 +106,40 @@ impl CliRunner {
     }
 
     pub(crate) async fn stop_orchestrator(&self) -> Result<()> {
-        use crate::ipc::{DEFAULT_IPC_HOST, DEFAULT_IPC_PORT, ShutdownRequest, ShutdownResponse};
-
-        // Try to read PID file to get port
+        // IPC server has been removed. Clean up PID file if it exists.
         let pid_file = self.repo_path.join(".ccswarm.pid");
-        let port = if pid_file.exists() {
-            match tokio::fs::read_to_string(&pid_file).await {
-                Ok(content) => {
-                    if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
-                        info["port"].as_u64().unwrap_or(DEFAULT_IPC_PORT as u64) as u16
-                    } else {
-                        DEFAULT_IPC_PORT
-                    }
-                }
-                Err(_) => DEFAULT_IPC_PORT,
+
+        if pid_file.exists() {
+            let _ = tokio::fs::remove_file(&pid_file).await;
+            if self.json_output {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "status": "success",
+                        "message": "Orchestrator PID file cleaned up",
+                    }))?
+                );
+            } else {
+                println!("Orchestrator PID file cleaned up.");
             }
+        } else if self.json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "status": "info",
+                    "message": "No running orchestrator found",
+                }))?
+            );
         } else {
-            DEFAULT_IPC_PORT
-        };
-
-        // Send shutdown request via HTTP
-        let url = format!("http://{}:{}/shutdown", DEFAULT_IPC_HOST, port);
-        let client = reqwest::Client::new();
-
-        let shutdown_request = ShutdownRequest {
-            reason: Some("CLI stop command".to_string()),
-            force: false,
-        };
-
-        match client.post(&url).json(&shutdown_request).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    match response.json::<ShutdownResponse>().await {
-                        Ok(shutdown_response) => {
-                            if self.json_output {
-                                println!(
-                                    "{}",
-                                    serde_json::to_string_pretty(&serde_json::json!({
-                                        "status": "success",
-                                        "message": shutdown_response.message,
-                                    }))?
-                                );
-                            } else {
-                                println!("🛑 {}", shutdown_response.message);
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to parse shutdown response: {}", e);
-                            if !self.json_output {
-                                println!("🛑 Shutdown signal sent (response parse error)");
-                            }
-                        }
-                    }
-                } else {
-                    let status = response.status();
-                    if self.json_output {
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(&serde_json::json!({
-                                "status": "error",
-                                "message": format!("Shutdown request failed: {}", status),
-                            }))?
-                        );
-                    } else {
-                        println!("❌ Shutdown request failed: {}", status);
-                    }
-                }
-            }
-            Err(e) => {
-                // Connection error - orchestrator might not be running
-                if self.json_output {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "status": "error",
-                            "message": format!("Could not connect to orchestrator: {}", e),
-                            "hint": "The orchestrator may not be running",
-                        }))?
-                    );
-                } else {
-                    println!("❌ Could not connect to orchestrator on port {}", port);
-                    println!("   The orchestrator may not be running.");
-                }
-            }
+            println!("No running orchestrator found.");
+            println!("The IPC server has been removed. Use Claude Code directly.");
         }
 
         Ok(())
     }
 
     pub(crate) async fn show_status(&self, detailed: bool, agent: Option<&str>) -> Result<()> {
-        use crate::ipc::{DEFAULT_IPC_HOST, DEFAULT_IPC_PORT, StatusResponse};
-
-        // Try to get live status from IPC server first
-        let pid_file = self.repo_path.join(".ccswarm.pid");
-        let port = if pid_file.exists() {
-            match tokio::fs::read_to_string(&pid_file).await {
-                Ok(content) => {
-                    if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
-                        info["port"].as_u64().unwrap_or(DEFAULT_IPC_PORT as u64) as u16
-                    } else {
-                        DEFAULT_IPC_PORT
-                    }
-                }
-                Err(_) => DEFAULT_IPC_PORT,
-            }
-        } else {
-            DEFAULT_IPC_PORT
-        };
-
-        // Try IPC server for live status
-        let url = format!("http://{}:{}/status", DEFAULT_IPC_HOST, port);
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(2))
-            .build()?;
-
-        if let Ok(response) = client.get(&url).send().await
-            && response.status().is_success()
-            && let Ok(status) = response.json::<StatusResponse>().await
-        {
-            if !self.json_output {
-                println!("📊 ccswarm Live Status (IPC)");
-                println!("============================");
-                println!("Master ID: {}", status.master_id);
-                println!("Active Agents: {}", status.active_agents);
-                println!("Pending Tasks: {}", status.pending_tasks);
-                println!("Running Tasks: {}", status.running_tasks);
-                println!("Completed Tasks: {}", status.completed_tasks);
-                println!("Phase: {}", status.phase);
-                println!("Uptime: {}s", status.uptime_secs);
-                println!();
-            } else {
-                println!("{}", serde_json::to_string_pretty(&status)?);
-                return Ok(());
-            }
-        }
-
-        // Fall back to reading status from coordination files
+        // Read status from coordination files
         let status_tracker = crate::coordination::StatusTracker::new().await?;
 
         if let Some(agent_id) = agent {
@@ -383,29 +272,19 @@ impl CliRunner {
     }
 
     pub(crate) async fn start_tui(&self) -> Result<()> {
-        info!("Starting ccswarm TUI");
-
         if self.json_output {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "success",
-                    "message": "Starting TUI mode",
+                    "status": "removed",
+                    "message": "TUI has been removed. Use 'ccswarm status' instead.",
                 }))?
             );
         } else {
-            println!("🖥️  Starting ccswarm TUI...");
-            println!("   Press 'q' to quit");
-        }
-
-        // Start TUI with execution engine if available
-        if let Some(ref execution_engine) = self.execution_engine {
-            crate::tui::run_tui_with_engine(Arc::new(execution_engine.clone())).await?;
-        } else {
-            crate::tui::run_tui().await?;
+            println!("TUI has been removed.");
+            println!("Use 'ccswarm status' to view orchestrator status.");
         }
 
         Ok(())
     }
-
 }

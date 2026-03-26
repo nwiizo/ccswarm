@@ -399,7 +399,12 @@ impl CliRunner {
     }
 
     /// Merge a completed task's worktree branch into the main branch
-    pub(crate) async fn merge_task_branch(&self, task_id: &str, cleanup: bool, _yes: bool) -> Result<()> {
+    pub(crate) async fn merge_task_branch(
+        &self,
+        task_id: &str,
+        cleanup: bool,
+        _yes: bool,
+    ) -> Result<()> {
         let manager = crate::git::shell::ShellWorktreeManager::new(self.repo_path.clone())?;
 
         // Find the task's worktree branch
@@ -658,7 +663,12 @@ impl CliRunner {
     }
 
     /// Cancel a task
-    pub(crate) async fn cancel_task(&self, task_id: &str, force: bool, reason: Option<&str>) -> Result<()> {
+    pub(crate) async fn cancel_task(
+        &self,
+        task_id: &str,
+        force: bool,
+        reason: Option<&str>,
+    ) -> Result<()> {
         let result = if let Some(ref engine) = self.execution_engine {
             let executor = engine.get_executor();
             match executor
@@ -957,5 +967,4 @@ impl CliRunner {
 
         Ok(task)
     }
-
 }

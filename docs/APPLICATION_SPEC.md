@@ -275,6 +275,252 @@ let compressed_context = session.get_compressed_context().await?;
 
 - **[AI-Session README](../crates/ai-session/README.md)** - Overview and API reference
 
+## Multi-Agent Fundamentals (Operating Model)
+
+This section formalizes multi-agent behavior in ccswarm, aligning with widely used agent‑orchestration patterns and preparing for future provider integrations. It complements, not replaces, existing architecture.
+
+### Agent Lifecycle
+- Perceive: Ingest task/context, repository state, and recent coordination messages.
+- Deliberate: Produce a plan (steps, risks, dependencies, stop conditions).
+- Act: Execute atomic steps via session (idempotent where possible).
+- Observe: Parse outputs (tests/build/logs) and update internal state.
+- Report: Emit status/metrics and propose next actions.
+- Reflect: Summarize learnings, refine prompt/tool usage, adjust strategy.
+
+### Core Roles (Composable)
+- Planner: Decomposes goals into DAG tasks, sets acceptance criteria.
+- Executor: Performs edits, builds, tests, and environment operations.
+- Researcher: Gathers external facts, patterns, and examples.
+- Critic/Verifier: Reviews artifacts against checklists and policies.
+- Coordinator: Arbitrates assignments, resolves conflicts, escalates for HITL.
+
+ccswarm can instantiate specialized agents (Frontend/Backend/DevOps/QA) and also overlay these roles per agent.
+
+### Interaction Protocols
+- Centralized Orchestrator (current): ProactiveMaster issues assignments and collects results.
+- Contract Net/Auction (planned): Agents bid on tasks using capability/cost/latency scores.
+- Vote/Consensus (planned): Sangha voting on competing proposals; quorum and tie‑break rules.
+- Blackboard Bus: Shared topics for proposals, status, and decisions, with retention and replay.
+
+### Task Contract (Canonical Schema)
+Each task must include fields that enable automated assignment and robust verification.
+- id, description, priority, type, details
+- expected_outcomes: list of measurable acceptance items
+- constraints: safety, performance, compatibility
+- deps: prerequisite task ids, barrier policy (all/any)
+- skills_required: tags mapped to provider capabilities
+- estimated_cost/time, risk_level
+
+### Capability Model
+- Agent capability descriptor: { skills: string[], tools: string[], domains: string[], quality: {lint, test, perf}, limits: {tokens, time} }
+- Provider adapter exposes affordances (edit, build, test, run, search, browse) and cost profile.
+- Matching policy: score(task, agent) = f(skill match, historical success, queue length, SLA).
+
+### Coordination Patterns
+- Barriers for DAG nodes: don’t start downstream until upstream completes.
+- Speculative execution (optional): run multiple approaches with budget guardrail; pick best.
+- Rollback hooks: revert failing edits; keep failing artifacts for diagnosis.
+- Checkpointing: persist intermediate artifacts and prompts for reproducibility.
+
+### Safety and HITL
+- Guardrails: file/path allow/deny lists, command policies, secret redaction.
+- HITL gates: “plan”, “risky edit”, “deploy” checkpoints with ack/deny/comment.
+- Rate/Cost limits: per agent and per project; graceful degradation when exceeded.
+
+### Metrics and Evaluation
+- Latency (queue, exec), success rate, revert rate, test pass %, lint errors, token/CPU usage.
+- Rubrics per task type (feature, bugfix, refactor, docs) with thresholds.
+- Leaderboard across agents and provider configurations.
+
+### Failure Taxonomy and Recovery
+- Categories: spec_mismatch, env_issue, flaky_test, merge_conflict, provider_error.
+- Policy: retry with backoff (idempotent steps), escalate to Critic/Researcher, or HITL.
+
+## Interfaces (Multi-Agent Specific)
+
+### Coordination Bus Topics (planned consolidation)
+- proposals.*: Planner/Researcher proposals (title, rationale, expected impact)
+- assignments.*: Coordinator→Agent task assignments
+- status.*: Agent periodic status and metrics
+- reviews.*: Critic verdicts, checklists, and suggested fixes
+- votes.*: Sangha votes and tally records
+
+Message envelope fields (common): { id, ts, sender, topic, payload, correlation_id? }
+
+### Agent Registration
+- announce(capabilities, version, limits)
+- heartbeat(interval, load)
+- deregister(reason)
+
+## Execution Policies (Refinements)
+- Idempotency first: prefer commands that can be retried safely.
+- Small safe steps: narrow diffs with tests between steps.
+- Evidence‑driven: require build/test evidence for state transitions to completed.
+- Budget‑aware: cap parallelism by priority and remaining budget.
+
+## Acceptance Criteria (Multi-Agent Extensions)
+- Agents can register capabilities and receive assignments filtered by required skills.
+- Orchestrator can defer to auction/vote when multiple agents are eligible (planned).
+- Critic can block completion until all acceptance items pass.
+- Bus retains messages long enough for late joiners to catch up and reconcile.
+
+## Pieces and Movements (Workflow Model)
+
+ccswarm adopts a declarative workflow model inspired by established multi‑agent tools. A piece describes a sequence of movements (steps). Each movement binds a persona, permissions, and rules that determine the next step.
+
+### Piece (YAML schema – planned alignment)
+- name: string
+- initial_movement: string
+- max_movements: number (guard against infinite loops)
+- movements: Movement[]
+
+Movement fields:
+- name: string
+- persona: string (who acts; maps to agent prompt/facets)
+- edit: boolean (whether file edits are permitted)
+- required_permission_mode: enum (e.g., view|edit|exec; planned)
+- rules: [{ condition: string, next: string|COMPLETE|ABORT }]
+
+Rules encode fix loops (e.g., review → implement → review) and allow parallel review movements in future. COMPLETE finalizes the workflow; ABORT exits with failure and retains artifacts/logs.
+
+### Faceted Prompting (Personas/Policies/Knowledge)
+Prompts are composed from independent facets to improve reuse and control:
+- persona: role definition (planner, coder, reviewer, security, performance)
+- policy: approval criteria, risk thresholds, allowed operations
+- knowledge: domain notes, codebase guidance
+- instruction: step‑specific instructions and guardrails
+
+Facet resolution order (planned): builtin < project (`.ccswarm/facets/`) < user (`~/.ccswarm/facets/`). Provide `ccswarm eject <piece|facet>` to simplify customization.
+
+### Repertoire Packages (shared workflows)
+Install workflow/facet sets from external Git repositories with `ccswarm repertoire add <git-url>`. Installed to `~/.ccswarm/repertoire/@{owner}/{repo}/`. Resolve across three layers (builtin → project → user) with nearest override wins.
+
+### Directory Layout (recommended)
+- `~/.ccswarm/`
+  - `config.yaml` — default provider/model/language
+  - `pieces/` — user-defined pieces
+  - `facets/` — user-defined facets (persona/policy/knowledge/instruction)
+  - `repertoire/` — installed packages
+- `./.ccswarm/` (project)
+  - `config.yaml`
+  - `facets/` (project-local facets)
+  - `tasks.yaml` queue and `tasks/` specs
+  - `runs/` execution reports and NDJSON logs
+  - `logs/` runtime logs
+
+### Provider Sandbox & Permissions (enhancement)
+- permission modes: view|edit|exec per movement; enforce guardrails (write scopes/allowed commands/network policy).
+- trusted directories declared in global/project config.
+- audit trail: record all movement I/O to NDJSON for reproducibility.
+
+### Quality Gates and Review Loops
+- Parallel reviewers (architecture/security/performance) supported in future.
+- Aggregation rules (all‑approve/weighted/threshold) declared in piece rules.
+- REJECT/NEEDS_FIX routes back to implement to form fix loop.
+
+## Acceptance Criteria (Pieces/Facets/Repertoire)
+- AC‑P1: `ccswarm piece list/show/eject` works across builtin + project + user layers.
+- AC‑P2: movement `edit`/permission reflects in runtime guards; forbidden ops are blocked.
+- AC‑P3: `.ccswarm/tasks.yaml` queued tasks can be processed sequentially/parallel by a `ccswarm run` path (future).
+- AC‑P4: Execution traces (NDJSON) are saved under `.ccswarm/runs/*`.
+- AC‑P5: `ccswarm repertoire add <git-url>` installs packages resolvable by piece loader.
+
+## Harness Engineering
+
+See docs/HARNESS_ENGINEERING.md for scenario format and CLI. Harness executes piece pipelines against predefined tasks and verifies assertions, writing a consolidated report suitable for CI.
+
+## Scheduling & Assignment (Advanced)
+
+- Matching policy computes suitability score per agent: skills match, past success, queue length, SLA.
+- Policies: greedy (default), auction (bid by cost/latency/confidence), consensus (future with Sangha).
+- DAG barriers respected: downstream tasks activate only when prerequisites complete.
+- Acceptance criteria: selected policy and decision rationale recorded in events.ndjson.
+
+## Budgets & Cost Controls
+
+- Per‑project and per‑agent budgets: tokens, CPU time, wall time.
+- Budget‑aware parallelism: cap concurrency based on remaining budget and task priority.
+- Stop conditions: no progress, budget exhausted, excessive revert rate.
+
+## HITL Approvals
+
+- Gates: plan / risky‑edit / deploy / merge.
+- CLI: `ccswarm approve <gate> --id <run|task>` or `--reject --reason`.
+- Events: hitl.request, hitl.decision with actor and comment.
+
+## Event Schema (NDJSON)
+
+- Common fields: { ts, level, run_id, agent, movement?, task_id?, message }.
+- Types: movement.start|end, task.enqueue|start|end, review.request|result, hitl.request|decision, provider.call|error.
+- Storage: `.ccswarm/runs/<run-id>/{events.ndjson, summary.json}`.
+
+## TUI UX
+
+- Views: Overview, Runs, Logs, Queue, Review.
+- Hotkeys: q (quit), f (filter), r (refresh), o (open), h (help).
+
+
+## Sangha/Extend/Search/Evolution (CLI Spec)
+
+This section re‑introduces four CLI surfaces with takt‑aligned patterns. They are designed as thin handlers that delegate business logic to coordination modules, store state as JSON files, and support dual output (text/JSON).
+
+### takt Patterns Applied
+- Verb‑first positional args: primary input is positional (e.g., `search docs "query"`).
+- Minimal, action‑focused descriptions: short help texts with context hints.
+- Feature layer separation: CLI handlers dispatch; logic lives in coordination/analytics modules.
+- Filesystem as state store: JSON files under `coordination/{proposals,extensions,agent-status,task-queue}/` and `/.ccswarm/runs/`.
+- Format‑aware output: `self.json_output` returns `{ status, message, data }`.
+- Grouped handlers: Sangha+Extend (write ops), Search+Evolution (read‑only analytics).
+
+### Command Overview
+- sangha
+  - propose: `--title <str> --description <str> --proposal-type <feature|refactor|policy|tooling=feature>`
+  - vote: `<id> [--approve] [--reason <str>]` (absence of `--approve` implies reject)
+  - list: `[--status <open|accepted|rejected>]`
+  - status: `<id>`
+- extend
+  - propose: `--title <str> --description <str> [--agent <frontend|backend|devops|qa|all=all>]`
+  - list: `[--status <proposed|approved|active|deprecated>]`
+  - status: `<id>`
+  - history: `[<limit=20>]`
+- search
+  - docs: `<query> [--limit <n=10>]` (search in `docs/` tree)
+  - code: `<query> [--glob <pattern>] [--limit <n=10>]` (search in repo; glob like `*.rs`)
+- evolution
+  - metrics: `[--agent <name>] [--format <text|json=text>]`
+  - patterns: `[--agent <name>] [--limit <n=50>]`
+  - report: `[--format <text|json|markdown=text>]`
+
+### Storage Layout (Filesystem as Source of Truth)
+- `coordination/proposals/{id}.json`
+  - `{ id, title, description, type, created_at, status, votes: [{agent, approve, reason, ts}] }`
+- `coordination/extensions/{id}.json`
+  - `{ id, title, description, agent, status, history: [{event, detail, ts}] }`
+- `coordination/agent-status/{agent}.json`
+  - `{ agent_id, status, metrics, timestamp }`
+- `coordination/task-queue/{id}.json`
+  - `{ id, description, priority, type, state, timestamps }`
+- `./.ccswarm/runs/*/*.ndjson` — movement/task traces for audit
+
+JSON writes use pretty‑printed `serde_json`, filenames are UUID‑based, and directories are auto‑created with `tokio::fs::create_dir_all`.
+
+### Output Contracts
+- Text mode: concise colored lines for human consumption.
+- JSON mode (`--json` or config): `{ "status": "success|error", "message": "...", "data": { ... } }`.
+
+### Acceptance Criteria (CLI)
+- AC‑C1: `ccswarm sangha --help` 等で上記サブコマンド/引数が表示される。
+- AC‑C2: `sangha propose` 実行で `coordination/proposals/` に JSON が作成され、`sangha list/status` で参照できる。
+- AC‑C3: `sangha vote <id> [--approve]` 実行で既存 proposal に投票が追記され、集計が反映される。
+- AC‑C4: `extend propose` 実行で `coordination/extensions/` に JSON が作成され、`extend list/status/history` で参照できる。
+- AC‑C5: `search docs/code` はローカル検索（docs/ とリポジトリ）で結果を返し、外部 API を不要とする。
+- AC‑C6: `evolution metrics/patterns/report` は `coordination/*` の履歴から集計/分析を生成し、`--format json` で構造化出力を返す。
+
+### Notes
+- Search は ripgrep 互換の `--glob` を採用。
+- Vote は単一 `--approve` フラグで衝突を排除（未指定は reject）。
+- 4 コマンドはファイル I/O のみで実行可能（実行エンジン不要）。
+
 ## Configuration
 
 ### Project Configuration (ccswarm.json)

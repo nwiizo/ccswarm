@@ -584,28 +584,180 @@ fn test_config_default() {
 }
 
 // ============================================================================
-// Auto-accept Config Tests
+// Sangha/Extend/Search/Evolution CLI Parse Tests
 // ============================================================================
 
 #[test]
-fn test_auto_accept_config_default() {
-    use ccswarm::auto_accept::AutoAcceptConfig;
+fn test_cli_parse_sangha_propose() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "sangha",
+        "propose",
+        "--title",
+        "Add GraphQL",
+        "--description",
+        "Add GraphQL support to backend",
+    ])
+    .unwrap();
 
-    let config = AutoAcceptConfig::default();
-    assert!(!config.enabled);
-    assert!(!config.emergency_stop);
+    match cli.command {
+        Commands::Sangha { .. } => {}
+        _ => panic!("Expected Sangha command"),
+    }
 }
 
 #[test]
-fn test_auto_accept_restricted_files() {
-    use ccswarm::auto_accept::AutoAcceptConfig;
+fn test_cli_parse_sangha_vote() {
+    let cli =
+        Cli::try_parse_from(["ccswarm", "sangha", "vote", "prop-abc123", "--approve"]).unwrap();
 
-    let mut config = AutoAcceptConfig::default();
-    config.enabled = true;
-    config.restricted_files = vec!["*.sql".to_string(), "Cargo.toml".to_string()];
-    config.max_file_changes = 10;
+    match cli.command {
+        Commands::Sangha { .. } => {}
+        _ => panic!("Expected Sangha command"),
+    }
+}
 
-    assert!(config.enabled);
-    assert_eq!(config.restricted_files.len(), 2);
-    assert_eq!(config.max_file_changes, 10);
+#[test]
+fn test_cli_parse_sangha_list() {
+    let cli = Cli::try_parse_from(["ccswarm", "sangha", "list"]).unwrap();
+
+    match cli.command {
+        Commands::Sangha { .. } => {}
+        _ => panic!("Expected Sangha command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_extend_propose() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "extend",
+        "propose",
+        "--title",
+        "GraphQL resolver",
+        "--description",
+        "Add resolver support",
+        "--agent",
+        "backend",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Commands::Extend { .. } => {}
+        _ => panic!("Expected Extend command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_extend_list() {
+    let cli = Cli::try_parse_from(["ccswarm", "extend", "list"]).unwrap();
+
+    match cli.command {
+        Commands::Extend { .. } => {}
+        _ => panic!("Expected Extend command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_extend_history() {
+    let cli = Cli::try_parse_from(["ccswarm", "extend", "history", "5"]).unwrap();
+
+    match cli.command {
+        Commands::Extend { .. } => {}
+        _ => panic!("Expected Extend command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_search_docs() {
+    let cli =
+        Cli::try_parse_from(["ccswarm", "search", "docs", "authentication patterns"]).unwrap();
+
+    match cli.command {
+        Commands::Search { .. } => {}
+        _ => panic!("Expected Search command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_search_code_with_glob() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "search",
+        "code",
+        "error handling",
+        "--glob",
+        "*.rs",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Commands::Search { .. } => {}
+        _ => panic!("Expected Search command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_evolution_metrics() {
+    let cli =
+        Cli::try_parse_from(["ccswarm", "evolution", "metrics", "--agent", "frontend"]).unwrap();
+
+    match cli.command {
+        Commands::Evolution { .. } => {}
+        _ => panic!("Expected Evolution command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_evolution_report() {
+    let cli = Cli::try_parse_from(["ccswarm", "evolution", "report", "--format", "json"]).unwrap();
+
+    match cli.command {
+        Commands::Evolution { .. } => {}
+        _ => panic!("Expected Evolution command"),
+    }
+}
+
+// ============================================================================
+// Approve CLI Parse Tests
+// ============================================================================
+
+#[test]
+fn test_cli_parse_approve_plan() {
+    let cli = Cli::try_parse_from(["ccswarm", "approve", "plan", "--id", "run-abc123"]).unwrap();
+
+    match cli.command {
+        Commands::Approve { .. } => {}
+        _ => panic!("Expected Approve command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_approve_reject_with_reason() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "approve",
+        "deploy",
+        "--id",
+        "task-456",
+        "--reject",
+        "--reason",
+        "needs more tests",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Commands::Approve { .. } => {}
+        _ => panic!("Expected Approve command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_approve_list() {
+    let cli = Cli::try_parse_from(["ccswarm", "approve", "list", "--status", "pending"]).unwrap();
+
+    match cli.command {
+        Commands::Approve { .. } => {}
+        _ => panic!("Expected Approve command"),
+    }
 }

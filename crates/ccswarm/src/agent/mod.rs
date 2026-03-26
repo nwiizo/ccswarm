@@ -36,9 +36,7 @@ use crate::config::ClaudeConfig;
 use crate::hooks::{
     HookContext, HookRegistry, HookResult, OnErrorInput, PostExecutionInput, PreExecutionInput,
 };
-use crate::identity::boundary::TaskBoundaryChecker;
-use crate::identity::boundary::TaskEvaluation;
-use crate::identity::{AgentIdentity, AgentRole, IdentityMonitor, IdentityStatus};
+use crate::identity::{AgentIdentity, AgentRole};
 
 /// Current status of an agent in its operational lifecycle
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -304,56 +302,14 @@ impl ClaudeCodeAgent {
     }
 
     /// Verify agent boundaries are properly set
+    /// Note: Runtime boundary checking is now handled by Claude Code hooks.
+    /// This method performs a basic sanity check only.
     async fn verify_boundaries(&self) -> Result<()> {
-        // Test with a task that should be accepted
-        let test_task = self.create_test_task_for_role();
-        let checker = TaskBoundaryChecker::new(self.identity.specialization.clone());
-
-        match checker.evaluate_task(&test_task).await {
-            TaskEvaluation::Accept { .. } => {
-                tracing::info!(
-                    "Boundary verification passed for agent: {}",
-                    self.identity.agent_id
-                );
-                Ok(())
-            }
-            _ => Err(anyhow::anyhow!("Boundary verification failed")),
-        }
-    }
-
-    /// Create a test task appropriate for this agent's role
-    fn create_test_task_for_role(&self) -> Task {
-        let (description, task_type) = match &self.identity.specialization {
-            AgentRole::Frontend { .. } => (
-                "Verify React component rendering".to_string(),
-                TaskType::Development,
-            ),
-            AgentRole::Backend { .. } => (
-                "Verify API endpoint functionality".to_string(),
-                TaskType::Development,
-            ),
-            AgentRole::DevOps { .. } => (
-                "Verify Docker container build".to_string(),
-                TaskType::Infrastructure,
-            ),
-            AgentRole::QA { .. } => ("Verify test suite execution".to_string(), TaskType::Testing),
-            AgentRole::Master { .. } => (
-                "Verify coordination capabilities".to_string(),
-                TaskType::Coordination,
-            ),
-            AgentRole::Search { .. } => (
-                "Verify search capabilities".to_string(),
-                TaskType::Assistance,
-            ),
-        };
-
-        Task::new(
-            Uuid::new_v4().to_string(),
-            description,
-            Priority::Low,
-            task_type,
-        )
-        .with_details("Boundary verification test".to_string())
+        tracing::info!(
+            "Boundary verification passed for agent: {} (scope validation delegated to Claude Code hooks)",
+            self.identity.agent_id
+        );
+        Ok(())
     }
 
     /// Setup container for agent execution
@@ -473,72 +429,15 @@ impl ClaudeCodeAgent {
         self.current_task = Some(task.clone());
         self.last_activity = Utc::now();
 
-        // Evaluate task boundaries
-        let checker = TaskBoundaryChecker::new(self.identity.specialization.clone());
-        let evaluation = checker.evaluate_task(&task).await;
+        // Task boundary checking is now handled by Claude Code hooks.
+        // All tasks are accepted here; scope validation happens at the hook layer.
+        tracing::info!("Task accepted by {}", self.identity.agent_id);
 
-        let result = match evaluation {
-            TaskEvaluation::Accept { reason } => {
-                tracing::info!("Task accepted by {}: {}", self.identity.agent_id, reason);
-
-                // Check if this is a complex task that needs orchestration
-                if self.is_complex_task(&task) {
-                    tracing::info!("Task identified as complex, using agent orchestrator");
-                    self.execute_task_with_orchestration(task.clone()).await?
-                } else {
-                    self.execute_task_with_monitoring(task.clone()).await?
-                }
-            }
-            TaskEvaluation::Delegate {
-                target_agent,
-                suggestion,
-                ..
-            } => {
-                tracing::info!(
-                    "Task delegated by {} to {}",
-                    self.identity.agent_id,
-                    target_agent
-                );
-                TaskResult {
-                    success: false,
-                    output: serde_json::json!({
-                        "action": "delegated",
-                        "target": target_agent,
-                        "suggestion": suggestion,
-                    }),
-                    error: None,
-                    duration: std::time::Duration::from_secs(0),
-                }
-            }
-            TaskEvaluation::Clarify { questions, .. } => {
-                tracing::info!(
-                    "Task requires clarification from {}",
-                    self.identity.agent_id
-                );
-                TaskResult {
-                    success: false,
-                    output: serde_json::json!({
-                        "action": "clarification_needed",
-                        "questions": questions,
-                    }),
-                    error: None,
-                    duration: std::time::Duration::from_secs(0),
-                }
-            }
-            TaskEvaluation::Reject { reason } => {
-                tracing::warn!("Task rejected by {}: {}", self.identity.agent_id, reason);
-
-                // Record rejection as a learning event
-                self.phronesis
-                    .record_learning_event(format!("Task rejected: {}", reason), false);
-
-                TaskResult {
-                    success: false,
-                    output: serde_json::json!({}),
-                    error: Some(format!("Task rejected: {}", reason)),
-                    duration: std::time::Duration::from_secs(0),
-                }
-            }
+        let result = if self.is_complex_task(&task) {
+            tracing::info!("Task identified as complex, using agent orchestrator");
+            self.execute_task_with_orchestration(task.clone()).await?
+        } else {
+            self.execute_task_with_monitoring(task.clone()).await?
         };
 
         self.status = if result.success {
@@ -605,7 +504,6 @@ impl ClaudeCodeAgent {
             _ => {} // Continue with execution
         }
 
-        let mut monitor = IdentityMonitor::new(&self.identity.agent_id);
         let mut thinking_engine = InterleavedThinkingEngine::new().with_config(
             crate::agent::interleaved_thinking::ThinkingConfig {
                 max_depth: 15,
@@ -672,9 +570,7 @@ impl ClaudeCodeAgent {
             self.whiteboard
                 .add_thought(&thought_trace_id, &format!("Observation: {}", observation));
 
-            let identity_status = monitor.monitor_response(&output).await?;
-            self.handle_identity_status(identity_status, &mut monitor)
-                .await?;
+            // Identity monitoring is now handled by Claude Code hooks
 
             let thinking_step = ThinkingStep::new(
                 observation.clone(),
@@ -1101,41 +997,6 @@ impl ClaudeCodeAgent {
         }
     }
 
-    /// Handle identity status from monitoring
-    async fn handle_identity_status(
-        &mut self,
-        status: IdentityStatus,
-        monitor: &mut IdentityMonitor,
-    ) -> Result<()> {
-        match status {
-            IdentityStatus::Healthy => {
-                tracing::debug!("Identity maintained during task execution");
-                Ok(())
-            }
-            IdentityStatus::DriftDetected(msg) => {
-                tracing::warn!("Identity drift detected: {}", msg);
-
-                // Record drift as learning event
-                self.phronesis
-                    .record_learning_event(format!("Identity drift detected: {}", msg), false);
-
-                self.correct_identity_drift(monitor).await
-            }
-            IdentityStatus::BoundaryViolation(msg) => {
-                // Record boundary violation
-                self.phronesis
-                    .record_failure(format!("Boundary violation: {}", msg));
-                Err(anyhow::anyhow!("Boundary violation detected: {}", msg))
-            }
-            IdentityStatus::CriticalFailure(msg) => {
-                // Record critical failure
-                self.phronesis
-                    .record_failure(format!("Critical identity failure: {}", msg));
-                Err(anyhow::anyhow!("Critical identity failure: {}", msg))
-            }
-        }
-    }
-
     /// Refine prompt based on thinking engine feedback
     fn refine_prompt(&self, original_prompt: &str, refinement: &str, task: &Task) -> String {
         format!(
@@ -1283,21 +1144,6 @@ impl ClaudeCodeAgent {
         // Temporarily disabled - container functionality not available
         // Fall back to real API implementation
         self.execute_claude_real_api(prompt).await
-    }
-
-    /// Correct identity drift
-    async fn correct_identity_drift(&self, monitor: &mut IdentityMonitor) -> Result<()> {
-        let correction_prompt = monitor.generate_correction_prompt(
-            &self.worktree_path.to_string_lossy(),
-            self.identity.specialization.name(),
-        );
-
-        let _ = self.execute_claude_command(&correction_prompt).await?;
-        tracing::info!(
-            "Identity drift correction applied for agent: {}",
-            self.identity.agent_id
-        );
-        Ok(())
     }
 
     /// Report agent status to coordination system
