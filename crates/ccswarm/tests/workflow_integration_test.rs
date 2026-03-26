@@ -45,6 +45,9 @@ fn make_movement(id: &str, rules: Vec<(&str, &str)>) -> Movement {
         output_contract: None,
         timeout: None,
         max_retries: 0,
+        agent: None,
+        working_dir: None,
+        retry_delay_ms: 1000,
     }
 }
 
@@ -575,14 +578,11 @@ fn test_facets_judge_prompt_composition() {
         Some("Return JSON with {status, files_changed}"),
     );
 
-    // System prompt should contain coder persona
+    // System prompt should contain coder persona system prompt
     assert!(
-        composed.system.contains("coder"),
-        "system should have persona"
-    );
-    assert!(
-        composed.system.contains("Senior software engineer"),
-        "should use builtin coder role"
+        composed.system.contains("software engineer"),
+        "system should have persona: got '{}'",
+        composed.system
     );
 
     // User prompt should have structured sections

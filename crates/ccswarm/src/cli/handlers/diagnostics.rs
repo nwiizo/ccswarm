@@ -450,26 +450,4 @@ impl CliRunner {
 
         Ok(())
     }
-
-    pub(crate) async fn handle_verify(
-        &self,
-        _path: &Path,
-        _backend_port: u16,
-        _skip_deps: bool,
-    ) -> Result<()> {
-        if self.json_output {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "removed",
-                    "message": "Verification agent has been removed. Use 'ccswarm quality check' instead.",
-                }))?
-            );
-        } else {
-            println!("Verification agent has been removed.");
-            println!("Use 'ccswarm quality check' for build and test verification.");
-        }
-
-        Ok(())
-    }
 }

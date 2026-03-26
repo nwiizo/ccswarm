@@ -141,6 +141,22 @@ pub struct Movement {
     /// Number of retries on failure
     #[serde(default)]
     pub max_retries: u32,
+
+    /// Claude Code agent name for --agent flag routing
+    #[serde(default)]
+    pub agent: Option<String>,
+
+    /// Working directory override for this movement
+    #[serde(default)]
+    pub working_dir: Option<String>,
+
+    /// Retry delay in milliseconds (default: 1000)
+    #[serde(default = "default_retry_delay")]
+    pub retry_delay_ms: u64,
+}
+
+fn default_retry_delay() -> u64 {
+    1000
 }
 
 /// Permission level for a movement
@@ -865,7 +881,7 @@ impl PieceEngine {
         // Add permission context
         parts.push(format!("Permission level: {:?}", movement.permission));
 
-        // Add relevant variable context from previous movements
+        // Inject context from previous movements for continuity
         if !state.variables.is_empty() {
             let var_summary: Vec<String> = state
                 .variables
@@ -873,11 +889,33 @@ impl PieceEngine {
                 .filter(|(k, _)| k.ends_with("_output"))
                 .map(|(k, v)| {
                     let key = k.trim_end_matches("_output");
-                    format!("Previous '{}' output: {}", key, v)
+                    // Extract the actual output text from JSON if possible
+                    let output_text = v
+                        .as_object()
+                        .and_then(|obj| obj.get("output"))
+                        .and_then(|o| o.as_str())
+                        .map(|s| truncate_for_context(s, 2000))
+                        .unwrap_or_else(|| truncate_for_context(&v.to_string(), 500));
+                    format!("[Previous '{}' result]:\n{}", key, output_text)
                 })
                 .collect();
             if !var_summary.is_empty() {
-                parts.push(format!("Context:\n{}", var_summary.join("\n")));
+                parts.push(format!(
+                    "## Context from previous steps\n\n{}",
+                    var_summary.join("\n\n")
+                ));
+            }
+        }
+
+        // Also inject ai-session context if bridge is available
+        if let Some(ref bridge) = self.bridge {
+            let agent_id = movement.persona.as_deref().unwrap_or("default");
+            let recent = bridge.get_recent_context(agent_id, 3);
+            if !recent.is_empty() {
+                parts.push(format!(
+                    "## Recent conversation context\n\n{}",
+                    recent.join("\n")
+                ));
             }
         }
 
@@ -1142,6 +1180,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
                 Movement {
                     id: "implement".to_string(),
@@ -1175,6 +1216,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 1,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
                 Movement {
                     id: "review".to_string(),
@@ -1204,6 +1248,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
                 Movement {
                     id: "fix".to_string(),
@@ -1230,6 +1277,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 2,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
                 Movement {
                     id: "complete".to_string(),
@@ -1247,6 +1297,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
             ],
             variables: HashMap::new(),
@@ -1285,6 +1338,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
                 Movement {
                     id: "summarize".to_string(),
@@ -1312,6 +1368,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     }),
                     timeout: None,
                     max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
             ],
             variables: HashMap::new(),
@@ -1352,6 +1411,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
                 Movement {
                     id: "fix".to_string(),
@@ -1378,6 +1440,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 2,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
                 Movement {
                     id: "done".to_string(),
@@ -1395,6 +1460,9 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     output_contract: None,
                     timeout: None,
                     max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
                 },
             ],
             variables: HashMap::new(),
@@ -1402,6 +1470,15 @@ pub fn builtin_pieces() -> Vec<Piece> {
             interactive_mode: None,
         },
     ]
+}
+
+/// Truncate a string for inclusion in prompt context, preserving meaning
+fn truncate_for_context(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}... [truncated]", &s[..max_len])
+    }
 }
 
 #[cfg(test)]

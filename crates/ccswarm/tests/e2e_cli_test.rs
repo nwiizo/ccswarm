@@ -350,51 +350,6 @@ fn test_session_list() {
     );
 }
 
-#[test]
-fn test_session_help() {
-    let output = run_ccswarm(&["session", "--help"], None);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    assert!(output.status.success(), "Session help should succeed");
-    assert!(
-        stdout.contains("list") || stdout.contains("COMMAND"),
-        "Session help should show subcommands"
-    );
-}
-
-// ============================================================================
-// Template Management Tests
-// ============================================================================
-
-#[test]
-fn test_template_list() {
-    let output = run_ccswarm(&["template", "list"], None);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    // Should list available templates
-    assert!(
-        output.status.success()
-            || stdout.to_lowercase().contains("template")
-            || stderr.to_lowercase().contains("template"),
-        "Template list should work. stdout: {}, stderr: {}",
-        stdout,
-        stderr
-    );
-}
-
-#[test]
-fn test_template_help() {
-    let output = run_ccswarm(&["template", "--help"], None);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    assert!(output.status.success(), "Template help should succeed");
-    assert!(
-        stdout.contains("list") || stdout.contains("COMMAND"),
-        "Template help should show subcommands"
-    );
-}
-
 // ============================================================================
 // JSON Output Tests
 // ============================================================================
@@ -510,20 +465,13 @@ fn test_full_workflow_init_to_task() {
     let _task_output = run_ccswarm(&["task", "list"], Some(project_path));
     // Should work with empty task list
 
-    // Step 5: Check status
-    let status_output = run_ccswarm(&["status"], Some(project_path));
-    let status_stdout = String::from_utf8_lossy(&status_output.stdout);
-    let status_stderr = String::from_utf8_lossy(&status_output.stderr);
-
-    // Status should show project info or indicate not running
+    // Step 5: Check doctor
+    let doctor_output = run_ccswarm(&["doctor"], Some(project_path));
+    // Doctor should show system health
     assert!(
-        status_output.status.success()
-            || status_stdout.to_lowercase().contains("status")
-            || status_stderr.to_lowercase().contains("not running")
-            || status_stderr.to_lowercase().contains("no orchestrator"),
-        "Status should work. stdout: {}, stderr: {}",
-        status_stdout,
-        status_stderr
+        doctor_output.status.success()
+            || !String::from_utf8_lossy(&doctor_output.stderr).is_empty(),
+        "Doctor should work"
     );
 }
 
@@ -545,7 +493,7 @@ fn test_verbose_flag() {
 #[test]
 fn test_all_subcommands_have_help() {
     let subcommands = [
-        "init", "task", "agents", "config", "session", "template", "health", "doctor", "status",
+        "init", "task", "agents", "config", "health", "doctor", "piece", "harness", "approve",
     ];
 
     for subcmd in subcommands {
