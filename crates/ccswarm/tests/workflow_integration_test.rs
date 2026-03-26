@@ -48,6 +48,7 @@ fn make_movement(id: &str, rules: Vec<(&str, &str)>) -> Movement {
         agent: None,
         working_dir: None,
         retry_delay_ms: 1000,
+        pass_previous_response: true,
     }
 }
 
@@ -580,7 +581,7 @@ fn test_facets_judge_prompt_composition() {
 
     // System prompt should contain coder persona system prompt
     assert!(
-        composed.system.contains("software engineer"),
+        composed.system.contains("implementer"),
         "system should have persona: got '{}'",
         composed.system
     );

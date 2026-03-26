@@ -1,0 +1,13 @@
+{
+  "run_id": "1841ea47-d3ea-4d21-b523-96481baf5f58",
+  "started_at": "2026-03-26T12:53:12.007244Z",
+  "ended_at": "2026-03-26T12:56:59.946250Z",
+  "total_events": 10,
+  "tasks_completed": 1,
+  "tasks_failed": 0,
+  "agents_used": [
+    "plan",
+    "review",
+    "implement"
+  ]
+}

@@ -153,6 +153,15 @@ pub struct Movement {
     /// Retry delay in milliseconds (default: 1000)
     #[serde(default = "default_retry_delay")]
     pub retry_delay_ms: u64,
+
+    /// Whether to pass previous movement's response as context (default: true)
+    /// Set to false for fix movements where fresh context is preferred
+    #[serde(default = "default_true")]
+    pub pass_previous_response: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_retry_delay() -> u64 {
@@ -1053,7 +1062,8 @@ impl PieceEngine {
         parts.push(format!("Permission level: {:?}", movement.permission));
 
         // Inject context from previous movements for continuity
-        if !state.variables.is_empty() {
+        // (skip if pass_previous_response is false — used for fix movements)
+        if movement.pass_previous_response && !state.variables.is_empty() {
             let var_summary: Vec<String> = state
                 .variables
                 .iter()
@@ -1354,6 +1364,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
                 Movement {
                     id: "implement".to_string(),
@@ -1390,6 +1401,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
                 Movement {
                     id: "review".to_string(),
@@ -1422,6 +1434,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
                 Movement {
                     id: "fix".to_string(),
@@ -1451,6 +1464,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
                 Movement {
                     id: "complete".to_string(),
@@ -1471,6 +1485,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
             ],
             variables: HashMap::new(),
@@ -1512,6 +1527,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
                 Movement {
                     id: "summarize".to_string(),
@@ -1542,6 +1558,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
             ],
             variables: HashMap::new(),
@@ -1585,6 +1602,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
                 Movement {
                     id: "fix".to_string(),
@@ -1614,6 +1632,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
                 Movement {
                     id: "done".to_string(),
@@ -1634,6 +1653,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     agent: None,
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
                 },
             ],
             variables: HashMap::new(),
@@ -1673,6 +1693,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                 agent: None,
                 working_dir: None,
                 retry_delay_ms: default_retry_delay(),
+                pass_previous_response: true,
             }],
             variables: HashMap::new(),
             metadata: HashMap::new(),

@@ -346,6 +346,7 @@ mod tests {
             agent: None,
             working_dir: None,
             retry_delay_ms: 1000,
+            pass_previous_response: true,
         }
     }
 
