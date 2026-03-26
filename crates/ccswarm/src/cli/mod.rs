@@ -399,6 +399,20 @@ pub enum Commands {
         #[command(subcommand)]
         action: ApproveAction,
     },
+
+    /// View past pipeline runs recorded in .ccswarm/runs/
+    #[command(
+        long_about = "Browse pipeline run history stored in .ccswarm/runs/.\n\n\
+        Each run directory contains events.ndjson and summary.json produced\n\
+        by the pipeline runner.\n\n\
+        Examples:\n  \
+          ccswarm run list\n  \
+          ccswarm run view <run-id>"
+    )]
+    Run {
+        #[command(subcommand)]
+        action: RunAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -573,6 +587,17 @@ pub enum ApproveAction {
     List {
         #[arg(short, long)]
         status: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RunAction {
+    /// List past pipeline runs (sorted by date, newest first)
+    List,
+    /// View details and events for a specific run
+    View {
+        /// Run ID to inspect
+        id: String,
     },
 }
 

@@ -467,6 +467,21 @@ pub struct PieceEngine {
     event_recorder: Option<crate::events::EventRecorder>,
     /// Last known execution state (for partial result recovery on timeout)
     last_state: std::sync::Arc<tokio::sync::RwLock<Option<PieceState>>>,
+    /// Progress callback for real-time movement completion notifications
+    progress_tx: Option<tokio::sync::mpsc::UnboundedSender<MovementProgress>>,
+}
+
+/// Progress notification sent after each movement completes
+#[derive(Debug, Clone)]
+pub struct MovementProgress {
+    /// Movement ID
+    pub movement_id: String,
+    /// Duration in milliseconds
+    pub duration_ms: u64,
+    /// Whether it succeeded
+    pub success: bool,
+    /// Movement count so far
+    pub movements_completed: usize,
 }
 
 impl PieceEngine {
@@ -492,6 +507,7 @@ impl PieceEngine {
             working_dir: std::path::PathBuf::from("."),
             event_recorder: None,
             last_state: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
+            progress_tx: None,
         }
     }
 
@@ -525,6 +541,14 @@ impl PieceEngine {
     /// Get the last known execution state (for partial result recovery on timeout)
     pub async fn get_last_state(&self) -> Option<PieceState> {
         self.last_state.read().await.clone()
+    }
+
+    /// Set a progress channel for real-time movement completion notifications
+    pub fn set_progress_channel(
+        &mut self,
+        tx: tokio::sync::mpsc::UnboundedSender<MovementProgress>,
+    ) {
+        self.progress_tx = Some(tx);
     }
 
     /// Load a piece from a YAML file
@@ -720,6 +744,16 @@ impl PieceEngine {
 
             // Save intermediate state for timeout recovery
             *self.last_state.write().await = Some(state.clone());
+
+            // Notify progress listener
+            if let Some(ref tx) = self.progress_tx {
+                let _ = tx.send(MovementProgress {
+                    movement_id: movement.id.clone(),
+                    duration_ms: movement_duration_ms,
+                    success: true,
+                    movements_completed: state.movement_count as usize,
+                });
+            }
 
             // Record movement end with duration metadata
             self.record_event(
@@ -1591,6 +1625,44 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     retry_delay_ms: default_retry_delay(),
                 },
             ],
+            variables: HashMap::new(),
+            metadata: HashMap::new(),
+            interactive_mode: None,
+        },
+        // Quick single-shot workflow (1 Claude call, fastest)
+        Piece {
+            name: "quick".to_string(),
+            description: "Single-shot execution: one Claude call, no plan/review overhead"
+                .to_string(),
+            max_movements: 1,
+            initial_movement: "execute".to_string(),
+            movements: vec![Movement {
+                id: "execute".to_string(),
+                persona: Some("coder".to_string()),
+                policy: Some("coding".to_string()),
+                knowledge: None,
+                provider: None,
+                model: None,
+                instruction: "Execute the task directly. Write clean, working code.".to_string(),
+                tools: vec![
+                    "read".to_string(),
+                    "write".to_string(),
+                    "edit".to_string(),
+                    "bash".to_string(),
+                    "grep".to_string(),
+                    "glob".to_string(),
+                ],
+                permission: MovementPermission::Edit,
+                rules: vec![], // Terminal - single shot
+                parallel: false,
+                sub_movements: vec![],
+                output_contract: None,
+                timeout: None,
+                max_retries: 1,
+                agent: None,
+                working_dir: None,
+                retry_delay_ms: default_retry_delay(),
+            }],
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,

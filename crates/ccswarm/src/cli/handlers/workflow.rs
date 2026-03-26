@@ -165,8 +165,29 @@ impl CliRunner {
             engine.set_event_recorder(recorder);
         }
 
+        // Set up real-time progress display
+        let (progress_tx, mut progress_rx) =
+            tokio::sync::mpsc::unbounded_channel::<crate::workflow::piece::MovementProgress>();
+        engine.set_progress_channel(progress_tx);
+
+        // Spawn progress display task
+        let progress_handle = tokio::spawn(async move {
+            while let Some(progress) = progress_rx.recv().await {
+                let status = if progress.success {
+                    "\u{2713}"
+                } else {
+                    "\u{2717}"
+                };
+                let secs = progress.duration_ms as f64 / 1000.0;
+                eprintln!("  {} {} ({:.1}s)", status, progress.movement_id, secs);
+            }
+        });
+
         let runner = PipelineRunner::with_engine(engine);
         let result = runner.execute(config).await?;
+
+        // Clean up progress display
+        drop(progress_handle);
 
         // Format output based on requested format
         let formatted = match output_format {
