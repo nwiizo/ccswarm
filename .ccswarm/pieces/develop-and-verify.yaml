@@ -1,0 +1,49 @@
+name: develop-and-verify
+description: "Development workflow with automated E2E verification loop: plan → implement → test → fix (repeats until tests pass)"
+max_movements: 15
+initial_movement: plan
+
+movements:
+  - id: plan
+    persona: planner
+    instruction: "Analyze the task and create a detailed implementation plan. Include file structure, key components, and testing strategy."
+    tools: [read, grep, glob]
+    permission: readonly
+    rules:
+      - condition: success
+        next: implement
+
+  - id: implement
+    persona: coder
+    instruction: "Implement the plan from the previous step. Write clean, working code. Include data-testid attributes on all interactive HTML elements for testing."
+    tools: [read, write, edit, bash]
+    permission: edit
+    max_retries: 1
+    rules:
+      - condition: success
+        next: verify
+
+  - id: verify
+    persona: reviewer
+    instruction: "Run the test suite. Execute: npx playwright test 2>&1. If tests fail, analyze the failures and list exactly what needs to be fixed. Include the exact error messages."
+    tools: [read, bash]
+    permission: readonly
+    rules:
+      - condition: success
+        next: complete
+      - condition: needs_fix
+        next: fix
+
+  - id: fix
+    persona: coder
+    instruction: "Fix the issues identified in the verify step. Focus on the exact errors reported. Do not refactor unrelated code."
+    tools: [read, write, edit, bash]
+    permission: edit
+    max_retries: 1
+    retry_delay_ms: 2000
+    rules:
+      - condition: success
+        next: verify
+
+  - id: complete
+    instruction: "Summarize what was built and verified. List all files created/modified and test results."

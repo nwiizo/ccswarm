@@ -145,6 +145,20 @@ impl CliRunner {
         engine.set_bridge(std::sync::Arc::new(bridge));
         engine.set_working_dir(self.repo_path.clone());
 
+        // Load custom pieces from .ccswarm/pieces/
+        let custom_pieces_dir = self.repo_path.join(".ccswarm").join("pieces");
+        if let Ok(mut entries) = tokio::fs::read_dir(&custom_pieces_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                let is_yaml = path
+                    .extension()
+                    .is_some_and(|ext| ext == "yaml" || ext == "yml");
+                if is_yaml && let Err(e) = engine.load_piece(&path).await {
+                    warn!("Failed to load custom piece {:?}: {}", path, e);
+                }
+            }
+        }
+
         // Configure event recorder for observability
         let run_id = uuid::Uuid::new_v4().to_string();
         if let Ok(recorder) = crate::events::EventRecorder::new(&run_id).await {
