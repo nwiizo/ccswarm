@@ -116,6 +116,15 @@ Review agents run as subagents (not teams):
 
 ## Development Learnings
 
+### Pipeline Usage (from real-world testing)
+- **Task description size**: Large task descriptions (>500 words) cause implement movement to exceed 600s timeout. Split complex tasks into multiple pipeline runs or use the `develop-and-verify` piece with smaller steps.
+- **Complete movement**: Use empty instruction (`""`) for terminal movements to skip Claude CLI call. Local summary is instant vs ~12s for Claude.
+- **Template variables**: Use `{task}`, `{plan_output}`, `{verify_output}` in movement instructions for inter-step context. Variables auto-expand from `state.variables`.
+- **Custom pieces**: Place YAML files in `.ccswarm/pieces/` for auto-loading. Builtin pieces: `default`, `research`, `review-fix`.
+- **data-testid**: Include data-testid requirements in the task description for Playwright-testable output. Claude generates them if explicitly asked.
+- **Timeout tuning**: Default 600s is often not enough for complex implement movements. Consider `--timeout 900` or splitting tasks.
+- **AI-Session context**: The `--resume` flag is sent to Claude Code CLI but may not work as expected in all versions. Context passing between movements uses the prompt injection approach (state.variables).
+
 ### Error Handling
 - `CCSwarmError` uses struct variants: `Agent { agent_id, message, source }`, `Session { session_id, message, source }`, `Configuration { field, message }`
 - Helper constructors: `CCSwarmError::config()`, `agent()`, `session()`, `task()`, `git()`, `user_error()`
