@@ -766,6 +766,17 @@ impl PieceEngine {
                 .with_movement(&movement.id)
                 .with_metadata(serde_json::json!({
                     "duration_ms": movement_duration_ms,
+                    "output_preview": output
+                        .as_object()
+                        .and_then(|o| o.get("output"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| truncate_for_context(s, 500))
+                        .unwrap_or_default(),
+                    "status": output
+                        .as_object()
+                        .and_then(|o| o.get("status"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown"),
                 })),
             )
             .await;

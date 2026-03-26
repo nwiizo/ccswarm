@@ -213,7 +213,63 @@ impl CliRunner {
             std::process::exit(result.exit_code().as_code());
         }
 
+        // Suggest next commands based on generated files
+        self.suggest_next_steps(&run_id).await;
+
         Ok(())
+    }
+
+    /// Suggest next commands after successful pipeline execution
+    async fn suggest_next_steps(&self, run_id: &str) {
+        let repo = &self.repo_path;
+        let mut suggestions = Vec::new();
+
+        // Detect project type and suggest appropriate commands
+        if repo.join("playwright.config.ts").exists() || repo.join("playwright.config.js").exists()
+        {
+            suggestions.push(format!(
+                "cd {} && npx playwright test           # Run E2E tests",
+                repo.display()
+            ));
+        }
+        if repo.join("package.json").exists() && repo.join("public").exists() {
+            suggestions.push(format!(
+                "cd {} && npx serve public -l 3000       # Open http://localhost:3000",
+                repo.display()
+            ));
+        }
+        if repo.join("Cargo.toml").exists() {
+            suggestions.push(format!(
+                "cd {} && cargo run                         # Run the app",
+                repo.display()
+            ));
+        }
+        if repo.join("go.mod").exists() {
+            suggestions.push(format!(
+                "cd {} && go run .                          # Run the app",
+                repo.display()
+            ));
+        }
+        if repo.join("requirements.txt").exists() || repo.join("pyproject.toml").exists() {
+            suggestions.push(format!(
+                "cd {} && python main.py                    # Run the app",
+                repo.display()
+            ));
+        }
+        let short_id = &run_id[..8.min(run_id.len())];
+        suggestions.push(format!("ccswarm run view {short_id}   # View run details"));
+        suggestions.push(
+            "ccswarm pipeline --piece review-fix --task \"Review and fix issues\"   # Iterate"
+                .to_string(),
+        );
+
+        if !suggestions.is_empty() {
+            eprintln!();
+            eprintln!("{}", "Next steps:".bright_cyan().bold());
+            for s in &suggestions {
+                eprintln!("  {}", s);
+            }
+        }
     }
 
     pub(crate) async fn handle_piece(&self, action: &PieceAction) -> Result<()> {
