@@ -795,6 +795,24 @@ impl PieceEngine {
                 .variables
                 .insert(format!("{}_output", movement.id), output.clone());
 
+            // Save movement report to .ccswarm/runs/{run-id}/reports/{movement}.md
+            if !run_id.is_empty() {
+                let report_dir = std::path::PathBuf::from(".ccswarm")
+                    .join("runs")
+                    .join(&run_id)
+                    .join("reports");
+                let _ = tokio::fs::create_dir_all(&report_dir).await;
+                let report_content = output
+                    .as_object()
+                    .and_then(|o| o.get("output"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if !report_content.is_empty() {
+                    let report_path = report_dir.join(format!("{}.md", movement.id));
+                    let _ = tokio::fs::write(&report_path, report_content).await;
+                }
+            }
+
             // Check if terminal (no rules = done)
             if movement.rules.is_empty() {
                 info!(

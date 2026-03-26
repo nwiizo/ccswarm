@@ -105,8 +105,8 @@ impl CommandRegistry {
         );
 
         register_command!(self, "pipeline", runner, cmd,
-            Commands::Pipeline { task, piece, output_format, timeout, verbose, output_file, .. } =>
-            runner.handle_pipeline(task, piece, output_format, *timeout, *verbose, output_file.as_deref())
+            Commands::Pipeline { task, piece, output_format, timeout, verbose, output_file, isolate, budget, model_override, auto_commit, create_pr, .. } =>
+            runner.handle_pipeline(task, piece, output_format, *timeout, *verbose, output_file.as_deref(), *isolate, *budget, model_override.as_deref(), *auto_commit, *create_pr)
         );
 
         register_command!(self, "help", runner, cmd,
