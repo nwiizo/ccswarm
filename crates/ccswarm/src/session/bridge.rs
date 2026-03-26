@@ -1,8 +1,8 @@
 //! AISessionBridge: Claude Code CLI execution + ai-session result management
 //!
 //! This module bridges the gap between ccswarm's orchestration layer and the ai-session
-//! crate. It uses `ClaudeCodeExecutor` for actual Claude Code CLI execution, and ai-session's
-//! subsystems for context compression, output parsing, inter-agent messaging, and persistence.
+//! crate. It uses direct CLI subprocess execution and ai-session's subsystems for context
+//! compression, output parsing, inter-agent messaging, and persistence.
 
 use anyhow::{Context as _, Result};
 use dashmap::DashMap;
@@ -17,8 +17,6 @@ use ai_session::output::{OutputParser, ParsedOutput};
 use ai_session::persistence::PersistenceManager;
 
 use crate::identity::AgentIdentity;
-use crate::providers::claude_code::ClaudeCodeExecutor;
-use crate::providers::{ClaudeCodeConfig, ProviderExecutor};
 
 /// Result of an AISessionBridge execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,14 +32,12 @@ pub struct BridgeResult {
 /// Claude Code CLI execution + ai-session result management layer.
 ///
 /// This bridge provides:
-/// - Real Claude Code CLI execution via `ClaudeCodeExecutor`
+/// - Direct Claude Code CLI execution via subprocess
 /// - zstd context compression via ai-session's `TokenEfficientHistory` (93% token reduction)
 /// - Semantic output parsing via ai-session's `OutputParser`
 /// - Inter-agent messaging via ai-session's `MessageBus`
 /// - Session persistence via ai-session's `PersistenceManager`
 pub struct AISessionBridge {
-    /// Claude Code CLI executor (spawns `claude -p ...` subprocess)
-    executor: ClaudeCodeExecutor,
     /// Per-agent context histories (zstd compressed)
     context_histories: DashMap<String, SessionContext>,
     /// Inter-agent message bus
@@ -55,22 +51,9 @@ pub struct AISessionBridge {
 }
 
 impl AISessionBridge {
-    /// Create a new AISessionBridge with default Claude Code configuration
-    pub fn new(config: ClaudeCodeConfig, storage_path: PathBuf) -> Self {
+    /// Create a new AISessionBridge
+    pub fn new(storage_path: PathBuf) -> Self {
         Self {
-            executor: ClaudeCodeExecutor::new(config),
-            context_histories: DashMap::new(),
-            message_bus: Arc::new(MessageBus::new()),
-            output_parser: OutputParser::new(),
-            persistence: PersistenceManager::new(storage_path),
-            agent_mappings: DashMap::new(),
-        }
-    }
-
-    /// Create a new AISessionBridge with a custom executor
-    pub fn with_executor(executor: ClaudeCodeExecutor, storage_path: PathBuf) -> Self {
-        Self {
-            executor,
             context_histories: DashMap::new(),
             message_bus: Arc::new(MessageBus::new()),
             output_parser: OutputParser::new(),
@@ -105,7 +88,7 @@ impl AISessionBridge {
     /// Execute a task via Claude Code CLI and manage results with ai-session.
     ///
     /// Flow:
-    /// 1. Execute `claude -p <prompt>` via `ClaudeCodeExecutor`
+    /// 1. Execute `claude -p <prompt>` via subprocess
     /// 2. Parse output with ai-session's `OutputParser`
     /// 3. Store in context history (zstd compressed when threshold reached)
     /// 4. Broadcast result to other agents via message bus
@@ -114,14 +97,23 @@ impl AISessionBridge {
         &self,
         agent_id: &str,
         prompt: &str,
-        identity: &AgentIdentity,
+        _identity: &AgentIdentity,
         working_dir: &Path,
     ) -> Result<BridgeResult> {
         // 1. Execute Claude Code CLI via subprocess
-        let raw_output: String =
-            ProviderExecutor::execute_prompt(&self.executor, prompt, identity, working_dir)
-                .await
-                .context("Claude Code CLI execution failed")?;
+        let output = tokio::process::Command::new("claude")
+            .args(["-p", prompt, "--output-format", "text"])
+            .current_dir(working_dir)
+            .output()
+            .await
+            .context("Failed to execute Claude Code CLI")?;
+
+        let raw_output = if output.status.success() {
+            String::from_utf8_lossy(&output.stdout).to_string()
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!("Claude Code CLI failed: {}", stderr));
+        };
 
         // 2. Parse output semantically with ai-session
         let parsed = self
@@ -143,7 +135,7 @@ impl AISessionBridge {
         // 4. Notify other agents via message bus
         if let Some(ai_agent_id) = self.agent_mappings.get(agent_id) {
             let task_id = ai_session::coordination::TaskId::new();
-            let msg = AgentMessage::TaskCompleted {
+            let _msg = AgentMessage::TaskCompleted {
                 agent_id: ai_agent_id.clone(),
                 task_id,
                 result: serde_json::json!({
@@ -158,7 +150,11 @@ impl AISessionBridge {
                 ai_session::BroadcastMessage {
                     id: uuid::Uuid::new_v4(),
                     from: ai_agent_id.clone(),
-                    content: serde_json::to_string(&msg).unwrap_or_default(),
+                    content: serde_json::json!({
+                        "agent": agent_id,
+                        "success": success,
+                    })
+                    .to_string(),
                     priority: ai_session::MessagePriority::Normal,
                     timestamp: chrono::Utc::now(),
                 },
@@ -253,15 +249,13 @@ mod tests {
 
     #[test]
     fn test_bridge_creation() {
-        let config = ClaudeCodeConfig::default();
-        let bridge = AISessionBridge::new(config, PathBuf::from("/tmp/ccswarm-test"));
+        let bridge = AISessionBridge::new(PathBuf::from("/tmp/ccswarm-test"));
         assert_eq!(bridge.agent_count(), 0);
     }
 
     #[test]
     fn test_agent_registration() {
-        let config = ClaudeCodeConfig::default();
-        let bridge = AISessionBridge::new(config, PathBuf::from("/tmp/ccswarm-test"));
+        let bridge = AISessionBridge::new(PathBuf::from("/tmp/ccswarm-test"));
         bridge.register_agent("frontend-agent").unwrap();
         assert_eq!(bridge.agent_count(), 1);
     }

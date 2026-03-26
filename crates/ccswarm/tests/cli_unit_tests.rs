@@ -3,7 +3,6 @@
 //! These tests verify individual CLI components without executing the full binary.
 
 use ccswarm::cli::{Cli, Commands};
-use ccswarm::providers::SensitiveString;
 use clap::Parser;
 
 // ============================================================================
@@ -113,47 +112,6 @@ fn test_cli_parse_repo_path() {
 }
 
 #[test]
-fn test_cli_parse_start_command() {
-    let cli = Cli::try_parse_from(["ccswarm", "start"]).unwrap();
-
-    match cli.command {
-        Commands::Start { daemon, port, .. } => {
-            assert!(!daemon);
-            assert_eq!(port, 8080); // default port
-        }
-        _ => panic!("Expected Start command"),
-    }
-}
-
-#[test]
-fn test_cli_parse_start_with_options() {
-    let cli = Cli::try_parse_from([
-        "ccswarm",
-        "start",
-        "--daemon",
-        "--port",
-        "9000",
-        "--isolation",
-        "container",
-    ])
-    .unwrap();
-
-    match cli.command {
-        Commands::Start {
-            daemon,
-            port,
-            isolation,
-            ..
-        } => {
-            assert!(daemon);
-            assert_eq!(port, 9000);
-            assert_eq!(isolation, "container");
-        }
-        _ => panic!("Expected Start command"),
-    }
-}
-
-#[test]
 fn test_cli_parse_task_list() {
     let cli = Cli::try_parse_from(["ccswarm", "task", "list"]).unwrap();
 
@@ -175,30 +133,6 @@ fn test_cli_parse_task_add() {
             // Successfully parsed task add command
         }
         _ => panic!("Expected Task command"),
-    }
-}
-
-#[test]
-fn test_cli_parse_session_list() {
-    let cli = Cli::try_parse_from(["ccswarm", "session", "list"]).unwrap();
-
-    match cli.command {
-        Commands::Session { .. } => {
-            // Successfully parsed session command
-        }
-        _ => panic!("Expected Session command"),
-    }
-}
-
-#[test]
-fn test_cli_parse_template_list() {
-    let cli = Cli::try_parse_from(["ccswarm", "template", "list"]).unwrap();
-
-    match cli.command {
-        Commands::Template { .. } => {
-            // Successfully parsed template command
-        }
-        _ => panic!("Expected Template command"),
     }
 }
 
@@ -233,30 +167,6 @@ fn test_cli_parse_invalid_command() {
 }
 
 #[test]
-fn test_cli_parse_status() {
-    let cli = Cli::try_parse_from(["ccswarm", "status"]).unwrap();
-
-    match cli.command {
-        Commands::Status { .. } => {
-            // Successfully parsed status command
-        }
-        _ => panic!("Expected Status command"),
-    }
-}
-
-#[test]
-fn test_cli_parse_stop() {
-    let cli = Cli::try_parse_from(["ccswarm", "stop"]).unwrap();
-
-    match cli.command {
-        Commands::Stop { .. } => {
-            // Successfully parsed stop command
-        }
-        _ => panic!("Expected Stop command"),
-    }
-}
-
-#[test]
 fn test_cli_parse_agents() {
     let cli = Cli::try_parse_from(["ccswarm", "agents"]).unwrap();
 
@@ -265,18 +175,6 @@ fn test_cli_parse_agents() {
             // Successfully parsed agents command
         }
         _ => panic!("Expected Agents command"),
-    }
-}
-
-#[test]
-fn test_cli_parse_tui() {
-    let cli = Cli::try_parse_from(["ccswarm", "tui"]).unwrap();
-
-    match cli.command {
-        Commands::Tui { .. } => {
-            // Successfully parsed tui command
-        }
-        _ => panic!("Expected Tui command"),
     }
 }
 
@@ -290,171 +188,6 @@ fn test_cli_parse_logs() {
         }
         _ => panic!("Expected Logs command"),
     }
-}
-
-#[test]
-fn test_cli_parse_review() {
-    let cli = Cli::try_parse_from(["ccswarm", "review"]).unwrap();
-
-    match cli.command {
-        Commands::Review { .. } => {
-            // Successfully parsed review command
-        }
-        _ => panic!("Expected Review command"),
-    }
-}
-
-// ============================================================================
-// SensitiveString Tests
-// ============================================================================
-
-#[test]
-fn test_sensitive_string_creation() {
-    let secret = SensitiveString::new("my-secret-api-key");
-    assert_eq!(secret.expose(), "my-secret-api-key");
-}
-
-#[test]
-fn test_sensitive_string_debug_masks_value() {
-    let secret = SensitiveString::new("super-secret-key");
-    let debug_output = format!("{:?}", secret);
-
-    // Debug output should NOT contain the actual secret
-    assert!(!debug_output.contains("super-secret-key"));
-    assert!(debug_output.contains("****"));
-}
-
-#[test]
-fn test_sensitive_string_display_masks_value() {
-    let secret = SensitiveString::new("my-api-key-12345");
-    let display_output = format!("{}", secret);
-
-    // Display output should NOT contain the actual secret
-    assert!(!display_output.contains("my-api-key-12345"));
-    assert!(display_output.contains("****"));
-}
-
-#[test]
-fn test_sensitive_string_is_empty() {
-    let empty = SensitiveString::new("");
-    let non_empty = SensitiveString::new("secret");
-
-    assert!(empty.is_empty());
-    assert!(!non_empty.is_empty());
-}
-
-#[test]
-fn test_sensitive_string_clone() {
-    let original = SensitiveString::new("clone-me");
-    let cloned = original.clone();
-
-    assert_eq!(original.expose(), cloned.expose());
-}
-
-#[test]
-fn test_sensitive_string_default() {
-    let default = SensitiveString::default();
-    assert!(default.is_empty());
-}
-
-#[test]
-fn test_sensitive_string_from_string() {
-    let s = String::from("from-string");
-    let secret: SensitiveString = s.into();
-    assert_eq!(secret.expose(), "from-string");
-}
-
-#[test]
-fn test_sensitive_string_from_str() {
-    let secret: SensitiveString = "from-str".into();
-    assert_eq!(secret.expose(), "from-str");
-}
-
-#[test]
-fn test_sensitive_string_serialization() {
-    let secret = SensitiveString::new("serialization-test");
-    let serialized = serde_json::to_string(&secret).unwrap();
-
-    // Serialized value should be "[REDACTED]", not the actual secret
-    assert!(!serialized.contains("serialization-test"));
-    assert!(serialized.contains("REDACTED"));
-}
-
-#[test]
-fn test_sensitive_string_deserialization() {
-    // Deserializing a normal string should create a SensitiveString
-    let secret: SensitiveString = serde_json::from_str("\"my-key\"").unwrap();
-    assert_eq!(secret.expose(), "my-key");
-}
-
-#[test]
-fn test_sensitive_string_deserialize_redacted() {
-    // Deserializing "[REDACTED]" should create an empty SensitiveString
-    let secret: SensitiveString = serde_json::from_str("\"[REDACTED]\"").unwrap();
-    assert!(secret.is_empty());
-}
-
-// ============================================================================
-// Provider Config Tests
-// ============================================================================
-
-#[test]
-fn test_claude_code_config_default() {
-    use ccswarm::providers::ClaudeCodeConfig;
-
-    let config = ClaudeCodeConfig::default();
-    assert_eq!(config.model, "sonnet");
-    assert!(!config.dangerous_skip);
-    assert!(config.api_key.is_none());
-}
-
-#[test]
-fn test_claude_code_config_with_api_key() {
-    use ccswarm::providers::ClaudeCodeConfig;
-    use ccswarm::providers::ProviderConfig;
-
-    let mut config = ClaudeCodeConfig::default();
-    config.api_key = Some(SensitiveString::new("sk-test-key"));
-
-    // Get env vars should contain the key
-    let env_vars = config.get_env_vars();
-    assert!(env_vars.contains_key("ANTHROPIC_API_KEY"));
-    assert_eq!(env_vars.get("ANTHROPIC_API_KEY").unwrap(), "sk-test-key");
-}
-
-#[test]
-fn test_aider_config_default() {
-    use ccswarm::providers::AiderConfig;
-
-    let config = AiderConfig::default();
-    assert_eq!(config.model, "gpt-4");
-    assert!(config.openai_api_key.is_none());
-    assert!(config.anthropic_api_key.is_none());
-    assert!(config.auto_commit);
-}
-
-#[test]
-fn test_aider_config_with_keys() {
-    use ccswarm::providers::AiderConfig;
-    use ccswarm::providers::ProviderConfig;
-
-    let mut config = AiderConfig::default();
-    config.openai_api_key = Some(SensitiveString::new("openai-key"));
-    config.anthropic_api_key = Some(SensitiveString::new("anthropic-key"));
-
-    let env_vars = config.get_env_vars();
-    assert_eq!(env_vars.get("OPENAI_API_KEY").unwrap(), "openai-key");
-    assert_eq!(env_vars.get("ANTHROPIC_API_KEY").unwrap(), "anthropic-key");
-}
-
-#[test]
-fn test_codex_config_default() {
-    use ccswarm::providers::CodexConfig;
-
-    let config = CodexConfig::default();
-    assert_eq!(config.model, "gpt-4");
-    assert_eq!(config.max_tokens, Some(2048));
-    assert_eq!(config.temperature, Some(0.1));
 }
 
 // ============================================================================

@@ -5,7 +5,6 @@
 
 mod command_registry;
 mod commands;
-mod subagent_commands;
 
 mod error_help;
 mod health;
@@ -35,8 +34,6 @@ use tracing::{info, warn};
 
 use crate::agent::{Priority, Task, TaskType};
 use crate::config::CcswarmConfig;
-use crate::execution::{ExecutionEngine, TaskStatus};
-use crate::orchestrator::ProactiveMaster;
 
 /// ccswarm - Claude Code integrated multi-agent system
 #[derive(Parser)]
@@ -273,12 +270,6 @@ pub enum Commands {
     Template {
         #[command(subcommand)]
         action: TemplateAction,
-    },
-
-    /// Manage Claude Code subagents
-    Subagent {
-        #[command(subcommand)]
-        command: subagent_commands::SubagentCommand,
     },
 
     /// Interactive setup wizard for new users
@@ -1453,7 +1444,6 @@ pub struct CliRunner {
     repo_path: PathBuf,
     json_output: bool,
     formatter: OutputFormatter,
-    execution_engine: Option<ExecutionEngine>,
 }
 
 impl CliRunner {
@@ -1471,50 +1461,12 @@ impl CliRunner {
 
         let formatter = create_formatter(cli.json);
 
-        // Only initialize execution engine for commands that need it.
-        // Many commands (doctor, piece, repertoire, help, config, etc.)
-        // don't need agents spawned, so skip expensive initialization.
-        let execution_engine = if Self::command_needs_engine(&cli.command) {
-            match ExecutionEngine::new(&config).await {
-                Ok(engine) => {
-                    if let Err(e) = engine.start().await {
-                        warn!("Failed to start execution engine: {}", e);
-                        None
-                    } else {
-                        Some(engine)
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to create execution engine: {}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
         Ok(Self {
             config,
             repo_path: cli.repo.clone(),
             json_output: cli.json,
             formatter,
-            execution_engine,
         })
-    }
-
-    /// Check if a command requires the execution engine (agent spawning).
-    /// Commands that only read config/display info should NOT spawn agents.
-    fn command_needs_engine(command: &Commands) -> bool {
-        matches!(
-            command,
-            Commands::Start { .. }
-                | Commands::Task { .. }
-                | Commands::Tui
-                | Commands::AutoCreate { .. }
-                | Commands::Pipeline { .. }
-                | Commands::Interactive { .. }
-                | Commands::Delegate { .. }
-        )
     }
 
     /// Run the CLI command

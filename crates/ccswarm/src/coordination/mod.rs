@@ -35,9 +35,7 @@ pub enum CoordinationType {
     Custom(String),
 }
 
-pub mod ai_message_bus;
 pub mod conversion;
-pub mod dialogue;
 pub mod mailbox;
 
 // Re-export key conversion utilities
