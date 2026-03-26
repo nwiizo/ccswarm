@@ -728,7 +728,6 @@ impl Default for SessionManager {
 }
 
 /// Session error types
-
 #[cfg(test)]
 mod tests {
     use super::*;

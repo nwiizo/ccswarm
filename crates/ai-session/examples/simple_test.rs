@@ -14,9 +14,11 @@ async fn main() -> Result<()> {
     println!("✓ Session manager created");
 
     // Create basic session configuration
-    let mut config = SessionConfig::default();
-    config.enable_ai_features = false; // Disable AI features for basic test
-    config.pty_size = (24, 80);
+    let config = SessionConfig {
+        enable_ai_features: false, // Disable AI features for basic test
+        pty_size: (24, 80),
+        ..Default::default()
+    };
 
     // Create session
     let session = manager.create_session_with_config(config).await?;

@@ -9,5 +9,6 @@ mod misc;
 pub mod run;
 mod sangha;
 pub mod scaffold;
+mod session;
 mod task;
 mod workflow;

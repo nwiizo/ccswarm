@@ -32,9 +32,11 @@ async fn main() -> Result<()> {
         (backend_id.clone(), "backend"),
         (devops_id.clone(), "devops"),
     ] {
-        let mut config = SessionConfig::default();
-        config.agent_role = Some(role.to_string());
-        config.enable_ai_features = true;
+        let config = SessionConfig {
+            agent_role: Some(role.to_string()),
+            enable_ai_features: true,
+            ..Default::default()
+        };
 
         let session = manager.create_session_with_config(config).await?;
         multi_session.register_agent(agent_id, session)?;
