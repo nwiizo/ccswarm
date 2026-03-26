@@ -800,6 +800,12 @@ impl PieceEngine {
             movement.id, movement.persona, movement.permission
         );
 
+        // If instruction is empty or starts with "_local", skip Claude and produce local summary
+        if movement.instruction.is_empty() || movement.instruction.starts_with("_local") {
+            let summary = self.build_local_summary(state);
+            return Ok(summary);
+        }
+
         // Build the prompt from instruction + persona + context
         let prompt = self.build_movement_prompt(movement, state);
 
@@ -877,6 +883,42 @@ impl PieceEngine {
         Ok(output)
     }
 
+    /// Build a local summary from state without calling Claude Code CLI.
+    /// Used for terminal/complete movements to avoid unnecessary LLM calls.
+    fn build_local_summary(&self, state: &PieceState) -> serde_json::Value {
+        let movements: Vec<String> = state
+            .history
+            .iter()
+            .map(|t| format!("{} -> {}", t.from, t.to))
+            .collect();
+
+        let outputs: serde_json::Map<String, serde_json::Value> = state
+            .variables
+            .iter()
+            .filter(|(k, _)| k.ends_with("_output"))
+            .map(|(k, v)| {
+                let key = k.trim_end_matches("_output").to_string();
+                let preview = v
+                    .as_object()
+                    .and_then(|obj| obj.get("status"))
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("unknown");
+                (key, serde_json::json!(preview))
+            })
+            .collect();
+
+        serde_json::json!({
+            "movement": "complete",
+            "status": "completed",
+            "summary": {
+                "piece": state.piece_name,
+                "movements_executed": state.movement_count,
+                "transitions": movements,
+                "step_results": outputs,
+            }
+        })
+    }
+
     /// Build the prompt for a movement using faceted prompting.
     ///
     /// Composition order (takt-style):
@@ -898,12 +940,15 @@ impl PieceEngine {
             parts.join("\n")
         });
 
+        // Expand template variables in instruction: {key} -> state.variables[key]
+        let expanded_instruction = expand_template(&movement.instruction, &state.variables);
+
         // Use faceted prompting to compose system + user message
         let composed = self.facet_registry.compose(
             movement.persona.as_deref(),
             movement.policy.as_deref(),
             movement.knowledge.as_deref(),
-            &movement.instruction,
+            &expanded_instruction,
             contract_text.as_deref(),
         );
 
@@ -1339,7 +1384,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     knowledge: None,
                     provider: None,
                     model: None,
-                    instruction: "Workflow completed successfully".to_string(),
+                    instruction: String::new(), // Empty = local summary, no Claude call
                     tools: vec![],
                     permission: MovementPermission::Readonly,
                     rules: vec![], // Terminal
@@ -1524,6 +1569,30 @@ pub fn builtin_pieces() -> Vec<Piece> {
 }
 
 /// Truncate a string for inclusion in prompt context, preserving meaning
+/// Expand `{key}` template variables in a string using state variables.
+/// For `{key_output}`, extracts the "output" field from the JSON value if available.
+fn expand_template(template: &str, variables: &HashMap<String, serde_json::Value>) -> String {
+    let mut result = template.to_string();
+    for (key, value) in variables {
+        let placeholder = format!("{{{}}}", key);
+        if result.contains(&placeholder) {
+            let replacement = value
+                .as_str()
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    value
+                        .as_object()
+                        .and_then(|obj| obj.get("output"))
+                        .and_then(|o| o.as_str())
+                        .map(|s| truncate_for_context(s, 2000))
+                })
+                .unwrap_or_else(|| value.to_string());
+            result = result.replace(&placeholder, &replacement);
+        }
+    }
+    result
+}
+
 fn truncate_for_context(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()

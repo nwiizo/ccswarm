@@ -144,34 +144,87 @@ impl OutputParser {
 
     /// Parse output into structured format
     pub fn parse(&self, output: &str) -> Result<ParsedOutput> {
-        // Simple heuristic-based parsing
-        // In a real implementation, this would be much more sophisticated
-
+        // Build output patterns
         if output.contains("BUILD SUCCESSFUL") || output.contains("Build succeeded") {
-            Ok(ParsedOutput::BuildOutput {
+            return Ok(ParsedOutput::BuildOutput {
                 status: BuildStatus::Success,
                 artifacts: Vec::new(),
-            })
-        } else if output.contains("BUILD FAILED") || output.contains("Build failed") {
-            Ok(ParsedOutput::BuildOutput {
+            });
+        }
+        if output.contains("BUILD FAILED") || output.contains("Build failed") {
+            return Ok(ParsedOutput::BuildOutput {
                 status: BuildStatus::Failed("Build failed".to_string()),
                 artifacts: Vec::new(),
-            })
-        } else if output.contains("tests passed") || output.contains("All tests passed") {
-            Ok(ParsedOutput::TestResults {
-                passed: 1, // Placeholder
+            });
+        }
+
+        // Cargo / generic "tests passed" pattern
+        if output.contains("tests passed") || output.contains("All tests passed") {
+            return Ok(ParsedOutput::TestResults {
+                passed: 1, // Placeholder for legacy plain-string matches
                 failed: 0,
                 details: TestDetails::default(),
-            })
-        } else if self.patterns["error"].is_match(output) {
-            Ok(ParsedOutput::StructuredLog {
+            });
+        }
+
+        // Rust `cargo test` summary: "test result: ok. 10 passed; 0 failed"
+        // Covers both passing and failing runs.
+        let cargo_re = regex::Regex::new(r"test result:.*?(\d+)\s+passed;\s+(\d+)\s+failed")
+            .expect("valid regex");
+        if let Some(caps) = cargo_re.captures(output) {
+            let passed: usize = caps[1].parse().unwrap_or(0);
+            let failed: usize = caps[2].parse().unwrap_or(0);
+            return Ok(ParsedOutput::TestResults {
+                passed,
+                failed,
+                details: TestDetails::default(),
+            });
+        }
+
+        // Playwright output: "7 passed (3.0s)" or "5 passed, 2 failed (10s)"
+        // The failed group is optional.
+        let playwright_re = regex::Regex::new(r"(\d+)\s+passed(?:,\s*(\d+)\s+failed)?\s*\(\d")
+            .expect("valid regex");
+        if let Some(caps) = playwright_re.captures(output) {
+            let passed: usize = caps[1].parse().unwrap_or(0);
+            let failed: usize = caps
+                .get(2)
+                .and_then(|m| m.as_str().parse().ok())
+                .unwrap_or(0);
+            return Ok(ParsedOutput::TestResults {
+                passed,
+                failed,
+                details: TestDetails::default(),
+            });
+        }
+
+        // npm test / Jest summary: "Tests: 3 passed, 1 failed, 4 total"
+        // The failed group is optional (all-passing runs omit it).
+        let jest_re = regex::Regex::new(r"Tests?:\s*(\d+)\s+passed(?:,\s*(\d+)\s+failed)?")
+            .expect("valid regex");
+        if let Some(caps) = jest_re.captures(output) {
+            let passed: usize = caps[1].parse().unwrap_or(0);
+            let failed: usize = caps
+                .get(2)
+                .and_then(|m| m.as_str().parse().ok())
+                .unwrap_or(0);
+            return Ok(ParsedOutput::TestResults {
+                passed,
+                failed,
+                details: TestDetails::default(),
+            });
+        }
+
+        // Generic error log fallback
+        if self.patterns["error"].is_match(output) {
+            return Ok(ParsedOutput::StructuredLog {
                 level: LogLevel::Error,
                 message: output.to_string(),
                 context: LogContext::default(),
-            })
-        } else {
-            Ok(ParsedOutput::PlainText(output.to_string()))
+            });
         }
+
+        Ok(ParsedOutput::PlainText(output.to_string()))
     }
 }
 
@@ -412,5 +465,103 @@ mod tests {
 
         assert!(!processed.highlights.is_empty());
         assert_eq!(processed.highlights[0].severity, Severity::Error);
+    }
+
+    // --- cargo test ---
+
+    #[test]
+    fn test_cargo_test_all_passing() {
+        let parser = OutputParser::new();
+        let output = "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured";
+        match parser.parse(output).unwrap() {
+            ParsedOutput::TestResults { passed, failed, .. } => {
+                assert_eq!(passed, 10);
+                assert_eq!(failed, 0);
+            }
+            other => panic!("expected TestResults, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_cargo_test_with_failures() {
+        let parser = OutputParser::new();
+        let output = "test result: FAILED. 8 passed; 2 failed; 0 ignored";
+        match parser.parse(output).unwrap() {
+            ParsedOutput::TestResults { passed, failed, .. } => {
+                assert_eq!(passed, 8);
+                assert_eq!(failed, 2);
+            }
+            other => panic!("expected TestResults, got {:?}", other),
+        }
+    }
+
+    // --- Playwright ---
+
+    #[test]
+    fn test_playwright_all_passing() {
+        let parser = OutputParser::new();
+        let output = "  7 passed (3.0s)";
+        match parser.parse(output).unwrap() {
+            ParsedOutput::TestResults { passed, failed, .. } => {
+                assert_eq!(passed, 7);
+                assert_eq!(failed, 0);
+            }
+            other => panic!("expected TestResults, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_playwright_with_failures() {
+        let parser = OutputParser::new();
+        let output = "  5 passed, 2 failed (10s)";
+        match parser.parse(output).unwrap() {
+            ParsedOutput::TestResults { passed, failed, .. } => {
+                assert_eq!(passed, 5);
+                assert_eq!(failed, 2);
+            }
+            other => panic!("expected TestResults, got {:?}", other),
+        }
+    }
+
+    // --- npm test / Jest ---
+
+    #[test]
+    fn test_jest_all_passing() {
+        let parser = OutputParser::new();
+        let output = "Tests: 3 passed, 4 total";
+        match parser.parse(output).unwrap() {
+            ParsedOutput::TestResults { passed, failed, .. } => {
+                assert_eq!(passed, 3);
+                assert_eq!(failed, 0);
+            }
+            other => panic!("expected TestResults, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_jest_with_failures() {
+        let parser = OutputParser::new();
+        let output = "Tests: 3 passed, 1 failed, 4 total";
+        match parser.parse(output).unwrap() {
+            ParsedOutput::TestResults { passed, failed, .. } => {
+                assert_eq!(passed, 3);
+                assert_eq!(failed, 1);
+            }
+            other => panic!("expected TestResults, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_jest_singular_noun() {
+        // "Test:" (singular) should also match
+        let parser = OutputParser::new();
+        let output = "Test: 1 passed, 0 failed, 1 total";
+        match parser.parse(output).unwrap() {
+            ParsedOutput::TestResults { passed, failed, .. } => {
+                assert_eq!(passed, 1);
+                assert_eq!(failed, 0);
+            }
+            other => panic!("expected TestResults, got {:?}", other),
+        }
     }
 }
