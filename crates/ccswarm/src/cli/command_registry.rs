@@ -136,11 +136,6 @@ impl CommandRegistry {
             runner.handle_template(action)
         );
 
-        register_command!(self, "subagent", _runner, cmd,
-            Commands::Subagent { command } =>
-            crate::cli::subagent_commands::execute_subagent_command(command.clone())
-        );
-
         register_command!(self, "tutorial", runner, cmd,
             Commands::Tutorial { chapter } =>
             runner.handle_tutorial(*chapter)
@@ -227,12 +222,12 @@ impl CommandRegistry {
         &mut self,
         name: &'static str,
         handler: impl for<'a> Fn(
-            &'a CliRunner,
-            &'a Commands,
-        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
-        + Send
-        + Sync
-        + 'static,
+                &'a CliRunner,
+                &'a Commands,
+            ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
+            + Send
+            + Sync
+            + 'static,
     ) {
         self.handlers.insert(name, Box::new(handler));
     }
@@ -268,7 +263,6 @@ impl CommandRegistry {
             Commands::AutoCreate { .. } => "auto-create",
             Commands::Quality { .. } => "quality",
             Commands::Template { .. } => "template",
-            Commands::Subagent { .. } => "subagent",
             Commands::Setup => "setup",
             Commands::Tutorial { .. } => "tutorial",
             Commands::Interactive { .. } => "interactive",

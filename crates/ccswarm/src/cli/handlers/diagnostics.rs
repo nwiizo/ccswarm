@@ -10,7 +10,7 @@ impl CliRunner {
         detailed: bool,
         format: &str,
     ) -> Result<()> {
-        use crate::cli::health::{HealthChecker, run_diagnostics};
+        use crate::cli::health::{run_diagnostics, HealthChecker};
         use crate::coordination::StatusTracker;
 
         // Run diagnostics if requested
@@ -22,17 +22,8 @@ impl CliRunner {
         let status_tracker = StatusTracker::new().await?;
         let health_checker = HealthChecker::new(status_tracker);
 
-        // Get execution stats from execution engine if available
-        let execution_stats = if let Some(ref engine) = self.execution_engine {
-            let stats = engine.get_executor().get_stats().await;
-            Some((
-                stats.tasks_executed,
-                stats.tasks_succeeded,
-                stats.tasks_failed,
-            ))
-        } else {
-            None
-        };
+        // Execution engine has been removed
+        let execution_stats: Option<(usize, usize, usize)> = None;
 
         // Perform health checks based on flags
         let report = if check_agents && !check_sessions && !resources {
@@ -462,36 +453,21 @@ impl CliRunner {
 
     pub(crate) async fn handle_verify(
         &self,
-        path: &Path,
-        backend_port: u16,
-        skip_deps: bool,
+        _path: &Path,
+        _backend_port: u16,
+        _skip_deps: bool,
     ) -> Result<()> {
-        use crate::orchestrator::{VerificationAgent, VerificationConfig};
-
-        let config = VerificationConfig {
-            backend_port,
-            auto_install_deps: !skip_deps,
-            ..Default::default()
-        };
-
-        let agent = VerificationAgent::new(config);
-        let result = agent.verify_app(path).await?;
-
         if self.json_output {
-            println!("{}", serde_json::to_string_pretty(&result)?);
-        } else if !result.success {
-            let suggestions = VerificationAgent::get_remediation_suggestions(&result);
-            if !suggestions.is_empty() {
-                println!("\nRemediation suggestions:");
-                for s in &suggestions {
-                    let fixable = if s.auto_fixable {
-                        " (auto-fixable)"
-                    } else {
-                        ""
-                    };
-                    println!("  - {}: {}{}", s.check_name, s.suggestion, fixable);
-                }
-            }
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "status": "removed",
+                    "message": "Verification agent has been removed. Use 'ccswarm quality check' instead.",
+                }))?
+            );
+        } else {
+            println!("Verification agent has been removed.");
+            println!("Use 'ccswarm quality check' for build and test verification.");
         }
 
         Ok(())

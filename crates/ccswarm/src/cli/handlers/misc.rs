@@ -3,179 +3,22 @@ use super::super::*;
 impl CliRunner {
     pub(crate) async fn handle_auto_create(
         &self,
-        description: &str,
-        template: Option<&str>,
-        auto_deploy: bool,
-        output: &PathBuf,
+        _description: &str,
+        _template: Option<&str>,
+        _auto_deploy: bool,
+        _output: &PathBuf,
     ) -> Result<()> {
-        use crate::orchestrator::auto_create::AutoCreateEngine;
-
-        info!("🚀 Starting auto-create for: {}", description);
-
         if self.json_output {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "started",
-                    "message": "Auto-create process initiated",
-                    "description": description,
-                    "template": template,
-                    "auto_deploy": auto_deploy,
-                    "output": output,
+                    "status": "removed",
+                    "message": "Auto-create engine has been removed. Use 'ccswarm pipeline' for workflow execution.",
                 }))?
             );
         } else {
-            println!("🚀 ccswarm Auto-Create");
-            println!("====================");
-            println!("📋 Request: {}", description);
-            if let Some(tmpl) = template {
-                println!("📄 Template: {}", tmpl);
-            }
-            println!("📂 Output: {}", output.display());
-            println!();
-        }
-
-        // Create auto-create engine
-        let mut engine = AutoCreateEngine::new();
-
-        // Execute auto-create workflow
-        match engine
-            .execute_auto_create(description, &self.config, output)
-            .await
-        {
-            Ok(()) => {
-                if self.json_output {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "status": "success",
-                            "message": "Application created successfully",
-                            "output": output,
-                        }))?
-                    );
-                } else {
-                    println!("\n✅ Application created successfully!");
-                    println!("📂 Location: {}", output.display());
-
-                    if auto_deploy {
-                        println!("\n🚀 Auto-deploying application...");
-
-                        // Check for Dockerfile
-                        let dockerfile_path = output.join("Dockerfile");
-                        if !dockerfile_path.exists() {
-                            println!("   Creating Dockerfile...");
-
-                            // Generate basic Dockerfile based on detected app type
-                            let dockerfile_content = if output.join("package.json").exists() {
-                                // Node.js application
-                                r#"FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-EXPOSE 3000
-CMD ["npm", "start"]
-"#
-                            } else if output.join("Cargo.toml").exists() {
-                                // Rust application
-                                r#"FROM rust:1.70 as builder
-WORKDIR /app
-COPY . .
-RUN cargo build --release
-
-FROM debian:bullseye-slim
-COPY --from=builder /app/target/release/app /usr/local/bin/app
-EXPOSE 8080
-CMD ["app"]
-"#
-                            } else if output.join("requirements.txt").exists() {
-                                // Python application
-                                r#"FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8000
-CMD ["python", "app.py"]
-"#
-                            } else {
-                                r#"FROM alpine:latest
-WORKDIR /app
-COPY . .
-CMD ["/bin/sh"]
-"#
-                            };
-
-                            tokio::fs::write(&dockerfile_path, dockerfile_content)
-                                .await
-                                .context("Failed to create Dockerfile")?;
-                            println!("   ✅ Dockerfile created");
-                        }
-
-                        // Build Docker image
-                        println!("   Building Docker image...");
-                        let image_name =
-                            format!("{}-app", description.to_lowercase().replace(' ', "-"));
-
-                        let build_status = tokio::process::Command::new("docker")
-                            .arg("build")
-                            .arg("-t")
-                            .arg(&image_name)
-                            .arg(output.as_path())
-                            .status()
-                            .await
-                            .context("Failed to execute docker build")?;
-
-                        if !build_status.success() {
-                            println!("   ⚠️ Docker build failed");
-                        } else {
-                            println!("   ✅ Docker image built: {}", image_name);
-
-                            // Create docker-compose.yml if needed
-                            let compose_path = output.join("docker-compose.yml");
-                            if !compose_path.exists() {
-                                println!("   Creating docker-compose.yml...");
-                                let compose_content = format!(
-                                    r#"version: '3.8'
-services:
-  app:
-    image: {}
-    ports:
-      - "8080:8080"
-    environment:
-      - NODE_ENV=production
-    restart: unless-stopped
-"#,
-                                    image_name
-                                );
-
-                                tokio::fs::write(&compose_path, compose_content)
-                                    .await
-                                    .context("Failed to create docker-compose.yml")?;
-                                println!("   ✅ docker-compose.yml created");
-                            }
-
-                            println!("\n   🎉 Deployment ready!");
-                            println!("   Run: cd {} && docker-compose up", output.display());
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                if self.json_output {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
-                            "status": "error",
-                            "message": "Auto-create failed",
-                            "error": e.to_string(),
-                        }))?
-                    );
-                } else {
-                    println!("\n❌ Auto-create failed: {}", e);
-                }
-                return Err(e);
-            }
+            println!("Auto-create engine has been removed.");
+            println!("Use 'ccswarm pipeline' for workflow execution.");
         }
 
         Ok(())
@@ -318,92 +161,18 @@ services:
         Ok(())
     }
 
-    pub(crate) async fn run_review(&self, agent: Option<&str>, strict: bool) -> Result<()> {
-        use crate::orchestrator::llm_quality_judge::{LLMQualityJudge, QualityRubric};
-
-        // Get execution history from the engine
-        let history = if let Some(ref engine) = self.execution_engine {
-            let executor = engine.get_executor();
-            executor.get_execution_history(None).await
-        } else {
-            Vec::new()
-        };
-
-        // Filter by agent if specified
-        let filtered: Vec<_> = if let Some(agent_filter) = agent {
-            history
-                .iter()
-                .filter(|r| {
-                    r.agent_used
-                        .as_deref()
-                        .is_some_and(|a| a.contains(agent_filter))
-                })
-                .collect()
-        } else {
-            history.iter().collect()
-        };
-
-        // Create quality judge with appropriate rubric
-        let mut rubric = QualityRubric::default();
-        if strict {
-            // Raise all thresholds by 10%
-            for threshold in rubric.thresholds.values_mut() {
-                *threshold = (*threshold + 0.1).min(1.0);
-            }
-        }
-        let _judge = LLMQualityJudge::with_rubric(rubric);
-
-        let reviewed_count = filtered.len();
-        let succeeded = filtered.iter().filter(|r| r.success).count();
-        let failed = filtered.iter().filter(|r| !r.success).count();
-
+    pub(crate) async fn run_review(&self, _agent: Option<&str>, _strict: bool) -> Result<()> {
         if self.json_output {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "success",
-                    "message": "Quality review completed",
-                    "tasks_reviewed": reviewed_count,
-                    "tasks_succeeded": succeeded,
-                    "tasks_failed": failed,
-                    "strict_mode": strict,
-                    "agent_filter": agent,
+                    "status": "removed",
+                    "message": "Quality review engine has been removed. Use 'ccswarm quality check' instead.",
                 }))?
             );
         } else {
-            println!(
-                "🔍 Quality Review {}",
-                if strict { "(Strict Mode)" } else { "" }
-            );
-            println!("================");
-            println!();
-
-            if let Some(agent_filter) = agent {
-                println!("   Filter: Agent '{}'", agent_filter);
-            }
-
-            if reviewed_count == 0 {
-                println!("   No completed tasks to review");
-                if self.execution_engine.is_none() {
-                    println!("   Start ccswarm with 'ccswarm start' to enable task execution");
-                }
-            } else {
-                println!("   Tasks reviewed: {}", reviewed_count);
-                println!("   Succeeded: {}", format!("{}", succeeded).bright_green());
-                println!("   Failed: {}", format!("{}", failed).bright_red());
-
-                // Show details for failed tasks
-                for result in &filtered {
-                    if !result.success {
-                        println!();
-                        println!(
-                            "   ❌ Task {}: {}",
-                            result.task_id,
-                            result.error.as_deref().unwrap_or("Unknown error")
-                        );
-                    }
-                }
-            }
+            println!("Quality review engine has been removed.");
+            println!("Use 'ccswarm quality check' for code quality analysis.");
         }
 
         Ok(())
@@ -1021,21 +790,28 @@ services:
 
     /// Validate that the Claude Code CLI provider is available and configured
     pub(crate) async fn validate_provider(&self) -> Result<()> {
-        use crate::providers::ClaudeCodeConfig;
-        use crate::providers::ProviderConfig;
-
-        let config = ClaudeCodeConfig::default();
-
         // Check if claude CLI is installed
-        if !config.is_available().await {
-            return Err(anyhow!(
-                "Claude Code CLI not found in PATH.\n\
-                 Install it with: npm install -g @anthropic-ai/claude-code\n\
-                 Or see: https://docs.anthropic.com/en/docs/claude-code"
-            ));
+        let output = tokio::process::Command::new("claude")
+            .arg("--version")
+            .env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
+            .output()
+            .await;
+
+        match output {
+            Ok(o) if o.status.success() => {
+                info!("Provider validation passed: Claude Code CLI is available");
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Claude Code CLI not found in PATH.\n\
+                     Install it with: npm install -g @anthropic-ai/claude-code\n\
+                     Or see: https://docs.anthropic.com/en/docs/claude-code"
+                ));
+            }
         }
 
-        // Check for API key (warn, don't fail — claude CLI may have its own auth)
+        // Check for API key (warn, don't fail -- claude CLI may have its own auth)
         if std::env::var("ANTHROPIC_API_KEY").is_err() {
             warn!(
                 "ANTHROPIC_API_KEY not set. Claude Code CLI may use its own authentication, \
@@ -1043,7 +819,6 @@ services:
             );
         }
 
-        info!("Provider validation passed: Claude Code CLI is available");
         Ok(())
     }
 }

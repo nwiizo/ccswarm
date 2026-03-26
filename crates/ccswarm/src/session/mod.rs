@@ -4,12 +4,7 @@
 //! crate for multi-agent coordination and parallel execution.
 
 pub mod bridge;
-pub mod checkpoint;
-pub mod claude_session;
 pub mod error;
-pub mod memory;
-pub mod persistent_session;
-pub mod worktree_session;
 
 // Re-export ai-session types for multi-agent coordination
 pub use ai_session::PtyHandle;
@@ -28,7 +23,6 @@ pub use ai_session::core::{
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -44,9 +38,6 @@ pub struct AutoAcceptConfig {
 }
 use crate::identity::AgentRole;
 use crate::resource::{ResourceMonitor, SessionResourceIntegration};
-use memory::{
-    EpisodeOutcome, EpisodeType, MemorySummary, RetrievalResult, SessionMemory, WorkingMemoryType,
-};
 
 /// Represents the current status of an agent session
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -109,8 +100,6 @@ pub struct AgentSession {
     /// Number of tasks currently in queue
     pub tasks_queued: usize,
 
-    /// Integrated memory system for this session
-    pub memory: SessionMemory,
 }
 
 impl AgentSession {
@@ -122,11 +111,9 @@ impl AgentSession {
     ) -> Self {
         let session_id = Uuid::new_v4().to_string();
 
-        let memory = SessionMemory::new(session_id.clone(), agent_id.clone());
-
         Self {
             id: session_id,
-            agent_id: agent_id.clone(),
+            agent_id,
             agent_role,
             status: SessionStatus::Active,
             background_mode: false,
@@ -138,7 +125,6 @@ impl AgentSession {
             working_directory,
             tasks_processed: 0,
             tasks_queued: 0,
-            memory,
         }
     }
 
@@ -192,47 +178,6 @@ impl AgentSession {
         self.auto_accept && self.auto_accept_config.is_some()
     }
 
-    /// Add item to working memory
-    pub fn add_memory(&mut self, content: String, item_type: WorkingMemoryType, priority: f32) {
-        self.memory
-            .add_to_working_memory(content, item_type, priority);
-        self.touch();
-    }
-
-    /// Set current task context
-    pub fn set_task_context(&mut self, task_id: String, description: String) {
-        self.memory.set_task_context(task_id, description);
-        self.touch();
-    }
-
-    /// Add episode to memory
-    pub fn add_episode(
-        &mut self,
-        event_type: EpisodeType,
-        description: String,
-        context: HashMap<String, String>,
-        outcome: EpisodeOutcome,
-    ) {
-        self.memory
-            .add_episode(event_type, description, context, outcome);
-        self.touch();
-    }
-
-    /// Consolidate memories
-    pub fn consolidate_memories(&mut self) {
-        self.memory.consolidate_memories();
-        self.touch();
-    }
-
-    /// Retrieve relevant memories
-    pub fn retrieve_memories(&self, query: &str) -> RetrievalResult {
-        self.memory.retrieve_relevant_memories(query)
-    }
-
-    /// Get memory summary
-    pub fn get_memory_summary(&self) -> MemorySummary {
-        self.memory.generate_memory_summary()
-    }
 }
 
 /// Manages multiple agent sessions with native session management

@@ -2,17 +2,12 @@ pub mod claude;
 pub mod interleaved_thinking;
 pub mod isolation;
 pub mod orchestrator;
-pub mod persistent;
 pub mod personality;
 pub mod phronesis;
-pub mod pool;
-pub mod search_agent;
-pub mod simple;
 pub mod task;
 pub mod task_builder;
 pub mod task_builder_typestate;
 pub mod type_state;
-pub mod whiteboard;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -29,7 +24,6 @@ pub use task_builder::TaskBuilder;
 pub use task_builder_typestate::{
     Complete as TaskComplete, HasDescription, HasPriority, NoDescription, TypedTaskBuilder,
 };
-pub use whiteboard::{AnnotationMarker, EntryType, Whiteboard, WhiteboardEntry};
 
 use self::interleaved_thinking::{DecisionType, InterleavedThinkingEngine, ThinkingStep};
 use crate::config::ClaudeConfig;
@@ -37,6 +31,65 @@ use crate::hooks::{
     HookContext, HookRegistry, HookResult, OnErrorInput, PostExecutionInput, PreExecutionInput,
 };
 use crate::identity::{AgentIdentity, AgentRole};
+
+/// Annotation marker for whiteboard entries (stub replacing deleted whiteboard module)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AnnotationMarker {
+    Important,
+    Info,
+    Warning,
+}
+
+/// In-memory whiteboard for agent thought visualization (stub replacing deleted whiteboard module)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Whiteboard {
+    agent_id: String,
+    notes: Vec<String>,
+}
+
+impl Whiteboard {
+    pub fn new(agent_id: String) -> Self {
+        Self {
+            agent_id,
+            notes: Vec::new(),
+        }
+    }
+
+    pub fn create_section(&mut self, _title: &str) -> String {
+        format!("section-{}", self.notes.len())
+    }
+
+    pub fn add_note(&mut self, content: &str, _tags: Vec<String>) -> String {
+        let id = format!("note-{}", self.notes.len());
+        self.notes.push(content.to_string());
+        id
+    }
+
+    pub fn add_to_section(&mut self, _section_id: &str, _item_id: &str) {}
+
+    pub fn start_thought_trace(&mut self) -> String {
+        format!("trace-{}", self.notes.len())
+    }
+
+    pub fn add_thought(&mut self, _trace_id: &str, thought: &str) {
+        self.notes.push(thought.to_string());
+    }
+
+    pub fn set_conclusion(&mut self, _trace_id: &str, _conclusion: &str) {}
+
+    pub fn add_hypothesis(&mut self, _hypothesis: &str, _confidence: f64) -> String {
+        format!("hyp-{}", self.notes.len())
+    }
+
+    pub fn annotate(&mut self, _item_id: &str, _annotation: &str, _marker: AnnotationMarker) {}
+
+    pub fn summarize(&self) -> serde_json::Value {
+        serde_json::json!({
+            "agent_id": self.agent_id,
+            "note_count": self.notes.len(),
+        })
+    }
+}
 
 /// Current status of an agent in its operational lifecycle
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1094,56 +1147,10 @@ impl ClaudeCodeAgent {
         }
     }
 
-    /// Execute Claude using real API
-    async fn execute_claude_real_api(&self, prompt: &str) -> Result<String> {
-        use crate::providers::claude_api::ClaudeApiClient;
-
-        tracing::info!(
-            "Using real Claude API for agent: {}",
-            self.identity.agent_id
-        );
-
-        // Create API client
-        let api_client = ClaudeApiClient::new(None)?;
-
-        // Format the full prompt with agent identity
-        let full_prompt = format!(
-            "{}\n\n{}",
-            claude::generate_identity_header(&self.identity),
-            prompt
-        );
-
-        // Make API call
-        let response = api_client
-            .simple_completion(
-                &self.claude_config.model,
-                &full_prompt,
-                4096, // Max tokens
-            )
-            .await?;
-
-        // Format response to match expected output format
-        use crate::config::OutputFormat;
-        if self.claude_config.output_format == OutputFormat::Json
-            || self.claude_config.output_format == OutputFormat::StreamJson
-        {
-            // Wrap response in JSON format similar to CLI output
-            let json_response = serde_json::json!({
-                "response": response,
-                "agent": self.identity.agent_id,
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-            });
-            Ok(serde_json::to_string(&json_response)?)
-        } else {
-            Ok(response)
-        }
-    }
-
-    /// Execute Claude Code command in container
+    /// Execute Claude Code command in container (placeholder - use CLI subprocess instead)
     async fn execute_claude_in_container(&self, prompt: &str) -> Result<String> {
-        // Temporarily disabled - container functionality not available
-        // Fall back to real API implementation
-        self.execute_claude_real_api(prompt).await
+        // Container execution removed in v0.6.0 - fall back to worktree
+        self.execute_claude_in_worktree(prompt).await
     }
 
     /// Report agent status to coordination system

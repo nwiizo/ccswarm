@@ -9,8 +9,6 @@ impl CliRunner {
         delegate: bool,
         enable_acp: bool,
     ) -> Result<()> {
-        use tokio::sync::RwLock;
-
         info!(
             "Starting ccswarm orchestrator with isolation mode: {} (port: {}, delegate: {}, acp: {})",
             isolation, port, delegate, enable_acp
@@ -19,33 +17,9 @@ impl CliRunner {
         // Validate provider availability before starting
         self.validate_provider().await?;
 
-        // Parse isolation mode
-        let isolation_mode = match isolation {
-            "container" => crate::agent::IsolationMode::Container,
-            "hybrid" => crate::agent::IsolationMode::Hybrid,
-            _ => crate::agent::IsolationMode::GitWorktree,
-        };
-
-        let mut master =
-            ProactiveMaster::new_with_config(self.config.clone(), self.repo_path.clone()).await?;
-
-        // Set isolation mode for all agents
-        master.set_isolation_mode(isolation_mode);
-
-        // Configure delegate mode if enabled
-        if delegate {
-            info!("Delegate mode enabled: lead orchestrates only, no direct code execution");
-            master.set_delegate_mode(true);
-        }
-
-        // Initialize agents
-        master.initialize().await?;
-
-        let master_id = master.id.clone();
-        let agent_count = master.agents.len();
-
-        // Wrap master in Arc<RwLock> for shared access
-        let _master = Arc::new(RwLock::new(master));
+        // ProactiveMaster has been removed. Orchestrator runs in lightweight mode.
+        let master_id = uuid::Uuid::new_v4().to_string();
+        let agent_count = self.config.agents.len();
 
         // Start ACP WebSocket server if enabled
         if enable_acp {
