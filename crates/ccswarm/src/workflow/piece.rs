@@ -447,6 +447,8 @@ pub struct PieceEngine {
     bridge: Option<std::sync::Arc<crate::session::bridge::AISessionBridge>>,
     /// Working directory for agent execution
     working_dir: std::path::PathBuf,
+    /// Optional event recorder for NDJSON observability
+    event_recorder: Option<crate::events::EventRecorder>,
 }
 
 impl PieceEngine {
@@ -470,6 +472,7 @@ impl PieceEngine {
             facet_registry,
             bridge: None,
             working_dir: std::path::PathBuf::from("."),
+            event_recorder: None,
         }
     }
 
@@ -493,6 +496,11 @@ impl PieceEngine {
     /// Set the working directory for agent execution
     pub fn set_working_dir(&mut self, dir: std::path::PathBuf) {
         self.working_dir = dir;
+    }
+
+    /// Set the event recorder for NDJSON observability
+    pub fn set_event_recorder(&mut self, recorder: crate::events::EventRecorder) {
+        self.event_recorder = Some(recorder);
     }
 
     /// Load a piece from a YAML file
@@ -554,6 +562,16 @@ impl PieceEngine {
         self.pieces.insert(piece.name.clone(), piece);
     }
 
+    /// Record an event if recorder is configured (best-effort, logs on failure)
+    async fn record_event(&self, event: crate::events::Event) {
+        let Some(ref recorder) = self.event_recorder else {
+            return;
+        };
+        if let Err(e) = recorder.record(event).await {
+            warn!("Failed to record event: {}", e);
+        }
+    }
+
     /// Execute a piece workflow
     pub async fn execute_piece(&self, name: &str) -> Result<PieceState> {
         let piece = self
@@ -563,6 +581,20 @@ impl PieceEngine {
 
         let mut state = piece.create_state();
         state.status = PieceStatus::Running;
+
+        let run_id = self
+            .event_recorder
+            .as_ref()
+            .map(|r| r.run_id().to_string())
+            .unwrap_or_default();
+
+        self.record_event(crate::events::Event::new(
+            &run_id,
+            crate::events::EventLevel::Info,
+            crate::events::EventType::TaskStart,
+            format!("Starting piece '{}'", name),
+        ))
+        .await;
 
         info!(
             "Starting piece '{}' at movement '{}'",
@@ -600,9 +632,27 @@ impl PieceEngine {
                 movement.id, state.movement_count, name
             );
 
+            // Record movement start
+            self.record_event(crate::events::Event::new(
+                &run_id,
+                crate::events::EventLevel::Info,
+                crate::events::EventType::MovementStart,
+                format!("Movement '{}' started", movement.id),
+            ).with_movement(&movement.id))
+            .await;
+
             // Execute the movement
             let output = self.execute_movement(&movement, &state).await?;
             state.movement_count += 1;
+
+            // Record movement end
+            self.record_event(crate::events::Event::new(
+                &run_id,
+                crate::events::EventLevel::Info,
+                crate::events::EventType::MovementEnd,
+                format!("Movement '{}' completed", movement.id),
+            ).with_movement(&movement.id))
+            .await;
 
             // Store output in variables
             state
@@ -646,6 +696,31 @@ impl PieceEngine {
                     state.completed_at = Some(Utc::now());
                     break;
                 }
+            }
+        }
+
+        // Record piece completion and write summary
+        let completed = state.status == PieceStatus::Completed;
+        self.record_event(crate::events::Event::new(
+            &run_id,
+            if completed { crate::events::EventLevel::Info } else { crate::events::EventLevel::Warn },
+            crate::events::EventType::TaskEnd,
+            format!("Piece '{}' finished with status {:?}", name, state.status),
+        ))
+        .await;
+
+        if let Some(ref recorder) = self.event_recorder {
+            let summary = crate::events::RunSummary {
+                run_id: run_id.clone(),
+                started_at: state.started_at,
+                ended_at: state.completed_at,
+                total_events: recorder.event_count(),
+                tasks_completed: if completed { 1 } else { 0 },
+                tasks_failed: if completed { 0 } else { 1 },
+                agents_used: state.history.iter().map(|t| t.from.clone()).collect::<std::collections::HashSet<_>>().into_iter().collect(),
+            };
+            if let Err(e) = recorder.write_summary(&summary).await {
+                warn!("Failed to write run summary: {}", e);
             }
         }
 
