@@ -127,7 +127,7 @@ impl CliRunner {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn handle_pipeline(
+    pub async fn handle_pipeline(
         &self,
         task: &str,
         piece: &str,
@@ -141,6 +141,30 @@ impl CliRunner {
         auto_commit: bool,
         create_pr: bool,
     ) -> Result<()> {
+        let (run_id, result) = self
+            .execute_pipeline_core(task, piece, output_format, timeout, verbose, output_file)
+            .await?;
+
+        // Post-pipeline assisted flow: auto-detect → execute → ask OK/NG
+        self.run_post_pipeline_flow(task, piece, &run_id, &result, auto_commit, create_pr)
+            .await;
+
+        Ok(())
+    }
+
+    /// Core pipeline execution logic without post-pipeline flow.
+    /// Returns (run_id, PipelineOutput) on success.
+    /// Separated from `handle_pipeline` to allow `run_post_pipeline_flow`
+    /// to run fix pipelines without triggering recursive post-pipeline flows.
+    async fn execute_pipeline_core(
+        &self,
+        task: &str,
+        piece: &str,
+        output_format: &str,
+        timeout: u64,
+        verbose: bool,
+        output_file: Option<&Path>,
+    ) -> Result<(String, crate::workflow::pipeline::PipelineOutput)> {
         use crate::workflow::pipeline::{PipelineConfig, PipelineRunner};
         use std::time::Duration;
 
@@ -247,11 +271,7 @@ impl CliRunner {
             std::process::exit(result.exit_code().as_code());
         }
 
-        // Post-pipeline assisted flow: auto-detect → execute → ask OK/NG
-        self.run_post_pipeline_flow(task, piece, &run_id, &result, auto_commit, create_pr)
-            .await;
-
-        Ok(())
+        Ok((run_id, result))
     }
 
     /// Post-pipeline assisted flow: auto-detect tests, run them, then guide
@@ -269,11 +289,50 @@ impl CliRunner {
         let repo = &self.repo_path;
         eprintln!();
 
-        // Step 1: Auto-detect and run tests
-        let test_passed = self.auto_run_tests(repo).await;
+        // Step 1: Auto-detect and run tests, with auto-fix loop (max 3 retries)
+        let mut test_passed = self.auto_run_tests(repo).await;
+        let mut fix_attempts = 0;
+        const MAX_FIX_ATTEMPTS: u32 = 3;
+
+        while !test_passed && fix_attempts < MAX_FIX_ATTEMPTS {
+            fix_attempts += 1;
+            eprintln!(
+                "\n  {} Auto-fix attempt {}/{}...",
+                "\u{1f527}".to_string(),
+                fix_attempts,
+                MAX_FIX_ATTEMPTS
+            );
+
+            // Run fix via Claude Code CLI directly (no pipeline recursion)
+            let fix_output = tokio::process::Command::new("claude")
+                .args([
+                    "-p",
+                    "Fix the failing tests. Read the test output, identify the issue, and fix the code.",
+                    "--dangerously-skip-permissions",
+                ])
+                .current_dir(repo)
+                .output()
+                .await;
+
+            if fix_output.is_err() || !fix_output.as_ref().is_ok_and(|o| o.status.success()) {
+                eprintln!("  {} Fix attempt failed", "\u{2717}".bright_red());
+                break;
+            }
+            eprintln!("  {} Fix applied", "\u{2713}".bright_green());
+
+            test_passed = self.auto_run_tests(repo).await;
+        }
+
+        if !test_passed && fix_attempts >= MAX_FIX_ATTEMPTS {
+            eprintln!(
+                "  {} Tests still failing after {} fix attempts",
+                "\u{2717}".bright_red(),
+                MAX_FIX_ATTEMPTS
+            );
+        }
 
         // Step 2: Commit (auto or ask)
-        let committed = if auto_commit {
+        let committed = if auto_commit && test_passed {
             self.do_commit(repo, task).await
         } else if test_passed {
             if ask_yn("Commit changes?") {
@@ -282,10 +341,6 @@ impl CliRunner {
                 false
             }
         } else {
-            // Tests failed — ask if user wants to fix
-            if ask_yn("Tests failed. Run review-fix pipeline?") {
-                eprintln!("  Run: ccswarm pipeline --piece review-fix --task \"Fix test failures\"");
-            }
             false
         };
 

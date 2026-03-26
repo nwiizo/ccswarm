@@ -424,6 +424,21 @@ pub enum Commands {
         action: ApproveAction,
     },
 
+    /// Session management - list, inspect, and manage pipeline sessions
+    #[command(
+        long_about = "Browse and manage pipeline sessions stored in .ccswarm/runs/.\n\n\
+        Sessions are created automatically when running pipelines. Each session\n\
+        records events as NDJSON and produces a summary on completion.\n\n\
+        Examples:\n  \
+          ccswarm session list\n  \
+          ccswarm session list --all\n  \
+          ccswarm session view <session-id>"
+    )]
+    Session {
+        #[command(subcommand)]
+        action: SessionAction,
+    },
+
     /// View past pipeline runs recorded in .ccswarm/runs/
     #[command(
         long_about = "Browse pipeline run history stored in .ccswarm/runs/.\n\n\
@@ -1016,6 +1031,19 @@ pub enum ConfigAction {
 
 #[derive(Subcommand)]
 pub enum SessionAction {
+    /// List all sessions (pipeline runs) with metadata extracted from event logs
+    List {
+        /// Show all sessions including those without summary
+        #[arg(short, long)]
+        all: bool,
+    },
+
+    /// View details and events for a specific session
+    View {
+        /// Session/run ID to inspect
+        id: String,
+    },
+
     /// Create a new agent session
     Create {
         /// Agent type (frontend, backend, devops, qa)
@@ -1029,13 +1057,6 @@ pub enum SessionAction {
         /// Background mode
         #[arg(short, long)]
         background: bool,
-    },
-
-    /// List all sessions
-    List {
-        /// Show all sessions including inactive
-        #[arg(short, long)]
-        all: bool,
     },
 
     /// Pause a running session
