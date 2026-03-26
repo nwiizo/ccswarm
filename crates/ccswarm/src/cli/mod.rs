@@ -215,6 +215,26 @@ pub enum Commands {
         /// Continue from a previous run (reuse Claude Code session)
         #[arg(long, name = "continue")]
         continue_from: Option<String>,
+
+        /// Execute in isolated git worktree
+        #[arg(long)]
+        isolate: bool,
+
+        /// Budget limit in USD per movement
+        #[arg(long)]
+        budget: Option<f64>,
+
+        /// Model override for all movements
+        #[arg(long, name = "model")]
+        model_override: Option<String>,
+
+        /// Auto-commit changes after successful execution
+        #[arg(long)]
+        auto_commit: bool,
+
+        /// Create GitHub PR after successful execution (requires gh cli)
+        #[arg(long)]
+        create_pr: bool,
     },
 
     /// Enhanced help system with examples
