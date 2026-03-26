@@ -27,6 +27,9 @@ pub struct BridgeResult {
     pub parsed: ParsedOutput,
     /// Whether the execution was successful (based on parsed output)
     pub success: bool,
+    /// Execution duration in milliseconds
+    #[serde(default)]
+    pub duration_ms: u64,
 }
 
 /// Claude Code CLI execution + ai-session result management layer.
@@ -104,7 +107,7 @@ impl AISessionBridge {
             .await
     }
 
-    /// Execute with optional Claude Code agent/team routing
+    /// Execute with optional Claude Code agent/team routing, resume, and retry
     pub async fn execute_task_with_options(
         &self,
         agent_id: &str,
@@ -113,6 +116,71 @@ impl AISessionBridge {
         working_dir: &Path,
         agent_name: Option<&str>,
     ) -> Result<BridgeResult> {
+        self.execute_with_retry(
+            agent_id,
+            prompt,
+            _identity,
+            working_dir,
+            agent_name,
+            0,
+            1000,
+        )
+        .await
+    }
+
+    /// Execute with retry logic and exponential backoff
+    #[allow(clippy::too_many_arguments)]
+    pub async fn execute_with_retry(
+        &self,
+        agent_id: &str,
+        prompt: &str,
+        _identity: &AgentIdentity,
+        working_dir: &Path,
+        agent_name: Option<&str>,
+        max_retries: u32,
+        retry_delay_ms: u64,
+    ) -> Result<BridgeResult> {
+        let mut last_err = None;
+        let attempts = max_retries + 1;
+
+        for attempt in 0..attempts {
+            if attempt > 0 {
+                let delay = retry_delay_ms * 2u64.pow(attempt - 1);
+                tracing::info!(
+                    "Retrying Claude Code CLI (attempt {}/{}, delay {}ms)",
+                    attempt + 1,
+                    attempts,
+                    delay
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            }
+
+            match self
+                .execute_once(agent_id, prompt, _identity, working_dir, agent_name)
+                .await
+            {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    tracing::warn!("Claude Code CLI attempt {} failed: {}", attempt + 1, e);
+                    last_err = Some(e);
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("All retry attempts failed")))
+    }
+
+    /// Single execution attempt
+    async fn execute_once(
+        &self,
+        agent_id: &str,
+        prompt: &str,
+        _identity: &AgentIdentity,
+        working_dir: &Path,
+        agent_name: Option<&str>,
+    ) -> Result<BridgeResult> {
+        let start = std::time::Instant::now();
+
         // 1. Execute Claude Code CLI via subprocess
         let mut cmd = tokio::process::Command::new("claude");
         cmd.args(["-p", prompt, "--output-format", "text"]);
@@ -122,11 +190,18 @@ impl AISessionBridge {
             cmd.args(["--agent", name]);
         }
 
+        // Resume session if we have prior context for this agent
+        if self.context_histories.contains_key(agent_id) {
+            cmd.args(["--resume"]);
+        }
+
         let output = cmd
             .current_dir(working_dir)
             .output()
             .await
             .context("Failed to execute Claude Code CLI")?;
+
+        let duration = start.elapsed();
 
         let raw_output = if output.status.success() {
             String::from_utf8_lossy(&output.stdout).to_string()
@@ -201,6 +276,7 @@ impl AISessionBridge {
             raw: raw_output,
             parsed,
             success,
+            duration_ms: duration.as_millis() as u64,
         })
     }
 
