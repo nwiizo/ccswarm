@@ -137,7 +137,21 @@ impl CliRunner {
             .build()
             .context("Failed to build pipeline configuration")?;
 
-        let runner = PipelineRunner::new();
+        // Configure bridge for real Claude Code CLI execution
+        let mut engine = crate::workflow::piece::PieceEngine::new();
+        let bridge = crate::session::bridge::AISessionBridge::new(
+            self.repo_path.join(".ccswarm").join("sessions"),
+        );
+        engine.set_bridge(std::sync::Arc::new(bridge));
+        engine.set_working_dir(self.repo_path.clone());
+
+        // Configure event recorder for observability
+        let run_id = uuid::Uuid::new_v4().to_string();
+        if let Ok(recorder) = crate::events::EventRecorder::new(&run_id).await {
+            engine.set_event_recorder(recorder);
+        }
+
+        let runner = PipelineRunner::with_engine(engine);
         let result = runner.execute(config).await?;
 
         // Format output based on requested format
