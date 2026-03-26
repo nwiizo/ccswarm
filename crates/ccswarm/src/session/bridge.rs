@@ -30,6 +30,9 @@ pub struct BridgeResult {
     /// Execution duration in milliseconds
     #[serde(default)]
     pub duration_ms: u64,
+    /// Context compression ratio (if available)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compression_ratio: Option<f64>,
 }
 
 /// Claude Code CLI execution + ai-session result management layer.
@@ -239,8 +242,8 @@ impl AISessionBridge {
                     "output_preview": truncate_output(&raw_output, 500),
                 }),
             };
-            // Broadcast is best-effort; don't fail the task if messaging fails
-            let _ = self.message_bus.broadcast(
+            // Broadcast is best-effort; log errors for debugging
+            if let Err(e) = self.message_bus.broadcast(
                 ai_agent_id.clone(),
                 ai_session::BroadcastMessage {
                     id: uuid::Uuid::new_v4(),
@@ -253,7 +256,13 @@ impl AISessionBridge {
                     priority: ai_session::MessagePriority::Normal,
                     timestamp: chrono::Utc::now(),
                 },
-            );
+            ) {
+                tracing::debug!(
+                    "MessageBus broadcast failed for agent '{}': {}",
+                    agent_id,
+                    e
+                );
+            }
         }
 
         // 5. Persist session state (best-effort)
@@ -272,11 +281,17 @@ impl AISessionBridge {
             }
         }
 
+        // Get compression ratio if context exists
+        let compression_ratio = self
+            .get_compression_stats(agent_id)
+            .map(|stats| stats.compression_ratio);
+
         Ok(BridgeResult {
             raw: raw_output,
             parsed,
             success,
             duration_ms: duration.as_millis() as u64,
+            compression_ratio,
         })
     }
 
