@@ -33,6 +33,23 @@ pub struct BridgeResult {
     pub compression_ratio: Option<f64>,
 }
 
+/// Options for a single movement execution, mapped to Claude Code CLI flags
+#[derive(Debug, Clone, Default)]
+pub struct MovementExecOptions {
+    /// Tools to allow (mapped to --allowed-tools)
+    pub tools: Vec<String>,
+    /// Model override (mapped to --model)
+    pub model: Option<String>,
+    /// System prompt from persona (mapped to --system-prompt)
+    pub system_prompt: Option<String>,
+    /// Budget limit in USD (mapped to --max-budget-usd)
+    pub max_budget: Option<f64>,
+    /// Execute in isolated worktree (mapped to --worktree)
+    pub worktree_name: Option<String>,
+    /// Session ID for continuation (mapped to --session-id)
+    pub session_id: Option<String>,
+}
+
 /// Claude Code CLI execution + ai-session result management layer.
 ///
 /// This bridge provides:
@@ -85,27 +102,15 @@ impl AISessionBridge {
         _identity: &AgentIdentity,
         working_dir: &Path,
     ) -> Result<BridgeResult> {
-        self.execute_task_with_options(agent_id, prompt, _identity, working_dir, None)
-            .await
-    }
-
-    /// Execute with optional Claude Code agent/team routing, resume, and retry
-    pub async fn execute_task_with_options(
-        &self,
-        agent_id: &str,
-        prompt: &str,
-        _identity: &AgentIdentity,
-        working_dir: &Path,
-        agent_name: Option<&str>,
-    ) -> Result<BridgeResult> {
         self.execute_with_retry(
             agent_id,
             prompt,
             _identity,
             working_dir,
-            agent_name,
+            None,
             0,
             1000,
+            &MovementExecOptions::default(),
         )
         .await
     }
@@ -121,6 +126,7 @@ impl AISessionBridge {
         agent_name: Option<&str>,
         max_retries: u32,
         retry_delay_ms: u64,
+        options: &MovementExecOptions,
     ) -> Result<BridgeResult> {
         let mut last_err = None;
         let attempts = max_retries + 1;
@@ -138,7 +144,7 @@ impl AISessionBridge {
             }
 
             match self
-                .execute_once(agent_id, prompt, _identity, working_dir, agent_name)
+                .execute_once(agent_id, prompt, _identity, working_dir, agent_name, options)
                 .await
             {
                 Ok(result) => return Ok(result),
@@ -152,7 +158,7 @@ impl AISessionBridge {
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("All retry attempts failed")))
     }
 
-    /// Single execution attempt
+    /// Single execution attempt with full Claude Code CLI flag mapping
     async fn execute_once(
         &self,
         agent_id: &str,
@@ -160,21 +166,58 @@ impl AISessionBridge {
         _identity: &AgentIdentity,
         working_dir: &Path,
         agent_name: Option<&str>,
+        options: &MovementExecOptions,
     ) -> Result<BridgeResult> {
         let start = std::time::Instant::now();
 
-        // 1. Execute Claude Code CLI via subprocess
+        // Build Claude Code CLI command with full flag mapping
         let mut cmd = tokio::process::Command::new("claude");
         cmd.args(["-p", prompt, "--output-format", "text"]);
 
-        // Route to specific agent if specified
+        // Always skip permissions for non-interactive pipeline execution
+        cmd.arg("--dangerously-skip-permissions");
+
+        // Agent routing
         if let Some(name) = agent_name {
             cmd.args(["--agent", name]);
         }
 
-        // Resume session if we have prior context for this agent
-        if self.context_histories.contains_key(agent_id) {
-            cmd.args(["--resume"]);
+        // Session continuation
+        if let Some(ref sid) = options.session_id {
+            cmd.args(["--session-id", sid]);
+        } else if self.context_histories.contains_key(agent_id) {
+            cmd.arg("--continue");
+        }
+
+        // Tool restrictions from movement YAML
+        if !options.tools.is_empty() {
+            let tools_str = options
+                .tools
+                .iter()
+                .map(|t| capitalize_first(t))
+                .collect::<Vec<_>>()
+                .join(",");
+            cmd.args(["--allowed-tools", &tools_str]);
+        }
+
+        // Model override
+        if let Some(ref model) = options.model {
+            cmd.args(["--model", model]);
+        }
+
+        // System prompt from persona
+        if let Some(ref sys) = options.system_prompt {
+            cmd.args(["--system-prompt", sys]);
+        }
+
+        // Budget limit
+        if let Some(budget) = options.max_budget {
+            cmd.args(["--max-budget-usd", &budget.to_string()]);
+        }
+
+        // Worktree isolation
+        if let Some(ref wt) = options.worktree_name {
+            cmd.args(["--worktree", wt]);
         }
 
         let output = cmd
@@ -265,6 +308,15 @@ impl AISessionBridge {
                     .collect()
             })
             .unwrap_or_default()
+    }
+}
+
+/// Capitalize first letter of a tool name (e.g. "read" → "Read", "bash" → "Bash")
+fn capitalize_first(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
     }
 }
 
