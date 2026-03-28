@@ -908,6 +908,13 @@ impl PieceEngine {
             return Ok(summary);
         }
 
+        // Parallel execution: run sub-movements concurrently
+        if movement.parallel && !movement.sub_movements.is_empty() {
+            return self
+                .execute_parallel_movements(movement, state)
+                .await;
+        }
+
         // Build the prompt from instruction + persona + context
         let prompt = self.build_movement_prompt(movement, state);
 
@@ -1002,6 +1009,73 @@ impl PieceEngine {
         }
 
         Ok(output)
+    }
+
+    /// Execute sub-movements in parallel across multiple agents.
+    async fn execute_parallel_movements(
+        &self,
+        parent: &Movement,
+        state: &PieceState,
+    ) -> Result<serde_json::Value> {
+        info!(
+            "Parallel execution: {} sub-movements for '{}'",
+            parent.sub_movements.len(),
+            parent.id
+        );
+
+        // Find all sub-movement definitions from the piece
+        let piece = self
+            .pieces
+            .values()
+            .find(|p| p.movements.iter().any(|m| m.id == parent.id))
+            .ok_or_else(|| anyhow::anyhow!("Parent piece not found for movement '{}'", parent.id))?;
+
+        let sub_movs: Vec<&Movement> = parent
+            .sub_movements
+            .iter()
+            .filter_map(|id| piece.movements.iter().find(|m| m.id == *id))
+            .collect();
+
+        if sub_movs.is_empty() {
+            return Err(anyhow::anyhow!(
+                "No valid sub-movements found for parallel execution"
+            ));
+        }
+
+        // Execute all sub-movements concurrently
+        let futures: Vec<_> = sub_movs
+            .iter()
+            .map(|m| self.execute_movement(m, state))
+            .collect();
+
+        let results = futures::future::join_all(futures).await;
+
+        // Aggregate results
+        let mut outputs = serde_json::Map::new();
+        let mut all_success = true;
+        for (i, result) in results.into_iter().enumerate() {
+            let sub_id = &sub_movs[i].id;
+            match result {
+                Ok(output) => {
+                    outputs.insert(sub_id.clone(), output);
+                }
+                Err(e) => {
+                    warn!("Parallel sub-movement '{}' failed: {}", sub_id, e);
+                    all_success = false;
+                    outputs.insert(
+                        sub_id.clone(),
+                        serde_json::json!({"status": "failed", "error": e.to_string()}),
+                    );
+                }
+            }
+        }
+
+        Ok(serde_json::json!({
+            "movement": parent.id,
+            "parallel": true,
+            "status": if all_success { "completed" } else { "partial" },
+            "agents": outputs,
+        }))
     }
 
     /// Build a local summary from state without calling Claude Code CLI.
@@ -1732,6 +1806,161 @@ pub fn builtin_pieces() -> Vec<Piece> {
                 retry_delay_ms: default_retry_delay(),
                 pass_previous_response: true,
             }],
+            variables: HashMap::new(),
+            metadata: HashMap::new(),
+            interactive_mode: None,
+        },
+        // Multi-agent team workflow: plan → parallel(frontend + backend) → review → complete
+        Piece {
+            name: "team".to_string(),
+            description: "Multi-agent orchestration: planner designs, frontend & backend agents execute in parallel, reviewer validates".to_string(),
+            max_movements: 10,
+            initial_movement: "plan".to_string(),
+            movements: vec![
+                Movement {
+                    id: "plan".to_string(),
+                    persona: Some("planner".to_string()),
+                    policy: Some("coding".to_string()),
+                    knowledge: None,
+                    provider: None,
+                    model: None,
+                    instruction: "Analyze the task and create a plan that splits work between frontend and backend agents. Define clear interfaces and contracts between them.".to_string(),
+                    tools: vec!["read".to_string(), "grep".to_string(), "glob".to_string()],
+                    permission: MovementPermission::Readonly,
+                    rules: vec![MovementRule {
+                        condition: RuleCondition::Simple("success".to_string()),
+                        next: "parallel-implement".to_string(),
+                        priority: 0,
+                    }],
+                    parallel: false,
+                    sub_movements: vec![],
+                    output_contract: None,
+                    timeout: None,
+                    max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
+                },
+                // Parallel hub: dispatches to frontend-impl and backend-impl simultaneously
+                Movement {
+                    id: "parallel-implement".to_string(),
+                    persona: None,
+                    policy: None,
+                    knowledge: None,
+                    provider: None,
+                    model: None,
+                    instruction: "Execute frontend and backend in parallel".to_string(),
+                    tools: vec![],
+                    permission: MovementPermission::Edit,
+                    rules: vec![MovementRule {
+                        condition: RuleCondition::Simple("success".to_string()),
+                        next: "review".to_string(),
+                        priority: 0,
+                    }],
+                    parallel: true,
+                    sub_movements: vec!["frontend-impl".to_string(), "backend-impl".to_string()],
+                    output_contract: None,
+                    timeout: None,
+                    max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
+                },
+                // Frontend agent (runs in parallel)
+                Movement {
+                    id: "frontend-impl".to_string(),
+                    persona: Some("coder".to_string()),
+                    policy: Some("coding".to_string()),
+                    knowledge: None,
+                    provider: None,
+                    model: None,
+                    instruction: "Implement the frontend portion of the plan. Focus on UI, user interaction, and client-side logic.".to_string(),
+                    tools: vec!["read".to_string(), "write".to_string(), "edit".to_string(), "bash".to_string()],
+                    permission: MovementPermission::Edit,
+                    rules: vec![],
+                    parallel: false,
+                    sub_movements: vec![],
+                    output_contract: None,
+                    timeout: None,
+                    max_retries: 1,
+                    agent: Some("frontend-specialist".to_string()),
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
+                },
+                // Backend agent (runs in parallel)
+                Movement {
+                    id: "backend-impl".to_string(),
+                    persona: Some("coder".to_string()),
+                    policy: Some("coding".to_string()),
+                    knowledge: None,
+                    provider: None,
+                    model: None,
+                    instruction: "Implement the backend portion of the plan. Focus on APIs, data models, and server-side logic.".to_string(),
+                    tools: vec!["read".to_string(), "write".to_string(), "edit".to_string(), "bash".to_string()],
+                    permission: MovementPermission::Edit,
+                    rules: vec![],
+                    parallel: false,
+                    sub_movements: vec![],
+                    output_contract: None,
+                    timeout: None,
+                    max_retries: 1,
+                    agent: Some("backend-specialist".to_string()),
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
+                },
+                // Supervisor reviews the combined output
+                Movement {
+                    id: "review".to_string(),
+                    persona: Some("supervisor".to_string()),
+                    policy: Some("review".to_string()),
+                    knowledge: None,
+                    provider: None,
+                    model: None,
+                    instruction: "Review the combined frontend and backend implementation. Verify integration points, check for inconsistencies, and ensure the plan was followed.".to_string(),
+                    tools: vec!["read".to_string(), "grep".to_string(), "bash".to_string()],
+                    permission: MovementPermission::Readonly,
+                    rules: vec![MovementRule {
+                        condition: RuleCondition::Simple("success".to_string()),
+                        next: "complete".to_string(),
+                        priority: 0,
+                    }],
+                    parallel: false,
+                    sub_movements: vec![],
+                    output_contract: None,
+                    timeout: None,
+                    max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
+                },
+                // Local completion
+                Movement {
+                    id: "complete".to_string(),
+                    persona: None,
+                    policy: None,
+                    knowledge: None,
+                    provider: None,
+                    model: None,
+                    instruction: String::new(),
+                    tools: vec![],
+                    permission: MovementPermission::Readonly,
+                    rules: vec![],
+                    parallel: false,
+                    sub_movements: vec![],
+                    output_contract: None,
+                    timeout: None,
+                    max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
+                },
+            ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,

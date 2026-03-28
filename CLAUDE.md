@@ -2,9 +2,10 @@
 
 ## Project Overview
 
-ccswarm v0.6.0 — AI Agent Workflow Engine. OK/NG駆動設計。
+ccswarm v0.6.0 — Multi-Agent Orchestration Pipeline.
 
-ユーザーは `y` か `n` しか押さない。ccswarmが検出・実行・提案し、ユーザーは承認/拒否するだけ。
+複数のClaude Codeエージェントをパイプラインで協調させるワークフローエンジン。
+OK/NG駆動設計: ユーザーは `y` か `n` しか押さない。
 
 ## Usage
 
@@ -69,14 +70,33 @@ ccswarm (workflow engine) ──depends on──> ai-session (session management
 
 ## Builtin Pieces
 
-| Piece | Description |
-|-------|-------------|
-| `default` | plan → implement → review → complete (4 steps) |
-| `quick` | single-shot execution (1 step, 3-5x faster) |
-| `review-fix` | review → fix loop (3 steps) |
-| `research` | investigate → report (2 steps) |
+| Piece | Description | Agents |
+|-------|-------------|--------|
+| `default` | plan → implement → review → complete | planner, coder, reviewer |
+| `team` | plan → parallel(frontend + backend) → review → complete | planner, frontend-specialist, backend-specialist, supervisor |
+| `quick` | single-shot execution (1 step) | coder |
+| `review-fix` | review → fix loop | reviewer, coder |
+| `research` | investigate → report | researcher |
 
 Custom: `.ccswarm/pieces/*.yaml`
+
+### Multi-Agent Pipeline Example
+
+```yaml
+# team piece: plan → parallel agents → supervisor review
+movements:
+  - id: plan
+    persona: planner
+  - id: parallel-implement
+    parallel: true
+    sub_movements: [frontend-impl, backend-impl]
+  - id: frontend-impl
+    agent: frontend-specialist    # Routes to .claude/agents/frontend-specialist.md
+  - id: backend-impl
+    agent: backend-specialist     # Routes to .claude/agents/backend-specialist.md
+  - id: review
+    persona: supervisor           # Final validation
+```
 
 ## Personas (builtin)
 
