@@ -1,0 +1,43 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md"]
+
+[agents]
+max_threads = 6
+max_depth = 2
+
+[agents.frontend-specialist]
+description = "Frontend development specialist for React, Vue, UI/UX, CSS, and client-side development."
+config_file = "../.agents/agents/frontend-specialist.toml"
+
+[agents.backend-specialist]
+description = "Backend development specialist for APIs, databases, Rust server logic, and authentication."
+config_file = "../.agents/agents/backend-specialist.toml"
+
+[agents.devops-specialist]
+description = "DevOps specialist for Docker, CI/CD, infrastructure, monitoring, and deployment automation."
+config_file = "../.agents/agents/devops-specialist.toml"
+
+[agents.qa-specialist]
+description = "QA specialist for testing, coverage, and quality gates."
+config_file = "../.agents/agents/qa-specialist.toml"
+
+[agents.rust-fix-agent]
+description = "Rust build and clippy error fixing specialist for practical, minimal fixes."
+config_file = "../.agents/agents/rust-fix-agent.toml"
+
+[agents.code-refactor-agent]
+description = "Duplicate detection and DRY-focused refactoring specialist."
+config_file = "../.agents/agents/code-refactor-agent.toml"
+
+[agents.architecture-reviewer]
+description = "Architecture pattern compliance reviewer for ccswarm."
+config_file = "../.agents/agents/architecture-reviewer.toml"
+
+[agents.all-reviewer]
+description = "Integrated reviewer covering design compliance, code quality, and architecture patterns."
+config_file = "../.agents/agents/all-reviewer.toml"
+
+[agents.review-fix-agent]
+description = "Review-and-fix specialist for uncommitted changes and diff-local correctness issues."
+config_file = "../.agents/agents/review-fix-agent.toml"
