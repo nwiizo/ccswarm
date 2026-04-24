@@ -53,14 +53,14 @@ impl OutputManager {
         let mut highlights = Vec::new();
 
         match parsed {
-            ParsedOutput::CodeExecution { result: _, metrics } => {
-                if metrics.execution_time > std::time::Duration::from_secs(5) {
-                    highlights.push(Highlight {
-                        category: HighlightCategory::Performance,
-                        message: format!("Slow execution: {:?}", metrics.execution_time),
-                        severity: Severity::Warning,
-                    });
-                }
+            ParsedOutput::CodeExecution { result: _, metrics }
+                if metrics.execution_time > std::time::Duration::from_secs(5) =>
+            {
+                highlights.push(Highlight {
+                    category: HighlightCategory::Performance,
+                    message: format!("Slow execution: {:?}", metrics.execution_time),
+                    severity: Severity::Warning,
+                });
             }
             ParsedOutput::BuildOutput { status, .. } => match status {
                 BuildStatus::Failed(error) => {
@@ -79,14 +79,12 @@ impl OutputManager {
                 }
                 _ => {}
             },
-            ParsedOutput::TestResults { failed, .. } => {
-                if *failed > 0 {
-                    highlights.push(Highlight {
-                        category: HighlightCategory::TestFailure,
-                        message: format!("{} tests failed", failed),
-                        severity: Severity::Error,
-                    });
-                }
+            ParsedOutput::TestResults { failed, .. } if *failed > 0 => {
+                highlights.push(Highlight {
+                    category: HighlightCategory::TestFailure,
+                    message: format!("{} tests failed", failed),
+                    severity: Severity::Error,
+                });
             }
             ParsedOutput::StructuredLog { level, message, .. } => {
                 if matches!(level, LogLevel::Error | LogLevel::Warning) {

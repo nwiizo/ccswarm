@@ -1,147 +1,6 @@
 use super::super::*;
 
 impl CliRunner {
-    pub(crate) async fn handle_health(
-        &self,
-        check_agents: bool,
-        check_sessions: bool,
-        resources: bool,
-        diagnose: bool,
-        detailed: bool,
-        format: &str,
-    ) -> Result<()> {
-        use crate::cli::health::{HealthChecker, run_diagnostics};
-        use crate::coordination::StatusTracker;
-
-        // Run diagnostics if requested
-        if diagnose {
-            return run_diagnostics(&self.repo_path).await;
-        }
-
-        // Initialize health checker
-        let status_tracker = StatusTracker::new().await?;
-        let health_checker = HealthChecker::new(status_tracker);
-
-        // Execution engine has been removed
-        let execution_stats: Option<(usize, usize, usize)> = None;
-
-        // Perform health checks based on flags
-        let report = if check_agents && !check_sessions && !resources {
-            // Only check agents
-            let checks = health_checker.check_agents_only().await?;
-            let overall_status = if checks.iter().any(|c| {
-                matches!(
-                    c.status,
-                    health::HealthStatus::Down | health::HealthStatus::Critical
-                )
-            }) {
-                health::HealthStatus::Critical
-            } else if checks
-                .iter()
-                .any(|c| c.status == health::HealthStatus::Warning)
-            {
-                health::HealthStatus::Warning
-            } else {
-                health::HealthStatus::Healthy
-            };
-
-            let total_agents = checks.len();
-            let healthy_agents = checks
-                .iter()
-                .filter(|c| c.status == health::HealthStatus::Healthy)
-                .count();
-            health::SystemHealthReport {
-                timestamp: chrono::Utc::now(),
-                overall_status,
-                checks,
-                total_agents,
-                healthy_agents,
-                active_tasks: 0,
-                session_count: 0,
-            }
-        } else if check_sessions && !check_agents && !resources {
-            // Only check sessions
-            let checks = health_checker.check_sessions_only().await?;
-            let overall_status = if checks.iter().any(|c| {
-                matches!(
-                    c.status,
-                    health::HealthStatus::Down | health::HealthStatus::Critical
-                )
-            }) {
-                health::HealthStatus::Critical
-            } else if checks
-                .iter()
-                .any(|c| c.status == health::HealthStatus::Warning)
-            {
-                health::HealthStatus::Warning
-            } else {
-                health::HealthStatus::Healthy
-            };
-
-            let session_count = checks.len();
-            health::SystemHealthReport {
-                timestamp: chrono::Utc::now(),
-                overall_status,
-                checks,
-                total_agents: 0,
-                healthy_agents: 0,
-                active_tasks: 0,
-                session_count,
-            }
-        } else {
-            // Full health check
-            health_checker.check_all().await?
-        };
-
-        // Output results based on format
-        match format {
-            "json" => {
-                let mut json_report = serde_json::to_value(&report)?;
-
-                // Add execution stats if available
-                if let Some((executed, succeeded, failed)) = execution_stats {
-                    json_report["execution_stats"] = serde_json::json!({
-                        "tasks_executed": executed,
-                        "tasks_succeeded": succeeded,
-                        "tasks_failed": failed,
-                    });
-                }
-
-                println!("{}", serde_json::to_string_pretty(&json_report)?);
-            }
-            _ => {
-                if detailed {
-                    report.print_detailed();
-                } else {
-                    report.print_summary();
-                }
-
-                // Print execution stats if available
-                if let Some((executed, succeeded, failed)) = execution_stats {
-                    println!();
-                    println!("{}", "Execution Statistics:".bright_cyan());
-                    println!("  Tasks executed: {}", executed);
-                    println!(
-                        "  Tasks succeeded: {}",
-                        format!("{}", succeeded).bright_green()
-                    );
-                    println!("  Tasks failed: {}", format!("{}", failed).bright_red());
-                    if executed > 0 {
-                        let success_rate = (succeeded as f64 / executed as f64) * 100.0;
-                        println!("  Success rate: {:.1}%", success_rate);
-                    }
-                }
-            }
-        }
-
-        // Exit with non-zero code if unhealthy
-        if report.overall_status == health::HealthStatus::Critical {
-            std::process::exit(1);
-        }
-
-        Ok(())
-    }
-
     pub(crate) async fn handle_doctor(
         &self,
         fix: bool,
@@ -315,25 +174,66 @@ impl CliRunner {
             issues.push("git_repo");
         }
 
-        // Check Claude Code CLI
-        print!("Checking Claude Code CLI... ");
-        match std::process::Command::new("claude")
-            .arg("--version")
-            .env_remove("CLAUDECODE")
-            .env_remove("CLAUDE_CODE_ENTRYPOINT")
-            .output()
-        {
-            Ok(output) if output.status.success() => {
-                let version = String::from_utf8_lossy(&output.stdout);
-                println!(
-                    "{} ({})",
-                    "✅ Available".bright_green(),
-                    version.trim().bright_black()
-                );
-            }
-            _ => {
-                println!("{}", "❌ Not found".bright_red());
-                issues.push("claude_cli");
+        // Check agent provider CLIs (Claude/Codex/Copilot)
+        println!("Checking agent provider CLIs...");
+
+        for (label, probe, fix_key, required, caveat) in [
+            (
+                "  claude",
+                &["claude", "--version"][..],
+                "claude_cli",
+                true,
+                None,
+            ),
+            (
+                "  codex",
+                &["codex", "--version"][..],
+                "codex_cli",
+                false,
+                None,
+            ),
+            (
+                "  gh copilot",
+                &["gh", "copilot", "--version"][..],
+                "copilot_cli",
+                false,
+                // `gh copilot suggest` is interactive and returns shell-command
+                // strings, not file edits — see providers/copilot.rs.
+                Some("code-gen unsupported; use claude or codex"),
+            ),
+        ] {
+            print!("{} ... ", label);
+            let mut cmd = std::process::Command::new(probe[0]);
+            cmd.args(&probe[1..])
+                .env_remove("CLAUDECODE")
+                .env_remove("CLAUDE_CODE_ENTRYPOINT");
+            match cmd.output() {
+                Ok(output) if output.status.success() => {
+                    let v = String::from_utf8_lossy(&output.stdout);
+                    let first_line = v.lines().next().unwrap_or("").trim();
+                    if let Some(note) = caveat {
+                        println!(
+                            "{} ({}) {}",
+                            "⚠️  Available".bright_yellow(),
+                            first_line.bright_black(),
+                            format!("— {}", note).bright_yellow(),
+                        );
+                    } else {
+                        println!(
+                            "{} ({})",
+                            "✅ Available".bright_green(),
+                            first_line.bright_black()
+                        );
+                    }
+                }
+                _ => {
+                    if required {
+                        println!("{}", "❌ Not found".bright_red());
+                        issues.push(fix_key);
+                    } else {
+                        println!("{}", "⚠️  Not installed (optional)".bright_yellow());
+                    }
+                }
             }
         }
 
@@ -403,15 +303,13 @@ impl CliRunner {
                         "config" => {
                             println!("• Config: Run 'ccswarm setup' to create configuration");
                         }
-                        "git_repo" => {
-                            if fix {
-                                println!("• Initializing git repository...");
-                                crate::git::shell::ShellWorktreeManager::init_if_needed(
-                                    &self.repo_path,
-                                )
-                                .await?;
-                                println!("  ✅ Git repository initialized");
-                            }
+                        "git_repo" if fix => {
+                            println!("• Initializing git repository...");
+                            crate::git::shell::ShellWorktreeManager::init_if_needed(
+                                &self.repo_path,
+                            )
+                            .await?;
+                            println!("  ✅ Git repository initialized");
                         }
                         "claude_cli" => {
                             println!(

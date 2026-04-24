@@ -1,0 +1,8 @@
+Create exactly one file at path ./index.html in the current working directory. The file must:
+1. Have document title: ccswarm counter
+2. Contain <h1>Counter</h1>
+3. Contain <button id="inc">+1</button>
+4. Contain <span id="count">0</span>
+5. Inline script increments the span on click
+
+Create only this one file. Use a relative path.

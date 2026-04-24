@@ -1,6 +1,6 @@
-//! Repertoire: External workflow piece package management
+//! Repertoire: External workflow flow package management
 //!
-//! Manages installation and loading of external piece packages from Git repositories.
+//! Manages installation and loading of external flow packages from Git repositories.
 //! Packages are stored in `~/.ccswarm/repertoire/<name>/`.
 
 use anyhow::{Context, Result, anyhow};
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-use super::piece::Piece;
+use super::flow::Flow;
 
 /// Metadata about an installed repertoire package
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,8 +19,8 @@ pub struct RepertoirePackage {
     pub source_url: String,
     /// Local installation path
     pub install_path: PathBuf,
-    /// Installed pieces
-    pub pieces: Vec<String>,
+    /// Installed flows
+    pub flows: Vec<String>,
 }
 
 /// Manages repertoire packages
@@ -86,14 +86,14 @@ impl RepertoireManager {
             return Err(anyhow!("git clone failed: {}", stderr));
         }
 
-        // Discover pieces in the cloned repo
-        let pieces = self.discover_pieces(&install_path).await?;
+        // Discover flows in the cloned repo
+        let flows = self.discover_pieces(&install_path).await?;
 
         let package = RepertoirePackage {
             name,
             source_url: url.to_string(),
             install_path,
-            pieces,
+            flows,
         };
 
         // Save package metadata
@@ -122,7 +122,7 @@ impl RepertoireManager {
                     }
                 } else {
                     // Try to reconstruct metadata from directory
-                    let pieces = self.discover_pieces(&path).await.unwrap_or_default();
+                    let flows = self.discover_pieces(&path).await.unwrap_or_default();
                     let name = path
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
@@ -131,7 +131,7 @@ impl RepertoireManager {
                         name,
                         source_url: String::new(),
                         install_path: path,
-                        pieces,
+                        flows,
                     });
                 }
             }
@@ -156,17 +156,17 @@ impl RepertoireManager {
         Ok(())
     }
 
-    /// Load all pieces from installed repertoire packages
-    pub async fn load_all_pieces(&self) -> Result<Vec<Piece>> {
+    /// Load all flows from installed repertoire packages
+    pub async fn load_all_pieces(&self) -> Result<Vec<Flow>> {
         let mut all_pieces = Vec::new();
         let packages = self.list().await?;
 
         for package in &packages {
             match self.load_pieces_from_package(package).await {
-                Ok(pieces) => all_pieces.extend(pieces),
+                Ok(flows) => all_pieces.extend(flows),
                 Err(e) => {
                     warn!(
-                        "Failed to load pieces from package '{}': {}",
+                        "Failed to load flows from package '{}': {}",
                         package.name, e
                     );
                 }
@@ -176,61 +176,35 @@ impl RepertoireManager {
         Ok(all_pieces)
     }
 
-    /// Discover piece YAML files in a directory
+    /// Discover flow YAML files in a directory (returns the file stems).
     async fn discover_pieces(&self, dir: &Path) -> Result<Vec<String>> {
-        let mut pieces = Vec::new();
-
-        // Look for YAML files in the root and pieces/ subdirectory
-        for search_dir in &[dir.to_path_buf(), dir.join("pieces")] {
-            if !search_dir.exists() {
-                continue;
+        let mut flows = Vec::new();
+        for_each_flow_yaml(dir, |path| {
+            if let Some(name) = path.file_stem() {
+                flows.push(name.to_string_lossy().to_string());
             }
-
-            let mut entries = tokio::fs::read_dir(search_dir).await?;
-            while let Some(entry) = entries.next_entry().await? {
-                let path = entry.path();
-                if let Some(ext) = path.extension()
-                    && (ext == "yaml" || ext == "yml")
-                    && let Some(name) = path.file_stem()
-                {
-                    pieces.push(name.to_string_lossy().to_string());
-                }
-            }
-        }
-
-        Ok(pieces)
+            Ok(())
+        })
+        .await?;
+        Ok(flows)
     }
 
-    /// Load pieces from a specific package
-    async fn load_pieces_from_package(&self, package: &RepertoirePackage) -> Result<Vec<Piece>> {
-        let mut pieces = Vec::new();
-
-        for search_dir in &[
-            package.install_path.clone(),
-            package.install_path.join("pieces"),
-        ] {
-            if !search_dir.exists() {
-                continue;
+    /// Load flows from a specific package.
+    async fn load_pieces_from_package(&self, package: &RepertoirePackage) -> Result<Vec<Flow>> {
+        let mut flows = Vec::new();
+        for_each_flow_yaml(&package.install_path, |path| {
+            // Best-effort: unparseable files are logged and skipped, not fatal.
+            match std::fs::read_to_string(path) {
+                Ok(content) => match serde_yml::from_str::<Flow>(&content) {
+                    Ok(flow) => flows.push(flow),
+                    Err(e) => warn!("Failed to parse flow at {}: {}", path.display(), e),
+                },
+                Err(e) => warn!("Failed to read flow at {}: {}", path.display(), e),
             }
-
-            let mut entries = tokio::fs::read_dir(search_dir).await?;
-            while let Some(entry) = entries.next_entry().await? {
-                let path = entry.path();
-                if let Some(ext) = path.extension()
-                    && (ext == "yaml" || ext == "yml")
-                {
-                    let content = tokio::fs::read_to_string(&path).await?;
-                    match serde_yaml::from_str::<Piece>(&content) {
-                        Ok(piece) => pieces.push(piece),
-                        Err(e) => {
-                            warn!("Failed to parse piece at {}: {}", path.display(), e);
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(pieces)
+            Ok(())
+        })
+        .await?;
+        Ok(flows)
     }
 
     /// Save package metadata
@@ -240,6 +214,29 @@ impl RepertoireManager {
         tokio::fs::write(&metadata_path, content).await?;
         Ok(())
     }
+}
+
+/// Walk `dir` and `dir/flows/` (if either exists), calling `visit` with the path of
+/// every `*.yaml` / `*.yml` file found. Used by both `discover_pieces` (needs just
+/// names) and `load_pieces_from_package` (needs to parse each file) so the directory
+/// traversal lives in exactly one place.
+async fn for_each_flow_yaml(dir: &Path, mut visit: impl FnMut(&Path) -> Result<()>) -> Result<()> {
+    for search_dir in [dir.to_path_buf(), dir.join("flows")] {
+        if !search_dir.exists() {
+            continue;
+        }
+        let mut entries = tokio::fs::read_dir(&search_dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path
+                .extension()
+                .is_some_and(|ext| ext == "yaml" || ext == "yml")
+            {
+                visit(&path)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Extract package name from a Git URL
@@ -259,12 +256,12 @@ mod tests {
     #[test]
     fn test_extract_package_name() {
         assert_eq!(
-            extract_package_name("https://github.com/user/my-pieces").unwrap(),
-            "my-pieces"
+            extract_package_name("https://github.com/user/my-flows").unwrap(),
+            "my-flows"
         );
         assert_eq!(
-            extract_package_name("https://github.com/user/my-pieces.git").unwrap(),
-            "my-pieces"
+            extract_package_name("https://github.com/user/my-flows.git").unwrap(),
+            "my-flows"
         );
         assert_eq!(
             extract_package_name("git@github.com:user/workflow-pack.git").unwrap(),

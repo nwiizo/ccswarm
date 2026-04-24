@@ -1,5 +1,7 @@
 //! Error help topics and documentation
 
+#![allow(dead_code)]
+
 use colored::Colorize;
 use std::collections::HashMap;
 

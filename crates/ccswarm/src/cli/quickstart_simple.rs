@@ -281,7 +281,7 @@ An AI-orchestrated project powered by ccswarm.
 
 - [ccswarm Documentation](https://github.com/nwiizo/ccswarm)
 - Run `ccswarm help` for command reference
-- Run `ccswarm tutorial` for interactive guide
+- Run `ccswarm doctor` for environment diagnostics
 "#,
             project_name,
             agents.len(),

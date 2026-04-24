@@ -129,13 +129,8 @@
 pub mod context;
 pub mod coordination;
 pub mod core;
-pub mod integration;
 #[cfg(feature = "mcp")]
 pub mod mcp;
-#[cfg(feature = "tmux-compat")]
-pub mod native_portable;
-#[cfg(feature = "tmux-compat")]
-pub use native_portable as native;
 pub mod output;
 pub mod persistence;
 pub mod session_persistence;

@@ -4,7 +4,7 @@ Last updated: 2026-03-11
 
 ## 1. What is Harness Engineering?
 
-Harness Engineering is the practice of designing and operating a deterministic evaluation system (a “harness”) that executes workflows under controlled conditions and validates outcomes against clear oracles. For ccswarm (multi‑agent orchestration), the harness ensures that pieces/movements, providers, and guards collectively deliver correct, safe, and cost‑effective results.
+Harness Engineering is the practice of designing and operating a deterministic evaluation system (a “harness”) that executes workflows under controlled conditions and validates outcomes against clear oracles. For ccswarm (multi‑agent orchestration), the harness ensures that flows/movements, providers, and guards collectively deliver correct, safe, and cost‑effective results.
 
 Goals:
 - Determinism and reproducibility: same inputs → same outcomes (within stochastic bounds)
@@ -25,7 +25,7 @@ Non‑Goals:
 ## 3. Architecture
 - Scenario Loader: reads YAML scenarios; expands matrices/tags/filters.
 - Fixture Manager: prepares inputs (repos, datasets), manages setup/teardown.
-- Executor: runs `pipeline` (piece/movements) with timeouts and captures outputs.
+- Executor: runs `pipeline` (flow/movements) with timeouts and captures outputs.
 - Oracles: evaluate assertions (text, files, tests, metrics, policies).
 - Reporter: aggregates results, writes JSON/markdown, surfaces diffs vs baseline.
 - Storage: organizes runs under `.ccswarm/runs/<run-id>/` with `events.ndjson` and summaries.
@@ -38,7 +38,7 @@ Place scenarios under `.ccswarm/harness/` or pass paths explicitly.
 name: "add-login-form"
 tags: ["feature", "frontend"]
 
-piece: "default"              # workflow piece
+flow: "default"              # workflow flow
 task: "Create login form"
 
 timeout_secs: 600              # default 600
@@ -158,7 +158,7 @@ Harness report auto‑includes a best‑effort summary of the most recent `event
 
 ## 14. Current Implementation (v0)
 - Minimal CLI: `harness run|list`
-- Scenario fields: `piece`, `task`, `timeout_secs`, `output_format`, `assert` (expect_success/expect_text/forbid_text)
+- Scenario fields: `flow`, `task`, `timeout_secs`, `output_format`, `assert` (expect_success/expect_text/forbid_text)
 - Report: JSON or text/markdown; consolidated pass/fail with per‑scenario details
 
 ## 15. Roadmap

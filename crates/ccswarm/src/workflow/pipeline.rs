@@ -1,6 +1,6 @@
 //! Pipeline Mode for CI/CD Automation
 //!
-//! Enables running piece workflows non-interactively in CI/CD environments.
+//! Enables running flow workflows non-interactively in CI/CD environments.
 //! Provides structured output, exit code mapping, and environment variable injection.
 //!
 //! # Example
@@ -10,7 +10,7 @@
 //!
 //! # async fn example() -> anyhow::Result<()> {
 //! let config = PipelineConfig::builder()
-//!     .piece_name("default")
+//!     .flow_name("default")
 //!     .task_text("Implement feature X")
 //!     .output_format("json")
 //!     .timeout(Duration::from_secs(300))
@@ -34,13 +34,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
-use super::piece::{PieceEngine, PieceState, PieceStatus};
+use super::flow::{FlowEngine, FlowState, FlowStatus};
 
 /// Configuration for pipeline execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineConfig {
-    /// Name of the piece to execute
-    pub piece_name: String,
+    /// Name of the flow to execute
+    pub flow_name: String,
 
     /// Task text to execute
     pub task_text: String,
@@ -53,7 +53,7 @@ pub struct PipelineConfig {
     #[serde(default = "default_timeout")]
     pub timeout: Duration,
 
-    /// Environment variables to inject into piece variables
+    /// Environment variables to inject into flow variables
     #[serde(default)]
     pub env_vars: HashMap<String, String>,
 
@@ -69,7 +69,7 @@ pub struct PipelineConfig {
     #[serde(default)]
     pub fail_on_warnings: bool,
 
-    /// Additional piece variables
+    /// Additional flow variables
     #[serde(default)]
     pub variables: HashMap<String, serde_json::Value>,
 }
@@ -85,7 +85,7 @@ fn default_timeout() -> Duration {
 /// Builder for PipelineConfig
 #[derive(Debug, Default)]
 pub struct PipelineConfigBuilder {
-    piece_name: Option<String>,
+    flow_name: Option<String>,
     task_text: Option<String>,
     output_format: String,
     timeout: Duration,
@@ -106,9 +106,9 @@ impl PipelineConfigBuilder {
         }
     }
 
-    /// Set the piece name
-    pub fn piece_name(mut self, name: impl Into<String>) -> Self {
-        self.piece_name = Some(name.into());
+    /// Set the flow name
+    pub fn flow_name(mut self, name: impl Into<String>) -> Self {
+        self.flow_name = Some(name.into());
         self
     }
 
@@ -168,15 +168,15 @@ impl PipelineConfigBuilder {
 
     /// Build the configuration
     pub fn build(self) -> Result<PipelineConfig> {
-        let piece_name = self
-            .piece_name
-            .ok_or_else(|| anyhow::anyhow!("piece_name is required"))?;
+        let flow_name = self
+            .flow_name
+            .ok_or_else(|| anyhow::anyhow!("flow_name is required"))?;
         let task_text = self
             .task_text
             .ok_or_else(|| anyhow::anyhow!("task_text is required"))?;
 
         Ok(PipelineConfig {
-            piece_name,
+            flow_name,
             task_text,
             output_format: self.output_format,
             timeout: self.timeout,
@@ -220,12 +220,12 @@ impl PipelineExitCode {
         }
     }
 
-    /// Create from PieceStatus
-    pub fn from_status(status: PieceStatus) -> Self {
+    /// Create from FlowStatus
+    pub fn from_status(status: FlowStatus) -> Self {
         match status {
-            PieceStatus::Completed => Self::Success,
-            PieceStatus::Failed | PieceStatus::Aborted => Self::Failure,
-            PieceStatus::Pending | PieceStatus::Running => Self::Failure,
+            FlowStatus::Completed => Self::Success,
+            FlowStatus::Failed | FlowStatus::Aborted => Self::Failure,
+            FlowStatus::Pending | FlowStatus::Running => Self::Failure,
         }
     }
 }
@@ -245,7 +245,7 @@ pub struct PipelineOutput {
     /// Execution duration
     pub duration: Duration,
 
-    /// Number of movements executed
+    /// Number of stages executed
     pub movement_count: u32,
 
     /// Started at timestamp
@@ -283,22 +283,22 @@ pub enum PipelineStatus {
 /// Detailed pipeline execution information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineDetails {
-    /// Piece name executed
-    pub piece_name: String,
+    /// Flow name executed
+    pub flow_name: String,
 
-    /// Movement transitions
+    /// Stage transitions
     pub transitions: Vec<MovementTransitionSummary>,
 
     /// Variables at completion
     pub variables: HashMap<String, serde_json::Value>,
 }
 
-/// Summary of a movement transition
+/// Summary of a stage transition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MovementTransitionSummary {
-    /// Source movement
+    /// Source stage
     pub from: String,
-    /// Destination movement
+    /// Destination stage
     pub to: String,
     /// Condition that triggered transition
     pub condition: String,
@@ -322,7 +322,7 @@ impl PipelineOutput {
         let mut result = String::new();
         result.push_str(&format!("Status: {:?}\n", self.status));
         result.push_str(&format!("Duration: {:?}\n", self.duration));
-        result.push_str(&format!("Movements: {}\n", self.movement_count));
+        result.push_str(&format!("Stages: {}\n", self.movement_count));
 
         if !self.warnings.is_empty() {
             result.push_str("\nWarnings:\n");
@@ -351,7 +351,7 @@ impl PipelineOutput {
         result.push_str("# Pipeline Execution Report\n\n");
         result.push_str(&format!("**Status:** {:?}\n", self.status));
         result.push_str(&format!("**Duration:** {:?}\n", self.duration));
-        result.push_str(&format!("**Movements:** {}\n\n", self.movement_count));
+        result.push_str(&format!("**Stages:** {}\n\n", self.movement_count));
 
         if !self.warnings.is_empty() {
             result.push_str("## Warnings\n\n");
@@ -371,10 +371,10 @@ impl PipelineOutput {
 
         if let Some(details) = &self.details {
             result.push_str("\n## Execution Details\n\n");
-            result.push_str(&format!("**Piece:** {}\n\n", details.piece_name));
+            result.push_str(&format!("**Flow:** {}\n\n", details.flow_name));
 
             if !details.transitions.is_empty() {
-                result.push_str("### Movement Transitions\n\n");
+                result.push_str("### Stage Transitions\n\n");
                 for transition in &details.transitions {
                     result.push_str(&format!(
                         "- {} → {} ({})\n",
@@ -388,21 +388,21 @@ impl PipelineOutput {
     }
 }
 
-/// Runner for executing pieces in pipeline mode
+/// Runner for executing flows in pipeline mode
 pub struct PipelineRunner {
-    engine: PieceEngine,
+    engine: FlowEngine,
 }
 
 impl PipelineRunner {
     /// Create a new pipeline runner
     pub fn new() -> Self {
         Self {
-            engine: PieceEngine::new(),
+            engine: FlowEngine::new(),
         }
     }
 
-    /// Create with a custom piece engine
-    pub fn with_engine(engine: PieceEngine) -> Self {
+    /// Create with a custom flow engine
+    pub fn with_engine(engine: FlowEngine) -> Self {
         Self { engine }
     }
 
@@ -410,8 +410,8 @@ impl PipelineRunner {
     pub async fn execute(&self, config: PipelineConfig) -> Result<PipelineOutput> {
         let started_at = Utc::now();
         info!(
-            "Starting pipeline execution: piece={}, timeout={:?}",
-            config.piece_name, config.timeout
+            "Starting pipeline execution: flow={}, timeout={:?}",
+            config.flow_name, config.timeout
         );
 
         // Validate configuration
@@ -440,12 +440,12 @@ impl PipelineRunner {
                     self.create_error_output(started_at, e.to_string())
                 }
                 Err(_) => {
-                    // Check if movements completed before timeout
+                    // Check if stages completed before timeout
                     let partial = self.engine.get_last_state().await;
                     let movements_done = partial.as_ref().map(|s| s.movement_count).unwrap_or(0);
                     if movements_done > 0 {
                         warn!(
-                            "Pipeline timed out after {:?} but {} movements completed",
+                            "Pipeline timed out after {:?} but {} stages completed",
                             config.timeout, movements_done
                         );
                         self.create_partial_success_output(started_at, config.timeout, partial)
@@ -470,9 +470,9 @@ impl PipelineRunner {
 
     /// Validate pipeline configuration
     fn validate_config(&self, config: &PipelineConfig) -> Result<()> {
-        // Check piece exists
-        if self.engine.get_piece(&config.piece_name).is_none() {
-            anyhow::bail!("Piece '{}' not found", config.piece_name);
+        // Check flow exists
+        if self.engine.get_flow(&config.flow_name).is_none() {
+            anyhow::bail!("Flow '{}' not found", config.flow_name);
         }
 
         // Validate output format
@@ -493,16 +493,16 @@ impl PipelineRunner {
     async fn execute_internal(&self, config: &PipelineConfig) -> Result<PipelineOutput> {
         let started_at = Utc::now();
         debug!(
-            "Executing piece '{}' with task: {}",
-            config.piece_name, config.task_text
+            "Executing flow '{}' with task: {}",
+            config.flow_name, config.task_text
         );
 
-        // Execute the piece with task text injected as context
+        // Execute the flow with task text injected as context
         let state = self
             .engine
-            .execute_piece_with_task(&config.piece_name, &config.task_text)
+            .execute_piece_with_task(&config.flow_name, &config.task_text)
             .await
-            .context("Failed to execute piece")?;
+            .context("Failed to execute flow")?;
 
         let completed_at = Utc::now();
         let duration = (completed_at - started_at)
@@ -511,16 +511,16 @@ impl PipelineRunner {
 
         // Determine status
         let (status, exit_code) = match state.status {
-            PieceStatus::Completed => (PipelineStatus::Success, PipelineExitCode::Success),
-            PieceStatus::Aborted => (PipelineStatus::Aborted, PipelineExitCode::Failure),
-            PieceStatus::Failed => (PipelineStatus::Failed, PipelineExitCode::Failure),
+            FlowStatus::Completed => (PipelineStatus::Success, PipelineExitCode::Success),
+            FlowStatus::Aborted => (PipelineStatus::Aborted, PipelineExitCode::Failure),
+            FlowStatus::Failed => (PipelineStatus::Failed, PipelineExitCode::Failure),
             _ => (PipelineStatus::Failed, PipelineExitCode::Failure),
         };
 
         // Collect warnings
         let mut warnings = Vec::new();
         if state.movement_count >= 20 {
-            warnings.push(format!("High movement count: {}", state.movement_count));
+            warnings.push(format!("High stage count: {}", state.movement_count));
         }
 
         // Format output
@@ -529,7 +529,7 @@ impl PipelineRunner {
         // Create details if verbose
         let details = if config.verbose {
             Some(PipelineDetails {
-                piece_name: config.piece_name.clone(),
+                flow_name: config.flow_name.clone(),
                 transitions: state
                     .history
                     .iter()
@@ -566,17 +566,17 @@ impl PipelineRunner {
         })
     }
 
-    /// Format piece state output
-    fn format_output(&self, state: &super::piece::PieceState, format: &str) -> Result<String> {
+    /// Format flow state output
+    fn format_output(&self, state: &super::flow::FlowState, format: &str) -> Result<String> {
         match format {
             "json" => serde_json::to_string_pretty(state).context("Failed to serialize as JSON"),
             "text" => Ok(format!(
-                "Piece: {}\nStatus: {:?}\nMovements: {}\n",
-                state.piece_name, state.status, state.movement_count
+                "Flow: {}\nStatus: {:?}\nMovements: {}\n",
+                state.flow_name, state.status, state.movement_count
             )),
             "markdown" => Ok(format!(
-                "# Piece Execution: {}\n\n**Status:** {:?}\n**Movements:** {}\n",
-                state.piece_name, state.status, state.movement_count
+                "# Flow Execution: {}\n\n**Status:** {:?}\n**Stages:** {}\n",
+                state.flow_name, state.status, state.movement_count
             )),
             _ => anyhow::bail!("Unsupported output format: {}", format),
         }
@@ -603,41 +603,41 @@ impl PipelineRunner {
         }
     }
 
-    /// Create partial success output when timeout occurs after some movements completed
+    /// Create partial success output when timeout occurs after some stages completed
     fn create_partial_success_output(
         &self,
         started_at: DateTime<Utc>,
         timeout: Duration,
-        partial_state: Option<PieceState>,
+        partial_state: Option<FlowState>,
     ) -> PipelineOutput {
         let completed_at = Utc::now();
-        let movements = partial_state
+        let stages = partial_state
             .as_ref()
             .map(|s| s.movement_count)
             .unwrap_or(0);
-        let piece_name = partial_state
+        let flow_name = partial_state
             .as_ref()
-            .map(|s| s.piece_name.clone())
+            .map(|s| s.flow_name.clone())
             .unwrap_or_default();
 
         PipelineOutput {
             exit_code: PipelineExitCode::Success, // Partial success = still usable
             status: PipelineStatus::Success,
             output: format!(
-                "Piece: {}\nStatus: Partial (timed out after {} movements)\nMovements: {}",
-                piece_name, movements, movements
+                "Flow: {}\nStatus: Partial (timed out after {} stages)\nMovements: {}",
+                flow_name, stages, stages
             ),
             duration: timeout,
-            movement_count: movements,
+            movement_count: stages,
             started_at,
             completed_at,
             warnings: vec![format!(
-                "Pipeline timed out after {:?} but {} movements completed successfully. Generated files may be usable.",
-                timeout, movements
+                "Pipeline timed out after {:?} but {} stages completed successfully. Generated files may be usable.",
+                timeout, stages
             )],
             error: None,
             details: partial_state.map(|s| PipelineDetails {
-                piece_name: s.piece_name,
+                flow_name: s.flow_name,
                 transitions: s
                     .history
                     .iter()
@@ -696,13 +696,13 @@ impl PipelineRunner {
         Ok(())
     }
 
-    /// Get a reference to the piece engine
-    pub fn engine(&self) -> &PieceEngine {
+    /// Get a reference to the flow engine
+    pub fn engine(&self) -> &FlowEngine {
         &self.engine
     }
 
-    /// Get a mutable reference to the piece engine
-    pub fn engine_mut(&mut self) -> &mut PieceEngine {
+    /// Get a mutable reference to the flow engine
+    pub fn engine_mut(&mut self) -> &mut FlowEngine {
         &mut self.engine
     }
 }
@@ -720,7 +720,7 @@ mod tests {
     #[test]
     fn test_pipeline_config_builder() {
         let config = PipelineConfig::builder()
-            .piece_name("test-piece")
+            .flow_name("test-flow")
             .task_text("Do something")
             .output_format("json")
             .timeout(Duration::from_secs(300))
@@ -730,7 +730,7 @@ mod tests {
 
         assert!(config.is_ok());
         let config = config.unwrap();
-        assert_eq!(config.piece_name, "test-piece");
+        assert_eq!(config.flow_name, "test-flow");
         assert_eq!(config.task_text, "Do something");
         assert_eq!(config.output_format, "json");
         assert_eq!(config.timeout, Duration::from_secs(300));
@@ -740,7 +740,7 @@ mod tests {
 
     #[test]
     fn test_pipeline_config_builder_missing_required() {
-        let result = PipelineConfig::builder().piece_name("test").build();
+        let result = PipelineConfig::builder().flow_name("test").build();
         assert!(result.is_err());
 
         let result = PipelineConfig::builder().task_text("test").build();
@@ -758,19 +758,19 @@ mod tests {
     #[test]
     fn test_exit_code_from_status() {
         assert_eq!(
-            PipelineExitCode::from_status(PieceStatus::Completed),
+            PipelineExitCode::from_status(FlowStatus::Completed),
             PipelineExitCode::Success
         );
         assert_eq!(
-            PipelineExitCode::from_status(PieceStatus::Failed),
+            PipelineExitCode::from_status(FlowStatus::Failed),
             PipelineExitCode::Failure
         );
         assert_eq!(
-            PipelineExitCode::from_status(PieceStatus::Aborted),
+            PipelineExitCode::from_status(FlowStatus::Aborted),
             PipelineExitCode::Failure
         );
         assert_eq!(
-            PipelineExitCode::from_status(PieceStatus::Running),
+            PipelineExitCode::from_status(FlowStatus::Running),
             PipelineExitCode::Failure
         );
     }
@@ -792,7 +792,7 @@ mod tests {
 
         let text = output.format_text();
         assert!(text.contains("Status: Success"));
-        assert!(text.contains("Movements: 5"));
+        assert!(text.contains("Stages: 5"));
         assert!(text.contains("warning 1"));
         assert!(text.contains("test output"));
     }
@@ -875,14 +875,14 @@ mod tests {
     #[test]
     fn test_pipeline_runner_creation() {
         let runner = PipelineRunner::new();
-        // PieceEngine::new() now loads builtin pieces by default
-        assert!(!runner.engine().list_pieces().is_empty());
+        // FlowEngine::new() now loads builtin flows by default
+        assert!(!runner.engine().list_flows().is_empty());
     }
 
     #[test]
     fn test_pipeline_config_default_values() {
         let config = PipelineConfig::builder()
-            .piece_name("test")
+            .flow_name("test")
             .task_text("test task")
             .build()
             .unwrap();
@@ -896,7 +896,7 @@ mod tests {
     #[test]
     fn test_pipeline_details_serialization() {
         let details = PipelineDetails {
-            piece_name: "test".to_string(),
+            flow_name: "test".to_string(),
             transitions: vec![MovementTransitionSummary {
                 from: "start".to_string(),
                 to: "end".to_string(),

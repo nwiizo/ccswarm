@@ -55,23 +55,24 @@ fn is_known_subcommand(arg: &str) -> bool {
             | "worktree"
             | "logs"
             | "config"
-            | "setup"
-            | "tutorial"
             | "interactive"
             | "pipeline"
-            | "help-topic"
             | "health"
             | "quickstart"
-            | "piece"
+            | "flow"
             | "repertoire"
-            | "sangha"
-            | "extend"
-            | "search"
-            | "evolution"
+            | "lab"
             | "harness"
             | "approve"
             | "session"
             | "run"
+            | "facets"
+            | "queue"
+            | "auto"
+            | "undo"
+            | "replay"
+            | "cost"
+            | "tail"
             | "scaffold"
     )
 }
@@ -213,7 +214,7 @@ async fn run_direct_task(task: &str) -> anyhow::Result<()> {
         "pipeline",
         "--task",
         task,
-        "--piece",
+        "--flow",
         "default",
         "--timeout",
         "600",
@@ -225,6 +226,7 @@ async fn run_direct_task(task: &str) -> anyhow::Result<()> {
         .handle_pipeline(
             task, "default", "text", 600, false, None, false, // isolate
             None,  // budget
+            None,  // run_budget_tokens
             None,  // model
             false, // auto_commit (ask instead)
             false, // create_pr (ask instead)

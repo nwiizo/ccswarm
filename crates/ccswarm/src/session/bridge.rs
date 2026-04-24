@@ -1,8 +1,9 @@
-//! AISessionBridge: Claude Code CLI execution + ai-session result management
+//! AISessionBridge: multi-provider CLI execution + ai-session result management
 //!
 //! This module bridges the gap between ccswarm's orchestration layer and the ai-session
-//! crate. It uses direct CLI subprocess execution and ai-session's subsystems for context
-//! compression, output parsing, and persistence.
+//! crate. Provider-specific command construction is delegated to [`crate::providers`];
+//! everything else (context compression, output parsing, persistence, retry) is neutral
+//! to which CLI is spoken.
 
 use anyhow::{Context as _, Result};
 use dashmap::DashMap;
@@ -15,6 +16,7 @@ use ai_session::output::{OutputParser, ParsedOutput};
 use ai_session::persistence::PersistenceManager;
 
 use crate::identity::AgentIdentity;
+use crate::providers::{ProviderKind, ProviderOptions};
 
 /// Result of an AISessionBridge execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,22 +33,34 @@ pub struct BridgeResult {
     /// Context compression ratio (if available)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compression_ratio: Option<f64>,
+    /// Rough input-token estimate (prompt + system_prompt bytes / 4). Non-authoritative —
+    /// provider CLIs don't surface real counts, but this is useful for `ccswarm cost` to
+    /// show relative stage weight.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_in: Option<u64>,
+    /// Rough output-token estimate (raw output bytes / 4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_out: Option<u64>,
 }
 
-/// Options for a single movement execution, mapped to Claude Code CLI flags
+/// Options for a single stage execution. Provider-specific flag mapping happens in
+/// [`crate::providers`]; unsupported fields are silently ignored by providers that don't
+/// understand them, keeping flow YAML portable.
 #[derive(Debug, Clone, Default)]
 pub struct MovementExecOptions {
-    /// Tools to allow (mapped to --allowed-tools)
+    /// Provider to use for this stage (default: Claude).
+    pub(crate) provider: Option<ProviderKind>,
+    /// Tools to allow (mapped to --allowed-tools on Claude).
     pub tools: Vec<String>,
-    /// Model override (mapped to --model)
+    /// Model override.
     pub model: Option<String>,
-    /// System prompt from persona (mapped to --system-prompt)
+    /// System prompt from persona.
     pub system_prompt: Option<String>,
-    /// Budget limit in USD (mapped to --max-budget-usd)
+    /// Budget limit in USD (Claude only).
     pub max_budget: Option<f64>,
-    /// Execute in isolated worktree (mapped to --worktree)
+    /// Execute in isolated worktree (Claude only).
     pub worktree_name: Option<String>,
-    /// Session ID for continuation (mapped to --session-id)
+    /// Session ID for continuation.
     pub session_id: Option<String>,
 }
 
@@ -165,7 +179,7 @@ impl AISessionBridge {
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("All retry attempts failed")))
     }
 
-    /// Single execution attempt with full Claude Code CLI flag mapping
+    /// Single execution attempt — delegates command construction to the selected provider.
     async fn execute_once(
         &self,
         agent_id: &str,
@@ -177,61 +191,54 @@ impl AISessionBridge {
     ) -> Result<BridgeResult> {
         let start = std::time::Instant::now();
 
-        // Build Claude Code CLI command with full flag mapping
-        let mut cmd = tokio::process::Command::new("claude");
-        cmd.args(["-p", prompt, "--output-format", "text"]);
+        let kind = options.provider.unwrap_or(ProviderKind::Claude);
+        let provider = crate::providers::resolve(kind);
 
-        // Always skip permissions for non-interactive pipeline execution
-        cmd.arg("--dangerously-skip-permissions");
+        let provider_options = ProviderOptions {
+            allowed_tools: options.tools.clone(),
+            model: options.model.clone(),
+            system_prompt: options.system_prompt.clone(),
+            agent_name: agent_name.map(String::from),
+            session_id: options.session_id.clone(),
+            continue_session: options.session_id.is_none()
+                && self.context_histories.contains_key(agent_id),
+            max_budget: options.max_budget,
+            worktree_name: options.worktree_name.clone(),
+        };
 
-        // Agent routing
-        if let Some(name) = agent_name {
-            cmd.args(["--agent", name]);
+        // code #4 fix: cap prompt size before we hand it to a subprocess. Linux `execve`
+        // truncates near ~2 MB of total argv with a cryptic E2BIG; surfacing a clear
+        // error is friendlier than chasing "Failed to execute provider CLI".
+        const MAX_PROMPT_BYTES: usize = 200_000;
+        if prompt.len() > MAX_PROMPT_BYTES {
+            return Err(anyhow::anyhow!(
+                "prompt is {} bytes (cap is {}) — shorten the task description or split it",
+                prompt.len(),
+                MAX_PROMPT_BYTES
+            ));
         }
 
-        // Session continuation
-        if let Some(ref sid) = options.session_id {
-            cmd.args(["--session-id", sid]);
-        } else if self.context_histories.contains_key(agent_id) {
-            cmd.arg("--continue");
-        }
+        // Issue #22 fix: prepend the working directory as explicit context so the
+        // provider LLM uses relative paths anchored here, not $HOME or random absolute
+        // paths. Separate marker line keeps the original prompt intact and scannable.
+        let prompt_with_cwd = format!(
+            "# Working directory\n{}\nUse this directory as the current working directory. Prefer relative paths anchored here.\n\n# Task\n{}",
+            working_dir.display(),
+            prompt
+        );
 
-        // Tool restrictions from movement YAML
-        if !options.tools.is_empty() {
-            let tools_str = options
-                .tools
-                .iter()
-                .map(|t| capitalize_first(t))
-                .collect::<Vec<_>>()
-                .join(",");
-            cmd.args(["--allowed-tools", &tools_str]);
-        }
+        let mut cmd = provider.build_command(&prompt_with_cwd, working_dir, &provider_options);
+        // code #7 fix: centrally enforce working_dir regardless of what each provider did.
+        // A future provider implementation that forgets `.current_dir(...)` would otherwise
+        // silently run against ccswarm's own cwd and scatter generated files into $HOME.
+        cmd.current_dir(working_dir);
 
-        // Model override
-        if let Some(ref model) = options.model {
-            cmd.args(["--model", model]);
-        }
-
-        // System prompt from persona
-        if let Some(ref sys) = options.system_prompt {
-            cmd.args(["--system-prompt", sys]);
-        }
-
-        // Budget limit
-        if let Some(budget) = options.max_budget {
-            cmd.args(["--max-budget-usd", &budget.to_string()]);
-        }
-
-        // Worktree isolation
-        if let Some(ref wt) = options.worktree_name {
-            cmd.args(["--worktree", wt]);
-        }
-
-        let output = cmd
-            .current_dir(working_dir)
-            .output()
-            .await
-            .context("Failed to execute Claude Code CLI")?;
+        let output = cmd.output().await.with_context(|| {
+            format!(
+                "Failed to execute provider CLI: {}",
+                provider.kind().as_str()
+            )
+        })?;
 
         let duration = start.elapsed();
 
@@ -239,7 +246,11 @@ impl AISessionBridge {
             String::from_utf8_lossy(&output.stdout).to_string()
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Claude Code CLI failed: {}", stderr));
+            return Err(anyhow::anyhow!(
+                "{} provider CLI failed: {}",
+                provider.kind().as_str(),
+                stderr
+            ));
         };
 
         // 2. Parse output semantically with ai-session
@@ -280,12 +291,22 @@ impl AISessionBridge {
             .get_compression_stats(agent_id)
             .map(|stats| stats.compression_ratio);
 
+        // Issue #28 fix: emit rough byte→token estimates so `ccswarm cost` has data to
+        // aggregate. We don't claim accuracy — provider CLIs don't expose real token
+        // counts. Divide by 4 as a GPT-family rule of thumb (actual ratio varies).
+        let input_bytes =
+            prompt.len() + options.system_prompt.as_ref().map(|s| s.len()).unwrap_or(0);
+        let tokens_in = Some((input_bytes / 4) as u64);
+        let tokens_out = Some((raw_output.len() / 4) as u64);
+
         Ok(BridgeResult {
             raw: raw_output,
             parsed,
             success,
             duration_ms: duration.as_millis() as u64,
             compression_ratio,
+            tokens_in,
+            tokens_out,
         })
     }
 
@@ -315,15 +336,6 @@ impl AISessionBridge {
                     .collect()
             })
             .unwrap_or_default()
-    }
-}
-
-/// Capitalize first letter of a tool name (e.g. "read" → "Read", "bash" → "Bash")
-fn capitalize_first(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
     }
 }
 

@@ -183,8 +183,6 @@ impl CliRunner {
             if let Some(duration) = task.estimated_duration {
                 println!("   {} {} minutes", "Est. Duration:".bright_cyan(), duration);
             }
-
-            show_quick_help("task-created");
         }
 
         Ok(())
@@ -345,9 +343,7 @@ impl CliRunner {
 
     /// Retry a failed task
     pub(crate) async fn retry_task(&self, _task_id: &str, _force: bool) -> Result<()> {
-        println!(
-            "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
-        );
+        print_task_queue_removed();
         Ok(())
     }
 
@@ -412,9 +408,7 @@ impl CliRunner {
         _force: bool,
         _reason: Option<&str>,
     ) -> Result<()> {
-        println!(
-            "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
-        );
+        print_task_queue_removed();
         Ok(())
     }
 
@@ -425,17 +419,22 @@ impl CliRunner {
         _agent_filter: Option<&str>,
         _failed_only: bool,
     ) -> Result<()> {
-        println!(
-            "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
-        );
+        print_task_queue_removed();
         Ok(())
     }
 
     /// Show task queue statistics
     pub(crate) async fn show_task_stats(&self, _detailed: bool, _performance: bool) -> Result<()> {
-        println!(
-            "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
-        );
+        print_task_queue_removed();
         Ok(())
     }
+}
+
+/// Shared message used by the legacy task-queue stubs. The old per-task queue was
+/// removed in favor of `ccswarm pipeline` + `ccswarm queue`; the stubs are kept so
+/// existing scripts don't crash, and this helper keeps the wording consistent.
+fn print_task_queue_removed() {
+    println!(
+        "Task queue management has been removed. Use 'ccswarm pipeline' for workflow execution."
+    );
 }

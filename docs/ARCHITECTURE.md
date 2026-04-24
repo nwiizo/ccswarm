@@ -2,7 +2,7 @@
 
 ## System Architecture Overview
 
-ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Agent Teams. It provides workflow orchestration via piece/movement pipelines, NDJSON event recording, and an AISessionBridge for Claude Code CLI execution with session resumption and retry.
+ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Agent Teams. It provides workflow orchestration via flow/stage pipelines, NDJSON event recording, and an AISessionBridge for Claude Code CLI execution with session resumption and retry.
 
 ## Workspace Structure
 
@@ -29,15 +29,15 @@ The workspace configuration enables:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                  CLI (~23 commands)                          │
-│  init, task, pipeline, piece, harness, agent-gen, approve,  │
+│  init, task, pipeline, flow, harness, agent-gen, approve,  │
 │  sangha, extend, search, evolution, doctor, ...             │
 └─────────────────────┬───────────────────────────────────────┘
                       │
 ┌─────────────────────▼───────────────────────────────────────┐
-│              Workflow Engine (Pieces + Movements)            │
-│  - PieceEngine: YAML-driven multi-step pipelines            │
+│              Workflow Engine (Flows + Stages)            │
+│  - FlowEngine: YAML-driven multi-step pipelines            │
 │  - FacetRegistry: persona/policy/knowledge composition      │
-│  - Movement fields: agent, working_dir, retry_delay_ms      │
+│  - Stage fields: agent, working_dir, retry_delay_ms      │
 │  - Context passing between steps                            │
 └─────────────────────┬───────────────────────────────────────┘
                       │
@@ -53,7 +53,7 @@ The workspace configuration enables:
 ┌─────────────────────▼───────────────────────────────────────┐
 │              Events + Hooks                                  │
 │  - NDJSON EventRecorder (.ccswarm/runs/{run-id}/)           │
-│  - Duration tracking per movement                           │
+│  - Duration tracking per stage                           │
 │  - HookRegistry for pre/post actions                        │
 └─────────────────────┬───────────────────────────────────────┘
                       │
@@ -69,12 +69,12 @@ The workspace configuration enables:
 ## Core Components
 
 ### 1. Workflow Engine (`crates/ccswarm/src/workflow/`)
-The core of ccswarm, driving piece-based workflow pipelines.
+The core of ccswarm, driving flow-based workflow pipelines.
 
-#### PieceEngine
-- Loads YAML piece definitions with movements (steps)
-- Executes movements sequentially with context passing between steps
-- Supports movement-level fields: `agent`, `working_dir`, `retry_delay_ms`
+#### FlowEngine
+- Loads YAML flow definitions with stages (steps)
+- Executes stages sequentially with context passing between steps
+- Supports stage-level fields: `agent`, `working_dir`, `retry_delay_ms`
 - Integrates with EventRecorder for NDJSON audit trail
 
 #### FacetRegistry
@@ -117,36 +117,47 @@ NDJSON event recording for observability.
 
 #### EventRecorder
 - Writes events to `.ccswarm/runs/{run-id}/events.ndjson`
-- Duration tracking per movement
+- Duration tracking per stage
 - Produces `summary.json` at run completion
-- Event types: movement.start/end, task.enqueue/start/end, hitl.request/decision
+- Event types: stage.start/end, task.enqueue/start/end, hitl.request/decision
 
-### 5. Coordination Layer (`crates/ccswarm/src/coordination/`)
-Inter-agent communication and task management.
+### 5. Governance Layer (`crates/ccswarm/src/governance/`)
+Renamed from `coordination/` to disambiguate from `ai-session::coordination` (which is a
+technical message bus, while this is governance / HITL state).
 
 #### Components
-- **Task Queue**: Async task distribution
-- **Message Bus**: Agent communication bridge to ai-session
-- **Dialogue System**: Structured conversations
+- **Proposals**: `.ccswarm/coordination/proposals/*.json` (sangha votes — still on-disk
+  name kept for back-compat with existing data)
+- **Extensions**: `.ccswarm/coordination/extensions/*.json` (agent self-extension)
+- **Approvals**: `.ccswarm/approvals/*.json` (HITL gate state)
+- **Agent Messages**: in-process channels for orchestration
+
+### 6. Providers Layer (`crates/ccswarm/src/providers/`)
+Multi-provider subprocess command builders, added in the multi-provider refactor.
+
+- `AgentProvider` trait: `build_command(prompt, working_dir, options) -> Command`
+- `ClaudeProvider` (default), `CodexProvider`, `CopilotProvider` (currently unsupported
+  for code generation — see `providers/copilot.rs` for rationale)
+- Selection precedence: stage YAML `provider:` > `CCSWARM_PROVIDER` env > Claude
 
 ## Data Flow
 
 ### Pipeline Execution Flow
 ```
-User Input → CLI Parser → PieceEngine loads YAML
+User Input → CLI Parser → FlowEngine loads YAML
     ↓
-Movement Iteration → FacetRegistry composes prompt
+Stage Iteration → FacetRegistry composes prompt
     ↓
 AISessionBridge → Claude Code CLI (--resume, --agent)
     ↓
-Output Parsing → EventRecorder (NDJSON) → Next Movement or COMPLETE
+Output Parsing → EventRecorder (NDJSON) → Next Stage or COMPLETE
     ↓
 RunSummary written → .ccswarm/runs/{run-id}/summary.json
 ```
 
 ### Harness Execution Flow
 ```
-Scenario YAML → Harness Runner → PieceEngine
+Scenario YAML → Harness Runner → FlowEngine
     ↓
 Assertions verified → Consolidated report (JSON)
     ↓
@@ -219,12 +230,12 @@ ai-session exec myproject "python train.py" --capture
 ## Known Limitations and Practical Constraints
 
 ### Pipeline Timeout
-- Complex tasks (>500 word descriptions) can cause the implement movement to exceed 600s
+- Complex tasks (>500 word descriptions) can cause the implement stage to exceed 600s
 - Workaround: split tasks, use shorter descriptions, or increase `--timeout`
-- The `complete` movement now uses local summary (no Claude call) to avoid wasted time
+- The `complete` stage now uses local summary (no Claude call) to avoid wasted time
 
-### Movement Context Passing
-- Context between movements is injected via prompt text, not Claude Code session state
+### Stage Context Passing
+- Context between stages is injected via prompt text, not Claude Code session state
 - The `--resume` flag is sent but Claude Code CLI session continuity is version-dependent
 - Template variables `{key}` in instructions expand from state.variables
 
@@ -275,10 +286,10 @@ Tests that may fail in CI due to timing or environment:
 3. Add facet definitions for the new role
 4. Use `ccswarm agent-gen generate` to create `.claude/agents/*.md`
 
-### Adding New Workflow Pieces
-1. Create YAML piece definition with movements
+### Adding New Workflow Flows
+1. Create YAML flow definition with stages
 2. Define facets (persona, policy, knowledge, instruction)
-3. Place in `.ccswarm/pieces/` (project) or `~/.ccswarm/pieces/` (user)
+3. Place in `.ccswarm/flows/` (project) or `~/.ccswarm/flows/` (user)
 4. Or install via `ccswarm repertoire add <git-url>`
 
 ### AI-Session Crate Structure and Integration

@@ -178,41 +178,7 @@ async fn test_output_parsing() -> Result<()> {
     Ok(())
 }
 
-// Note: Security and observability tests removed - modules were deleted as unused
-
-/// Test tmux compatibility layer
-#[tokio::test]
-async fn test_tmux_integration() -> Result<()> {
-    use integration::{MigrationHelper, TmuxCompatLayer};
-
-    let _tmux = TmuxCompatLayer::new();
-    let _migration = MigrationHelper::new();
-
-    // These tests would require tmux to be installed
-    // For now, we'll test the structure and basic functionality
-
-    // Test session name generation
-    let session_id = core::SessionId::new();
-    let session_name = format!(
-        "ai-session-{}",
-        session_id
-            .to_string()
-            .split('-')
-            .next()
-            .unwrap_or("unknown")
-    );
-    assert!(session_name.starts_with("ai-session-"));
-
-    // Test migration result structure
-    let _result = integration::MigrationResult {
-        session_name: "test-session".to_string(),
-        captured_output: "test output".to_string(),
-        environment: std::collections::HashMap::new(),
-        working_directory: "/tmp".to_string(),
-    };
-
-    Ok(())
-}
+// Note: Security, observability, and tmux integration tests removed - modules deleted as unused.
 
 /// Test comprehensive session workflow
 #[tokio::test]

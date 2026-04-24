@@ -96,31 +96,4 @@ impl CliRunner {
         )
         .await
     }
-
-    pub(crate) async fn handle_setup(&self) -> Result<()> {
-        // Check if config already exists
-        let config_path = self.repo_path.join("ccswarm.json");
-        if config_path.exists() {
-            println!("{}", "⚠️  Configuration already exists!".bright_yellow());
-            println!();
-            print!("Overwrite existing configuration? [y/N] ");
-            std::io::stdout().flush()?;
-
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input)?;
-            if !input.trim().eq_ignore_ascii_case("y") {
-                println!("Setup cancelled.");
-                return Ok(());
-            }
-        }
-
-        // Run setup wizard
-        let _config = SetupWizard::run().await?;
-
-        // Initialize project
-        crate::utils::user_error::show_progress("Initializing project structure...");
-        crate::git::shell::ShellWorktreeManager::init_if_needed(&self.repo_path).await?;
-
-        Ok(())
-    }
 }

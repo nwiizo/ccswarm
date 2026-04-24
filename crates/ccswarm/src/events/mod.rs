@@ -40,7 +40,7 @@ pub enum EventLevel {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventType {
-    // Movement lifecycle
+    // Stage lifecycle
     MovementStart,
     MovementEnd,
     // Task lifecycle
@@ -77,9 +77,9 @@ pub struct Event {
     /// Name of the agent that emitted the event, if applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    /// Movement label associated with this event, if any.
+    /// Stage label associated with this event, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub movement: Option<String>,
+    pub stage: Option<String>,
     /// Task identifier, if the event is scoped to a task.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
@@ -104,7 +104,7 @@ impl Event {
             run_id: run_id.into(),
             event_type,
             agent: None,
-            movement: None,
+            stage: None,
             task_id: None,
             message: message.into(),
             metadata: None,
@@ -117,9 +117,9 @@ impl Event {
         self
     }
 
-    /// Builder: attach a movement label.
-    pub fn with_movement(mut self, movement: impl Into<String>) -> Self {
-        self.movement = Some(movement.into());
+    /// Builder: attach a stage label.
+    pub fn with_movement(mut self, stage: impl Into<String>) -> Self {
+        self.stage = Some(stage.into());
         self
     }
 
@@ -267,15 +267,15 @@ pub struct SessionInfo {
     pub status: String,
     /// Total number of events in the NDJSON log.
     pub total_events: usize,
-    /// Task/piece name extracted from the first task_start message.
+    /// Task/flow name extracted from the first task_start message.
     pub task: Option<String>,
-    /// Latest movement name from movement_start events.
+    /// Latest stage name from movement_start events.
     pub last_movement: Option<String>,
-    /// Count of movements that completed.
+    /// Count of stages that completed.
     pub movements_completed: usize,
     /// Deduplicated list of agents seen in events.
     pub agents_used: Vec<String>,
-    /// Whether any movement or task reported a failure status.
+    /// Whether any stage or task reported a failure status.
     pub has_errors: bool,
 }
 
@@ -412,22 +412,20 @@ impl SessionInfo {
                 .unwrap_or("");
 
             match event_type {
-                "task_start" => {
-                    if task.is_none() {
-                        // Extract piece/task name from the message
-                        // e.g. "Starting piece 'default'"
-                        task = event
-                            .get("message")
-                            .and_then(|v| v.as_str())
-                            .map(extract_piece_name);
-                    }
+                "task_start" if task.is_none() => {
+                    // Extract flow/task name from the message
+                    // e.g. "Starting flow 'default'"
+                    task = event
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .map(extract_piece_name);
                 }
                 "task_end" => {
                     has_task_end = true;
                 }
                 "movement_start" => {
                     last_movement = event
-                        .get("movement")
+                        .get("stage")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_owned());
                 }
@@ -488,11 +486,11 @@ impl SessionInfo {
     }
 }
 
-/// Extract a piece name from a task_start message.
+/// Extract a flow name from a task_start message.
 ///
 /// Handles formats like:
-/// - `"Starting piece 'default'"`  → `"default"`
-/// - `"Starting piece 'quick'"`    → `"quick"`
+/// - `"Starting flow 'default'"`  → `"default"`
+/// - `"Starting flow 'quick'"`    → `"quick"`
 /// - Other messages                → returns the message as-is (trimmed)
 fn extract_piece_name(message: &str) -> String {
     if let Some(start) = message.find('\'')
@@ -581,7 +579,7 @@ mod tests {
 
         // Absent optional fields must be omitted.
         assert!(
-            !json.contains("\"movement\""),
+            !json.contains("\"stage\""),
             "absent field should be omitted"
         );
         assert!(
@@ -718,11 +716,8 @@ mod tests {
 
     #[test]
     fn test_extract_piece_name_quoted() {
-        assert_eq!(extract_piece_name("Starting piece 'default'"), "default");
-        assert_eq!(
-            extract_piece_name("Starting piece 'quick-fix'"),
-            "quick-fix"
-        );
+        assert_eq!(extract_piece_name("Starting flow 'default'"), "default");
+        assert_eq!(extract_piece_name("Starting flow 'quick-fix'"), "quick-fix");
     }
 
     #[test]
@@ -771,9 +766,9 @@ mod tests {
 
     #[test]
     fn test_session_info_from_events_completed() {
-        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"abc","event_type":"task_start","message":"Starting piece 'default'"}
-{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"abc","event_type":"movement_start","movement":"plan","message":"Movement 'plan' started"}
-{"ts":"2026-03-26T15:30:28.567Z","level":"info","run_id":"abc","event_type":"movement_end","movement":"plan","message":"Movement 'plan' completed"}
+        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"abc","event_type":"task_start","message":"Starting flow 'default'"}
+{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"abc","event_type":"movement_start","stage":"plan","message":"Stage 'plan' started"}
+{"ts":"2026-03-26T15:30:28.567Z","level":"info","run_id":"abc","event_type":"movement_end","stage":"plan","message":"Stage 'plan' completed"}
 {"ts":"2026-03-26T15:30:38.660Z","level":"info","run_id":"abc","event_type":"task_end","message":"Task completed"}
 "#;
         let info = SessionInfo::from_events("abc", ndjson);
@@ -792,9 +787,9 @@ mod tests {
 
     #[test]
     fn test_session_info_from_events_failed() {
-        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"fail-run","event_type":"task_start","message":"Starting piece 'default'"}
-{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"fail-run","event_type":"movement_start","movement":"plan","message":"Movement 'plan' started"}
-{"ts":"2026-03-26T15:30:28.567Z","level":"info","run_id":"fail-run","event_type":"movement_end","movement":"plan","message":"Movement 'plan' completed","metadata":{"status":"failed"}}
+        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"fail-run","event_type":"task_start","message":"Starting flow 'default'"}
+{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"fail-run","event_type":"movement_start","stage":"plan","message":"Stage 'plan' started"}
+{"ts":"2026-03-26T15:30:28.567Z","level":"info","run_id":"fail-run","event_type":"movement_end","stage":"plan","message":"Stage 'plan' completed","metadata":{"status":"failed"}}
 "#;
         let info = SessionInfo::from_events("fail-run", ndjson);
 
@@ -805,8 +800,8 @@ mod tests {
 
     #[test]
     fn test_session_info_from_events_running() {
-        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"running-run","event_type":"task_start","message":"Starting piece 'default'"}
-{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"running-run","event_type":"movement_start","movement":"plan","message":"Movement 'plan' started"}
+        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"running-run","event_type":"task_start","message":"Starting flow 'default'"}
+{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"running-run","event_type":"movement_start","stage":"plan","message":"Stage 'plan' started"}
 "#;
         let info = SessionInfo::from_events("running-run", ndjson);
 
@@ -826,9 +821,9 @@ mod tests {
 
     #[test]
     fn test_session_info_from_events_with_agents() {
-        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"x","event_type":"task_start","agent":"backend","message":"Starting piece 'default'"}
-{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"x","event_type":"movement_start","agent":"frontend","movement":"plan","message":"started"}
-{"ts":"2026-03-26T15:30:12.141Z","level":"info","run_id":"x","event_type":"movement_end","agent":"backend","movement":"plan","message":"done"}
+        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"x","event_type":"task_start","agent":"backend","message":"Starting flow 'default'"}
+{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"x","event_type":"movement_start","agent":"frontend","stage":"plan","message":"started"}
+{"ts":"2026-03-26T15:30:12.141Z","level":"info","run_id":"x","event_type":"movement_end","agent":"backend","stage":"plan","message":"done"}
 "#;
         let info = SessionInfo::from_events("x", ndjson);
 
@@ -839,7 +834,7 @@ mod tests {
 
     #[test]
     fn test_session_info_from_events_provider_error() {
-        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"err","event_type":"task_start","message":"Starting piece 'default'"}
+        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"err","event_type":"task_start","message":"Starting flow 'default'"}
 {"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"err","event_type":"provider_error","message":"rate limited"}
 "#;
         let info = SessionInfo::from_events("err", ndjson);
