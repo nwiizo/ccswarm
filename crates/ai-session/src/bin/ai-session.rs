@@ -85,17 +85,6 @@ enum Commands {
         lines: usize,
     },
 
-    /// Migrate from tmux
-    Migrate {
-        /// Tmux session name
-        #[arg(short, long)]
-        tmux_session: Option<String>,
-
-        /// Migrate all tmux sessions
-        #[arg(long)]
-        all: bool,
-    },
-
     /// Remote session management via HTTP API
     Remote {
         #[command(subcommand)]
@@ -332,7 +321,6 @@ async fn main() -> Result<()> {
         } => exec_command(session, command, capture).await?,
         Commands::Kill { session, force } => kill_session(session, force).await?,
         Commands::Context { session, lines } => show_context(session, lines).await?,
-        Commands::Migrate { tmux_session, all } => migrate_tmux(tmux_session, all).await?,
         Commands::Remote { command } => handle_remote_command(command).await?,
         Commands::Interactive { name, server, raw } => interactive_mode(name, server, raw).await?,
         Commands::ClaudeChat {
@@ -531,31 +519,6 @@ async fn show_context(session: String, lines: usize) -> Result<()> {
     println!("  - AI conversation context");
     println!("  - Token usage statistics");
     println!("  - Performance metrics");
-
-    Ok(())
-}
-
-async fn migrate_tmux(tmux_session: Option<String>, all: bool) -> Result<()> {
-    use ai_session::integration::TmuxCompatLayer;
-
-    let tmux = TmuxCompatLayer::new();
-
-    if all {
-        println!("Migrating all tmux sessions...");
-        let sessions = tmux.list_tmux_sessions().await?;
-        println!("Found {} tmux sessions", sessions.len());
-
-        for session in sessions {
-            println!("  - {} (created: {})", session.name, session.created);
-        }
-
-        println!("\n(Migration would convert these to AI sessions)");
-    } else if let Some(name) = tmux_session {
-        println!("Migrating tmux session: {}", name);
-        println!("(Would capture state and create equivalent AI session)");
-    } else {
-        println!("Please specify --tmux-session or --all");
-    }
 
     Ok(())
 }

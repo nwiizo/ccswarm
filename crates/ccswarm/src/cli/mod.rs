@@ -7,21 +7,14 @@ mod command_registry;
 mod commands;
 
 mod error_help;
-mod health;
-mod interactive_help;
 mod output;
 mod progress;
 mod quickstart_simple;
-mod setup_wizard;
-mod tutorial;
 
-mod handlers;
+pub(crate) mod handlers;
 
-pub use interactive_help::{InteractiveHelp, show_quick_help};
 use output::{OutputFormatter, create_formatter};
 pub use progress::{ProcessTracker, ProgressStyle, ProgressTracker, StatusLine};
-pub use setup_wizard::SetupWizard;
-pub use tutorial::InteractiveTutorial;
 
 use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand};
@@ -37,16 +30,20 @@ use crate::config::CcswarmConfig;
 #[derive(Parser)]
 #[command(name = "ccswarm")]
 #[command(about = "Claude Code multi-agent orchestration system")]
-#[command(long_about = "ccswarm - AI Multi-Agent Orchestration System\n\n\
-    Coordinate specialized AI agents (Frontend, Backend, DevOps, QA) using Claude Code.\n\
-    Each agent works in isolated git worktrees with strict role boundaries.\n\n\
-    Quick start:\n  \
-      ccswarm quickstart --name MyProject\n  \
-      ccswarm task execute \"Add user authentication\"\n\n\
-    For more information:\n  \
-      ccswarm doctor          Check system health\n  \
-      ccswarm tutorial        Interactive walkthrough\n  \
-      ccswarm help-topic      Extended help system")]
+#[command(
+    long_about = "ccswarm — turn tasks into PR-ready diffs with quality gates.\n\n\
+    One task in, one quality-gated change out: plan → implement → review → fix,\n\
+    reproducibly. Provider-agnostic (Claude Code, Codex, GitHub Copilot CLI).\n\n\
+    Primary flow:\n  \
+      ccswarm                                  # interactive task entry\n  \
+      ccswarm pipeline --task \"...\"            # single-shot run\n  \
+      ccswarm queue add \"...\"; ccswarm queue drain  # batch\n\n\
+    Inspection:\n  \
+      ccswarm doctor           Environment and provider CLI checks\n  \
+      ccswarm runs list        Past pipeline runs\n  \
+      ccswarm tail             Follow the current run's event stream\n  \
+      ccswarm cost <run-id>    Duration + token breakdown"
+)]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 pub struct Cli {
     /// Configuration file path
@@ -157,34 +154,24 @@ pub enum Commands {
         action: ConfigAction,
     },
 
-    /// Interactive setup wizard for new users
-    Setup,
-
-    /// Interactive tutorial to learn ccswarm
-    Tutorial {
-        /// Start from specific chapter (1-4)
-        #[arg(short, long)]
-        chapter: Option<u8>,
-    },
-
     /// Interactive task creation and execution with AI-assisted clarification
     Interactive {
         /// Interaction mode: assistant, persona, quiet, passthrough
         #[arg(short, long, default_value = "assistant")]
         mode: String,
 
-        /// Piece to use for execution (e.g., "default")
+        /// Flow to use for execution (e.g., "default")
         #[arg(short, long)]
-        piece: Option<String>,
+        flow: Option<String>,
     },
 
-    /// Execute a task through a piece pipeline
+    /// Execute a task through a flow pipeline
     #[command(
-        long_about = "Execute a task through a piece-based workflow pipeline.\n\n\
-        Pieces define multi-step agent workflows (movements). The pipeline runner\n\
-        executes each movement sequentially, passing context between steps.\n\n\
+        long_about = "Execute a task through a flow-based workflow pipeline.\n\n\
+        Flows define multi-step agent workflows (stages). The pipeline runner\n\
+        executes each stage sequentially, passing context between steps.\n\n\
         Examples:\n  \
-          ccswarm pipeline --task \"Fix README typo\" --piece default\n  \
+          ccswarm pipeline --task \"Fix README typo\" --flow default\n  \
           ccswarm pipeline --task \"Add tests\" --output-format json --verbose"
     )]
     Pipeline {
@@ -192,9 +179,9 @@ pub enum Commands {
         #[arg(short, long)]
         task: String,
 
-        /// Piece to use (default: "default")
+        /// Flow to use (default: "default")
         #[arg(short, long, default_value = "default")]
-        piece: String,
+        flow: String,
 
         /// Output format: text, json, markdown
         #[arg(short, long, default_value = "text")]
@@ -220,11 +207,17 @@ pub enum Commands {
         #[arg(long)]
         isolate: bool,
 
-        /// Budget limit in USD per movement
+        /// Budget limit in USD per stage
         #[arg(long)]
         budget: Option<f64>,
 
-        /// Model override for all movements
+        /// Cumulative input+output token cap across the whole run.
+        /// Aborts the flow after the stage that crosses the threshold.
+        /// Provider-agnostic (works for claude and codex).
+        #[arg(long)]
+        run_budget_tokens: Option<u64>,
+
+        /// Model override for all stages
         #[arg(long, name = "model")]
         model_override: Option<String>,
 
@@ -235,43 +228,12 @@ pub enum Commands {
         /// Create GitHub PR after successful execution (requires gh cli)
         #[arg(long)]
         create_pr: bool,
-    },
 
-    /// Enhanced help system with examples
-    HelpTopic {
-        /// Topic to get help on
-        topic: Option<String>,
-
-        /// Search help topics
-        #[arg(short, long)]
-        search: Option<String>,
-    },
-
-    /// System health checks and diagnostics
-    Health {
-        /// Check agent health status
+        /// Print the composed prompt for each stage and exit without spawning the
+        /// provider CLI. Useful for reviewing what ccswarm would send before paying
+        /// for the round-trip.
         #[arg(long)]
-        check_agents: bool,
-
-        /// Check AI-session health
-        #[arg(long)]
-        check_sessions: bool,
-
-        /// Show resource usage
-        #[arg(long)]
-        resources: bool,
-
-        /// Run full diagnostics
-        #[arg(long)]
-        diagnose: bool,
-
-        /// Show detailed output
-        #[arg(short, long)]
-        detailed: bool,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
+        dry_run: bool,
     },
 
     /// Check system health and diagnose issues
@@ -315,91 +277,54 @@ pub enum Commands {
         with_tests: bool,
     },
 
-    /// Manage workflow pieces (list, eject, inspect)
+    /// Manage workflow flows (list, eject, inspect)
     #[command(
-        name = "piece",
-        long_about = "Manage workflow pieces for agent task execution.\n\n\
-        Pieces are YAML-defined workflow templates that specify movements (steps),\n\
+        name = "flow",
+        long_about = "Manage workflow flows for agent task execution.\n\n\
+        Flows are YAML-defined workflow templates that specify stages (steps),\n\
         personas, policies, and output contracts.\n\n\
         Examples:\n  \
-          ccswarm piece list\n  \
-          ccswarm piece eject default\n  \
-          ccswarm piece inspect default"
+          ccswarm flow list\n  \
+          ccswarm flow eject default\n  \
+          ccswarm flow inspect default"
     )]
-    Piece {
+    Flow {
         #[command(subcommand)]
-        action: PieceAction,
+        action: FlowAction,
     },
 
-    /// Manage external piece packages (repertoire)
+    /// Manage external flow packages (repertoire)
     #[command(
-        long_about = "Manage external piece packages from Git repositories.\n\n\
-        Repertoire packages are collections of workflow pieces that can be installed\n\
-        from any Git repository and used alongside builtin pieces.\n\n\
+        long_about = "Manage external flow packages from Git repositories.\n\n\
+        Repertoire packages are collections of workflow flows that can be installed\n\
+        from any Git repository and used alongside builtin flows.\n\n\
         Examples:\n  \
-          ccswarm repertoire add https://github.com/user/my-pieces\n  \
+          ccswarm repertoire add https://github.com/user/my-flows\n  \
           ccswarm repertoire list\n  \
-          ccswarm repertoire remove my-pieces"
+          ccswarm repertoire remove my-flows"
     )]
     Repertoire {
         #[command(subcommand)]
         action: RepertoireAction,
     },
 
-    /// Sangha collective intelligence - propose and vote on changes
-    #[command(long_about = "Democratic decision-making for agent swarms.\n\
-        Proposals are persisted to coordination/proposals/ as JSON.\n\n\
-        Examples:\n  \
-          ccswarm sangha propose --title \"Add GraphQL\" --description \"...\"\n  \
-          ccswarm sangha vote abc-123 --approve\n  \
-          ccswarm sangha list\n  \
-          ccswarm sangha status abc-123")]
-    Sangha {
+    /// Experimental / research commands (sangha, extend, evolution, search)
+    #[command(long_about = "Experimental features grouped under `lab`:\n  \
+          ccswarm lab sangha propose ...      Collective voting on proposals\n  \
+          ccswarm lab extend propose ...      Agent self-extension tracking\n  \
+          ccswarm lab evolution report        Agent performance analytics\n  \
+          ccswarm lab search docs \"...\"       Ripgrep over docs/ and source\n\n\
+        These sit below the primary flow (task / pipeline / queue / runs). They exist for \
+        research and may change without notice.")]
+    Lab {
         #[command(subcommand)]
-        action: SanghaAction,
-    },
-
-    /// Agent self-extension - propose and track capability extensions
-    #[command(
-        long_about = "Agents propose new capabilities tracked in coordination/extensions/.\n\n\
-        Examples:\n  \
-          ccswarm extend propose --title \"GraphQL resolver\" --agent backend\n  \
-          ccswarm extend list\n  \
-          ccswarm extend status ext-456\n  \
-          ccswarm extend history"
-    )]
-    Extend {
-        #[command(subcommand)]
-        action: ExtendAction,
-    },
-
-    /// Search documentation and code
-    #[command(long_about = "Search project documentation and source code.\n\n\
-        Examples:\n  \
-          ccswarm search docs \"authentication patterns\"\n  \
-          ccswarm search code \"error handling\" --glob \"*.rs\"")]
-    Search {
-        #[command(subcommand)]
-        action: SearchAction,
-    },
-
-    /// Agent evolution metrics and pattern analysis
-    #[command(
-        long_about = "Analyze agent performance from coordination/ history.\n\n\
-        Examples:\n  \
-          ccswarm evolution metrics\n  \
-          ccswarm evolution patterns --agent frontend\n  \
-          ccswarm evolution report --format json"
-    )]
-    Evolution {
-        #[command(subcommand)]
-        action: EvolutionAction,
+        action: LabAction,
     },
 
     /// Test harness to execute predefined scenarios and verify outcomes
     #[command(
         long_about = "Run harness scenarios to validate workflows end-to-end.\n\n\
-        Scenarios are YAML files under .ccswarm/harness/ describing task, piece, and assertions.\n\n\
+        Scenarios are YAML files under .ccswarm/harness/ describing task, flow, and assertions.\n\n\
         Examples:\n  \
           ccswarm harness run\n  \
           ccswarm harness run --scenario .ccswarm/harness/add-login.yaml --report report.json --format json\n  \
@@ -453,12 +378,155 @@ pub enum Commands {
         action: RunAction,
     },
 
+    /// List all registered facets (personas, policies, knowledge)
+    #[command(
+        long_about = "Show built-in and project-local facets available to flows.\n\n\
+        Examples:\n  \
+          ccswarm facets\n  \
+          ccswarm facets personas\n  \
+          ccswarm facets policies --detailed"
+    )]
+    Facets {
+        /// Facet type filter: personas | policies | knowledge | all (default)
+        #[arg(default_value = "all")]
+        kind: String,
+
+        /// Show description/role inline
+        #[arg(short, long)]
+        detailed: bool,
+    },
+
+    /// Queue tasks and drain them through the pipeline in batch
+    #[command(
+        long_about = "Accumulate tasks in .ccswarm/queue.yaml, then process them all.\n\n\
+        Examples:\n  \
+          ccswarm queue add \"Add login form\"\n  \
+          ccswarm queue add --from-issue 42\n  \
+          ccswarm queue list\n  \
+          ccswarm queue drain --timeout 600"
+    )]
+    Queue {
+        #[command(subcommand)]
+        action: QueueAction,
+    },
+
+    /// Fully autonomous mode — no y/n prompts, auto-commit, auto-PR
+    #[command(
+        long_about = "Self-driving loop: pull tasks → pipeline → auto-fix → auto-commit → auto-PR → repeat.\n\n\
+        All interactive prompts are suppressed. Use `--watch` to keep polling the queue \
+        for new tasks; otherwise stops when the queue drains.\n\n\
+        Safety: aborts on exceeded iteration count, first hard failure if --stop-on-error, \
+        or exceeded wall-clock budget.\n\n\
+        Examples:\n  \
+          ccswarm auto                          # drain queue once, auto-everything\n  \
+          ccswarm auto --task \"Add X\"           # single task, no queue needed\n  \
+          ccswarm auto --watch --poll-secs 30   # daemon-like: keep running\n  \
+          ccswarm auto --max-iterations 5 --stop-on-error"
+    )]
+    Auto {
+        /// Single task to execute (bypass the queue)
+        #[arg(short, long)]
+        task: Option<String>,
+
+        /// Flow to use (default: "default")
+        #[arg(short, long, default_value = "default")]
+        flow: String,
+
+        /// Keep polling the queue for new tasks even after it empties
+        #[arg(long)]
+        watch: bool,
+
+        /// Poll interval in seconds when --watch is set
+        #[arg(long, default_value_t = 30)]
+        poll_secs: u64,
+
+        /// Maximum tasks to process in one invocation (0 = unlimited)
+        #[arg(long, default_value_t = 0)]
+        max_iterations: usize,
+
+        /// Wall-clock budget in seconds for the whole session (0 = unlimited)
+        #[arg(long, default_value_t = 0)]
+        wall_budget_secs: u64,
+
+        /// Abort the loop on the first task that fails
+        #[arg(long)]
+        stop_on_error: bool,
+
+        /// Per-task timeout in seconds
+        #[arg(long, default_value_t = 600)]
+        timeout: u64,
+
+        /// Create a GitHub PR after each successful task (requires gh cli)
+        #[arg(long)]
+        create_pr: bool,
+    },
+
+    /// Revert-advisory for a past run (shows git commits since run started)
+    #[command(
+        long_about = "Inspect a past run and show the git commits that may need reverting.\n\n\
+        This command is intentionally advisory: it never rewrites history on its own.\n\
+        Copy the suggested `git revert` commands and run them yourself."
+    )]
+    Undo {
+        /// Run ID (default: most recent)
+        run_id: Option<String>,
+    },
+
+    /// Replay a past run: re-execute the recorded task through the pipeline
+    #[command(
+        long_about = "Extract the task from a past run's summary.json and re-run it.\n\n\
+        Examples:\n  \
+          ccswarm replay <run-id>\n  \
+          ccswarm replay <run-id> --flow review-fix"
+    )]
+    Replay {
+        /// Run ID (default: most recent)
+        run_id: Option<String>,
+
+        /// Override the flow used for replay (default: same flow as original)
+        #[arg(short, long)]
+        flow: Option<String>,
+
+        /// Timeout in seconds
+        #[arg(long, default_value = "600")]
+        timeout: u64,
+    },
+
+    /// Show token / duration breakdown for a past run
+    #[command(
+        long_about = "Aggregate per-stage and per-agent metrics from events.ndjson.\n\n\
+        Examples:\n  \
+          ccswarm cost\n  \
+          ccswarm cost <run-id>"
+    )]
+    Cost {
+        /// Run ID (default: most recent)
+        run_id: Option<String>,
+    },
+
+    /// Tail a pipeline run's event stream (live when still running)
+    #[command(
+        long_about = "Follow the NDJSON event log for a run with pretty formatting.\n\n\
+        Examples:\n  \
+          ccswarm tail\n  \
+          ccswarm tail <run-id>\n  \
+          ccswarm tail <run-id> --no-follow"
+    )]
+    Tail {
+        /// Run ID (default: most recent run in .ccswarm/runs/)
+        run_id: Option<String>,
+
+        /// Do not follow new events; print existing log and exit
+        #[arg(long)]
+        no_follow: bool,
+    },
+
     /// Create a new project and run pipeline in one command
     #[command(
         long_about = "Scaffold a new project: create directory, git init, run pipeline.\n\n\
         Examples:\n  \
           ccswarm scaffold --dir /tmp/myapp --task \"Create a todo app\"\n  \
-          ccswarm scaffold --dir ./myapp --task \"Build a REST API\" --piece quick"
+          ccswarm scaffold --dir ./myapp --task \"Build a REST API\" --flow quick"
     )]
     Scaffold {
         /// Directory to create
@@ -469,9 +537,9 @@ pub enum Commands {
         #[arg(short, long)]
         task: String,
 
-        /// Piece to use (default: "default")
+        /// Flow to use (default: "default")
         #[arg(short, long, default_value = "default")]
-        piece: String,
+        flow: String,
 
         /// Timeout in seconds
         #[arg(long, default_value = "600")]
@@ -481,19 +549,43 @@ pub enum Commands {
 
 #[derive(Subcommand)]
 pub enum RepertoireAction {
-    /// Install a piece package from a Git repository
+    /// Install a flow package from a Git repository
     Add {
-        /// Git URL of the piece package
+        /// Git URL of the flow package
         url: String,
     },
 
-    /// List installed piece packages
+    /// List installed flow packages
     List,
 
-    /// Remove an installed piece package
+    /// Remove an installed flow package
     Remove {
         /// Package name to remove
         name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum LabAction {
+    /// Collective voting on proposals
+    Sangha {
+        #[command(subcommand)]
+        action: SanghaAction,
+    },
+    /// Agent self-extension tracking
+    Extend {
+        #[command(subcommand)]
+        action: ExtendAction,
+    },
+    /// Agent performance analytics
+    Evolution {
+        #[command(subcommand)]
+        action: EvolutionAction,
+    },
+    /// Ripgrep over docs/ and source
+    Search {
+        #[command(subcommand)]
+        action: SearchAction,
     },
 }
 
@@ -655,6 +747,51 @@ pub enum ApproveAction {
 }
 
 #[derive(Subcommand)]
+pub enum QueueAction {
+    /// Append a task to the queue
+    Add {
+        /// Task description (ignored if --from-issue or --file is given).
+        /// Pass `-` to read the task body from stdin.
+        #[arg(default_value = "")]
+        task: String,
+        /// Load task body from a GitHub issue via `gh issue view`
+        #[arg(long, value_name = "NUMBER")]
+        from_issue: Option<u64>,
+        /// Load task body from a file (convenient for long prompts)
+        #[arg(long, value_name = "PATH")]
+        file: Option<std::path::PathBuf>,
+        /// Flow to run when this task is drained (default: "default")
+        #[arg(short, long)]
+        flow: Option<String>,
+    },
+    /// Show queued tasks
+    List,
+    /// Clear pending tasks from the queue
+    Clear,
+    /// Execute all queued tasks through the pipeline.
+    /// `drain` runs unattended by default — all commit/PR prompts are suppressed so
+    /// the queue fully empties without user input. Pass `--interactive` to restore
+    /// the old per-task y/n prompts.
+    Drain {
+        /// Flow override; by default each task uses its per-task flow or "default"
+        #[arg(short, long)]
+        flow: Option<String>,
+        /// Timeout per task in seconds
+        #[arg(long, default_value = "600")]
+        timeout: u64,
+        /// Stop on the first failure (default: continue)
+        #[arg(long)]
+        fail_fast: bool,
+        /// Restore per-task y/n prompts (default: off, unattended)
+        #[arg(long)]
+        interactive: bool,
+        /// Also create a GitHub PR for each successful task (requires `gh` CLI)
+        #[arg(long)]
+        create_pr: bool,
+    },
+}
+
+#[derive(Subcommand)]
 pub enum RunAction {
     /// List past pipeline runs (sorted by date, newest first)
     List,
@@ -662,6 +799,13 @@ pub enum RunAction {
     View {
         /// Run ID to inspect
         id: String,
+    },
+    /// Compare the timeline of two runs
+    Diff {
+        /// Baseline run ID
+        a: String,
+        /// Candidate run ID
+        b: String,
     },
 }
 
@@ -769,24 +913,60 @@ pub enum HarnessAction {
 }
 
 #[derive(Subcommand)]
-pub enum PieceAction {
-    /// List all available pieces (builtin and custom)
+pub enum FlowAction {
+    /// List all available flows (builtin and custom)
     List,
 
-    /// Eject a builtin piece to a local YAML file for customization
+    /// Eject a builtin flow to a local YAML file for customization
     Eject {
-        /// Name of the piece to eject
+        /// Name of the flow to eject
         name: String,
 
-        /// Output directory (default: .ccswarm/pieces/)
+        /// Output directory (default: .ccswarm/flows/)
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
 
-    /// Inspect a piece's structure and movements
+    /// Inspect a flow's structure and stages
     Inspect {
-        /// Name of the piece to inspect
+        /// Name of the flow to inspect
         name: String,
+    },
+
+    /// Check a flow YAML file for structural validity
+    Check {
+        /// Name of builtin/custom flow, or path to a YAML file
+        target: String,
+    },
+
+    /// Scaffold a new flow YAML file
+    New {
+        /// Name of the new flow (used as filename)
+        name: String,
+
+        /// Template: "minimal" (1 stage) or "faceted" (plan+implement+review)
+        #[arg(short, long, default_value = "minimal")]
+        template: String,
+
+        /// Output directory (default: .ccswarm/flows/)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Render composed prompts for each stage in a flow
+    Render {
+        /// Name of builtin/custom flow, or path to a YAML file
+        target: String,
+
+        /// Render only the stage with this ID
+        #[arg(short, long)]
+        stage: Option<String>,
+    },
+
+    /// Suggest an appropriate builtin flow for a given task description
+    Suggest {
+        /// Task description to classify
+        task: String,
     },
 }
 
@@ -1490,10 +1670,10 @@ impl CliRunner {
         &self,
         dir: &std::path::Path,
         task: &str,
-        piece: &str,
+        flow: &str,
         timeout: u64,
     ) -> Result<()> {
-        handlers::scaffold::handle_scaffold(dir, task, piece, timeout).await
+        handlers::scaffold::handle_scaffold(dir, task, flow, timeout).await
     }
 
     /// Handle agent-gen subcommands

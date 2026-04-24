@@ -55,9 +55,6 @@ impl CommandRegistry {
 
     /// Register all command handlers
     fn register_commands(&mut self) {
-        // Simple commands without parameters
-        register_command!(self, "setup", runner, runner.handle_setup());
-
         // Commands with parameters
         register_command!(self, "init", runner, cmd,
             Commands::Init { name, repo_url, agents } =>
@@ -94,29 +91,14 @@ impl CommandRegistry {
             runner.handle_config(action)
         );
 
-        register_command!(self, "tutorial", runner, cmd,
-            Commands::Tutorial { chapter } =>
-            runner.handle_tutorial(*chapter)
-        );
-
         register_command!(self, "interactive", runner, cmd,
-            Commands::Interactive { mode, piece } =>
-            runner.handle_interactive(mode, piece.as_deref())
+            Commands::Interactive { mode, flow } =>
+            runner.handle_interactive(mode, flow.as_deref())
         );
 
         register_command!(self, "pipeline", runner, cmd,
-            Commands::Pipeline { task, piece, output_format, timeout, verbose, output_file, isolate, budget, model_override, auto_commit, create_pr, .. } =>
-            runner.handle_pipeline(task, piece, output_format, *timeout, *verbose, output_file.as_deref(), *isolate, *budget, model_override.as_deref(), *auto_commit, *create_pr)
-        );
-
-        register_command!(self, "help", runner, cmd,
-            Commands::HelpTopic { topic, search } =>
-            runner.handle_help(topic.as_deref(), search.as_deref())
-        );
-
-        register_command!(self, "health", runner, cmd,
-            Commands::Health { check_agents, check_sessions, resources, diagnose, detailed, format } =>
-            runner.handle_health(*check_agents, *check_sessions, *resources, *diagnose, *detailed, format)
+            Commands::Pipeline { task, flow, output_format, timeout, verbose, output_file, isolate, budget, run_budget_tokens, model_override, auto_commit, create_pr, dry_run, .. } =>
+            runner.handle_pipeline_with_dry_run(task, flow, output_format, *timeout, *verbose, output_file.as_deref(), *isolate, *budget, *run_budget_tokens, model_override.as_deref(), *auto_commit, *create_pr, *dry_run)
         );
 
         register_command!(self, "doctor", runner, cmd,
@@ -129,8 +111,8 @@ impl CommandRegistry {
             runner.handle_quickstart(name.as_deref(), *no_prompt, *all_agents, *with_tests)
         );
 
-        register_command!(self, "piece", runner, cmd,
-            Commands::Piece { action } =>
+        register_command!(self, "flow", runner, cmd,
+            Commands::Flow { action } =>
             runner.handle_piece(action)
         );
 
@@ -139,24 +121,9 @@ impl CommandRegistry {
             runner.handle_repertoire(action)
         );
 
-        register_command!(self, "sangha", runner, cmd,
-            Commands::Sangha { action } =>
-            runner.handle_sangha(action)
-        );
-
-        register_command!(self, "extend", runner, cmd,
-            Commands::Extend { action } =>
-            runner.handle_extend(action)
-        );
-
-        register_command!(self, "search", runner, cmd,
-            Commands::Search { action } =>
-            runner.handle_search_cmd(action)
-        );
-
-        register_command!(self, "evolution", runner, cmd,
-            Commands::Evolution { action } =>
-            runner.handle_evolution(action)
+        register_command!(self, "lab", runner, cmd,
+            Commands::Lab { action } =>
+            runner.handle_lab(action)
         );
 
         register_command!(self, "harness", runner, cmd,
@@ -180,8 +147,43 @@ impl CommandRegistry {
         );
 
         register_command!(self, "scaffold", runner, cmd,
-            Commands::Scaffold { dir, task, piece, timeout } =>
-            runner.handle_scaffold(dir, task, piece, *timeout)
+            Commands::Scaffold { dir, task, flow, timeout } =>
+            runner.handle_scaffold(dir, task, flow, *timeout)
+        );
+
+        register_command!(self, "facets", runner, cmd,
+            Commands::Facets { kind, detailed } =>
+            runner.handle_facets(kind, *detailed)
+        );
+
+        register_command!(self, "tail", runner, cmd,
+            Commands::Tail { run_id, no_follow } =>
+            runner.handle_tail(run_id.as_deref(), *no_follow)
+        );
+
+        register_command!(self, "cost", runner, cmd,
+            Commands::Cost { run_id } =>
+            runner.handle_cost(run_id.as_deref())
+        );
+
+        register_command!(self, "queue", runner, cmd,
+            Commands::Queue { action } =>
+            runner.handle_queue(action)
+        );
+
+        register_command!(self, "undo", runner, cmd,
+            Commands::Undo { run_id } =>
+            runner.handle_undo(run_id.as_deref())
+        );
+
+        register_command!(self, "replay", runner, cmd,
+            Commands::Replay { run_id, flow, timeout } =>
+            runner.handle_replay(run_id.as_deref(), flow.as_deref(), *timeout)
+        );
+
+        register_command!(self, "auto", runner, cmd,
+            Commands::Auto { task, flow, watch, poll_secs, max_iterations, wall_budget_secs, stop_on_error, timeout, create_pr } =>
+            runner.handle_auto(task.as_deref(), flow, *watch, *poll_secs, *max_iterations, *wall_budget_secs, *stop_on_error, *timeout, *create_pr)
         );
     }
 
@@ -221,20 +223,20 @@ impl CommandRegistry {
             Commands::Worktree { .. } => "worktree",
             Commands::Logs { .. } => "logs",
             Commands::Config { .. } => "config",
-            Commands::Setup => "setup",
-            Commands::Tutorial { .. } => "tutorial",
             Commands::Interactive { .. } => "interactive",
-            Commands::HelpTopic { .. } => "help",
-            Commands::Health { .. } => "health",
             Commands::Doctor { .. } => "doctor",
             Commands::Quickstart { .. } => "quickstart",
+            Commands::Facets { .. } => "facets",
+            Commands::Tail { .. } => "tail",
+            Commands::Cost { .. } => "cost",
+            Commands::Queue { .. } => "queue",
+            Commands::Undo { .. } => "undo",
+            Commands::Replay { .. } => "replay",
+            Commands::Auto { .. } => "auto",
             Commands::Pipeline { .. } => "pipeline",
-            Commands::Piece { .. } => "piece",
+            Commands::Flow { .. } => "flow",
             Commands::Repertoire { .. } => "repertoire",
-            Commands::Sangha { .. } => "sangha",
-            Commands::Extend { .. } => "extend",
-            Commands::Search { .. } => "search",
-            Commands::Evolution { .. } => "evolution",
+            Commands::Lab { .. } => "lab",
             Commands::Harness { .. } => "harness",
             Commands::Approve { .. } => "approve",
             Commands::Session { .. } => "session",

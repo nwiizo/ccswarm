@@ -35,17 +35,6 @@ pub enum CoordinationType {
     Custom(String),
 }
 
-pub mod conversion;
-pub mod mailbox;
-
-// Re-export key conversion utilities
-pub use conversion::{
-    AgentMappingRegistry, UnifiedAgentInfo, convert_from_ai_session, convert_to_ai_session,
-};
-
-// Re-export mailbox types
-pub use mailbox::{AgentMailbox, MailboxMessage, MailboxPriority, MailboxSystem, MessageTarget};
-
 /// Messages sent between agents and the orchestrator
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AgentMessage {
@@ -252,25 +241,35 @@ impl CoordinationBus {
         Ok(())
     }
 
-    /// Load messages from disk (for recovery)
+    /// Load messages from disk (for recovery).
+    ///
+    /// Messages are sorted by their filename which is `{timestamp_millis}-{uuid}.json`,
+    /// giving a stable, deterministic ordering regardless of which `AgentMessage`
+    /// variant is stored.
     pub async fn load_persisted_messages(&self) -> Result<Vec<AgentMessage>> {
-        let mut messages = Vec::new();
+        let mut files: Vec<(std::path::PathBuf, String)> = Vec::new();
         let mut entries = fs::read_dir(&self.message_dir).await?;
 
         while let Some(entry) = entries.next_entry().await? {
-            if let Ok(content) = fs::read_to_string(entry.path()).await
+            let path = entry.path();
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            files.push((path, name));
+        }
+
+        // Sort by filename (timestamp-prefixed) for deterministic ordering.
+        files.sort_by(|(_, a), (_, b)| a.cmp(b));
+
+        let mut messages = Vec::new();
+        for (path, _) in files {
+            if let Ok(content) = fs::read_to_string(&path).await
                 && let Ok(message) = serde_json::from_str::<AgentMessage>(&content)
             {
                 messages.push(message);
             }
         }
-
-        // Sort by timestamp if available
-        messages.sort_by_key(|m| match m {
-            AgentMessage::Heartbeat { timestamp, .. } => *timestamp,
-            AgentMessage::InterAgentMessage { timestamp, .. } => *timestamp,
-            _ => Utc::now(),
-        });
 
         Ok(messages)
     }

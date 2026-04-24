@@ -2,7 +2,7 @@
 //!
 //! These tests verify individual CLI components without executing the full binary.
 
-use ccswarm::cli::{Cli, Commands};
+use ccswarm::cli::{Cli, Commands, LabAction};
 use clap::Parser;
 
 // ============================================================================
@@ -145,18 +145,6 @@ fn test_cli_parse_doctor() {
             // Successfully parsed doctor command
         }
         _ => panic!("Expected Doctor command"),
-    }
-}
-
-#[test]
-fn test_cli_parse_health() {
-    let cli = Cli::try_parse_from(["ccswarm", "health"]).unwrap();
-
-    match cli.command {
-        Commands::Health { .. } => {
-            // Successfully parsed health command
-        }
-        _ => panic!("Expected Health command"),
     }
 }
 
@@ -324,6 +312,7 @@ fn test_config_default() {
 fn test_cli_parse_sangha_propose() {
     let cli = Cli::try_parse_from([
         "ccswarm",
+        "lab",
         "sangha",
         "propose",
         "--title",
@@ -334,28 +323,41 @@ fn test_cli_parse_sangha_propose() {
     .unwrap();
 
     match cli.command {
-        Commands::Sangha { .. } => {}
+        Commands::Lab {
+            action: LabAction::Sangha { .. },
+        } => {}
         _ => panic!("Expected Sangha command"),
     }
 }
 
 #[test]
 fn test_cli_parse_sangha_vote() {
-    let cli =
-        Cli::try_parse_from(["ccswarm", "sangha", "vote", "prop-abc123", "--approve"]).unwrap();
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "lab",
+        "sangha",
+        "vote",
+        "prop-abc123",
+        "--approve",
+    ])
+    .unwrap();
 
     match cli.command {
-        Commands::Sangha { .. } => {}
+        Commands::Lab {
+            action: LabAction::Sangha { .. },
+        } => {}
         _ => panic!("Expected Sangha command"),
     }
 }
 
 #[test]
 fn test_cli_parse_sangha_list() {
-    let cli = Cli::try_parse_from(["ccswarm", "sangha", "list"]).unwrap();
+    let cli = Cli::try_parse_from(["ccswarm", "lab", "sangha", "list"]).unwrap();
 
     match cli.command {
-        Commands::Sangha { .. } => {}
+        Commands::Lab {
+            action: LabAction::Sangha { .. },
+        } => {}
         _ => panic!("Expected Sangha command"),
     }
 }
@@ -364,6 +366,7 @@ fn test_cli_parse_sangha_list() {
 fn test_cli_parse_extend_propose() {
     let cli = Cli::try_parse_from([
         "ccswarm",
+        "lab",
         "extend",
         "propose",
         "--title",
@@ -376,38 +379,52 @@ fn test_cli_parse_extend_propose() {
     .unwrap();
 
     match cli.command {
-        Commands::Extend { .. } => {}
+        Commands::Lab {
+            action: LabAction::Extend { .. },
+        } => {}
         _ => panic!("Expected Extend command"),
     }
 }
 
 #[test]
 fn test_cli_parse_extend_list() {
-    let cli = Cli::try_parse_from(["ccswarm", "extend", "list"]).unwrap();
+    let cli = Cli::try_parse_from(["ccswarm", "lab", "extend", "list"]).unwrap();
 
     match cli.command {
-        Commands::Extend { .. } => {}
+        Commands::Lab {
+            action: LabAction::Extend { .. },
+        } => {}
         _ => panic!("Expected Extend command"),
     }
 }
 
 #[test]
 fn test_cli_parse_extend_history() {
-    let cli = Cli::try_parse_from(["ccswarm", "extend", "history", "5"]).unwrap();
+    let cli = Cli::try_parse_from(["ccswarm", "lab", "extend", "history", "5"]).unwrap();
 
     match cli.command {
-        Commands::Extend { .. } => {}
+        Commands::Lab {
+            action: LabAction::Extend { .. },
+        } => {}
         _ => panic!("Expected Extend command"),
     }
 }
 
 #[test]
 fn test_cli_parse_search_docs() {
-    let cli =
-        Cli::try_parse_from(["ccswarm", "search", "docs", "authentication patterns"]).unwrap();
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "lab",
+        "search",
+        "docs",
+        "authentication patterns",
+    ])
+    .unwrap();
 
     match cli.command {
-        Commands::Search { .. } => {}
+        Commands::Lab {
+            action: LabAction::Search { .. },
+        } => {}
         _ => panic!("Expected Search command"),
     }
 }
@@ -416,6 +433,7 @@ fn test_cli_parse_search_docs() {
 fn test_cli_parse_search_code_with_glob() {
     let cli = Cli::try_parse_from([
         "ccswarm",
+        "lab",
         "search",
         "code",
         "error handling",
@@ -425,28 +443,42 @@ fn test_cli_parse_search_code_with_glob() {
     .unwrap();
 
     match cli.command {
-        Commands::Search { .. } => {}
+        Commands::Lab {
+            action: LabAction::Search { .. },
+        } => {}
         _ => panic!("Expected Search command"),
     }
 }
 
 #[test]
 fn test_cli_parse_evolution_metrics() {
-    let cli =
-        Cli::try_parse_from(["ccswarm", "evolution", "metrics", "--agent", "frontend"]).unwrap();
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "lab",
+        "evolution",
+        "metrics",
+        "--agent",
+        "frontend",
+    ])
+    .unwrap();
 
     match cli.command {
-        Commands::Evolution { .. } => {}
+        Commands::Lab {
+            action: LabAction::Evolution { .. },
+        } => {}
         _ => panic!("Expected Evolution command"),
     }
 }
 
 #[test]
 fn test_cli_parse_evolution_report() {
-    let cli = Cli::try_parse_from(["ccswarm", "evolution", "report", "--format", "json"]).unwrap();
+    let cli =
+        Cli::try_parse_from(["ccswarm", "lab", "evolution", "report", "--format", "json"]).unwrap();
 
     match cli.command {
-        Commands::Evolution { .. } => {}
+        Commands::Lab {
+            action: LabAction::Evolution { .. },
+        } => {}
         _ => panic!("Expected Evolution command"),
     }
 }

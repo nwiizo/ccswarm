@@ -2,12 +2,12 @@
 
 ## Overview
 
-ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Agent Teams. It provides piece-based workflow pipelines, NDJSON event recording, AISessionBridge for Claude Code CLI execution, and agent definition generation. Built in Rust for performance and reliability with native ai-session terminal management.
+ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Agent Teams. It provides flow-based workflow pipelines, NDJSON event recording, AISessionBridge for Claude Code CLI execution, and agent definition generation. Built in Rust for performance and reliability with native ai-session terminal management.
 
 ## Key Features
 
 ### Core Capabilities
-- **Piece-Based Workflows**: YAML-driven multi-step pipelines with movement context passing
+- **Flow-Based Workflows**: YAML-driven multi-step pipelines with stage context passing
 - **AISessionBridge**: Claude Code CLI execution with --resume, --agent routing, retry with exponential backoff
 - **NDJSON Event Recording**: Observability via `.ccswarm/runs/{run-id}/events.ndjson` with duration tracking
 - **Agent Definition Generation**: `agent-gen` command generates/validates `.claude/agents/*.md` from facets
@@ -294,7 +294,7 @@ This section formalizes multi-agent behavior in ccswarm, aligning with widely us
 ccswarm can instantiate specialized agents (Frontend/Backend/DevOps/QA) and also overlay these roles per agent.
 
 ### Interaction Protocols
-- Piece Pipeline (current): Workflow engine executes movements, routing to agents via AISessionBridge.
+- Flow Pipeline (current): Workflow engine executes stages, routing to agents via AISessionBridge.
 - Contract Net/Auction (planned): Agents bid on tasks using capability/cost/latency scores.
 - Vote/Consensus (planned): Sangha voting on competing proposals; quorum and tie-break rules.
 - Blackboard Bus: Shared topics for proposals, status, and decisions, with retention and replay.
@@ -357,31 +357,31 @@ Message envelope fields (common): { id, ts, sender, topic, payload, correlation_
 
 ## Acceptance Criteria (Multi-Agent Extensions)
 - Agents can register capabilities and receive assignments filtered by required skills.
-- Workflow engine can route movements to specific agents via the `agent` field (planned: auction/vote).
+- Workflow engine can route stages to specific agents via the `agent` field (planned: auction/vote).
 - Critic can block completion until all acceptance items pass.
 - Bus retains messages long enough for late joiners to catch up and reconcile.
 
-## Pieces and Movements (Workflow Model)
+## Flows and Stages (Workflow Model)
 
-ccswarm adopts a declarative workflow model inspired by established multi‑agent tools. A piece describes a sequence of movements (steps). Each movement binds a persona, permissions, and rules that determine the next step.
+ccswarm adopts a declarative workflow model inspired by established multi‑agent tools. A flow describes a sequence of stages (steps). Each stage binds a persona, permissions, and rules that determine the next step.
 
-### Piece (YAML schema – planned alignment)
+### Flow (YAML schema – planned alignment)
 - name: string
 - initial_movement: string
 - max_movements: number (guard against infinite loops)
-- movements: Movement[]
+- stages: Stage[]
 
-Movement fields:
+Stage fields:
 - name: string
 - persona: string (who acts; maps to agent prompt/facets)
 - edit: boolean (whether file edits are permitted)
 - agent: string (optional; routes to specific .claude/agents/*.md via --agent flag)
-- working_dir: string (optional; working directory for the movement)
+- working_dir: string (optional; working directory for the stage)
 - retry_delay_ms: number (optional; base delay for exponential backoff on retry)
 - required_permission_mode: enum (e.g., view|edit|exec; planned)
 - rules: [{ condition: string, next: string|COMPLETE|ABORT }]
 
-Rules encode fix loops (e.g., review → implement → review) and allow parallel review movements in future. COMPLETE finalizes the workflow; ABORT exits with failure and retains artifacts/logs.
+Rules encode fix loops (e.g., review → implement → review) and allow parallel review stages in future. COMPLETE finalizes the workflow; ABORT exits with failure and retains artifacts/logs.
 
 ### Faceted Prompting (Personas/Policies/Knowledge)
 Prompts are composed from independent facets to improve reuse and control:
@@ -390,7 +390,7 @@ Prompts are composed from independent facets to improve reuse and control:
 - knowledge: domain notes, codebase guidance
 - instruction: step‑specific instructions and guardrails
 
-Facet resolution order (planned): builtin < project (`.ccswarm/facets/`) < user (`~/.ccswarm/facets/`). Provide `ccswarm eject <piece|facet>` to simplify customization.
+Facet resolution order (planned): builtin < project (`.ccswarm/facets/`) < user (`~/.ccswarm/facets/`). Provide `ccswarm eject <flow|facet>` to simplify customization.
 
 ### Repertoire Packages (shared workflows)
 Install workflow/facet sets from external Git repositories with `ccswarm repertoire add <git-url>`. Installed to `~/.ccswarm/repertoire/@{owner}/{repo}/`. Resolve across three layers (builtin → project → user) with nearest override wins.
@@ -398,7 +398,7 @@ Install workflow/facet sets from external Git repositories with `ccswarm reperto
 ### Directory Layout (recommended)
 - `~/.ccswarm/`
   - `config.yaml` — default provider/model/language
-  - `pieces/` — user-defined pieces
+  - `flows/` — user-defined flows
   - `facets/` — user-defined facets (persona/policy/knowledge/instruction)
   - `repertoire/` — installed packages
 - `./.ccswarm/` (project)
@@ -409,25 +409,25 @@ Install workflow/facet sets from external Git repositories with `ccswarm reperto
   - `logs/` runtime logs
 
 ### Provider Sandbox & Permissions (enhancement)
-- permission modes: view|edit|exec per movement; enforce guardrails (write scopes/allowed commands/network policy).
+- permission modes: view|edit|exec per stage; enforce guardrails (write scopes/allowed commands/network policy).
 - trusted directories declared in global/project config.
-- audit trail: record all movement I/O to NDJSON for reproducibility.
+- audit trail: record all stage I/O to NDJSON for reproducibility.
 
 ### Quality Gates and Review Loops
 - Parallel reviewers (architecture/security/performance) supported in future.
-- Aggregation rules (all‑approve/weighted/threshold) declared in piece rules.
+- Aggregation rules (all‑approve/weighted/threshold) declared in flow rules.
 - REJECT/NEEDS_FIX routes back to implement to form fix loop.
 
-## Acceptance Criteria (Pieces/Facets/Repertoire)
-- AC‑P1: `ccswarm piece list/show/eject` works across builtin + project + user layers.
-- AC‑P2: movement `edit`/permission reflects in runtime guards; forbidden ops are blocked.
+## Acceptance Criteria (Flows/Facets/Repertoire)
+- AC‑P1: `ccswarm flow list/show/eject` works across builtin + project + user layers.
+- AC‑P2: stage `edit`/permission reflects in runtime guards; forbidden ops are blocked.
 - AC‑P3: `.ccswarm/tasks.yaml` queued tasks can be processed sequentially/parallel by a `ccswarm run` path (future).
 - AC‑P4: Execution traces (NDJSON) are saved under `.ccswarm/runs/*`.
-- AC‑P5: `ccswarm repertoire add <git-url>` installs packages resolvable by piece loader.
+- AC‑P5: `ccswarm repertoire add <git-url>` installs packages resolvable by flow loader.
 
 ## Harness Engineering
 
-See docs/HARNESS_ENGINEERING.md for scenario format and CLI. Harness executes piece pipelines against predefined tasks and verifies assertions, writing a consolidated report suitable for CI.
+See docs/HARNESS_ENGINEERING.md for scenario format and CLI. Harness executes flow pipelines against predefined tasks and verifies assertions, writing a consolidated report suitable for CI.
 
 ## Scheduling & Assignment (Advanced)
 
@@ -450,8 +450,8 @@ See docs/HARNESS_ENGINEERING.md for scenario format and CLI. Harness executes pi
 
 ## Event Schema (NDJSON)
 
-- Common fields: { ts, level, run_id, agent, movement?, task_id?, message }.
-- Types: movement.start|end, task.enqueue|start|end, review.request|result, hitl.request|decision, provider.call|error.
+- Common fields: { ts, level, run_id, agent, stage?, task_id?, message }.
+- Types: stage.start|end, task.enqueue|start|end, review.request|result, hitl.request|decision, provider.call|error.
 - Storage: `.ccswarm/runs/<run-id>/{events.ndjson, summary.json}`.
 
 ## Sangha/Extend/Search/Evolution (CLI Spec)
@@ -494,7 +494,7 @@ This section re‑introduces four CLI surfaces with takt‑aligned patterns. The
   - `{ agent_id, status, metrics, timestamp }`
 - `coordination/task-queue/{id}.json`
   - `{ id, description, priority, type, state, timestamps }`
-- `./.ccswarm/runs/*/*.ndjson` — movement/task traces for audit
+- `./.ccswarm/runs/*/*.ndjson` — stage/task traces for audit
 
 JSON writes use pretty‑printed `serde_json`, filenames are UUID‑based, and directories are auto‑created with `tokio::fs::create_dir_all`.
 
@@ -564,34 +564,52 @@ cargo run --package ccswarm -- init --name "TodoApp"
 # Initialize project
 ccswarm init --name "TodoApp" --agents frontend,backend
 
-# Execute a task through a piece pipeline
-ccswarm pipeline --task "Add user authentication" --piece default
+# Execute a task through a flow pipeline
+ccswarm pipeline --task "Add user authentication" --flow default
+
+# Accumulate tasks and drain in batch
+ccswarm queue add "Add login"
+ccswarm queue add --from-issue 42
+ccswarm queue drain
+
+# Follow a running pipeline / inspect a past run
+ccswarm tail
+ccswarm cost <run-id>
+ccswarm run diff <run-a> <run-b>
+ccswarm replay <run-id>
 
 # Generate agent definitions from facets
 ccswarm agent-gen generate
 
-# Run harness scenarios
+# Run harness scenarios (regression tests of flows)
 ccswarm harness run
 
-# Check system health
+# Environment + provider CLI probe
 ccswarm doctor
 ```
 
 ### Advanced Usage
+
+Sangha / extend / evolution / search live under the `lab` subcommand — they are
+research features that sit beside the core JTBD flow.
+
 ```bash
 # Sangha proposal and voting
-ccswarm sangha propose --title "Add GraphQL support" --description "..."
-ccswarm sangha vote <proposal-id> --approve --reason "Improves API flexibility"
+ccswarm lab sangha propose --title "Add GraphQL support" --description "..."
+ccswarm lab sangha vote <proposal-id> --approve --reason "Improves API flexibility"
 
 # Agent extension proposals
-ccswarm extend propose --title "GraphQL resolver" --description "..." --agent backend
+ccswarm lab extend propose --title "GraphQL resolver" --description "..." --agent backend
 
-# HITL approval workflow
+# HITL approval workflow (core, not lab)
 ccswarm approve plan --id run-abc123
 ccswarm approve deploy --id task-456 --reject --reason "needs more tests"
 
 # Evolution metrics and analysis
-ccswarm evolution report --format json
+ccswarm lab evolution report --format json
+
+# Autonomous mode (drain queue, auto-commit, auto-PR)
+ccswarm auto --watch --stop-on-error
 ```
 
 ### Development Commands
@@ -618,12 +636,12 @@ cargo run --package ai-session --bin server
 ### v0.6.0 (Current)
 - Major restructuring: project identity shifted from "AI multi-agent orchestrator" to "AI Agent Workflow DevOps toolchain"
 - Deleted ~22.6k LOC: orchestrator/, providers/, acp_claude/, subagent/, execution/, tui/, template/, mcp/, ipc/, auto_accept/
-- Wired EventRecorder into PieceEngine with NDJSON events at .ccswarm/runs/
+- Wired EventRecorder into FlowEngine with NDJSON events at .ccswarm/runs/
 - Added AISessionBridge with --resume, --agent routing, retry with exponential backoff
 - Added agent-gen command for generating/validating .claude/agents/*.md from facets
 - Enriched builtin persona system prompts
-- Added Movement fields: agent, working_dir, retry_delay_ms
-- Movement context passing between steps
+- Added Stage fields: agent, working_dir, retry_delay_ms
+- Stage context passing between steps
 - Duration tracking in events
 - Harness scenarios added
 - Removed CLI commands: Start, Stop, Status, Tui, Verify, Review, Delegate, Session, Resource, AutoCreate, Quality, Template

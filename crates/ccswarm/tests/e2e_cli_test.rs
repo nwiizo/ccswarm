@@ -282,22 +282,7 @@ fn test_config_help() {
 // Health and Doctor Tests
 // ============================================================================
 
-#[test]
-fn test_health_command() {
-    let output = run_ccswarm(&["health"], None);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    // Health check should run (may report issues but shouldn't crash)
-    assert!(
-        output.status.success()
-            || stdout.to_lowercase().contains("health")
-            || stderr.to_lowercase().contains("check"),
-        "Health command should execute. stdout: {}, stderr: {}",
-        stdout,
-        stderr
-    );
-}
+// `health` was folded into `doctor`; its coverage moved to `test_doctor_command`.
 
 #[test]
 fn test_doctor_command() {
@@ -496,7 +481,8 @@ fn test_verbose_flag() {
 #[test]
 fn test_all_subcommands_have_help() {
     let subcommands = [
-        "init", "task", "agents", "config", "health", "doctor", "piece", "harness", "approve",
+        "init", "task", "agents", "config", "doctor", "flow", "harness", "approve", "queue",
+        "tail", "cost", "facets", "replay", "undo", "run", "auto", "lab",
     ];
 
     for subcmd in subcommands {

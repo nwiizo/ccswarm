@@ -1,9 +1,9 @@
-//! Arpeggio batch processing for Piece/Movement workflows.
+//! Arpeggio batch processing for Flow/Stage workflows.
 //!
-//! Enables running a piece across multiple inputs in batch, either sequentially
+//! Enables running a flow across multiple inputs in batch, either sequentially
 //! or in parallel. Inspired by takt's arpeggio (batch execution) feature.
 //!
-//! An "arpeggio" takes a single piece definition and applies it to a sequence
+//! An "arpeggio" takes a single flow definition and applies it to a sequence
 //! of tasks, collecting results.
 
 use anyhow::Result;
@@ -15,8 +15,8 @@ use tracing::{debug, info, warn};
 /// Configuration for an arpeggio (batch) execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArpeggioConfig {
-    /// Piece to execute for each item
-    pub piece_name: String,
+    /// Flow to execute for each item
+    pub flow_name: String,
     /// Maximum concurrent executions (1 = sequential)
     #[serde(default = "default_concurrency")]
     pub max_concurrency: usize,
@@ -38,7 +38,7 @@ fn default_concurrency() -> usize {
 impl Default for ArpeggioConfig {
     fn default() -> Self {
         Self {
-            piece_name: "default".to_string(),
+            flow_name: "default".to_string(),
             max_concurrency: 1,
             fail_fast: false,
             timeout_secs: None,
@@ -77,8 +77,8 @@ pub struct ArpeggioItemResult {
 /// Aggregate result of an arpeggio execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArpeggioResult {
-    /// Piece that was executed
-    pub piece_name: String,
+    /// Flow that was executed
+    pub flow_name: String,
     /// Individual item results
     pub items: Vec<ArpeggioItemResult>,
     /// Total items processed
@@ -132,8 +132,8 @@ impl ArpeggioExecutor {
         let start_instant = std::time::Instant::now();
 
         info!(
-            "Starting arpeggio: piece={}, items={}, concurrency={}",
-            self.config.piece_name, total, self.config.max_concurrency
+            "Starting arpeggio: flow={}, items={}, concurrency={}",
+            self.config.flow_name, total, self.config.max_concurrency
         );
 
         let mut results = Vec::new();
@@ -190,7 +190,7 @@ impl ArpeggioExecutor {
         );
 
         Ok(ArpeggioResult {
-            piece_name: self.config.piece_name.clone(),
+            flow_name: self.config.flow_name.clone(),
             items: results,
             total,
             succeeded,
@@ -216,11 +216,11 @@ impl ArpeggioExecutor {
         let mut _variables = self.config.shared_variables.clone();
         _variables.extend(item.variables.clone());
 
-        // In production, this would call PieceEngine.execute_piece()
+        // In production, this would call FlowEngine.execute_piece()
         // For now, simulate execution
         let output = format!(
-            "Executed piece '{}' for item '{}': {}",
-            self.config.piece_name, item.id, item.task_text
+            "Executed flow '{}' for item '{}': {}",
+            self.config.flow_name, item.id, item.task_text
         );
 
         let duration_ms = start.elapsed().as_millis() as u64;
@@ -273,7 +273,7 @@ mod tests {
     #[tokio::test]
     async fn test_arpeggio_execute_sequential() {
         let config = ArpeggioConfig {
-            piece_name: "test".to_string(),
+            flow_name: "test".to_string(),
             ..ArpeggioConfig::default()
         };
         let executor = ArpeggioExecutor::new(config);
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_result_metrics() {
         let result = ArpeggioResult {
-            piece_name: "test".to_string(),
+            flow_name: "test".to_string(),
             items: vec![],
             total: 10,
             succeeded: 7,
@@ -341,7 +341,7 @@ mod tests {
     async fn test_fail_fast() {
         // This test verifies the fail_fast flag structure
         let config = ArpeggioConfig {
-            piece_name: "test".to_string(),
+            flow_name: "test".to_string(),
             fail_fast: true,
             ..ArpeggioConfig::default()
         };

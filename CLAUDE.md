@@ -1,112 +1,133 @@
 # CLAUDE.md
 
-## Project Overview
+## What ccswarm does
 
-ccswarm v0.6.0 — Multi-Agent Orchestration Pipeline.
+Hire ccswarm when you have a coding task and want a PR-ready diff with quality gates
+already run, reproducibly. OK/NG-driven: you only press y or n.
 
-複数のClaude Codeエージェントをパイプラインで協調させるワークフローエンジン。
-OK/NG駆動設計: ユーザーは `y` か `n` しか押さない。
+- **Provider-agnostic**: Claude Code (default), Codex, GitHub Copilot CLI.
+- **Reproducible**: declarative flow YAML → same quality every time.
+- **Traceable**: NDJSON events + summaries in `.ccswarm/runs/<id>/`.
 
-## Usage
+## Daily usage
 
 ```bash
-ccswarm                            # 対話モード: 何を作るか聞いてくれる
-ccswarm "勤怠管理アプリを作って"      # 即実行: pipeline → test → commit → PR
-ccswarm runs                       # 過去のrun一覧
-ccswarm pieces                     # 利用可能なワークフロー
-ccswarm doctor                     # 環境チェック
+ccswarm                              # interactive — ccswarm asks what to build
+ccswarm pipeline --task "..."        # single-shot: plan → implement → review → commit → PR
+ccswarm queue add "..."              # accumulate tasks during the day
+ccswarm queue add --from-issue 42    # ingest a GitHub issue as a task
+ccswarm queue drain                  # run all pending, y/n at commit+PR time
+ccswarm doctor                       # probe all providers (claude/codex/gh copilot)
 ```
 
-## Post-Pipeline Flow (自動)
+## After a run
+
+```bash
+ccswarm run list                    # recent runs
+ccswarm tail                         # follow events of the current run, tail-like
+ccswarm cost <run-id>                # duration + token breakdown
+ccswarm run view <run-id>            # full event log
+ccswarm run diff <a> <b>             # compare two runs' timelines
+ccswarm replay <run-id>              # re-execute the recorded task
+ccswarm undo <run-id>                # advisory: show commits since run started
+```
+
+## Authoring flows
+
+```bash
+ccswarm flow list                   # builtin + custom flows
+ccswarm flow new <name>             # scaffold a new flow (minimal|faceted)
+ccswarm flow render <name>          # preview composed prompts per stage
+ccswarm flow check <name>           # validate flow YAML
+ccswarm flow eject <name>           # copy builtin to .ccswarm/flows/
+ccswarm facets [personas|policies|knowledge]  # list facet library
+```
+
+## Post-Pipeline Flow (automatic)
 
 ```
 Pipeline完了 → テスト自動実行 → 失敗なら自動修復(最大3回)
 → "Commit? [Y/n]" → "Create PR? [Y/n]"
 ```
 
-## Quick Commands (development)
+## Development commands
 
 ```bash
-cargo fmt && cargo clippy -- -D warnings && cargo test  # Before commit
-cargo run -p ccswarm -- --help                          # Full CLI
+cargo fmt && cargo clippy --workspace -- -D warnings && cargo test --workspace
+cargo run -p ccswarm -- --help
 ```
 
-## Workspace Architecture
+## Workspace architecture
 
 ```
-ccswarm (workflow engine) ──depends on──> ai-session (session management)
-                                              ──depends on──> portable-pty, tokio, zstd
+ccswarm (workflow + governance) ──depends on──> ai-session (terminal primitives)
 ```
 
 ### ccswarm crate
 
 | Module | Purpose |
 |--------|---------|
-| `cli/` | 3 entry modes (interactive / direct task / subcommands) |
-| `workflow/` | PieceEngine, Pipeline, Faceted prompting, movement reports |
-| `session/` | AISessionBridge (Claude CLI execution, --dangerously-skip-permissions, --allowed-tools, --system-prompt, retry) |
+| `cli/` | Command parsing + dispatch (3 entry modes: interactive / direct task / subcommand) |
+| `workflow/` | FlowEngine, Pipeline, faceted prompting, stage reports |
+| `providers/` | AgentProvider trait + ClaudeProvider / CodexProvider / CopilotProvider |
+| `session/` | AISessionBridge — delegates command construction to providers, owns context/retry/persistence |
 | `events/` | NDJSON EventRecorder, duration tracking, run summaries |
-| `agent/` | AgentRole, Type-State TaskBuilder |
+| `governance/` | Proposals, extensions, approvals, coordination bus (renamed from `coordination/`) |
+| `agent/` | AgentRole, type-state TaskBuilder |
 | `identity/` | AgentIdentity, role boundaries |
 | `hooks/` | HookRegistry |
-| `coordination/` | AgentMailbox, conversion layer |
 
 ### ai-session crate
 
 | Module | Purpose |
 |--------|---------|
 | `core/` | AISession, SessionManager, PTY/headless |
-| `context/` | TokenEfficientHistory (zstd compression) |
+| `context/` | TokenEfficientHistory (zstd, ~93% token reduction) |
 | `output/` | OutputParser (cargo/Playwright/npm/Jest patterns) |
 | `persistence/` | Session snapshots |
+| `coordination/` | Inter-session message bus (distinct from ccswarm's `governance/`) |
 
-## Key Design Decisions
+Role boundary: ai-session = terminal/session primitives. ccswarm = workflow + governance.
+Don't add workflow logic to ai-session.
 
-- **OK/NG駆動**: ユーザーの操作を y/n に削減。テスト自動実行、自動修復ループ。
-- **Claude Code CLI フラグ自動マッピング**: Movement YAML → --allowed-tools, --model, --system-prompt
-- **--dangerously-skip-permissions**: 全movement共通（non-interactiveパイプライン実行のため）
-- **ローカルcomplete**: 終端movementはClaude呼び出し不要（instant）
-- **部分成功**: タイムアウトでもmovements完了分は成功扱い
+## Providers
 
-## Builtin Pieces
+```yaml
+# ccswarm.json or flow YAML (per-stage override)
+provider: claude   # claude | codex | copilot (default: claude)
+model: sonnet
+```
 
-| Piece | Description | Agents |
+- **claude**: full flag coverage (--allowed-tools, --agent, --resume, --system-prompt, --max-budget-usd, --worktree)
+- **codex**: `codex exec "<prompt>"`, system prompt prepended to user prompt
+- **copilot**: unsupported for code generation (gh copilot suggest is interactive); falls back to friendly error
+
+`ccswarm doctor` probes all three CLIs.
+
+## Builtin flows
+
+| Flow | Description | Agents |
 |-------|-------------|--------|
-| `default` | plan → implement → review → complete | planner, coder, reviewer |
-| `team` | plan → parallel(frontend + backend) → review → complete | planner, frontend-specialist, backend-specialist, supervisor |
-| `quick` | single-shot execution (1 step) | coder |
+| `default` | plan → implement → review → fix → complete | planner, coder, reviewer |
+| `team` | plan → parallel(frontend + backend) → supervisor review | planner, frontend-specialist, backend-specialist, supervisor |
+| `quick` | single-shot (1 stage) | coder |
 | `review-fix` | review → fix loop | reviewer, coder |
 | `research` | investigate → report | researcher |
 
-Custom: `.ccswarm/pieces/*.yaml`
+Custom: `.ccswarm/flows/*.yaml`. Installable packages: `ccswarm repertoire add <git-url>`.
 
-### Multi-Agent Pipeline Example
+## Builtin facets
 
-```yaml
-# team piece: plan → parallel agents → supervisor review
-movements:
-  - id: plan
-    persona: planner
-  - id: parallel-implement
-    parallel: true
-    sub_movements: [frontend-impl, backend-impl]
-  - id: frontend-impl
-    agent: frontend-specialist    # Routes to .claude/agents/frontend-specialist.md
-  - id: backend-impl
-    agent: backend-specialist     # Routes to .claude/agents/backend-specialist.md
-  - id: review
-    persona: supervisor           # Final validation
-```
+Personas: planner, coder, reviewer, researcher, supervisor, ai-antipattern-reviewer.
+Policies: coding, review, security, testing.
+Knowledge: (user-provided under `.ccswarm/facets/knowledge/*.yaml`).
 
-## Personas (builtin)
+## Pipeline learnings
 
-planner, coder, reviewer, researcher, supervisor, ai-antipattern-reviewer
-
-## Pipeline Learnings
-
-- タスク記述は簡潔に（500語以下）。長いとimplementがタイムアウト。
-- `{task}`, `{plan_output}` テンプレート変数で movement 間コンテキスト受け渡し。
-- `pass_previous_response: false` で fix movement のコンテキストをリセット。
+- タスク記述は簡潔に(500語以下)。長いとimplementがタイムアウト。
+- `{task}`, `{plan_output}` テンプレート変数で stage 間コンテキスト受け渡し。
+- `pass_previous_response: false` で fix stage のコンテキストをリセット。
+- Empty `agents_used` in a summary means no provider CLI was invoked for that stage.
 
 ## Rules
 

@@ -1,9 +1,9 @@
-//! AI Judge and tag-based condition evaluation for Piece/Movement workflows.
+//! AI Judge and tag-based condition evaluation for Flow/Stage workflows.
 //!
 //! Implements takt-style three-phase evaluation:
 //! 1. **Tag-based routing**: `[STEP:N]` tags injected into prompts, detected in output
 //! 2. **AI judge**: `ai("condition text")` for LLM-powered condition evaluation
-//! 3. **Aggregate conditions**: `all("X")` / `any("X")` for parallel movement results
+//! 3. **Aggregate conditions**: `all("X")` / `any("X")` for parallel stage results
 
 use anyhow::{Context, Result};
 use regex::Regex;
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
-use super::piece::{MovementRule, RuleCondition};
+use super::flow::{MovementRule, RuleCondition};
 
 /// Tag format used for step routing: `[STEP:N]`
 const STEP_TAG_PATTERN: &str = r"\[STEP:(\d+)\]";
@@ -78,7 +78,7 @@ impl Default for JudgeConfig {
     }
 }
 
-/// The movement judge evaluates output and determines routing.
+/// The stage judge evaluates output and determines routing.
 ///
 /// Evaluation priority (from takt):
 /// 1. Aggregate conditions: `all("X")` / `any("X")`
@@ -122,9 +122,9 @@ impl MovementJudge {
         instructions
     }
 
-    /// Evaluate movement output against rules and determine the next movement.
+    /// Evaluate stage output against rules and determine the next stage.
     ///
-    /// Returns the ID of the next movement, or None if no rule matched.
+    /// Returns the ID of the next stage, or None if no rule matched.
     pub fn evaluate(
         &self,
         output: &str,
@@ -136,11 +136,11 @@ impl MovementJudge {
                 matched_rule_index: None,
                 match_method: MatchMethod::NoMatch,
                 confidence: 1.0,
-                explanation: "No rules defined (terminal movement)".to_string(),
+                explanation: "No rules defined (terminal stage)".to_string(),
             });
         }
 
-        // 1. Check aggregate conditions first (for parallel movements)
+        // 1. Check aggregate conditions first (for parallel stages)
         if let Some(parallel_out) = parallel_outputs
             && let Some(result) = self.evaluate_aggregate(rules, parallel_out)?
         {
@@ -218,7 +218,7 @@ impl MovementJudge {
 
         // Sort by priority (higher first)
         let mut indexed_rules: Vec<(usize, &MovementRule)> = rules.iter().enumerate().collect();
-        indexed_rules.sort_by(|a, b| b.1.priority.cmp(&a.1.priority));
+        indexed_rules.sort_by_key(|b| std::cmp::Reverse(b.1.priority));
 
         for (index, rule) in indexed_rules {
             if let RuleCondition::Simple(condition) = &rule.condition {
@@ -305,7 +305,7 @@ impl MovementJudge {
         Ok(None)
     }
 
-    /// Evaluate aggregate conditions (all/any) for parallel movement outputs
+    /// Evaluate aggregate conditions (all/any) for parallel stage outputs
     fn evaluate_aggregate(
         &self,
         rules: &[MovementRule],
@@ -314,14 +314,14 @@ impl MovementJudge {
         for (index, rule) in rules.iter().enumerate() {
             if let RuleCondition::Compound(compound) = &rule.condition {
                 let matched = match compound {
-                    super::piece::CompoundCondition::All(conditions) => {
+                    super::flow::CompoundCondition::All(conditions) => {
                         conditions.iter().all(|cond| {
                             parallel_outputs
                                 .values()
                                 .all(|out| out.to_lowercase().contains(&cond.to_lowercase()))
                         })
                     }
-                    super::piece::CompoundCondition::Any(conditions) => {
+                    super::flow::CompoundCondition::Any(conditions) => {
                         conditions.iter().any(|cond| {
                             parallel_outputs
                                 .values()
@@ -365,11 +365,21 @@ impl MovementJudge {
         Ok(None)
     }
 
-    /// Perform AI-based judgment of a condition against output.
+    /// Evaluate an `ai("...")` condition against a stage output.
     ///
-    /// In production, this calls the LLM. For now, uses heuristic evaluation.
+    /// This is intentionally a **lexical heuristic**, not a live LLM round-trip: for a
+    /// per-stage routing decision we don't want to pay an extra provider-CLI spawn
+    /// (latency + cost + non-determinism). The heuristic checks how many of the
+    /// condition's content words (>3 chars) appear in the output, and matches when the
+    /// ratio meets [`JudgeConfig::ai_confidence_threshold`] (default 0.5).
+    ///
+    /// Graduating this to a real LLM judge would require threading an
+    /// `AgentProvider` through the engine (`MovementJudge` currently has no provider
+    /// handle) and making `evaluate_ai_conditions` async. That refactor is tracked as
+    /// a follow-up — the heuristic has proven sufficient for the builtin flows
+    /// (`review-fix`, `default`) shipped today.
     fn ai_judge_evaluate(&self, condition: &str, output: &str) -> Result<AiJudgment> {
-        // Heuristic AI judge: analyze semantic overlap between condition and output
+        // Heuristic AI judge: analyze lexical overlap between condition and output.
         let condition_words: Vec<&str> = condition
             .split_whitespace()
             .filter(|w| w.len() > 3)
@@ -456,7 +466,7 @@ fn extract_function_arg(input: &str, fn_name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::piece::CompoundCondition;
+    use crate::workflow::flow::CompoundCondition;
 
     fn make_simple_rule(condition: &str, next: &str) -> MovementRule {
         MovementRule {

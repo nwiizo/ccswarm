@@ -34,7 +34,7 @@ thiserror = "2.0"
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yaml = "0.9"
+serde_yml = "0.0.12"
 
 # UUID generation
 uuid = { version = "1.10", features = ["v4", "serde"] }
@@ -61,7 +61,7 @@ glob = "0.3"
 
 # Process management
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", features = ["process"] }
+nix = { version = "0.31", features = ["process"] }
 
 # Configuration
 config = "0.15"
@@ -88,7 +88,7 @@ futures = "0.3"
 log = "0.4"
 
 # Docker integration (optional for container feature)
-bollard = { version = "0.19", optional = true }
+bollard = { version = "0.20", optional = true }
 futures-util = { version = "0.3", optional = true }
 tar = { version = "0.4", optional = true }
 
@@ -100,7 +100,7 @@ colored = "3.0"
 rand = "0.9"
 
 # System information for resource monitoring
-sysinfo = "0.33"
+sysinfo = "0.38"
 
 # Secure secret handling
 secrecy = { version = "0.10", features = ["serde"] }
@@ -109,13 +109,22 @@ secrecy = { version = "0.10", features = ["serde"] }
 ai-session = { version = "0.5.0", path = "../ai-session" }
 
 # Directory paths
-dirs = "5.0"
+dirs = "6.0"
 
 [dev-dependencies]
 # Testing
 mockall = "0.13"
 tempfile = "3.12"
 pretty_assertions = "1.4"
+
+# Behavior-driven tests against ccswarm's business-level behaviors. Keeps scenarios
+# declarative (what-not-how) and readable to non-Rust readers.
+cucumber = "0.21"
+
+[[test]]
+name = "bdd"
+path = "tests/bdd/main.rs"
+harness = false
 
 [features]
 default = []

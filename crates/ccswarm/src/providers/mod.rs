@@ -1,0 +1,93 @@
+//! Agent provider abstraction — build subprocess commands for Claude / Codex / Copilot CLIs.
+//!
+//! The `AISessionBridge` owns context/persistence/parsing logic; providers only know how to
+//! construct an executable command from a prompt and [`ProviderOptions`]. This keeps the
+//! bridge neutral to which underlying CLI is spoken.
+
+use std::path::Path;
+
+/// Options passed to a provider for a single execution.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ProviderOptions {
+    /// Tools the provider is allowed to use (provider-specific name mapping).
+    pub allowed_tools: Vec<String>,
+    /// Model override.
+    pub model: Option<String>,
+    /// System prompt (persona-derived).
+    pub system_prompt: Option<String>,
+    /// Agent definition name for `--agent` flag (Claude only).
+    pub agent_name: Option<String>,
+    /// Session identifier for resume.
+    pub session_id: Option<String>,
+    /// If true, attempt to continue the prior session (no explicit session id).
+    pub continue_session: bool,
+    /// Maximum budget in USD (Claude only).
+    pub max_budget: Option<f64>,
+    /// Worktree name (Claude only).
+    pub worktree_name: Option<String>,
+}
+
+/// Identifier for a provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderKind {
+    Claude,
+    Codex,
+    Copilot,
+}
+
+impl ProviderKind {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "claude" | "claude-code" => Some(Self::Claude),
+            "codex" => Some(Self::Codex),
+            "copilot" | "gh-copilot" | "github-copilot" => Some(Self::Copilot),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Claude => "claude",
+            Self::Codex => "codex",
+            Self::Copilot => "copilot",
+        }
+    }
+}
+
+/// Contract every provider must implement to be callable from `AISessionBridge`.
+pub(crate) trait AgentProvider {
+    fn kind(&self) -> ProviderKind;
+
+    /// Construct a `tokio::process::Command` ready to spawn.
+    fn build_command(
+        &self,
+        prompt: &str,
+        working_dir: &Path,
+        options: &ProviderOptions,
+    ) -> tokio::process::Command;
+}
+
+pub mod claude;
+pub mod codex;
+pub mod copilot;
+
+#[cfg(test)]
+mod tests;
+
+/// Resolve a provider by kind.
+pub(crate) fn resolve(kind: ProviderKind) -> Box<dyn AgentProvider + Send + Sync> {
+    match kind {
+        ProviderKind::Claude => Box::new(claude::ClaudeProvider),
+        ProviderKind::Codex => Box::new(codex::CodexProvider),
+        ProviderKind::Copilot => Box::new(copilot::CopilotProvider),
+    }
+}
+
+/// Capitalize the first character; used for normalizing tool names across providers.
+pub(crate) fn capitalize_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}

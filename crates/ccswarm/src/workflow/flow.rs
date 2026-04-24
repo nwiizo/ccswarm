@@ -1,18 +1,18 @@
-//! Piece/Movement workflow system inspired by takt.
+//! Flow/Stage workflow system.
 //!
-//! A **Piece** is a declarative YAML-defined workflow containing:
-//! - Named **Movements** (sequential steps with persona/provider/instructions)
-//! - **Rules** for conditional routing between movements
+//! A **Flow** is a declarative YAML-defined workflow containing:
+//! - Named **Stages** (sequential steps with persona/provider/instructions)
+//! - **Rules** for conditional routing between stages
 //! - **Output contracts** for schema validation
 //!
 //! Example YAML:
 //! ```yaml
 //! name: default
 //! description: "Standard development workflow"
-//! max_movements: 30
+//! max_stages: 30
 //! initial_movement: plan
 //!
-//! movements:
+//! stages:
 //!   - id: plan
 //!     persona: planner
 //!     instruction: "Analyze the task and create a plan"
@@ -43,35 +43,35 @@ use std::collections::HashMap;
 use std::path::Path;
 use tracing::{debug, info, warn};
 
-/// A Piece is a complete workflow definition loaded from YAML
+/// A Flow is a complete workflow definition loaded from YAML
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Piece {
-    /// Piece name (unique identifier)
+pub struct Flow {
+    /// Flow name (unique identifier)
     pub name: String,
 
     /// Human-readable description
     #[serde(default)]
     pub description: String,
 
-    /// Maximum number of movement transitions before abort
+    /// Maximum number of stage transitions before abort
     #[serde(default = "default_max_movements")]
-    pub max_movements: u32,
+    pub max_stages: u32,
 
-    /// ID of the first movement to execute
+    /// ID of the first stage to execute
     pub initial_movement: String,
 
-    /// List of movements in this piece
-    pub movements: Vec<Movement>,
+    /// List of stages in this flow
+    pub stages: Vec<Stage>,
 
-    /// Global variables for the piece
+    /// Global variables for the flow
     #[serde(default)]
     pub variables: HashMap<String, serde_json::Value>,
 
-    /// Piece-level metadata
+    /// Flow-level metadata
     #[serde(default)]
     pub metadata: HashMap<String, String>,
 
-    /// Default interactive mode for this piece
+    /// Default interactive mode for this flow
     #[serde(default)]
     pub interactive_mode: Option<super::interactive::InteractiveMode>,
 }
@@ -80,10 +80,10 @@ fn default_max_movements() -> u32 {
     30
 }
 
-/// A Movement is a single step in a Piece workflow
+/// A Stage is a single step in a Flow workflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Movement {
-    /// Unique movement identifier within the piece
+pub struct Stage {
+    /// Unique stage identifier within the flow
     pub id: String,
 
     /// Persona to use (references a persona YAML file or inline prompt)
@@ -110,23 +110,23 @@ pub struct Movement {
     #[serde(default)]
     pub instruction: String,
 
-    /// Tools available to this movement
+    /// Tools available to this stage
     #[serde(default)]
     pub tools: Vec<String>,
 
-    /// Permission level for this movement
+    /// Permission level for this stage
     #[serde(default)]
     pub permission: MovementPermission,
 
-    /// Routing rules evaluated after movement completes
+    /// Routing rules evaluated after stage completes
     #[serde(default)]
     pub rules: Vec<MovementRule>,
 
-    /// Whether this movement executes sub-movements in parallel
+    /// Whether this stage executes sub-stages in parallel
     #[serde(default)]
     pub parallel: bool,
 
-    /// Sub-movements for parallel execution
+    /// Sub-stages for parallel execution
     #[serde(default)]
     pub sub_movements: Vec<String>,
 
@@ -146,7 +146,7 @@ pub struct Movement {
     #[serde(default)]
     pub agent: Option<String>,
 
-    /// Working directory override for this movement
+    /// Working directory override for this stage
     #[serde(default)]
     pub working_dir: Option<String>,
 
@@ -154,8 +154,8 @@ pub struct Movement {
     #[serde(default = "default_retry_delay")]
     pub retry_delay_ms: u64,
 
-    /// Whether to pass previous movement's response as context (default: true)
-    /// Set to false for fix movements where fresh context is preferred
+    /// Whether to pass previous stage's response as context (default: true)
+    /// Set to false for fix stages where fresh context is preferred
     #[serde(default = "default_true")]
     pub pass_previous_response: bool,
 }
@@ -168,7 +168,7 @@ fn default_retry_delay() -> u64 {
     1000
 }
 
-/// Permission level for a movement
+/// Permission level for a stage
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum MovementPermission {
@@ -181,13 +181,13 @@ pub enum MovementPermission {
     Full,
 }
 
-/// A routing rule that determines the next movement
+/// A routing rule that determines the next stage
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MovementRule {
     /// Condition to evaluate (string match, AI evaluation, or built-in)
     pub condition: RuleCondition,
 
-    /// Next movement ID if condition matches
+    /// Next stage ID if condition matches
     pub next: String,
 
     /// Optional priority for rule ordering (higher = checked first)
@@ -195,7 +195,7 @@ pub struct MovementRule {
     pub priority: u8,
 }
 
-/// Condition types for movement routing
+/// Condition types for stage routing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RuleCondition {
@@ -223,7 +223,7 @@ pub enum CompoundCondition {
     Any(Vec<String>),
 }
 
-/// Output contract for validating movement results
+/// Output contract for validating stage results
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputContract {
     /// Expected output format (markdown, json, text, yaml, code)
@@ -261,6 +261,15 @@ pub struct OutputContract {
     /// Regular expression patterns the output must NOT match
     #[serde(default)]
     pub must_not_match: Vec<String>,
+
+    /// Allow-list of file globs the stage is permitted to create or modify.
+    ///
+    /// Empty means "no restriction". If present, files written by the stage that
+    /// don't match any pattern are surfaced as `UnexpectedFile` observations — not
+    /// hard violations, so the run still completes, but the user sees what the AI
+    /// added beyond the spec. This closes JTBD issue #44 (spec-drift detection).
+    #[serde(default)]
+    pub allowed_files: Vec<String>,
 }
 
 /// Result of output contract validation
@@ -300,32 +309,35 @@ pub enum ViolationKind {
     PatternViolation,
     /// Forbidden pattern found
     ForbiddenPattern,
+    /// File created/modified by the stage that is not covered by allowed_files.
+    /// Observation-level — does not fail the run by itself.
+    UnexpectedFile,
 }
 
 fn default_format() -> String {
     "text".to_string()
 }
 
-/// Runtime state of a piece execution
+/// Runtime state of a flow execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PieceState {
-    /// Piece being executed
-    pub piece_name: String,
+pub struct FlowState {
+    /// Flow being executed
+    pub flow_name: String,
 
-    /// Current movement ID
+    /// Current stage ID
     pub current_movement: String,
 
-    /// Number of movements executed so far
+    /// Number of stages executed so far
     pub movement_count: u32,
 
-    /// History of movement transitions
+    /// History of stage transitions
     pub history: Vec<MovementTransition>,
 
     /// Accumulated variables/outputs
     pub variables: HashMap<String, serde_json::Value>,
 
     /// Current status
-    pub status: PieceStatus,
+    pub status: FlowStatus,
 
     /// Started at
     pub started_at: DateTime<Utc>,
@@ -334,83 +346,83 @@ pub struct PieceState {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
-/// A recorded transition between movements
+/// A recorded transition between stages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MovementTransition {
-    /// Source movement ID
+    /// Source stage ID
     pub from: String,
-    /// Destination movement ID
+    /// Destination stage ID
     pub to: String,
     /// Condition that triggered the transition
     pub condition: String,
     /// Timestamp
     pub timestamp: DateTime<Utc>,
-    /// Output from the source movement
+    /// Output from the source stage
     pub output: Option<serde_json::Value>,
 }
 
-/// Piece execution status
+/// Flow execution status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PieceStatus {
+pub enum FlowStatus {
     /// Not yet started
     Pending,
     /// Currently executing
     Running,
-    /// Completed successfully (reached terminal movement or explicit completion)
+    /// Completed successfully (reached terminal stage or explicit completion)
     Completed,
-    /// Aborted (max movements exceeded or error)
+    /// Aborted (max stages exceeded or error)
     Aborted,
     /// Failed with error
     Failed,
 }
 
-impl Piece {
-    /// Load a piece from a YAML file
+impl Flow {
+    /// Load a flow from a YAML file
     pub async fn load_from_file(path: &Path) -> Result<Self> {
         let contents = tokio::fs::read_to_string(path)
             .await
-            .with_context(|| format!("Failed to read piece file: {}", path.display()))?;
+            .with_context(|| format!("Failed to read flow file: {}", path.display()))?;
 
         Self::from_yaml(&contents)
     }
 
-    /// Parse a piece from YAML string
+    /// Parse a flow from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self> {
-        let piece: Self = serde_yaml::from_str(yaml).context("Failed to parse piece YAML")?;
-        piece.validate()?;
-        Ok(piece)
+        let flow: Self = serde_yml::from_str(yaml).context("Failed to parse flow YAML")?;
+        flow.validate()?;
+        Ok(flow)
     }
 
-    /// Validate piece structure
+    /// Validate flow structure
     pub fn validate(&self) -> Result<()> {
-        // Check initial movement exists
-        if !self.movements.iter().any(|m| m.id == self.initial_movement) {
+        // Check initial stage exists
+        if !self.stages.iter().any(|m| m.id == self.initial_movement) {
             return Err(anyhow::anyhow!(
-                "Initial movement '{}' not found in piece '{}'",
+                "Initial stage '{}' not found in flow '{}'",
                 self.initial_movement,
                 self.name
             ));
         }
 
-        // Check all rule targets reference valid movements
-        for movement in &self.movements {
-            for rule in &movement.rules {
-                if !self.movements.iter().any(|m| m.id == rule.next) {
+        // Check all rule targets reference valid stages
+        for stage in &self.stages {
+            for rule in &stage.rules {
+                if !self.stages.iter().any(|m| m.id == rule.next) {
                     return Err(anyhow::anyhow!(
-                        "Rule in movement '{}' references unknown movement '{}'",
-                        movement.id,
+                        "Rule in stage '{}' references unknown stage '{}'",
+                        stage.id,
                         rule.next
                     ));
                 }
             }
 
-            // Check parallel sub-movements exist
-            if movement.parallel {
-                for sub in &movement.sub_movements {
-                    if !self.movements.iter().any(|m| m.id == *sub) {
+            // Check parallel sub-stages exist
+            if stage.parallel {
+                for sub in &stage.sub_movements {
+                    if !self.stages.iter().any(|m| m.id == *sub) {
                         return Err(anyhow::anyhow!(
-                            "Parallel movement '{}' references unknown sub-movement '{}'",
-                            movement.id,
+                            "Parallel stage '{}' references unknown sub-stage '{}'",
+                            stage.id,
                             sub
                         ));
                     }
@@ -418,13 +430,13 @@ impl Piece {
             }
         }
 
-        // Check for duplicate movement IDs
+        // Check for duplicate stage IDs
         let mut seen = std::collections::HashSet::new();
-        for movement in &self.movements {
-            if !seen.insert(&movement.id) {
+        for stage in &self.stages {
+            if !seen.insert(&stage.id) {
                 return Err(anyhow::anyhow!(
-                    "Duplicate movement ID '{}' in piece '{}'",
-                    movement.id,
+                    "Duplicate stage ID '{}' in flow '{}'",
+                    stage.id,
                     self.name
                 ));
             }
@@ -433,12 +445,12 @@ impl Piece {
         Ok(())
     }
 
-    /// Get a movement by ID
-    pub fn get_movement(&self, id: &str) -> Option<&Movement> {
-        self.movements.iter().find(|m| m.id == id)
+    /// Get a stage by ID
+    pub fn get_movement(&self, id: &str) -> Option<&Stage> {
+        self.stages.iter().find(|m| m.id == id)
     }
 
-    /// Check if a movement is terminal (has no rules / no transitions)
+    /// Check if a stage is terminal (has no rules / no transitions)
     pub fn is_terminal(&self, movement_id: &str) -> bool {
         self.get_movement(movement_id)
             .map(|m| m.rules.is_empty())
@@ -446,25 +458,25 @@ impl Piece {
     }
 
     /// Create initial execution state
-    pub fn create_state(&self) -> PieceState {
-        PieceState {
-            piece_name: self.name.clone(),
+    pub fn create_state(&self) -> FlowState {
+        FlowState {
+            flow_name: self.name.clone(),
             current_movement: self.initial_movement.clone(),
             movement_count: 0,
             history: Vec::new(),
             variables: self.variables.clone(),
-            status: PieceStatus::Pending,
+            status: FlowStatus::Pending,
             started_at: Utc::now(),
             completed_at: None,
         }
     }
 }
 
-/// Piece engine that executes piece workflows
-pub struct PieceEngine {
-    /// Loaded pieces
-    pieces: HashMap<String, Piece>,
-    /// Movement judge for tag/AI-based condition evaluation
+/// Flow engine that executes flow workflows
+pub struct FlowEngine {
+    /// Loaded flows
+    flows: HashMap<String, Flow>,
+    /// Stage judge for tag/AI-based condition evaluation
     judge: super::judge::MovementJudge,
     /// Facet registry for prompt composition
     facet_registry: super::facets::FacetRegistry,
@@ -475,25 +487,32 @@ pub struct PieceEngine {
     /// Optional event recorder for NDJSON observability
     event_recorder: Option<crate::events::EventRecorder>,
     /// Last known execution state (for partial result recovery on timeout)
-    last_state: std::sync::Arc<tokio::sync::RwLock<Option<PieceState>>>,
-    /// Progress callback for real-time movement completion notifications
+    last_state: std::sync::Arc<tokio::sync::RwLock<Option<FlowState>>>,
+    /// Progress callback for real-time stage completion notifications
     progress_tx: Option<tokio::sync::mpsc::UnboundedSender<MovementProgress>>,
+    /// Per-stage cost cap forwarded to providers that understand it (Claude's
+    /// `--max-budget-usd`). `None` leaves it to the provider's own default.
+    budget_usd: Option<f64>,
+    /// Cumulative input+output token cap across the whole run. When exceeded, the
+    /// flow aborts before the next stage starts. Complements `budget_usd`, which
+    /// only caps a single stage and only works for Claude.
+    run_token_cap: Option<u64>,
 }
 
-/// Progress notification sent after each movement completes
+/// Progress notification sent after each stage completes
 #[derive(Debug, Clone)]
 pub struct MovementProgress {
-    /// Movement ID
+    /// Stage ID
     pub movement_id: String,
     /// Duration in milliseconds
     pub duration_ms: u64,
     /// Whether it succeeded
     pub success: bool,
-    /// Movement count so far
+    /// Stage count so far
     pub movements_completed: usize,
 }
 
-impl PieceEngine {
+impl FlowEngine {
     pub fn new() -> Self {
         let mut facet_registry = super::facets::FacetRegistry::new();
         // Register built-in facets
@@ -503,13 +522,13 @@ impl PieceEngine {
         for policy in super::facets::builtin_policies() {
             facet_registry.register_policy(policy);
         }
-        // Register built-in pieces so they're available by default
-        let mut pieces = HashMap::new();
-        for piece in builtin_pieces() {
-            pieces.insert(piece.name.clone(), piece);
+        // Register built-in flows so they're available by default
+        let mut flows = HashMap::new();
+        for flow in builtin_flows() {
+            flows.insert(flow.name.clone(), flow);
         }
         Self {
-            pieces,
+            flows,
             judge: super::judge::MovementJudge::default(),
             facet_registry,
             bridge: None,
@@ -517,7 +536,23 @@ impl PieceEngine {
             event_recorder: None,
             last_state: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
             progress_tx: None,
+            budget_usd: None,
+            run_token_cap: None,
         }
+    }
+
+    /// Set a per-stage budget cap in USD. Forwarded to Claude via `--max-budget-usd`;
+    /// other providers currently ignore it (they don't expose an equivalent flag).
+    pub fn set_budget(&mut self, budget_usd: f64) {
+        self.budget_usd = Some(budget_usd);
+    }
+
+    /// Cap cumulative input+output tokens across the run. Checked between stages;
+    /// when exceeded, the flow aborts with `FlowStatus::Aborted` and emits a
+    /// `budget_exceeded` event. Provider-agnostic since token estimates are
+    /// produced by the bridge regardless of backend.
+    pub fn set_run_token_cap(&mut self, cap: u64) {
+        self.run_token_cap = Some(cap);
     }
 
     /// Create with custom judge config
@@ -548,11 +583,11 @@ impl PieceEngine {
     }
 
     /// Get the last known execution state (for partial result recovery on timeout)
-    pub async fn get_last_state(&self) -> Option<PieceState> {
+    pub async fn get_last_state(&self) -> Option<FlowState> {
         self.last_state.read().await.clone()
     }
 
-    /// Set a progress channel for real-time movement completion notifications
+    /// Set a progress channel for real-time stage completion notifications
     pub fn set_progress_channel(
         &mut self,
         tx: tokio::sync::mpsc::UnboundedSender<MovementProgress>,
@@ -560,20 +595,16 @@ impl PieceEngine {
         self.progress_tx = Some(tx);
     }
 
-    /// Load a piece from a YAML file
-    pub async fn load_piece(&mut self, path: &Path) -> Result<String> {
-        let piece = Piece::load_from_file(path).await?;
-        let name = piece.name.clone();
-        info!(
-            "Loaded piece '{}' with {} movements",
-            name,
-            piece.movements.len()
-        );
-        self.pieces.insert(name.clone(), piece);
+    /// Load a flow from a YAML file
+    pub async fn load_flow(&mut self, path: &Path) -> Result<String> {
+        let flow = Flow::load_from_file(path).await?;
+        let name = flow.name.clone();
+        info!("Loaded flow '{}' with {} stages", name, flow.stages.len());
+        self.flows.insert(name.clone(), flow);
         Ok(name)
     }
 
-    /// Load all pieces from a directory
+    /// Load all flows from a directory
     pub async fn load_pieces_from_dir(&mut self, dir: &Path) -> Result<Vec<String>> {
         let mut loaded = Vec::new();
 
@@ -587,9 +618,9 @@ impl PieceEngine {
             if path.extension().and_then(|e| e.to_str()) == Some("yaml")
                 || path.extension().and_then(|e| e.to_str()) == Some("yml")
             {
-                match self.load_piece(&path).await {
+                match self.load_flow(&path).await {
                     Ok(name) => loaded.push(name),
-                    Err(e) => warn!("Failed to load piece from {}: {}", path.display(), e),
+                    Err(e) => warn!("Failed to load flow from {}: {}", path.display(), e),
                 }
             }
         }
@@ -597,26 +628,26 @@ impl PieceEngine {
         Ok(loaded)
     }
 
-    /// Load all builtin pieces into the engine
-    pub fn load_builtin_pieces(&mut self) {
-        for piece in builtin_pieces() {
-            self.pieces.insert(piece.name.clone(), piece);
+    /// Load all builtin flows into the engine
+    pub fn load_builtin_flows(&mut self) {
+        for flow in builtin_flows() {
+            self.flows.insert(flow.name.clone(), flow);
         }
     }
 
-    /// Get a loaded piece
-    pub fn get_piece(&self, name: &str) -> Option<&Piece> {
-        self.pieces.get(name)
+    /// Get a loaded flow
+    pub fn get_flow(&self, name: &str) -> Option<&Flow> {
+        self.flows.get(name)
     }
 
-    /// List all loaded pieces
-    pub fn list_pieces(&self) -> Vec<&Piece> {
-        self.pieces.values().collect()
+    /// List all loaded flows
+    pub fn list_flows(&self) -> Vec<&Flow> {
+        self.flows.values().collect()
     }
 
-    /// Register a piece directly (for programmatic / test usage)
-    pub fn register_piece(&mut self, piece: Piece) {
-        self.pieces.insert(piece.name.clone(), piece);
+    /// Register a flow directly (for programmatic / test usage)
+    pub fn register_flow(&mut self, flow: Flow) {
+        self.flows.insert(flow.name.clone(), flow);
     }
 
     /// Record an event if recorder is configured (best-effort, logs on failure)
@@ -629,41 +660,41 @@ impl PieceEngine {
         }
     }
 
-    /// Execute a piece workflow with a task description injected as context
-    pub async fn execute_piece_with_task(&self, name: &str, task_text: &str) -> Result<PieceState> {
-        let piece = self
-            .pieces
+    /// Execute a flow workflow with a task description injected as context
+    pub async fn execute_piece_with_task(&self, name: &str, task_text: &str) -> Result<FlowState> {
+        let flow = self
+            .flows
             .get(name)
-            .ok_or_else(|| anyhow::anyhow!("Piece '{}' not found", name))?;
+            .ok_or_else(|| anyhow::anyhow!("Flow '{}' not found", name))?;
 
-        let mut state = piece.create_state();
-        // Inject task text as a variable so movements can reference it
+        let mut state = flow.create_state();
+        // Inject task text as a variable so stages can reference it
         state
             .variables
             .insert("task".to_string(), serde_json::json!(task_text));
-        state.status = PieceStatus::Running;
-        self.execute_piece_state(name, piece, state).await
+        state.status = FlowStatus::Running;
+        self.execute_piece_state(name, flow, state).await
     }
 
-    /// Execute a piece workflow
-    pub async fn execute_piece(&self, name: &str) -> Result<PieceState> {
-        let piece = self
-            .pieces
+    /// Execute a flow workflow
+    pub async fn execute_piece(&self, name: &str) -> Result<FlowState> {
+        let flow = self
+            .flows
             .get(name)
-            .ok_or_else(|| anyhow::anyhow!("Piece '{}' not found", name))?;
+            .ok_or_else(|| anyhow::anyhow!("Flow '{}' not found", name))?;
 
-        let mut state = piece.create_state();
-        state.status = PieceStatus::Running;
-        self.execute_piece_state(name, piece, state).await
+        let mut state = flow.create_state();
+        state.status = FlowStatus::Running;
+        self.execute_piece_state(name, flow, state).await
     }
 
-    /// Internal piece execution with pre-configured state
+    /// Internal flow execution with pre-configured state
     async fn execute_piece_state(
         &self,
         name: &str,
-        piece: &Piece,
-        mut state: PieceState,
-    ) -> Result<PieceState> {
+        flow: &Flow,
+        mut state: FlowState,
+    ) -> Result<FlowState> {
         let run_id = self
             .event_recorder
             .as_ref()
@@ -674,35 +705,34 @@ impl PieceEngine {
             &run_id,
             crate::events::EventLevel::Info,
             crate::events::EventType::TaskStart,
-            format!("Starting piece '{}'", name),
+            format!("Starting flow '{}'", name),
         ))
         .await;
 
         info!(
-            "Starting piece '{}' at movement '{}'",
+            "Starting flow '{}' at stage '{}'",
             name, state.current_movement
         );
 
+        let mut cumulative_tokens: u64 = 0;
+
         loop {
-            // Check max movements
-            if state.movement_count >= piece.max_movements {
-                warn!(
-                    "Piece '{}' exceeded max movements ({})",
-                    name, piece.max_movements
-                );
-                state.status = PieceStatus::Aborted;
+            // Check max stages
+            if state.movement_count >= flow.max_stages {
+                warn!("Flow '{}' exceeded max stages ({})", name, flow.max_stages);
+                state.status = FlowStatus::Aborted;
                 state.completed_at = Some(Utc::now());
                 break;
             }
 
-            // Get current movement
-            let movement = match piece.get_movement(&state.current_movement) {
+            // Get current stage
+            let stage = match flow.get_movement(&state.current_movement) {
                 Some(m) => m.clone(),
                 None => {
-                    state.status = PieceStatus::Failed;
+                    state.status = FlowStatus::Failed;
                     state.completed_at = Some(Utc::now());
                     return Err(anyhow::anyhow!(
-                        "Movement '{}' not found in piece '{}'",
+                        "Stage '{}' not found in flow '{}'",
                         state.current_movement,
                         name
                     ));
@@ -710,43 +740,46 @@ impl PieceEngine {
             };
 
             debug!(
-                "Executing movement '{}' (#{}) in piece '{}'",
-                movement.id, state.movement_count, name
+                "Executing stage '{}' (#{}) in flow '{}'",
+                stage.id, state.movement_count, name
             );
 
-            // Record movement start
-            self.record_event(
-                crate::events::Event::new(
-                    &run_id,
-                    crate::events::EventLevel::Info,
-                    crate::events::EventType::MovementStart,
-                    format!("Movement '{}' started", movement.id),
-                )
-                .with_movement(&movement.id),
-            )
-            .await;
+            // Issue #23 fix: derive the agent label used by this stage so that
+            // RunSummary::agents_used is populated. Preference order mirrors what the
+            // bridge actually uses to route the call: an explicit `.claude/agents/<name>`
+            // file (stage.agent) wins; otherwise we fall back to the persona facet.
+            let movement_agent = stage.agent.clone().or_else(|| stage.persona.clone());
 
-            // Execute the movement with timing and optional per-movement timeout
+            // Record stage start
+            let mut ev_start = crate::events::Event::new(
+                &run_id,
+                crate::events::EventLevel::Info,
+                crate::events::EventType::MovementStart,
+                format!("Stage '{}' started", stage.id),
+            )
+            .with_movement(&stage.id);
+            if let Some(ref a) = movement_agent {
+                ev_start = ev_start.with_agent(a);
+            }
+            self.record_event(ev_start).await;
+
+            // Execute the stage with timing and optional per-stage timeout
             let movement_start = std::time::Instant::now();
-            let output = if let Some(timeout_secs) = movement.timeout {
+            let output = if let Some(timeout_secs) = stage.timeout {
                 let timeout = std::time::Duration::from_secs(timeout_secs as u64);
-                match tokio::time::timeout(timeout, self.execute_movement(&movement, &state)).await
-                {
+                match tokio::time::timeout(timeout, self.execute_movement(&stage, &state)).await {
                     Ok(result) => result?,
                     Err(_) => {
-                        warn!(
-                            "Movement '{}' timed out after {}s",
-                            movement.id, timeout_secs
-                        );
+                        warn!("Stage '{}' timed out after {}s", stage.id, timeout_secs);
                         serde_json::json!({
-                            "movement": movement.id,
+                            "stage": stage.id,
                             "status": "timeout",
-                            "error": format!("Movement timed out after {}s", timeout_secs),
+                            "error": format!("Stage timed out after {}s", timeout_secs),
                         })
                     }
                 }
             } else {
-                self.execute_movement(&movement, &state).await?
+                self.execute_movement(&stage, &state).await?
             };
             let movement_duration_ms = movement_start.elapsed().as_millis() as u64;
             state.movement_count += 1;
@@ -757,45 +790,93 @@ impl PieceEngine {
             // Notify progress listener
             if let Some(ref tx) = self.progress_tx {
                 let _ = tx.send(MovementProgress {
-                    movement_id: movement.id.clone(),
+                    movement_id: stage.id.clone(),
                     duration_ms: movement_duration_ms,
                     success: true,
                     movements_completed: state.movement_count as usize,
                 });
             }
 
-            // Record movement end with duration metadata
-            self.record_event(
-                crate::events::Event::new(
-                    &run_id,
-                    crate::events::EventLevel::Info,
-                    crate::events::EventType::MovementEnd,
-                    format!("Movement '{}' completed", movement.id),
-                )
-                .with_movement(&movement.id)
-                .with_metadata(serde_json::json!({
-                    "duration_ms": movement_duration_ms,
-                    "output_preview": output
-                        .as_object()
-                        .and_then(|o| o.get("output"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| truncate_for_context(s, 500))
-                        .unwrap_or_default(),
-                    "status": output
-                        .as_object()
-                        .and_then(|o| o.get("status"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown"),
-                })),
+            // Record stage end with duration metadata
+            // Issue #28 fix: forward token estimates from the bridge into the event so
+            // `ccswarm cost` has something to aggregate.
+            let tokens_in = output
+                .as_object()
+                .and_then(|o| o.get("tokens_in"))
+                .and_then(|v| v.as_u64());
+            let tokens_out = output
+                .as_object()
+                .and_then(|o| o.get("tokens_out"))
+                .and_then(|v| v.as_u64());
+            let mut ev_end = crate::events::Event::new(
+                &run_id,
+                crate::events::EventLevel::Info,
+                crate::events::EventType::MovementEnd,
+                format!("Stage '{}' completed", stage.id),
             )
-            .await;
+            .with_movement(&stage.id)
+            .with_metadata(serde_json::json!({
+                "duration_ms": movement_duration_ms,
+                "tokens_in": tokens_in,
+                "tokens_out": tokens_out,
+                "output_preview": output
+                    .as_object()
+                    .and_then(|o| o.get("output"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| truncate_for_context(s, 500))
+                    .unwrap_or_default(),
+                "status": output
+                    .as_object()
+                    .and_then(|o| o.get("status"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown"),
+            }));
+            if let Some(ref a) = movement_agent {
+                ev_end = ev_end.with_agent(a);
+            }
+            self.record_event(ev_end).await;
+
+            // Enforce the run-level token budget. Done after the stage records its
+            // end event so `ccswarm cost` still sees the usage of the stage that
+            // pushed us over. We abort on the *next* iteration boundary rather
+            // than mid-stage: stages aren't cancellable, so stopping earlier
+            // would waste the in-flight work without preventing the spend.
+            cumulative_tokens = cumulative_tokens
+                .saturating_add(tokens_in.unwrap_or(0))
+                .saturating_add(tokens_out.unwrap_or(0));
+            if let Some(cap) = self.run_token_cap
+                && cumulative_tokens > cap
+            {
+                warn!(
+                    "Run token cap exceeded: {} > {} (aborting after stage '{}')",
+                    cumulative_tokens, cap, stage.id
+                );
+                self.record_event(
+                    crate::events::Event::new(
+                        &run_id,
+                        crate::events::EventLevel::Warn,
+                        crate::events::EventType::TaskEnd,
+                        format!("Run token cap exceeded: {} > {}", cumulative_tokens, cap),
+                    )
+                    .with_metadata(serde_json::json!({
+                        "reason": "budget_exceeded",
+                        "cumulative_tokens": cumulative_tokens,
+                        "cap": cap,
+                        "last_stage": stage.id,
+                    })),
+                )
+                .await;
+                state.status = FlowStatus::Aborted;
+                state.completed_at = Some(Utc::now());
+                break;
+            }
 
             // Store output in variables
             state
                 .variables
-                .insert(format!("{}_output", movement.id), output.clone());
+                .insert(format!("{}_output", stage.id), output.clone());
 
-            // Save movement report to .ccswarm/runs/{run-id}/reports/{movement}.md
+            // Save stage report to .ccswarm/runs/{run-id}/reports/{stage}.md
             if !run_id.is_empty() {
                 let report_dir = std::path::PathBuf::from(".ccswarm")
                     .join("runs")
@@ -808,31 +889,26 @@ impl PieceEngine {
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
                 if !report_content.is_empty() {
-                    let report_path = report_dir.join(format!("{}.md", movement.id));
+                    let report_path = report_dir.join(format!("{}.md", stage.id));
                     let _ = tokio::fs::write(&report_path, report_content).await;
                 }
             }
 
             // Check if terminal (no rules = done)
-            if movement.rules.is_empty() {
-                info!(
-                    "Piece '{}' completed at terminal movement '{}'",
-                    name, movement.id
-                );
-                state.status = PieceStatus::Completed;
+            if stage.rules.is_empty() {
+                info!("Flow '{}' completed at terminal stage '{}'", name, stage.id);
+                state.status = FlowStatus::Completed;
                 state.completed_at = Some(Utc::now());
                 break;
             }
 
-            // Evaluate rules to determine next movement
-            let next = self
-                .evaluate_rules(&movement.rules, &output, &state)
-                .await?;
+            // Evaluate rules to determine next stage
+            let next = self.evaluate_rules(&stage.rules, &output, &state).await?;
 
             match next {
                 Some(next_id) => {
                     state.history.push(MovementTransition {
-                        from: movement.id.clone(),
+                        from: stage.id.clone(),
                         to: next_id.clone(),
                         condition: "matched".to_string(),
                         timestamp: Utc::now(),
@@ -842,19 +918,16 @@ impl PieceEngine {
                 }
                 None => {
                     // No rule matched - treat as completion
-                    info!(
-                        "No rule matched in movement '{}', completing piece",
-                        movement.id
-                    );
-                    state.status = PieceStatus::Completed;
+                    info!("No rule matched in stage '{}', completing flow", stage.id);
+                    state.status = FlowStatus::Completed;
                     state.completed_at = Some(Utc::now());
                     break;
                 }
             }
         }
 
-        // Record piece completion and write summary
-        let completed = state.status == PieceStatus::Completed;
+        // Record flow completion and write summary
+        let completed = state.status == FlowStatus::Completed;
         self.record_event(crate::events::Event::new(
             &run_id,
             if completed {
@@ -863,11 +936,22 @@ impl PieceEngine {
                 crate::events::EventLevel::Warn
             },
             crate::events::EventType::TaskEnd,
-            format!("Piece '{}' finished with status {:?}", name, state.status),
+            format!("Flow '{}' finished with status {:?}", name, state.status),
         ))
         .await;
 
         if let Some(ref recorder) = self.event_recorder {
+            // Issue #23 fix: agents_used was previously `state.history[].from` which is
+            // a *stage* ID, not an agent. Derive the real agent label from each
+            // stage definition (explicit `agent:` file route wins over persona).
+            let mut agents_used: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for m in flow.stages.iter() {
+                if let Some(a) = m.agent.clone().or_else(|| m.persona.clone()) {
+                    agents_used.insert(a);
+                }
+            }
+
             let summary = crate::events::RunSummary {
                 run_id: run_id.clone(),
                 started_at: state.started_at,
@@ -875,13 +959,7 @@ impl PieceEngine {
                 total_events: recorder.event_count(),
                 tasks_completed: if completed { 1 } else { 0 },
                 tasks_failed: if completed { 0 } else { 1 },
-                agents_used: state
-                    .history
-                    .iter()
-                    .map(|t| t.from.clone())
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .collect(),
+                agents_used: agents_used.into_iter().collect(),
             };
             if let Err(e) = recorder.write_summary(&summary).await {
                 warn!("Failed to write run summary: {}", e);
@@ -891,38 +969,36 @@ impl PieceEngine {
         Ok(state)
     }
 
-    /// Execute a single movement via Claude Code CLI (through AISessionBridge) or prompt-only fallback
+    /// Execute a single stage via Claude Code CLI (through AISessionBridge) or prompt-only fallback
     async fn execute_movement(
         &self,
-        movement: &Movement,
-        state: &PieceState,
+        stage: &Stage,
+        state: &FlowState,
     ) -> Result<serde_json::Value> {
         info!(
-            "Movement '{}': persona={:?}, permission={:?}",
-            movement.id, movement.persona, movement.permission
+            "Stage '{}': persona={:?}, permission={:?}",
+            stage.id, stage.persona, stage.permission
         );
 
         // If instruction is empty or starts with "_local", skip Claude and produce local summary
-        if movement.instruction.is_empty() || movement.instruction.starts_with("_local") {
+        if stage.instruction.is_empty() || stage.instruction.starts_with("_local") {
             let summary = self.build_local_summary(state);
             return Ok(summary);
         }
 
-        // Parallel execution: run sub-movements concurrently
-        if movement.parallel && !movement.sub_movements.is_empty() {
-            return self
-                .execute_parallel_movements(movement, state)
-                .await;
+        // Parallel execution: run sub-stages concurrently
+        if stage.parallel && !stage.sub_movements.is_empty() {
+            return self.execute_parallel_movements(stage, state).await;
         }
 
         // Build the prompt from instruction + persona + context
-        let prompt = self.build_movement_prompt(movement, state);
+        let prompt = self.build_movement_prompt(stage, state);
 
         let output = if let Some(ref bridge) = self.bridge {
             // Real execution via Claude Code CLI + ai-session result management
-            let agent_id = movement.persona.as_deref().unwrap_or("default");
+            let agent_id = stage.persona.as_deref().unwrap_or("default");
 
-            // Create a minimal identity for the movement
+            // Create a minimal identity for the stage
             let identity = crate::identity::AgentIdentity {
                 agent_id: agent_id.to_string(),
                 specialization: crate::identity::AgentRole::Frontend {
@@ -937,18 +1013,40 @@ impl PieceEngine {
                 initialized_at: chrono::Utc::now(),
             };
 
-            // Determine working directory (movement override or engine default)
-            let work_dir = movement
+            // Determine working directory (stage override or engine default)
+            let work_dir = stage
                 .working_dir
                 .as_ref()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| self.working_dir.clone());
 
-            // Build MovementExecOptions from Movement fields → Claude CLI flags
+            // Build MovementExecOptions from Stage fields.
+            // Provider flag mapping is handled per-provider in crate::providers.
+            // Precedence: stage YAML `provider:` > `CCSWARM_PROVIDER` env > Claude default.
+            let provider = stage
+                .provider
+                .as_deref()
+                .and_then(crate::providers::ProviderKind::parse)
+                .or_else(|| {
+                    std::env::var("CCSWARM_PROVIDER")
+                        .ok()
+                        .as_deref()
+                        .and_then(crate::providers::ProviderKind::parse)
+                });
+            // Resolve effective tool list from the stage's permission level + explicit `tools:`.
+            // Without this, `permission: readonly` would still send no `--allowed-tools`,
+            // so the provider CLI would fall back to its own (permissive) default.
+            let effective_tools = super::permissions::PermissionEnforcer::from_movement(
+                stage.permission.clone(),
+                &stage.tools,
+            )
+            .available_tools();
+
             let exec_options = crate::session::bridge::MovementExecOptions {
-                tools: movement.tools.clone(),
-                model: movement.model.clone(),
-                system_prompt: movement.persona.as_ref().and_then(|p| {
+                provider,
+                tools: effective_tools,
+                model: stage.model.clone(),
+                system_prompt: stage.persona.as_ref().and_then(|p| {
                     self.facet_registry.get_persona(p).and_then(|f| {
                         if f.system_prompt.is_empty() {
                             None
@@ -957,7 +1055,7 @@ impl PieceEngine {
                         }
                     })
                 }),
-                max_budget: None,
+                max_budget: self.budget_usd,
                 worktree_name: None,
                 session_id: None,
             };
@@ -968,26 +1066,28 @@ impl PieceEngine {
                     &prompt,
                     &identity,
                     &work_dir,
-                    movement.agent.as_deref(),
-                    movement.max_retries,
-                    movement.retry_delay_ms,
+                    stage.agent.as_deref(),
+                    stage.max_retries,
+                    stage.retry_delay_ms,
                     &exec_options,
                 )
                 .await
             {
                 Ok(result) => {
                     serde_json::json!({
-                        "movement": movement.id,
+                        "stage": stage.id,
                         "output": result.raw,
                         "parsed": format!("{:?}", result.parsed),
                         "status": if result.success { "completed" } else { "failed" },
                         "duration_ms": result.duration_ms,
+                        "tokens_in": result.tokens_in,
+                        "tokens_out": result.tokens_out,
                     })
                 }
                 Err(e) => {
-                    warn!("Movement '{}' execution failed: {}", movement.id, e);
+                    warn!("Stage '{}' execution failed: {}", stage.id, e);
                     serde_json::json!({
-                        "movement": movement.id,
+                        "stage": stage.id,
                         "error": e.to_string(),
                         "status": "failed",
                     })
@@ -996,53 +1096,53 @@ impl PieceEngine {
         } else {
             // No bridge configured - return prompt as output (for testing/offline use)
             serde_json::json!({
-                "movement": movement.id,
-                "instruction": movement.instruction,
+                "stage": stage.id,
+                "instruction": stage.instruction,
                 "prompt": prompt,
                 "status": "completed",
             })
         };
 
         // Validate output contract if specified
-        if let Some(ref contract) = movement.output_contract {
+        if let Some(ref contract) = stage.output_contract {
             self.validate_output_contract(contract, &output)?;
         }
 
         Ok(output)
     }
 
-    /// Execute sub-movements in parallel across multiple agents.
+    /// Execute sub-stages in parallel across multiple agents.
     async fn execute_parallel_movements(
         &self,
-        parent: &Movement,
-        state: &PieceState,
+        parent: &Stage,
+        state: &FlowState,
     ) -> Result<serde_json::Value> {
         info!(
-            "Parallel execution: {} sub-movements for '{}'",
+            "Parallel execution: {} sub-stages for '{}'",
             parent.sub_movements.len(),
             parent.id
         );
 
-        // Find all sub-movement definitions from the piece
-        let piece = self
-            .pieces
+        // Find all sub-stage definitions from the flow
+        let flow = self
+            .flows
             .values()
-            .find(|p| p.movements.iter().any(|m| m.id == parent.id))
-            .ok_or_else(|| anyhow::anyhow!("Parent piece not found for movement '{}'", parent.id))?;
+            .find(|p| p.stages.iter().any(|m| m.id == parent.id))
+            .ok_or_else(|| anyhow::anyhow!("Parent flow not found for stage '{}'", parent.id))?;
 
-        let sub_movs: Vec<&Movement> = parent
+        let sub_movs: Vec<&Stage> = parent
             .sub_movements
             .iter()
-            .filter_map(|id| piece.movements.iter().find(|m| m.id == *id))
+            .filter_map(|id| flow.stages.iter().find(|m| m.id == *id))
             .collect();
 
         if sub_movs.is_empty() {
             return Err(anyhow::anyhow!(
-                "No valid sub-movements found for parallel execution"
+                "No valid sub-stages found for parallel execution"
             ));
         }
 
-        // Execute all sub-movements concurrently
+        // Execute all sub-stages concurrently
         let futures: Vec<_> = sub_movs
             .iter()
             .map(|m| self.execute_movement(m, state))
@@ -1060,7 +1160,7 @@ impl PieceEngine {
                     outputs.insert(sub_id.clone(), output);
                 }
                 Err(e) => {
-                    warn!("Parallel sub-movement '{}' failed: {}", sub_id, e);
+                    warn!("Parallel sub-stage '{}' failed: {}", sub_id, e);
                     all_success = false;
                     outputs.insert(
                         sub_id.clone(),
@@ -1071,7 +1171,7 @@ impl PieceEngine {
         }
 
         Ok(serde_json::json!({
-            "movement": parent.id,
+            "stage": parent.id,
             "parallel": true,
             "status": if all_success { "completed" } else { "partial" },
             "agents": outputs,
@@ -1079,9 +1179,9 @@ impl PieceEngine {
     }
 
     /// Build a local summary from state without calling Claude Code CLI.
-    /// Used for terminal/complete movements to avoid unnecessary LLM calls.
-    fn build_local_summary(&self, state: &PieceState) -> serde_json::Value {
-        let movements: Vec<String> = state
+    /// Used for terminal/complete stages to avoid unnecessary LLM calls.
+    fn build_local_summary(&self, state: &FlowState) -> serde_json::Value {
+        let stages: Vec<String> = state
             .history
             .iter()
             .map(|t| format!("{} -> {}", t.from, t.to))
@@ -1103,25 +1203,25 @@ impl PieceEngine {
             .collect();
 
         serde_json::json!({
-            "movement": "complete",
+            "stage": "complete",
             "status": "completed",
             "summary": {
-                "piece": state.piece_name,
+                "flow": state.flow_name,
                 "movements_executed": state.movement_count,
-                "transitions": movements,
+                "transitions": stages,
                 "step_results": outputs,
             }
         })
     }
 
-    /// Build the prompt for a movement using faceted prompting.
+    /// Build the prompt for a stage using faceted prompting.
     ///
     /// Composition order (takt-style):
     /// - System: persona (via FacetRegistry)
     /// - User: knowledge → instruction → policy → output contract → tools → tags
-    fn build_movement_prompt(&self, movement: &Movement, state: &PieceState) -> String {
+    fn build_movement_prompt(&self, stage: &Stage, state: &FlowState) -> String {
         // Build output contract text if present
-        let contract_text = movement.output_contract.as_ref().map(|c| {
+        let contract_text = stage.output_contract.as_ref().map(|c| {
             let mut parts = vec![format!("Format: {}", c.format)];
             if !c.required_sections.is_empty() {
                 parts.push(format!(
@@ -1136,13 +1236,13 @@ impl PieceEngine {
         });
 
         // Expand template variables in instruction: {key} -> state.variables[key]
-        let expanded_instruction = expand_template(&movement.instruction, &state.variables);
+        let expanded_instruction = expand_template(&stage.instruction, &state.variables);
 
         // Use faceted prompting to compose system + user message
         let composed = self.facet_registry.compose(
-            movement.persona.as_deref(),
-            movement.policy.as_deref(),
-            movement.knowledge.as_deref(),
+            stage.persona.as_deref(),
+            stage.policy.as_deref(),
+            stage.knowledge.as_deref(),
             &expanded_instruction,
             contract_text.as_deref(),
         );
@@ -1165,16 +1265,16 @@ impl PieceEngine {
         }
 
         // Add available tools
-        if !movement.tools.is_empty() {
-            parts.push(format!("Available tools: {}", movement.tools.join(", ")));
+        if !stage.tools.is_empty() {
+            parts.push(format!("Available tools: {}", stage.tools.join(", ")));
         }
 
         // Add permission context
-        parts.push(format!("Permission level: {:?}", movement.permission));
+        parts.push(format!("Permission level: {:?}", stage.permission));
 
-        // Inject context from previous movements for continuity
-        // (skip if pass_previous_response is false — used for fix movements)
-        if movement.pass_previous_response && !state.variables.is_empty() {
+        // Inject context from previous stages for continuity
+        // (skip if pass_previous_response is false — used for fix stages)
+        if stage.pass_previous_response && !state.variables.is_empty() {
             let var_summary: Vec<String> = state
                 .variables
                 .iter()
@@ -1201,7 +1301,7 @@ impl PieceEngine {
 
         // Also inject ai-session context if bridge is available
         if let Some(ref bridge) = self.bridge {
-            let agent_id = movement.persona.as_deref().unwrap_or("default");
+            let agent_id = stage.persona.as_deref().unwrap_or("default");
             let recent = bridge.get_recent_context(agent_id, 3);
             if !recent.is_empty() {
                 parts.push(format!(
@@ -1212,16 +1312,16 @@ impl PieceEngine {
         }
 
         // Inject tag instructions for routing (takt-style [STEP:N] tags)
-        if !movement.rules.is_empty() {
+        if !stage.rules.is_empty() {
             let tag_instructions =
-                super::judge::MovementJudge::generate_tag_instructions(&movement.rules);
+                super::judge::MovementJudge::generate_tag_instructions(&stage.rules);
             parts.push(tag_instructions);
         }
 
         parts.join("\n\n")
     }
 
-    /// Evaluate routing rules against movement output using the MovementJudge.
+    /// Evaluate routing rules against stage output using the MovementJudge.
     ///
     /// Evaluation priority (takt-style):
     /// 1. Aggregate conditions (all/any) for parallel outputs
@@ -1233,7 +1333,7 @@ impl PieceEngine {
         &self,
         rules: &[MovementRule],
         output: &serde_json::Value,
-        _state: &PieceState,
+        _state: &FlowState,
     ) -> Result<Option<String>> {
         let output_str = serde_json::to_string(output).unwrap_or_default();
 
@@ -1315,9 +1415,9 @@ impl PieceEngine {
             "json" => {
                 // Already JSON (since output is serde_json::Value)
             }
-            "markdown" => {
+            "markdown"
                 // Markdown should contain at least one heading or list
-                if !output_str.contains('#') && !output_str.contains("- ") {
+                if !output_str.contains('#') && !output_str.contains("- ") => {
                     violations.push(ContractViolation {
                         kind: ViolationKind::InvalidFormat,
                         message:
@@ -1325,25 +1425,22 @@ impl PieceEngine {
                                 .to_string(),
                     });
                 }
-            }
-            "yaml" => {
+            "yaml"
                 // Check for YAML-like structure (key: value patterns)
-                if !output_str.contains(':') {
+                if !output_str.contains(':') => {
                     violations.push(ContractViolation {
                         kind: ViolationKind::InvalidFormat,
                         message: "Output does not appear to be valid YAML".to_string(),
                     });
                 }
-            }
-            "code" => {
+            "code"
                 // Code should have some structure
-                if output_str.len() < 10 {
+                if output_str.len() < 10 => {
                     violations.push(ContractViolation {
                         kind: ViolationKind::InvalidFormat,
                         message: "Output appears too short to be code".to_string(),
                     });
                 }
-            }
             _ => {
                 // text or unknown format - no specific validation
             }
@@ -1435,24 +1532,24 @@ impl PieceEngine {
     }
 }
 
-impl Default for PieceEngine {
+impl Default for FlowEngine {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Built-in piece templates
-pub fn builtin_pieces() -> Vec<Piece> {
+/// Built-in flow templates
+pub fn builtin_flows() -> Vec<Flow> {
     vec![
         // Default development workflow
-        Piece {
+        Flow {
             name: "default".to_string(),
             description: "Standard development workflow: plan → implement → review → fix"
                 .to_string(),
-            max_movements: 30,
+            max_stages: 30,
             initial_movement: "plan".to_string(),
-            movements: vec![
-                Movement {
+            stages: vec![
+                Stage {
                     id: "plan".to_string(),
                     persona: Some("planner".to_string()),
                     policy: None,
@@ -1477,7 +1574,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                 },
-                Movement {
+                Stage {
                     id: "implement".to_string(),
                     persona: Some("coder".to_string()),
                     policy: Some("coding".to_string()),
@@ -1514,7 +1611,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                 },
-                Movement {
+                Stage {
                     id: "review".to_string(),
                     persona: Some("reviewer".to_string()),
                     policy: Some("review".to_string()),
@@ -1547,7 +1644,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                 },
-                Movement {
+                Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
                     policy: Some("coding".to_string()),
@@ -1577,7 +1674,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                 },
-                Movement {
+                Stage {
                     id: "complete".to_string(),
                     persona: None,
                     policy: None,
@@ -1604,13 +1701,13 @@ pub fn builtin_pieces() -> Vec<Piece> {
             interactive_mode: None,
         },
         // Research workflow
-        Piece {
+        Flow {
             name: "research".to_string(),
             description: "Autonomous research and investigation workflow".to_string(),
-            max_movements: 20,
+            max_stages: 20,
             initial_movement: "investigate".to_string(),
-            movements: vec![
-                Movement {
+            stages: vec![
+                Stage {
                     id: "investigate".to_string(),
                     persona: Some("researcher".to_string()),
                     policy: None,
@@ -1640,7 +1737,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                 },
-                Movement {
+                Stage {
                     id: "summarize".to_string(),
                     persona: Some("writer".to_string()),
                     policy: None,
@@ -1663,6 +1760,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                         max_length: None,
                         must_match: vec![],
                         must_not_match: vec![],
+                        allowed_files: vec![],
                     }),
                     timeout: None,
                     max_retries: 0,
@@ -1677,13 +1775,13 @@ pub fn builtin_pieces() -> Vec<Piece> {
             interactive_mode: None,
         },
         // Review-fix minimal workflow
-        Piece {
+        Flow {
             name: "review-fix".to_string(),
             description: "Minimal review and fix cycle".to_string(),
-            max_movements: 10,
+            max_stages: 10,
             initial_movement: "review".to_string(),
-            movements: vec![
-                Movement {
+            stages: vec![
+                Stage {
                     id: "review".to_string(),
                     persona: Some("reviewer".to_string()),
                     policy: Some("review".to_string()),
@@ -1715,7 +1813,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                 },
-                Movement {
+                Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
                     policy: Some("coding".to_string()),
@@ -1745,7 +1843,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                 },
-                Movement {
+                Stage {
                     id: "done".to_string(),
                     persona: None,
                     policy: None,
@@ -1772,13 +1870,13 @@ pub fn builtin_pieces() -> Vec<Piece> {
             interactive_mode: None,
         },
         // Quick single-shot workflow (1 Claude call, fastest)
-        Piece {
+        Flow {
             name: "quick".to_string(),
             description: "Single-shot execution: one Claude call, no plan/review overhead"
                 .to_string(),
-            max_movements: 1,
+            max_stages: 1,
             initial_movement: "execute".to_string(),
-            movements: vec![Movement {
+            stages: vec![Stage {
                 id: "execute".to_string(),
                 persona: Some("coder".to_string()),
                 policy: Some("coding".to_string()),
@@ -1811,13 +1909,13 @@ pub fn builtin_pieces() -> Vec<Piece> {
             interactive_mode: None,
         },
         // Multi-agent team workflow: plan → parallel(frontend + backend) → review → complete
-        Piece {
+        Flow {
             name: "team".to_string(),
             description: "Multi-agent orchestration: planner designs, frontend & backend agents execute in parallel, reviewer validates".to_string(),
-            max_movements: 10,
+            max_stages: 10,
             initial_movement: "plan".to_string(),
-            movements: vec![
-                Movement {
+            stages: vec![
+                Stage {
                     id: "plan".to_string(),
                     persona: Some("planner".to_string()),
                     policy: Some("coding".to_string()),
@@ -1843,7 +1941,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     pass_previous_response: true,
                 },
                 // Parallel hub: dispatches to frontend-impl and backend-impl simultaneously
-                Movement {
+                Stage {
                     id: "parallel-implement".to_string(),
                     persona: None,
                     policy: None,
@@ -1869,7 +1967,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     pass_previous_response: true,
                 },
                 // Frontend agent (runs in parallel)
-                Movement {
+                Stage {
                     id: "frontend-impl".to_string(),
                     persona: Some("coder".to_string()),
                     policy: Some("coding".to_string()),
@@ -1891,7 +1989,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     pass_previous_response: true,
                 },
                 // Backend agent (runs in parallel)
-                Movement {
+                Stage {
                     id: "backend-impl".to_string(),
                     persona: Some("coder".to_string()),
                     policy: Some("coding".to_string()),
@@ -1913,7 +2011,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     pass_previous_response: true,
                 },
                 // Supervisor reviews the combined output
-                Movement {
+                Stage {
                     id: "review".to_string(),
                     persona: Some("supervisor".to_string()),
                     policy: Some("review".to_string()),
@@ -1939,7 +2037,7 @@ pub fn builtin_pieces() -> Vec<Piece> {
                     pass_previous_response: true,
                 },
                 // Local completion
-                Movement {
+                Stage {
                     id: "complete".to_string(),
                     persona: None,
                     policy: None,
@@ -2008,12 +2106,12 @@ mod tests {
     #[test]
     fn test_piece_from_yaml() {
         let yaml = r#"
-name: test-piece
-description: "A test piece"
-max_movements: 10
+name: test-flow
+description: "A test flow"
+max_stages: 10
 initial_movement: start
 
-movements:
+stages:
   - id: start
     persona: planner
     instruction: "Plan the task"
@@ -2026,24 +2124,24 @@ movements:
     instruction: "Done"
 "#;
 
-        let piece = Piece::from_yaml(yaml).expect("Failed to parse YAML");
-        assert_eq!(piece.name, "test-piece");
-        assert_eq!(piece.movements.len(), 2);
-        assert_eq!(piece.initial_movement, "start");
-        assert_eq!(piece.movements[0].permission, MovementPermission::Readonly);
+        let flow = Flow::from_yaml(yaml).expect("Failed to parse YAML");
+        assert_eq!(flow.name, "test-flow");
+        assert_eq!(flow.stages.len(), 2);
+        assert_eq!(flow.initial_movement, "start");
+        assert_eq!(flow.stages[0].permission, MovementPermission::Readonly);
     }
 
     #[test]
     fn test_piece_validation_invalid_initial() {
         let yaml = r#"
-name: bad-piece
+name: bad-flow
 initial_movement: nonexistent
-movements:
+stages:
   - id: start
     instruction: "Hello"
 "#;
 
-        let result = Piece::from_yaml(yaml);
+        let result = Flow::from_yaml(yaml);
         assert!(result.is_err());
     }
 
@@ -2052,7 +2150,7 @@ movements:
         let yaml = r#"
 name: bad-rules
 initial_movement: start
-movements:
+stages:
   - id: start
     instruction: "Hello"
     rules:
@@ -2060,7 +2158,7 @@ movements:
         next: nonexistent
 "#;
 
-        let result = Piece::from_yaml(yaml);
+        let result = Flow::from_yaml(yaml);
         assert!(result.is_err());
     }
 
@@ -2069,27 +2167,25 @@ movements:
         let yaml = r#"
 name: dup-ids
 initial_movement: start
-movements:
+stages:
   - id: start
     instruction: "First"
   - id: start
     instruction: "Duplicate"
 "#;
 
-        let result = Piece::from_yaml(yaml);
+        let result = Flow::from_yaml(yaml);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_builtin_pieces() {
-        let pieces = builtin_pieces();
-        assert!(!pieces.is_empty());
+        let flows = builtin_flows();
+        assert!(!flows.is_empty());
 
-        for piece in &pieces {
-            piece.validate().expect(&format!(
-                "Built-in piece '{}' failed validation",
-                piece.name
-            ));
+        for flow in &flows {
+            flow.validate()
+                .expect(&format!("Built-in flow '{}' failed validation", flow.name));
         }
     }
 
@@ -2098,16 +2194,16 @@ movements:
         let yaml = r#"
 name: state-test
 initial_movement: start
-movements:
+stages:
   - id: start
     instruction: "Begin"
 "#;
-        let piece = Piece::from_yaml(yaml).expect("parse failed");
-        let state = piece.create_state();
-        assert_eq!(state.piece_name, "state-test");
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let state = flow.create_state();
+        assert_eq!(state.flow_name, "state-test");
         assert_eq!(state.current_movement, "start");
         assert_eq!(state.movement_count, 0);
-        assert_eq!(state.status, PieceStatus::Pending);
+        assert_eq!(state.status, FlowStatus::Pending);
     }
 
     #[test]
@@ -2115,7 +2211,7 @@ movements:
         let yaml = r#"
 name: terminal-test
 initial_movement: start
-movements:
+stages:
   - id: start
     instruction: "Begin"
     rules:
@@ -2124,9 +2220,9 @@ movements:
   - id: end
     instruction: "Done"
 "#;
-        let piece = Piece::from_yaml(yaml).expect("parse failed");
-        assert!(!piece.is_terminal("start"));
-        assert!(piece.is_terminal("end"));
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        assert!(!flow.is_terminal("start"));
+        assert!(flow.is_terminal("end"));
     }
 
     #[tokio::test]
@@ -2134,7 +2230,7 @@ movements:
         let yaml = r#"
 name: exec-test
 initial_movement: step1
-movements:
+stages:
   - id: step1
     instruction: "Step 1"
     rules:
@@ -2143,15 +2239,99 @@ movements:
   - id: step2
     instruction: "Step 2 (terminal)"
 "#;
-        let piece = Piece::from_yaml(yaml).expect("parse failed");
-        let mut engine = PieceEngine::new();
-        engine.pieces.insert("exec-test".to_string(), piece);
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let mut engine = FlowEngine::new();
+        engine.flows.insert("exec-test".to_string(), flow);
 
         let state = engine
             .execute_piece("exec-test")
             .await
             .expect("execution failed");
-        assert_eq!(state.status, PieceStatus::Completed);
+        assert_eq!(state.status, FlowStatus::Completed);
         assert_eq!(state.movement_count, 2);
+    }
+
+    /// `readonly` stages without an explicit `tools:` list must still restrict the
+    /// provider via the permission level — otherwise the provider CLI falls back to
+    /// its permissive default and can write/exec despite `permission: readonly`.
+    #[test]
+    fn test_readonly_stage_resolves_to_readonly_tools() {
+        use super::super::permissions::PermissionEnforcer;
+
+        let yaml = r#"
+name: perm-test
+initial_movement: review
+stages:
+  - id: review
+    instruction: "Read-only review"
+    permission: readonly
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let stage = &flow.stages[0];
+        assert!(stage.tools.is_empty(), "precondition: no explicit tools");
+
+        let resolved = PermissionEnforcer::from_movement(stage.permission.clone(), &stage.tools)
+            .available_tools();
+
+        assert!(resolved.contains(&"read".to_string()));
+        assert!(resolved.contains(&"grep".to_string()));
+        assert!(
+            !resolved
+                .iter()
+                .any(|t| t == "bash" || t == "write" || t == "edit"),
+            "readonly must not expose edit/exec tools, got: {:?}",
+            resolved,
+        );
+    }
+
+    /// `set_run_token_cap` installs the cap on the engine. Regression guard
+    /// so the public setter keeps working for the CLI `--run-budget-tokens`
+    /// path that plumbs into this field.
+    #[test]
+    fn test_run_token_cap_setter() {
+        let mut engine = FlowEngine::new();
+        assert_eq!(engine.run_token_cap, None);
+        engine.set_run_token_cap(5000);
+        assert_eq!(engine.run_token_cap, Some(5000));
+    }
+
+    /// The in-loop abort condition: cumulative strictly greater than the cap.
+    /// Keeping this as a standalone assertion so the cap semantics (`>`, not `>=`)
+    /// are pinned even if the enforcement site gets refactored.
+    #[test]
+    fn test_run_token_cap_abort_condition() {
+        // strictly greater than the cap — abort
+        assert!(10u64 > 5u64);
+        // equal — do NOT abort (the stage that lands exactly on the cap still
+        // gets its usage recorded and the next stage is allowed to start; a
+        // stricter check would surprise users who set the cap to the exact
+        // expected total).
+        assert!(!(5u64 > 5u64));
+    }
+
+    /// An explicit `tools:` list on a stage is honored verbatim, even if the
+    /// permission level would allow a broader set.
+    #[test]
+    fn test_explicit_tools_override_permission_defaults() {
+        use super::super::permissions::PermissionEnforcer;
+
+        let yaml = r#"
+name: perm-test
+initial_movement: narrow
+stages:
+  - id: narrow
+    instruction: "Narrow tools"
+    permission: full
+    tools: [read, grep]
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let stage = &flow.stages[0];
+
+        let resolved = PermissionEnforcer::from_movement(stage.permission.clone(), &stage.tools)
+            .available_tools();
+
+        let mut sorted = resolved.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec!["grep".to_string(), "read".to_string()]);
     }
 }

@@ -7,13 +7,13 @@ pub mod arpeggio;
 pub mod cycle;
 mod execution;
 pub mod facets;
+pub mod flow;
 pub mod github_issue;
 mod graph;
 pub mod interactive;
 pub mod judge;
 mod node;
 pub mod permissions;
-pub mod piece;
 pub mod pipeline;
 pub mod repertoire;
 pub mod watch;
@@ -25,6 +25,10 @@ pub use facets::{
     ComposedPrompt, FacetRegistry, KnowledgeFacet, PersonaFacet, PolicyFacet, builtin_personas,
     builtin_policies,
 };
+pub use flow::{
+    Flow, FlowEngine, FlowState, FlowStatus, MovementPermission, MovementRule, OutputContract,
+    RuleCondition, Stage, builtin_flows,
+};
 pub use github_issue::{
     GitHubIssue, GitHubIssueConfig, IssueResult, IssueTaskGenerator, parse_gh_issue,
 };
@@ -33,10 +37,6 @@ pub use interactive::{InteractiveAction, InteractiveConfig, InteractiveMode, Int
 pub use judge::{JudgeConfig, JudgeResult, MatchMethod, MovementJudge};
 pub use node::{NodeId, NodeStatus, NodeType, WorkflowNode};
 pub use permissions::PermissionEnforcer;
-pub use piece::{
-    Movement, MovementPermission, MovementRule, OutputContract, Piece, PieceEngine, PieceState,
-    PieceStatus, RuleCondition, builtin_pieces,
-};
 pub use pipeline::{
     PipelineConfig, PipelineConfigBuilder, PipelineExitCode, PipelineOutput, PipelineRunner,
     PipelineStatus,

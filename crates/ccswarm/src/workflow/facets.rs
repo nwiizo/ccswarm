@@ -1,11 +1,11 @@
-//! Faceted Prompting system for Piece/Movement workflows.
+//! Faceted Prompting system for Flow/Stage workflows.
 //!
 //! Decomposes prompts into five orthogonal concerns (takt-style):
 //! 1. **Persona** — Agent role, expertise, behavioral principles (system prompt)
 //! 2. **Policy** — Rules, prohibitions, quality standards
 //! 3. **Instruction** — Step-specific procedures and goals
 //! 4. **Knowledge** — Domain context, reference materials
-//! 5. **Output Contract** — Output structure and format (handled by piece.rs OutputContract)
+//! 5. **Output Contract** — Output structure and format (handled by flow.rs OutputContract)
 //!
 //! Composition order:
 //! - System prompt: Persona
@@ -175,52 +175,25 @@ impl FacetRegistry {
     }
 
     async fn load_personas(&mut self, dir: &Path) -> Result<()> {
-        let mut entries = tokio::fs::read_dir(dir).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if is_yaml_file(&path) {
-                match load_yaml::<PersonaFacet>(&path).await {
-                    Ok(persona) => {
-                        debug!("Loaded persona: {}", persona.name);
-                        self.personas.insert(persona.name.clone(), persona);
-                    }
-                    Err(e) => warn!("Failed to load persona from {}: {}", path.display(), e),
-                }
-            }
+        let loaded = load_facet_dir::<PersonaFacet>(dir, "persona").await?;
+        for persona in loaded {
+            self.personas.insert(persona.name.clone(), persona);
         }
         Ok(())
     }
 
     async fn load_policies(&mut self, dir: &Path) -> Result<()> {
-        let mut entries = tokio::fs::read_dir(dir).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if is_yaml_file(&path) {
-                match load_yaml::<PolicyFacet>(&path).await {
-                    Ok(policy) => {
-                        debug!("Loaded policy: {}", policy.name);
-                        self.policies.insert(policy.name.clone(), policy);
-                    }
-                    Err(e) => warn!("Failed to load policy from {}: {}", path.display(), e),
-                }
-            }
+        let loaded = load_facet_dir::<PolicyFacet>(dir, "policy").await?;
+        for policy in loaded {
+            self.policies.insert(policy.name.clone(), policy);
         }
         Ok(())
     }
 
     async fn load_knowledge(&mut self, dir: &Path) -> Result<()> {
-        let mut entries = tokio::fs::read_dir(dir).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if is_yaml_file(&path) {
-                match load_yaml::<KnowledgeFacet>(&path).await {
-                    Ok(knowledge) => {
-                        debug!("Loaded knowledge: {}", knowledge.name);
-                        self.knowledge.insert(knowledge.name.clone(), knowledge);
-                    }
-                    Err(e) => warn!("Failed to load knowledge from {}: {}", path.display(), e),
-                }
-            }
+        let loaded = load_facet_dir::<KnowledgeFacet>(dir, "knowledge").await?;
+        for knowledge in loaded {
+            self.knowledge.insert(knowledge.name.clone(), knowledge);
         }
         Ok(())
     }
@@ -242,7 +215,7 @@ impl FacetRegistry {
 
     /// Compose a prompt from facet references and an instruction.
     ///
-    /// Follows takt's composition order:
+    /// Composition order:
     /// - System: persona
     /// - User: knowledge → instruction → policy → output_contract
     pub fn compose(
@@ -408,8 +381,57 @@ async fn load_yaml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     let contents = tokio::fs::read_to_string(path)
         .await
         .with_context(|| format!("Failed to read: {}", path.display()))?;
-    serde_yaml::from_str(&contents)
+    serde_yml::from_str(&contents)
         .with_context(|| format!("Failed to parse YAML: {}", path.display()))
+}
+
+/// Marker trait so the shared `load_facet_dir` helper can log each loaded facet by
+/// name. Implemented for the three concrete facet kinds. Intentionally small — we
+/// don't want these kinds to share anything else.
+trait FacetNamed {
+    fn facet_name(&self) -> &str;
+}
+
+impl FacetNamed for PersonaFacet {
+    fn facet_name(&self) -> &str {
+        &self.name
+    }
+}
+impl FacetNamed for PolicyFacet {
+    fn facet_name(&self) -> &str {
+        &self.name
+    }
+}
+impl FacetNamed for KnowledgeFacet {
+    fn facet_name(&self) -> &str {
+        &self.name
+    }
+}
+
+/// Walk `dir`, parse every `*.yaml` / `*.yml` file as `T`, return the list. A
+/// single malformed file is logged and skipped rather than aborting the whole
+/// load — other facets in the same directory are still picked up. `kind` is the
+/// human label ("persona" / "policy" / "knowledge") used in log messages.
+async fn load_facet_dir<T>(dir: &Path, kind: &str) -> Result<Vec<T>>
+where
+    T: serde::de::DeserializeOwned + FacetNamed,
+{
+    let mut out: Vec<T> = Vec::new();
+    let mut entries = tokio::fs::read_dir(dir).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if !is_yaml_file(&path) {
+            continue;
+        }
+        match load_yaml::<T>(&path).await {
+            Ok(facet) => {
+                debug!("Loaded {}: {}", kind, facet.facet_name());
+                out.push(facet);
+            }
+            Err(e) => warn!("Failed to load {} from {}: {}", kind, path.display(), e),
+        }
+    }
+    Ok(out)
 }
 
 /// Check if a path is a YAML file
@@ -746,7 +768,7 @@ principles:
   - Think about scalability
   - Consider failure modes
 "#;
-        let persona: PersonaFacet = serde_yaml::from_str(yaml).unwrap();
+        let persona: PersonaFacet = serde_yml::from_str(yaml).unwrap();
         assert_eq!(persona.name, "architect");
         assert_eq!(persona.expertise.len(), 2);
         assert_eq!(persona.principles.len(), 2);
@@ -763,7 +785,7 @@ prohibitions:
 standards:
   - 80% code coverage
 "#;
-        let policy: PolicyFacet = serde_yaml::from_str(yaml).unwrap();
+        let policy: PolicyFacet = serde_yml::from_str(yaml).unwrap();
         assert_eq!(policy.name, "strict-review");
         assert_eq!(policy.rules.len(), 1);
         assert_eq!(policy.prohibitions.len(), 1);

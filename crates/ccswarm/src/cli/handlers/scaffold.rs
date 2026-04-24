@@ -5,7 +5,7 @@ use colored::Colorize;
 use std::path::Path;
 
 /// Scaffold a new project: create directory, git init, run pipeline
-pub async fn handle_scaffold(dir: &Path, task: &str, piece: &str, timeout: u64) -> Result<()> {
+pub async fn handle_scaffold(dir: &Path, task: &str, flow: &str, timeout: u64) -> Result<()> {
     eprintln!("{} {}", "Scaffolding:".bright_cyan().bold(), dir.display());
 
     // 1. Create directory
@@ -61,9 +61,9 @@ pub async fn handle_scaffold(dir: &Path, task: &str, piece: &str, timeout: u64) 
 
     // 5. Run pipeline
     eprintln!(
-        "  {} Running pipeline (piece: {}, timeout: {}s)...",
+        "  {} Running pipeline (flow: {}, timeout: {}s)...",
         "\u{25b6}".bright_blue(),
-        piece,
+        flow,
         timeout
     );
 
@@ -75,8 +75,8 @@ pub async fn handle_scaffold(dir: &Path, task: &str, piece: &str, timeout: u64) 
             "pipeline",
             "--task",
             task,
-            "--piece",
-            piece,
+            "--flow",
+            flow,
             "--timeout",
             &timeout.to_string(),
             "--verbose",

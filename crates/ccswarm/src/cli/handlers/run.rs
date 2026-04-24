@@ -5,7 +5,105 @@ impl CliRunner {
         match action {
             RunAction::List => self.run_list().await,
             RunAction::View { id } => self.run_view(id).await,
+            RunAction::Diff { a, b } => self.run_diff(a, b).await,
         }
+    }
+
+    /// Compare timelines of two runs (event_type + stage pairs, in order).
+    async fn run_diff(&self, a: &str, b: &str) -> Result<()> {
+        let runs_dir = self.repo_path.join(".ccswarm/runs");
+        let read_timeline = |id: &str| -> Result<Vec<(String, String, Option<u64>)>> {
+            let p = runs_dir.join(id).join("events.ndjson");
+            if !p.exists() {
+                anyhow::bail!("events.ndjson not found for run '{}'", id);
+            }
+            let content = std::fs::read_to_string(&p)?;
+            let items: Vec<(String, String, Option<u64>)> = content
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+                .map(|v| {
+                    let et = v
+                        .get("event_type")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let mv = v
+                        .get("stage")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let ms = v
+                        .get("metadata")
+                        .and_then(|m| m.get("duration_ms"))
+                        .and_then(|d| d.as_u64());
+                    (et, mv, ms)
+                })
+                .collect();
+            Ok(items)
+        };
+
+        let ta = read_timeline(a)?;
+        let tb = read_timeline(b)?;
+
+        println!(
+            "{}  {}  vs  {}",
+            "Run diff".bright_cyan().bold(),
+            a.bright_yellow(),
+            b.bright_yellow()
+        );
+        println!("{}", "=".repeat(70).bright_black());
+        println!(
+            "  {:<30}  {:<12}  {:<12}  {:<12}",
+            "event (stage)", "a", "b", "Δ ms"
+        );
+        println!("{}", "-".repeat(70).bright_black());
+
+        // Align by sequential position. Mismatches are highlighted.
+        let max_len = ta.len().max(tb.len());
+        let mut a_total: u64 = 0;
+        let mut b_total: u64 = 0;
+        for i in 0..max_len {
+            let ae = ta.get(i);
+            let be = tb.get(i);
+            let (label_a, ms_a) = ae
+                .map(|(e, m, ms)| (format!("{} ({})", e, m), *ms))
+                .unwrap_or_else(|| ("—".to_string(), None));
+            let (label_b, ms_b) = be
+                .map(|(e, m, ms)| (format!("{} ({})", e, m), *ms))
+                .unwrap_or_else(|| ("—".to_string(), None));
+            a_total += ms_a.unwrap_or(0);
+            b_total += ms_b.unwrap_or(0);
+
+            let diff: i64 = ms_b.unwrap_or(0) as i64 - ms_a.unwrap_or(0) as i64;
+            let same = label_a == label_b;
+            let shown_label = if same {
+                label_a.bright_white()
+            } else {
+                format!("{} / {}", label_a, label_b).bright_red()
+            };
+            println!(
+                "  {:<30}  {:<12}  {:<12}  {:<12}",
+                shown_label,
+                ms_a.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
+                ms_b.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
+                if diff == 0 {
+                    "0".bright_black()
+                } else if diff > 0 {
+                    format!("+{}", diff).bright_yellow()
+                } else {
+                    diff.to_string().bright_green()
+                },
+            );
+        }
+        println!("{}", "-".repeat(70).bright_black());
+        println!(
+            "  total ms       a={}  b={}  Δ={}",
+            a_total,
+            b_total,
+            (b_total as i64 - a_total as i64)
+        );
+        Ok(())
     }
 
     async fn run_list(&self) -> Result<()> {
@@ -246,7 +344,7 @@ impl CliRunner {
                 };
 
                 let type_colored = match event_type {
-                    t if t.starts_with("movement") => t.bright_magenta(),
+                    t if t.starts_with("stage") => t.bright_magenta(),
                     t if t.starts_with("task") => t.bright_cyan(),
                     t if t.starts_with("hitl") => t.bright_yellow(),
                     t if t.starts_with("provider") => t.bright_blue(),
@@ -256,7 +354,7 @@ impl CliRunner {
                 // Trim timestamp to first 19 chars (YYYY-MM-DDTHH:MM:SS) to keep lines short.
                 let ts_short = if ts.len() >= 19 { &ts[..19] } else { ts };
 
-                // Optionally show movement duration from metadata.
+                // Optionally show stage duration from metadata.
                 let duration_str = event
                     .get("metadata")
                     .and_then(|m| m.get("duration_ms"))

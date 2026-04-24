@@ -1,4 +1,4 @@
-//! Per-movement permission model for Piece/Movement workflows.
+//! Per-stage permission model for Flow/Stage workflows.
 //!
 //! Enforces tool and file access restrictions based on `MovementPermission`:
 //! - **Readonly** — Can read files, search, but not modify anything
@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use tracing::{debug, warn};
 
-use super::piece::MovementPermission;
+use super::flow::MovementPermission;
 
 /// Tools available at each permission level
 const READONLY_TOOLS: &[&str] = &["read", "grep", "glob", "search", "list", "cat", "find"];
@@ -55,11 +55,11 @@ pub struct PermissionCheckResult {
 /// A record of a permission violation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PermissionViolation {
-    /// The movement that violated permissions
+    /// The stage that violated permissions
     pub movement_id: String,
     /// The tool or action attempted
     pub action: String,
-    /// The permission level of the movement
+    /// The permission level of the stage
     pub permission: String,
     /// Human-readable explanation
     pub message: String,
@@ -83,7 +83,7 @@ impl PermissionEnforcer {
         }
     }
 
-    /// Create from a movement's permission and explicit tool list
+    /// Create from a stage's permission and explicit tool list
     pub fn from_movement(permission: MovementPermission, tools: &[String]) -> Self {
         let mut enforcer = Self::new(permission);
         if !tools.is_empty() {
@@ -130,10 +130,7 @@ impl PermissionEnforcer {
                 reason: if allowed {
                     None
                 } else {
-                    Some(format!(
-                        "Tool '{}' not in movement's allowed tools list",
-                        tool
-                    ))
+                    Some(format!("Tool '{}' not in stage's allowed tools list", tool))
                 },
                 permission: format!("{:?}", self.permission),
                 action: tool.to_string(),

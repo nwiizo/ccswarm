@@ -1,4 +1,4 @@
-//! GitHub Issue integration for Piece/Movement workflows.
+//! GitHub Issue integration for Flow/Stage workflows.
 //!
 //! Enables creating tasks from GitHub issues and posting workflow results
 //! back as comments. Inspired by takt's issue integration.
@@ -32,7 +32,7 @@ pub struct GitHubIssue {
 pub struct GitHubIssueConfig {
     /// Repository (owner/repo)
     pub repository: String,
-    /// Label-to-piece mapping (e.g., "bug" -> "review-fix")
+    /// Label-to-flow mapping (e.g., "bug" -> "review-fix")
     #[serde(default)]
     pub label_piece_mapping: HashMap<String, String>,
     /// Whether to post results as comments
@@ -41,7 +41,7 @@ pub struct GitHubIssueConfig {
     /// Whether to close the issue on success
     #[serde(default)]
     pub close_on_success: bool,
-    /// Default piece when no label matches
+    /// Default flow when no label matches
     #[serde(default)]
     pub default_piece: Option<String>,
 }
@@ -86,37 +86,37 @@ impl IssueTaskGenerator {
             issue.labels.join(", ")
         );
 
-        // Determine which piece to use based on labels
-        let piece_name = self.determine_piece(issue);
+        // Determine which flow to use based on labels
+        let flow_name = self.determine_piece(issue);
 
         debug!(
-            "Generated task from issue #{}: piece={}",
+            "Generated task from issue #{}: flow={}",
             issue.number,
-            piece_name.as_deref().unwrap_or("default")
+            flow_name.as_deref().unwrap_or("default")
         );
 
         TaskFromIssue {
             task_text,
-            piece_name,
+            flow_name,
             issue_number: issue.number,
             variables: self.extract_variables(issue),
         }
     }
 
-    /// Determine the piece to use based on issue labels
+    /// Determine the flow to use based on issue labels
     fn determine_piece(&self, issue: &GitHubIssue) -> Option<String> {
-        // Check label-to-piece mapping
+        // Check label-to-flow mapping
         for label in &issue.labels {
-            if let Some(piece) = self.config.label_piece_mapping.get(label) {
+            if let Some(flow) = self.config.label_piece_mapping.get(label) {
                 info!(
-                    "Label '{}' maps to piece '{}' for issue #{}",
-                    label, piece, issue.number
+                    "Label '{}' maps to flow '{}' for issue #{}",
+                    label, flow, issue.number
                 );
-                return Some(piece.clone());
+                return Some(flow.clone());
             }
         }
 
-        // Fall back to default piece
+        // Fall back to default flow
         self.config.default_piece.clone()
     }
 
@@ -178,8 +178,8 @@ impl IssueTaskGenerator {
 pub struct TaskFromIssue {
     /// The task description text
     pub task_text: String,
-    /// Recommended piece to use
-    pub piece_name: Option<String>,
+    /// Recommended flow to use
+    pub flow_name: Option<String>,
     /// Source issue number
     pub issue_number: u64,
     /// Variables extracted from the issue
@@ -269,7 +269,7 @@ mod tests {
         assert_eq!(task.issue_number, 42);
         assert!(task.task_text.contains("Login page CSS is broken"));
         assert!(task.task_text.contains("#42"));
-        assert_eq!(task.piece_name, Some("review-fix".to_string()));
+        assert_eq!(task.flow_name, Some("review-fix".to_string()));
     }
 
     #[test]
@@ -279,7 +279,7 @@ mod tests {
         let mut issue = sample_issue();
         issue.labels = vec!["feature".to_string()];
         let task = generator.generate_task(&issue);
-        assert_eq!(task.piece_name, Some("default".to_string()));
+        assert_eq!(task.flow_name, Some("default".to_string()));
     }
 
     #[test]
@@ -289,7 +289,7 @@ mod tests {
         let mut issue = sample_issue();
         issue.labels = vec!["unknown-label".to_string()];
         let task = generator.generate_task(&issue);
-        assert_eq!(task.piece_name, Some("default".to_string()));
+        assert_eq!(task.flow_name, Some("default".to_string()));
     }
 
     #[test]

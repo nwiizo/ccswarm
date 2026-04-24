@@ -1,8 +1,8 @@
-//! Interactive mode for Piece/Movement workflows.
+//! Interactive mode for Flow/Stage workflows.
 //!
 //! Provides four variants for user interaction before workflow execution:
 //! 1. **Assistant** — AI asks clarifying questions before generating task instructions
-//! 2. **Persona** — Conversation with the first movement's persona
+//! 2. **Persona** — Conversation with the first stage's persona
 //! 3. **Quiet** — Generates task instructions without asking questions (best-effort)
 //! 4. **Passthrough** — Passes user input directly as task text
 
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
 
-use super::piece::Piece;
+use super::flow::Flow;
 
 /// Interactive mode variant
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -20,7 +20,7 @@ pub enum InteractiveMode {
     /// AI asks clarifying questions before generating task instructions
     #[default]
     Assistant,
-    /// Conversation with the first movement's persona (uses its system prompt and tools)
+    /// Conversation with the first stage's persona (uses its system prompt and tools)
     Persona,
     /// Generates task instructions without asking questions (best-effort)
     Quiet,
@@ -45,7 +45,7 @@ impl InteractiveMode {
         match self {
             Self::Assistant => "AI asks clarifying questions before generating task instructions",
             Self::Persona => {
-                "Conversation with the first movement's persona (uses its system prompt and tools)"
+                "Conversation with the first stage's persona (uses its system prompt and tools)"
             }
             Self::Quiet => "Generates task instructions without asking questions (best-effort)",
             Self::Passthrough => "Passes user input directly as task text without AI processing",
@@ -71,10 +71,10 @@ pub struct InteractiveConfig {
     /// Maximum number of clarification rounds (for Assistant mode)
     #[serde(default = "default_max_rounds")]
     pub max_clarification_rounds: u32,
-    /// Whether to show piece selection menu
+    /// Whether to show flow selection menu
     #[serde(default = "default_true")]
     pub show_piece_selection: bool,
-    /// Default piece to use (if set, skips piece selection)
+    /// Default flow to use (if set, skips flow selection)
     #[serde(default)]
     pub default_piece: Option<String>,
 }
@@ -101,7 +101,7 @@ impl Default for InteractiveConfig {
 /// State of an interactive session
 #[derive(Debug, Clone)]
 pub struct InteractiveSession {
-    /// Selected piece (if any)
+    /// Selected flow (if any)
     pub selected_piece: Option<String>,
     /// Current mode
     pub mode: InteractiveMode,
@@ -155,18 +155,14 @@ impl InteractiveSession {
         }
     }
 
-    /// Select a piece for this session
-    pub fn select_piece(&mut self, piece_name: &str) {
-        self.selected_piece = Some(piece_name.to_string());
-        info!("Selected piece: {}", piece_name);
+    /// Select a flow for this session
+    pub fn select_flow(&mut self, flow_name: &str) {
+        self.selected_piece = Some(flow_name.to_string());
+        info!("Selected flow: {}", flow_name);
     }
 
     /// Process user input according to the current mode
-    pub fn process_input(
-        &mut self,
-        input: &str,
-        piece: Option<&Piece>,
-    ) -> Result<InteractiveAction> {
+    pub fn process_input(&mut self, input: &str, flow: Option<&Flow>) -> Result<InteractiveAction> {
         // Handle commands
         if let Some(action) = self.handle_command(input)? {
             return Ok(action);
@@ -175,8 +171,8 @@ impl InteractiveSession {
         self.user_inputs.push(input.to_string());
 
         match self.mode {
-            InteractiveMode::Assistant => self.process_assistant(input, piece),
-            InteractiveMode::Persona => self.process_persona(input, piece),
+            InteractiveMode::Assistant => self.process_assistant(input, flow),
+            InteractiveMode::Persona => self.process_persona(input, flow),
             InteractiveMode::Quiet => self.process_quiet(input),
             InteractiveMode::Passthrough => self.process_passthrough(input),
         }
@@ -234,7 +230,7 @@ impl InteractiveSession {
     fn process_assistant(
         &mut self,
         input: &str,
-        _piece: Option<&Piece>,
+        _piece: Option<&Flow>,
     ) -> Result<InteractiveAction> {
         // If we have pending clarifications, record the answer
         if let Some(last_clarification) = self.clarifications.last_mut()
@@ -269,9 +265,9 @@ impl InteractiveSession {
         Ok(InteractiveAction::AskQuestion(clarification))
     }
 
-    /// Persona mode: converse with the first movement's persona
-    fn process_persona(&mut self, input: &str, piece: Option<&Piece>) -> Result<InteractiveAction> {
-        let persona_name = piece
+    /// Persona mode: converse with the first stage's persona
+    fn process_persona(&mut self, input: &str, flow: Option<&Flow>) -> Result<InteractiveAction> {
+        let persona_name = flow
             .and_then(|p| p.get_movement(&p.initial_movement))
             .and_then(|m| m.persona.as_deref())
             .unwrap_or("assistant");

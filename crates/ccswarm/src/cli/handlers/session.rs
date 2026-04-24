@@ -409,104 +409,68 @@ impl CliRunner {
         Ok(())
     }
 
-    async fn session_pause(&self, session_id: &str) -> Result<()> {
+    fn print_session_action_hint<W: Write>(
+        &self,
+        writer: &mut W,
+        session_id: &str,
+        action: &str,
+        state_hint: &str,
+    ) -> Result<()> {
+        let managed_action = format!("{action}{state_hint}");
+
         if self.json_output {
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "status": "info",
                     "session_id": session_id,
-                    "message": "Session pause/resume is managed by the pipeline engine."
+                    "message": format!(
+                        "Session {} is managed by the pipeline engine.",
+                        managed_action
+                    )
                 }))?
-            );
+            )?;
         } else {
-            println!(
-                "{} Session '{}' pause/resume is managed by the pipeline engine.",
+            writeln!(
+                writer,
+                "{} Session '{}' {} is managed by the pipeline engine.",
                 "ℹ".bright_cyan(),
-                session_id.bright_yellow()
-            );
-            println!(
+                session_id.bright_yellow(),
+                managed_action
+            )?;
+            writeln!(
+                writer,
                 "Use {} to manage running pipelines.",
                 "ccswarm pipeline".bright_cyan()
-            );
+            )?;
         }
 
         Ok(())
+    }
+
+    async fn session_pause(&self, session_id: &str) -> Result<()> {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        self.print_session_action_hint(&mut stdout, session_id, "pause", "/resume")
     }
 
     async fn session_resume(&self, session_id: &str) -> Result<()> {
-        if self.json_output {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "info",
-                    "session_id": session_id,
-                    "message": "Session resume is managed by the pipeline engine."
-                }))?
-            );
-        } else {
-            println!(
-                "{} Session '{}' resume is managed by the pipeline engine.",
-                "ℹ".bright_cyan(),
-                session_id.bright_yellow()
-            );
-            println!(
-                "Use {} to manage running pipelines.",
-                "ccswarm pipeline".bright_cyan()
-            );
-        }
-
-        Ok(())
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        self.print_session_action_hint(&mut stdout, session_id, "resume", "")
     }
 
     async fn session_attach(&self, session_id: &str) -> Result<()> {
-        if self.json_output {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "info",
-                    "session_id": session_id,
-                    "message": "Session attach/detach is managed by the pipeline engine."
-                }))?
-            );
-        } else {
-            println!(
-                "{} Session '{}' attach/detach is managed by the pipeline engine.",
-                "ℹ".bright_cyan(),
-                session_id.bright_yellow()
-            );
-            println!(
-                "Use {} to manage running pipelines.",
-                "ccswarm pipeline".bright_cyan()
-            );
-        }
-
-        Ok(())
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        self.print_session_action_hint(&mut stdout, session_id, "attach", "/detach")
     }
 
     async fn session_detach(&self, session_id: &str) -> Result<()> {
-        if self.json_output {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "status": "info",
-                    "session_id": session_id,
-                    "message": "Session detach is managed by the pipeline engine."
-                }))?
-            );
-        } else {
-            println!(
-                "{} Session '{}' detach is managed by the pipeline engine.",
-                "ℹ".bright_cyan(),
-                session_id.bright_yellow()
-            );
-            println!(
-                "Use {} to manage running pipelines.",
-                "ccswarm pipeline".bright_cyan()
-            );
-        }
-
-        Ok(())
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        self.print_session_action_hint(&mut stdout, session_id, "detach", "")
     }
 
     async fn session_kill(&self, session_id: &str, force: bool) -> Result<()> {
@@ -536,5 +500,66 @@ impl CliRunner {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static COLOR_OVERRIDE_LOCK: Mutex<()> = Mutex::new(());
+
+    fn cli_runner(json_output: bool) -> CliRunner {
+        CliRunner {
+            config: CcswarmConfig::default(),
+            repo_path: PathBuf::from("."),
+            json_output,
+            formatter: create_formatter(json_output),
+        }
+    }
+
+    #[test]
+    fn print_session_action_hint_formats_json_output() {
+        let runner = cli_runner(true);
+        let mut output = Vec::new();
+
+        runner
+            .print_session_action_hint(&mut output, "session-123", "attach", "/detach")
+            .expect("json output should be written");
+
+        // Assert on parsed JSON rather than byte equality so the test isn't coupled to
+        // serde_json::Map's (alphabetical) key-ordering choice.
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&output).expect("output should parse as JSON");
+        assert_eq!(parsed["status"], "info");
+        assert_eq!(parsed["session_id"], "session-123");
+        assert_eq!(
+            parsed["message"],
+            "Session attach/detach is managed by the pipeline engine."
+        );
+    }
+
+    #[test]
+    fn print_session_action_hint_formats_human_output() {
+        let _lock = COLOR_OVERRIDE_LOCK
+            .lock()
+            .expect("color override lock should not be poisoned");
+        colored::control::set_override(false);
+
+        let runner = cli_runner(false);
+        let mut output = Vec::new();
+
+        runner
+            .print_session_action_hint(&mut output, "session-123", "pause", "/resume")
+            .expect("human output should be written");
+
+        colored::control::unset_override();
+
+        let output = String::from_utf8(output).expect("output should be valid UTF-8");
+        assert_eq!(
+            output,
+            "ℹ Session 'session-123' pause/resume is managed by the pipeline engine.\nUse ccswarm pipeline to manage running pipelines.\n"
+        );
     }
 }

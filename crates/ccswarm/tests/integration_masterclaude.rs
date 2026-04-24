@@ -2,7 +2,7 @@
 //!
 //! These tests verify the coordination and delegation functionality.
 
-use ccswarm::coordination::{AgentMessage, CoordinationBus};
+use ccswarm::governance::{AgentMessage, CoordinationBus};
 use serde_json::json;
 use std::sync::Arc;
 

@@ -1,8 +1,8 @@
-//! Cycle and loop detection for Piece/Movement workflows.
+//! Cycle and loop detection for Flow/Stage workflows.
 //!
-//! Provides takt-style cycle detection to prevent infinite loops in movement routing:
+//! Provides takt-style cycle detection to prevent infinite loops in stage routing:
 //! - **Static analysis**: Detect structural cycles before execution
-//! - **Runtime tracking**: Monitor movement visits during execution
+//! - **Runtime tracking**: Monitor stage visits during execution
 //! - **Loop strategies**: Configurable breakout behaviors (abort, skip, force-advance)
 //!
 //! Example usage:
@@ -10,7 +10,7 @@
 //! use ccswarm::workflow::cycle::{CycleDetector, LoopStrategy};
 //!
 //! let detector = CycleDetector::new(LoopStrategy::AllowN(3));
-//! // let analysis = detector.analyze_piece(&piece);
+//! // let analysis = detector.analyze_piece(&flow);
 //! ```
 
 use anyhow::{Context, Result};
@@ -18,16 +18,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{debug, info, warn};
 
-use super::piece::Piece;
+use super::flow::Flow;
 
 /// Strategy for handling loops in workflow execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LoopStrategy {
     /// Abort execution when loop detected
     Abort,
-    /// Skip the looping movement and continue
+    /// Skip the looping stage and continue
     Skip,
-    /// Force advance to next movement (ignore rules)
+    /// Force advance to next stage (ignore rules)
     ForceAdvance,
     /// Allow up to N iterations before taking action
     AllowN(u32),
@@ -39,24 +39,24 @@ impl Default for LoopStrategy {
     }
 }
 
-/// Result of static cycle analysis on a piece
+/// Result of static cycle analysis on a flow
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CycleAnalysis {
     /// Whether the workflow contains any cycles
     pub has_cycles: bool,
-    /// List of detected cycle paths (each path is a sequence of movement IDs)
+    /// List of detected cycle paths (each path is a sequence of stage IDs)
     pub cycle_paths: Vec<Vec<String>>,
     /// Maximum depth of the workflow graph
     pub max_depth: usize,
-    /// Movements that are part of cycles
+    /// Stages that are part of cycles
     pub cyclic_movements: HashSet<String>,
 }
 
-/// Cycle detector analyzes piece workflows for cycles
+/// Cycle detector analyzes flow workflows for cycles
 pub struct CycleDetector {
     /// Loop handling strategy
     strategy: LoopStrategy,
-    /// Maximum iterations per movement before triggering strategy
+    /// Maximum iterations per stage before triggering strategy
     max_iterations: u32,
 }
 
@@ -73,15 +73,15 @@ impl CycleDetector {
         }
     }
 
-    /// Perform static analysis on a piece to detect cycles in the movement graph
-    pub fn analyze_piece(&self, piece: &Piece) -> Result<CycleAnalysis> {
-        debug!("Starting static cycle analysis for piece '{}'", piece.name);
+    /// Perform static analysis on a flow to detect cycles in the stage graph
+    pub fn analyze_piece(&self, flow: &Flow) -> Result<CycleAnalysis> {
+        debug!("Starting static cycle analysis for flow '{}'", flow.name);
 
-        // Build adjacency list for the movement graph
+        // Build adjacency list for the stage graph
         let mut graph: HashMap<String, Vec<String>> = HashMap::new();
-        for movement in &piece.movements {
-            let edges: Vec<String> = movement.rules.iter().map(|r| r.next.clone()).collect();
-            graph.insert(movement.id.clone(), edges);
+        for stage in &flow.stages {
+            let edges: Vec<String> = stage.rules.iter().map(|r| r.next.clone()).collect();
+            graph.insert(stage.id.clone(), edges);
         }
 
         // Detect cycles using DFS with path tracking
@@ -90,10 +90,10 @@ impl CycleDetector {
         let mut rec_stack = HashSet::new();
         let mut path = Vec::new();
 
-        for movement in &piece.movements {
-            if !visited.contains(&movement.id) {
+        for stage in &flow.stages {
+            if !visited.contains(&stage.id) {
                 self.dfs_detect_cycles(
-                    &movement.id,
+                    &stage.id,
                     &graph,
                     &mut visited,
                     &mut rec_stack,
@@ -104,9 +104,9 @@ impl CycleDetector {
         }
 
         // Calculate max depth
-        let max_depth = self.calculate_max_depth(piece)?;
+        let max_depth = self.calculate_max_depth(flow)?;
 
-        // Collect all movements that are part of cycles
+        // Collect all stages that are part of cycles
         let mut cyclic_movements = HashSet::new();
         for cycle_path in &cycle_paths {
             for movement_id in cycle_path {
@@ -118,14 +118,14 @@ impl CycleDetector {
 
         if has_cycles {
             warn!(
-                "Piece '{}' contains {} cycle(s): max_depth={}, cyclic_movements={}",
-                piece.name,
+                "Flow '{}' contains {} cycle(s): max_depth={}, cyclic_movements={}",
+                flow.name,
                 cycle_paths.len(),
                 max_depth,
                 cyclic_movements.len()
             );
         } else {
-            info!("Piece '{}' is acyclic: max_depth={}", piece.name, max_depth);
+            info!("Flow '{}' is acyclic: max_depth={}", flow.name, max_depth);
         }
 
         Ok(CycleAnalysis {
@@ -173,19 +173,19 @@ impl CycleDetector {
     }
 
     /// Calculate the maximum depth of the workflow graph using BFS
-    fn calculate_max_depth(&self, piece: &Piece) -> Result<usize> {
+    fn calculate_max_depth(&self, flow: &Flow) -> Result<usize> {
         let mut graph: HashMap<String, Vec<String>> = HashMap::new();
-        for movement in &piece.movements {
-            let edges: Vec<String> = movement.rules.iter().map(|r| r.next.clone()).collect();
-            graph.insert(movement.id.clone(), edges);
+        for stage in &flow.stages {
+            let edges: Vec<String> = stage.rules.iter().map(|r| r.next.clone()).collect();
+            graph.insert(stage.id.clone(), edges);
         }
 
         let mut max_depth = 0;
         let mut queue = VecDeque::new();
-        queue.push_back((piece.initial_movement.clone(), 0));
+        queue.push_back((flow.initial_movement.clone(), 0));
 
         let mut visited = HashSet::new();
-        visited.insert(piece.initial_movement.clone());
+        visited.insert(flow.initial_movement.clone());
 
         while let Some((node, depth)) = queue.pop_front() {
             max_depth = max_depth.max(depth);
@@ -221,12 +221,12 @@ impl Default for CycleDetector {
     }
 }
 
-/// Runtime tracker for monitoring movement visits during execution
+/// Runtime tracker for monitoring stage visits during execution
 #[derive(Debug, Clone)]
 pub struct LoopTracker {
-    /// Visit count per movement ID
+    /// Visit count per stage ID
     visit_counts: HashMap<String, u32>,
-    /// History of movement transitions (for pattern detection)
+    /// History of stage transitions (for pattern detection)
     transition_history: Vec<String>,
     /// Loop handling strategy
     strategy: LoopStrategy,
@@ -245,7 +245,7 @@ impl LoopTracker {
         }
     }
 
-    /// Record a visit to a movement, returns whether the loop threshold was exceeded
+    /// Record a visit to a stage, returns whether the loop threshold was exceeded
     pub fn record_visit(&mut self, movement_id: &str) -> bool {
         let count = self
             .visit_counts
@@ -259,7 +259,7 @@ impl LoopTracker {
 
         if exceeded {
             warn!(
-                "Loop threshold exceeded for movement '{}': {} visits (max: {})",
+                "Loop threshold exceeded for stage '{}': {} visits (max: {})",
                 movement_id, count, self.max_iterations
             );
         }
@@ -267,7 +267,7 @@ impl LoopTracker {
         exceeded
     }
 
-    /// Get the visit count for a movement
+    /// Get the visit count for a stage
     pub fn visit_count(&self, movement_id: &str) -> u32 {
         self.visit_counts.get(movement_id).copied().unwrap_or(0)
     }
@@ -317,10 +317,10 @@ impl LoopTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::piece::{Movement, MovementPermission, MovementRule, RuleCondition};
+    use crate::workflow::flow::{MovementPermission, MovementRule, RuleCondition, Stage};
 
-    fn make_movement(id: &str, rules: Vec<(&str, &str)>) -> Movement {
-        Movement {
+    fn make_movement(id: &str, rules: Vec<(&str, &str)>) -> Stage {
+        Stage {
             id: id.to_string(),
             persona: None,
             policy: None,
@@ -353,12 +353,12 @@ mod tests {
     #[test]
     fn test_simple_cycle_detection() {
         // A -> B -> A
-        let piece = Piece {
+        let flow = Flow {
             name: "simple-cycle".to_string(),
             description: "Simple A-B cycle".to_string(),
-            max_movements: 10,
+            max_stages: 10,
             initial_movement: "A".to_string(),
-            movements: vec![
+            stages: vec![
                 make_movement("A", vec![("success", "B")]),
                 make_movement("B", vec![("success", "A")]),
             ],
@@ -368,7 +368,7 @@ mod tests {
         };
 
         let detector = CycleDetector::default();
-        let analysis = detector.analyze_piece(&piece).unwrap();
+        let analysis = detector.analyze_piece(&flow).unwrap();
 
         assert!(analysis.has_cycles);
         assert_eq!(analysis.cycle_paths.len(), 1);
@@ -379,12 +379,12 @@ mod tests {
     #[test]
     fn test_complex_cycle_detection() {
         // A -> B -> C -> A
-        let piece = Piece {
+        let flow = Flow {
             name: "complex-cycle".to_string(),
             description: "A-B-C cycle".to_string(),
-            max_movements: 10,
+            max_stages: 10,
             initial_movement: "A".to_string(),
-            movements: vec![
+            stages: vec![
                 make_movement("A", vec![("success", "B")]),
                 make_movement("B", vec![("success", "C")]),
                 make_movement("C", vec![("success", "A")]),
@@ -395,7 +395,7 @@ mod tests {
         };
 
         let detector = CycleDetector::default();
-        let analysis = detector.analyze_piece(&piece).unwrap();
+        let analysis = detector.analyze_piece(&flow).unwrap();
 
         assert!(analysis.has_cycles);
         assert_eq!(analysis.cycle_paths.len(), 1);
@@ -405,12 +405,12 @@ mod tests {
     #[test]
     fn test_no_cycle_linear_workflow() {
         // A -> B -> C (no cycles)
-        let piece = Piece {
+        let flow = Flow {
             name: "linear".to_string(),
             description: "Linear workflow".to_string(),
-            max_movements: 10,
+            max_stages: 10,
             initial_movement: "A".to_string(),
-            movements: vec![
+            stages: vec![
                 make_movement("A", vec![("success", "B")]),
                 make_movement("B", vec![("success", "C")]),
                 make_movement("C", vec![]),
@@ -421,7 +421,7 @@ mod tests {
         };
 
         let detector = CycleDetector::default();
-        let analysis = detector.analyze_piece(&piece).unwrap();
+        let analysis = detector.analyze_piece(&flow).unwrap();
 
         assert!(!analysis.has_cycles);
         assert_eq!(analysis.cycle_paths.len(), 0);
@@ -526,12 +526,12 @@ mod tests {
     #[test]
     fn test_multiple_cycles() {
         // A -> B -> A and C -> D -> C
-        let piece = Piece {
+        let flow = Flow {
             name: "multi-cycle".to_string(),
             description: "Multiple independent cycles".to_string(),
-            max_movements: 20,
+            max_stages: 20,
             initial_movement: "A".to_string(),
-            movements: vec![
+            stages: vec![
                 make_movement("A", vec![("success", "B")]),
                 make_movement("B", vec![("success", "A"), ("alt", "C")]),
                 make_movement("C", vec![("success", "D")]),
@@ -543,7 +543,7 @@ mod tests {
         };
 
         let detector = CycleDetector::default();
-        let analysis = detector.analyze_piece(&piece).unwrap();
+        let analysis = detector.analyze_piece(&flow).unwrap();
 
         assert!(analysis.has_cycles);
         // Should detect at least one cycle (may detect both)

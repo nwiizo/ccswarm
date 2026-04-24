@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ccswarm counter</title>
+</head>
+<body>
+<h1>Counter</h1>
+<button id="inc">+1</button>
+<span id="count">0</span>
+<script>
+(function () {
+  var button = document.getElementById('inc');
+  var countEl = document.getElementById('count');
+  button.addEventListener('click', function () {
+    var current = parseInt(countEl.textContent, 10);
+    if (isNaN(current)) {
+      current = 0;
+    }
+    countEl.textContent = String(current + 1);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-//! Watch mode for Piece/Movement workflows.
+//! Watch mode for Flow/Stage workflows.
 //!
 //! Monitors file system changes and automatically triggers workflow execution.
 //! Inspired by takt's watch mode feature.
@@ -24,9 +24,9 @@ pub struct WatchConfig {
     /// Debounce duration in milliseconds
     #[serde(default = "default_debounce")]
     pub debounce_ms: u64,
-    /// Piece to execute when changes are detected
-    pub piece_name: String,
-    /// Whether to run the full piece or just validate
+    /// Flow to execute when changes are detected
+    pub flow_name: String,
+    /// Whether to run the full flow or just validate
     #[serde(default = "default_true")]
     pub full_execution: bool,
     /// Whether to clear the terminal before each run
@@ -60,7 +60,7 @@ impl Default for WatchConfig {
                 "**/.git/**".to_string(),
             ],
             debounce_ms: default_debounce(),
-            piece_name: "default".to_string(),
+            flow_name: "default".to_string(),
             full_execution: true,
             clear_screen: false,
             max_consecutive_runs: default_max_consecutive(),

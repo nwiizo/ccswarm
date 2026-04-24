@@ -29,7 +29,7 @@ struct HarnessAssert {
 #[derive(Debug, Clone, Deserialize)]
 struct HarnessScenario {
     name: Option<String>,
-    piece: String,
+    flow: String,
     task: String,
     #[serde(default = "default_timeout")]
     timeout_secs: u64,
@@ -133,7 +133,7 @@ impl CliRunner {
                             results.push(serde_json::json!({
                                 "path": path.display().to_string(),
                                 "name": sc.name.clone().unwrap_or_default(),
-                                "piece": substitute_vars(&sc.piece, &vars),
+                                "flow": substitute_vars(&sc.flow, &vars),
                                 "task": substitute_vars(&sc.task, &vars),
                                 "vars": vars,
                                 "ok": ok,
@@ -145,7 +145,7 @@ impl CliRunner {
                             results.push(serde_json::json!({
                                 "path": path.display().to_string(),
                                 "name": sc.name.clone().unwrap_or_default(),
-                                "piece": substitute_vars(&sc.piece, &vars),
+                                "flow": substitute_vars(&sc.flow, &vars),
                                 "task": substitute_vars(&sc.task, &vars),
                                 "vars": vars,
                                 "ok": false,
@@ -233,9 +233,9 @@ impl CliRunner {
                 let scenarios = load_scenarios_from_dir(&default_dir)?;
                 for (path, sc) in scenarios {
                     println!(
-                        "- {} (piece: {}, task: {})",
+                        "- {} (flow: {}, task: {})",
                         path.display(),
-                        sc.piece,
+                        sc.flow,
                         sc.task
                     );
                 }
@@ -278,8 +278,8 @@ impl CliRunner {
                     for vars in varsets {
                         total += 1;
                         println!(
-                            "  - piece={} task={} vars={}",
-                            substitute_vars(&sc.piece, &vars),
+                            "  - flow={} task={} vars={}",
+                            substitute_vars(&sc.flow, &vars),
                             substitute_vars(&sc.task, &vars),
                             serde_json::to_string(&vars).unwrap_or_default()
                         );
@@ -322,7 +322,7 @@ impl CliRunner {
                         let (ok, details) = self.run_single_scenario_instance(&sc, &vars).await?;
                         tmp_results.push(serde_json::json!({
                             "name": sc.name.clone().unwrap_or_default(),
-                            "piece": substitute_vars(&sc.piece, &vars),
+                            "flow": substitute_vars(&sc.flow, &vars),
                             "task": substitute_vars(&sc.task, &vars),
                             "vars": vars,
                             "ok": ok,
@@ -431,11 +431,11 @@ impl CliRunner {
         }
 
         let task_text = substitute_vars(&sc.task, vars);
-        let piece_name = substitute_vars(&sc.piece, vars);
+        let flow_name = substitute_vars(&sc.flow, vars);
 
         let started = std::time::Instant::now();
         let config = PipelineConfig::builder()
-            .piece_name(&piece_name)
+            .flow_name(&flow_name)
             .task_text(&task_text)
             .output_format(&sc.output_format)
             .timeout(Duration::from_secs(sc.timeout_secs))
@@ -531,7 +531,7 @@ impl CliRunner {
 fn load_scenario(path: &Path) -> Result<(PathBuf, HarnessScenario)> {
     let content =
         fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
-    let sc: HarnessScenario = serde_yaml::from_str(&content)
+    let sc: HarnessScenario = serde_yml::from_str(&content)
         .with_context(|| format!("Invalid YAML in {}", path.display()))?;
     Ok((path.to_path_buf(), sc))
 }
@@ -567,12 +567,12 @@ fn index_results(root: &serde_json::Value) -> std::collections::HashMap<String, 
         .and_then(|r| r.as_array())
     {
         for item in arr {
-            let piece = item.get("piece").and_then(|v| v.as_str()).unwrap_or("");
+            let flow = item.get("flow").and_then(|v| v.as_str()).unwrap_or("");
             let task = item.get("task").and_then(|v| v.as_str()).unwrap_or("");
             let vars = item.get("vars").cloned().unwrap_or(serde_json::json!({}));
             let key = format!(
                 "{}|{}|{}",
-                piece,
+                flow,
                 task,
                 serde_json::to_string(&vars).unwrap_or_default()
             );
@@ -693,16 +693,16 @@ fn render_diff_markdown(summary: &serde_json::Value, current: &serde_json::Value
         .and_then(|r| r.as_array())
     {
         out.push_str("\n### Current Results (subset)\n\n");
-        out.push_str("| piece | task | ok |\n|---|---|---|\n");
+        out.push_str("| flow | task | ok |\n|---|---|---|\n");
         for r in results.iter().take(30) {
-            let piece = r.get("piece").and_then(|v| v.as_str()).unwrap_or("");
+            let flow = r.get("flow").and_then(|v| v.as_str()).unwrap_or("");
             let task = r.get("task").and_then(|v| v.as_str()).unwrap_or("");
             let ok = if r.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
                 "✅"
             } else {
                 "❌"
             };
-            out.push_str(&format!("| {} | {} | {} |\n", piece, task, ok));
+            out.push_str(&format!("| {} | {} | {} |\n", flow, task, ok));
         }
         if results.len() > 30 {
             out.push_str(&format!("\n(_{} more not shown_)\n", results.len() - 30));

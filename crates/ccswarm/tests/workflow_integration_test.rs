@@ -9,11 +9,11 @@ use std::time::Duration;
 
 use ccswarm::workflow::{
     ArpeggioConfig, ArpeggioExecutor, ArpeggioItem, ChangeType, CycleDetector, FacetRegistry,
-    FileChange, GitHubIssue, GitHubIssueConfig, InteractiveAction, InteractiveMode,
-    InteractiveSession, IssueResult, IssueTaskGenerator, LoopStrategy, MatchMethod, Movement,
-    MovementJudge, MovementPermission, MovementRule, PermissionEnforcer, Piece, PieceEngine,
-    PieceStatus, PipelineConfig, PipelineExitCode, PipelineRunner, PipelineStatus, RuleCondition,
-    WatchConfig, WatchController, WatchState, builtin_personas, builtin_pieces, builtin_policies,
+    FileChange, Flow, FlowEngine, FlowStatus, GitHubIssue, GitHubIssueConfig, InteractiveAction,
+    InteractiveMode, InteractiveSession, IssueResult, IssueTaskGenerator, LoopStrategy,
+    MatchMethod, MovementJudge, MovementPermission, MovementRule, PermissionEnforcer,
+    PipelineConfig, PipelineExitCode, PipelineRunner, PipelineStatus, RuleCondition, Stage,
+    WatchConfig, WatchController, WatchState, builtin_flows, builtin_personas, builtin_policies,
     parse_gh_issue,
 };
 
@@ -21,8 +21,8 @@ use ccswarm::workflow::{
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn make_movement(id: &str, rules: Vec<(&str, &str)>) -> Movement {
-    Movement {
+fn make_movement(id: &str, rules: Vec<(&str, &str)>) -> Stage {
+    Stage {
         id: id.to_string(),
         persona: None,
         policy: None,
@@ -80,19 +80,19 @@ fn sample_issue_config() -> GitHubIssueConfig {
 }
 
 // ---------------------------------------------------------------------------
-// 1. piece + facets + judge
+// 1. flow + facets + judge
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn test_piece_engine_faceted_execution() {
-    // Build a YAML-style piece with persona + policy references
+    // Build a YAML-style flow with persona + policy references
     let yaml = r#"
 name: faceted-test
-description: "Tests faceted prompt composition through PieceEngine"
-max_movements: 10
+description: "Tests faceted prompt composition through FlowEngine"
+max_stages: 10
 initial_movement: plan
 
-movements:
+stages:
   - id: plan
     persona: planner
     policy: coding
@@ -110,21 +110,21 @@ movements:
     permission: edit
     rules: []
 "#;
-    let piece = Piece::from_yaml(yaml).expect("parse failed");
+    let flow = Flow::from_yaml(yaml).expect("parse failed");
 
-    let mut engine = PieceEngine::new();
-    engine.register_piece(piece);
+    let mut engine = FlowEngine::new();
+    engine.register_flow(flow);
 
-    // Execute — PieceEngine internally composes faceted prompts and routes via judge
+    // Execute — FlowEngine internally composes faceted prompts and routes via judge
     let state = engine
         .execute_piece("faceted-test")
         .await
         .expect("execution failed");
 
-    assert_eq!(state.status, PieceStatus::Completed);
+    assert_eq!(state.status, FlowStatus::Completed);
     assert_eq!(state.movement_count, 2);
 
-    // Verify that movement outputs were stored as variables
+    // Verify that stage outputs were stored as variables
     assert!(state.variables.contains_key("plan_output"));
     assert!(state.variables.contains_key("implement_output"));
 
@@ -135,20 +135,20 @@ movements:
 }
 
 // ---------------------------------------------------------------------------
-// 2. pipeline + piece + judge
+// 2. pipeline + flow + judge
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn test_pipeline_executes_builtin_piece() {
     let mut runner = PipelineRunner::new();
 
-    // Register the builtin "research" piece into the runner's engine
-    for piece in builtin_pieces() {
-        runner.engine_mut().register_piece(piece);
+    // Register the builtin "research" flow into the runner's engine
+    for flow in builtin_flows() {
+        runner.engine_mut().register_flow(flow);
     }
 
     let config = PipelineConfig::builder()
-        .piece_name("research")
+        .flow_name("research")
         .task_text("Investigate Rust async patterns")
         .output_format("json")
         .timeout(Duration::from_secs(30))
@@ -171,29 +171,29 @@ async fn test_pipeline_executes_builtin_piece() {
     // Verbose details should be present
     assert!(output.details.is_some());
     let details = output.details.as_ref().unwrap();
-    assert_eq!(details.piece_name, "research");
+    assert_eq!(details.flow_name, "research");
 }
 
 // ---------------------------------------------------------------------------
-// 3. cycle + piece
+// 3. cycle + flow
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_cycle_detector_on_builtin_pieces() {
     let detector = CycleDetector::new(LoopStrategy::AllowN(3));
-    let pieces = builtin_pieces();
+    let pieces = builtin_flows();
 
-    for piece in &pieces {
+    for flow in &pieces {
         let analysis = detector
-            .analyze_piece(piece)
-            .unwrap_or_else(|e| panic!("Failed to analyze piece '{}': {}", piece.name, e));
+            .analyze_piece(flow)
+            .unwrap_or_else(|e| panic!("Failed to analyze flow '{}': {}", flow.name, e));
 
-        match piece.name.as_str() {
+        match flow.name.as_str() {
             "default" => {
-                // default piece has review <-> fix cycle
+                // default flow has review <-> fix cycle
                 assert!(
                     analysis.has_cycles,
-                    "default piece should have cycles (review<->fix)"
+                    "default flow should have cycles (review<->fix)"
                 );
                 assert!(
                     !analysis.cyclic_movements.is_empty(),
@@ -202,12 +202,12 @@ fn test_cycle_detector_on_builtin_pieces() {
             }
             "research" => {
                 // research is linear: investigate -> summarize
-                assert!(!analysis.has_cycles, "research piece should be acyclic");
+                assert!(!analysis.has_cycles, "research flow should be acyclic");
                 assert_eq!(analysis.max_depth, 1);
             }
             "review-fix" => {
                 // review-fix has review <-> fix cycle
-                assert!(analysis.has_cycles, "review-fix piece should have cycles");
+                assert!(analysis.has_cycles, "review-fix flow should have cycles");
                 assert!(analysis.cyclic_movements.contains("review"));
                 assert!(analysis.cyclic_movements.contains("fix"));
             }
@@ -249,7 +249,7 @@ fn test_loop_tracker_monitors_cyclic_piece() {
 }
 
 // ---------------------------------------------------------------------------
-// 5. permissions + piece
+// 5. permissions + flow
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -257,7 +257,7 @@ fn test_permission_enforcer_with_piece_movements() {
     let yaml = r#"
 name: perm-test
 initial_movement: scan
-movements:
+stages:
   - id: scan
     instruction: "Scan codebase"
     tools: [read, grep, glob]
@@ -271,10 +271,10 @@ movements:
     permission: full
     rules: []
 "#;
-    let piece = Piece::from_yaml(yaml).expect("parse failed");
+    let flow = Flow::from_yaml(yaml).expect("parse failed");
 
-    // Test readonly movement permissions
-    let scan = piece.get_movement("scan").unwrap();
+    // Test readonly stage permissions
+    let scan = flow.get_movement("scan").unwrap();
     let readonly_enforcer = PermissionEnforcer::from_movement(scan.permission.clone(), &scan.tools);
     assert!(readonly_enforcer.check_tool("read").allowed);
     assert!(readonly_enforcer.check_tool("grep").allowed);
@@ -300,8 +300,8 @@ movements:
         "readonly should deny command execution"
     );
 
-    // Test full permission movement
-    let modify = piece.get_movement("modify").unwrap();
+    // Test full permission stage
+    let modify = flow.get_movement("modify").unwrap();
     let full_enforcer = PermissionEnforcer::from_movement(modify.permission.clone(), &modify.tools);
     assert!(full_enforcer.check_tool("read").allowed);
     assert!(full_enforcer.check_tool("write").allowed);
@@ -324,15 +324,15 @@ movements:
 }
 
 // ---------------------------------------------------------------------------
-// 6. interactive + piece
+// 6. interactive + flow
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_interactive_session_with_piece() {
     let yaml = r#"
-name: interactive-piece
+name: interactive-flow
 initial_movement: plan
-movements:
+stages:
   - id: plan
     persona: planner
     instruction: "Create a plan"
@@ -342,20 +342,20 @@ movements:
   - id: done
     instruction: "Complete"
 "#;
-    let piece = Piece::from_yaml(yaml).expect("parse failed");
+    let flow = Flow::from_yaml(yaml).expect("parse failed");
 
     // Persona mode: should respond with persona name
     let mut session = InteractiveSession::new(InteractiveMode::Persona);
-    session.select_piece(&piece.name);
+    session.select_flow(&flow.name);
 
     let action = session
-        .process_input("Implement a REST API", Some(&piece))
+        .process_input("Implement a REST API", Some(&flow))
         .expect("process failed");
     match &action {
         InteractiveAction::ShowMessage(msg) => {
             assert!(
                 msg.contains("planner"),
-                "persona mode should reference the initial movement's persona"
+                "persona mode should reference the initial stage's persona"
             );
             assert!(msg.contains("REST API"));
         }
@@ -365,7 +365,7 @@ movements:
 
     // /go command should transition to Execute
     let go_action = session
-        .process_input("/go", Some(&piece))
+        .process_input("/go", Some(&flow))
         .expect("go failed");
     match go_action {
         InteractiveAction::Execute(task) => {
@@ -380,7 +380,7 @@ movements:
 }
 
 // ---------------------------------------------------------------------------
-// 7. github_issue + pipeline + piece
+// 7. github_issue + pipeline + flow
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -403,18 +403,18 @@ async fn test_github_issue_to_pipeline_workflow() {
     // Generate task from issue
     let generator = IssueTaskGenerator::new(sample_issue_config());
     let task = generator.generate_task(&issue);
-    assert_eq!(task.piece_name, Some("review-fix".to_string())); // bug -> review-fix
+    assert_eq!(task.flow_name, Some("review-fix".to_string())); // bug -> review-fix
     assert!(task.task_text.contains("#99"));
     assert!(task.task_text.contains("Fix broken login flow"));
 
     // Set up pipeline with builtin pieces
     let mut runner = PipelineRunner::new();
-    for piece in builtin_pieces() {
-        runner.engine_mut().register_piece(piece);
+    for flow in builtin_flows() {
+        runner.engine_mut().register_flow(flow);
     }
 
     let config = PipelineConfig::builder()
-        .piece_name(task.piece_name.as_deref().unwrap_or("default"))
+        .flow_name(task.flow_name.as_deref().unwrap_or("default"))
         .task_text(&task.task_text)
         .output_format("text")
         .timeout(Duration::from_secs(30))
@@ -439,18 +439,18 @@ async fn test_github_issue_to_pipeline_workflow() {
 }
 
 // ---------------------------------------------------------------------------
-// 8. watch + cycle + piece
+// 8. watch + cycle + flow
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_watch_cycle_integration() {
-    // Cycle analysis on a piece that the watch mode would trigger
-    let piece = Piece {
+    // Cycle analysis on a flow that the watch mode would trigger
+    let flow = Flow {
         name: "watched-workflow".to_string(),
         description: "Workflow triggered by file changes".to_string(),
-        max_movements: 20,
+        max_stages: 20,
         initial_movement: "lint".to_string(),
-        movements: vec![
+        stages: vec![
             make_movement("lint", vec![("success", "test"), ("error", "fix")]),
             make_movement("test", vec![("success", "done")]),
             make_movement("fix", vec![("success", "lint")]),
@@ -462,7 +462,7 @@ fn test_watch_cycle_integration() {
     };
 
     let detector = CycleDetector::new(LoopStrategy::AllowN(3));
-    let analysis = detector.analyze_piece(&piece).expect("analysis failed");
+    let analysis = detector.analyze_piece(&flow).expect("analysis failed");
     assert!(
         analysis.has_cycles,
         "lint->fix->lint should be detected as a cycle"
@@ -473,7 +473,7 @@ fn test_watch_cycle_integration() {
     // Watch controller: debounce_ms=0 for deterministic test
     let config = WatchConfig {
         debounce_ms: 0,
-        piece_name: "watched-workflow".to_string(),
+        flow_name: "watched-workflow".to_string(),
         include_patterns: vec![],
         exclude_patterns: vec![],
         max_consecutive_runs: 3,
@@ -533,7 +533,7 @@ async fn test_arpeggio_batch_from_issues() {
 
     // Execute batch
     let config = ArpeggioConfig {
-        piece_name: "default".to_string(),
+        flow_name: "default".to_string(),
         max_concurrency: 1,
         fail_fast: false,
         ..ArpeggioConfig::default()
@@ -556,7 +556,7 @@ async fn test_arpeggio_batch_from_issues() {
 }
 
 // ---------------------------------------------------------------------------
-// 10. facets + judge + piece
+// 10. facets + judge + flow
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -625,7 +625,7 @@ fn test_facets_judge_prompt_composition() {
         "Constraints should come before Output Format"
     );
 
-    // Generate judge tag instructions for a sample movement's rules
+    // Generate judge tag instructions for a sample stage's rules
     let rules = vec![
         MovementRule {
             condition: RuleCondition::Simple("success".to_string()),

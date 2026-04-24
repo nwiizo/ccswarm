@@ -27,7 +27,7 @@ impl CliRunner {
                 println!("📝 Logs");
                 println!("======");
                 println!("No logs directory found at {}", logs_dir.display());
-                println!("Run 'ccswarm start' to create logs");
+                println!("Run 'ccswarm pipeline --task \"...\"' to create logs");
             }
             return Ok(());
         }
@@ -314,69 +314,6 @@ impl CliRunner {
                     );
                 }
             }
-        }
-
-        Ok(())
-    }
-
-    pub(crate) async fn handle_tutorial(&self, chapter: Option<u8>) -> Result<()> {
-        let mut tutorial = InteractiveTutorial::new();
-
-        if let Some(ch) = chapter {
-            if !(1..=4).contains(&ch) {
-                println!(
-                    "{}",
-                    "❌ Invalid chapter number. Please choose 1-4.".bright_red()
-                );
-                return Ok(());
-            }
-            // Set starting chapter (adjusting for 0-based index)
-            tutorial.current_chapter = (ch - 1) as usize;
-        }
-
-        tutorial.start().await?;
-        Ok(())
-    }
-
-    pub(crate) async fn handle_help(
-        &self,
-        topic: Option<&str>,
-        search: Option<&str>,
-    ) -> Result<()> {
-        let help = InteractiveHelp::new();
-
-        if let Some(query) = search {
-            // Search help topics
-            let results = help.search(query);
-
-            if results.is_empty() {
-                println!();
-                println!(
-                    "{}",
-                    "❌ No help topics found matching your search.".bright_red()
-                );
-                println!();
-                println!("Try one of these topics:");
-                help.show_topic_list();
-            } else {
-                println!();
-                println!(
-                    "{}",
-                    format!("🔍 Found {} topics matching '{}'", results.len(), query).bright_cyan()
-                );
-                println!();
-
-                for (key, topic) in results.iter().take(3) {
-                    println!("{}", format!("📖 {}", topic.title).bright_yellow());
-                    println!("   {}", topic.description.bright_black());
-                    println!("   Run: ccswarm help {}", key.bright_white());
-                    println!();
-                }
-            }
-        } else if let Some(t) = topic {
-            help.show_topic(t);
-        } else {
-            help.show_topic_list();
         }
 
         Ok(())
