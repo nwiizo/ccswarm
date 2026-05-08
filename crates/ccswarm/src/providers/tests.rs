@@ -9,7 +9,7 @@
 //!    friendly error (codex #4 finding — `gh copilot suggest` is not usable as a code
 //!    generation backend).
 
-use super::{AgentProvider, ProviderKind, ProviderOptions, resolve};
+use super::{ProviderKind, ProviderOptions, resolve};
 use std::path::Path;
 
 fn argv_of(cmd: &tokio::process::Command) -> Vec<String> {

@@ -505,7 +505,7 @@ fn test_watch_cycle_integration() {
 
 #[tokio::test]
 async fn test_arpeggio_batch_from_issues() {
-    let issues = vec![
+    let issues = [
         sample_issue(1, "Fix header alignment", vec!["bug", "frontend"]),
         sample_issue(2, "Add user avatar upload", vec!["feature"]),
         sample_issue(3, "Research caching strategies", vec!["research"]),

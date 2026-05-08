@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use ai_session::context::{MessageRole, SessionContext};
-use ai_session::core::SessionId;
+use ai_session::core::{AttentionState, SessionId};
 use ai_session::output::{OutputParser, ParsedOutput};
 use ai_session::persistence::PersistenceManager;
 
@@ -41,6 +41,11 @@ pub struct BridgeResult {
     /// Rough output-token estimate (raw output bytes / 4).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens_out: Option<u64>,
+    /// Attention triage state derived from the parsed output. Falls back to
+    /// `Done` on success / `Error` on failure when the parser has no decisive
+    /// signal.
+    #[serde(default)]
+    pub attention: AttentionState,
 }
 
 /// Options for a single stage execution. Provider-specific flag mapping happens in
@@ -260,6 +265,15 @@ impl AISessionBridge {
             .unwrap_or(ParsedOutput::PlainText(raw_output.clone()));
 
         let success = is_parsed_success(&parsed);
+        // Decisive parsed signals (BuildOutput / TestResults / Error log) drive
+        // attention directly; for ambiguous output (PlainText / CodeExecution)
+        // fall back to the success bit so the column still says something
+        // useful per stage.
+        let attention = AttentionState::from_parsed(&parsed).unwrap_or(if success {
+            AttentionState::Done
+        } else {
+            AttentionState::Error
+        });
 
         // 3. Add to agent's context history (auto-compresses via zstd when threshold reached)
         if let Some(mut context) = self.context_histories.get_mut(agent_id) {
@@ -307,6 +321,7 @@ impl AISessionBridge {
             compression_ratio,
             tokens_in,
             tokens_out,
+            attention,
         })
     }
 

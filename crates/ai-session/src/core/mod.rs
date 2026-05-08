@@ -81,11 +81,15 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+pub mod attention;
 pub mod headless;
 pub mod lifecycle;
 pub mod process;
 pub mod pty;
 pub mod terminal;
+
+pub use attention::AttentionState;
+use attention::AttentionTracker;
 
 use crate::context::SessionContext;
 use crate::persistence::CommandRecord;
@@ -279,6 +283,8 @@ pub struct AISession {
     pub command_count: Arc<RwLock<usize>>,
     /// Total tokens used
     pub total_tokens: Arc<RwLock<usize>>,
+    /// Attention state — what does this session need next?
+    attention: AttentionTracker,
 }
 
 impl AISession {
@@ -300,6 +306,7 @@ impl AISession {
             command_history: Arc::new(RwLock::new(Vec::new())),
             command_count: Arc::new(RwLock::new(0)),
             total_tokens: Arc::new(RwLock::new(0)),
+            attention: AttentionTracker::new(AttentionState::Idle),
         })
     }
 
@@ -324,6 +331,7 @@ impl AISession {
             command_history: Arc::new(RwLock::new(Vec::new())),
             command_count: Arc::new(RwLock::new(0)),
             total_tokens: Arc::new(RwLock::new(0)),
+            attention: AttentionTracker::new(AttentionState::Idle),
         })
     }
 
@@ -430,6 +438,36 @@ impl AISession {
     /// Get total tokens used
     pub async fn get_total_tokens(&self) -> usize {
         *self.total_tokens.read().await
+    }
+
+    /// Current attention state — what triage bucket this session falls into.
+    pub fn attention(&self) -> AttentionState {
+        self.attention.get()
+    }
+
+    /// Subscribe to attention state changes.
+    ///
+    /// Returns a `watch::Receiver` initialized to the current state. Each
+    /// subsequent transition wakes `.changed()`.
+    pub fn subscribe_attention(&self) -> tokio::sync::watch::Receiver<AttentionState> {
+        self.attention.subscribe()
+    }
+
+    /// Set the attention state explicitly. Returns `true` if the state changed.
+    pub fn set_attention(&self, state: AttentionState) -> bool {
+        self.attention.set(state)
+    }
+
+    /// Update attention from a parsed output snapshot, if the snapshot is
+    /// decisive enough to imply a transition. Returns the new state when one
+    /// was applied.
+    pub fn update_attention_from_parsed(
+        &self,
+        parsed: &crate::output::ParsedOutput,
+    ) -> Option<AttentionState> {
+        let next = AttentionState::from_parsed(parsed)?;
+        self.attention.set(next);
+        Some(next)
     }
 
     /// Clear command history (keep recent N commands)

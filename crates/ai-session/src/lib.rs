@@ -146,8 +146,8 @@ pub use coordination::{
     TaskId, TaskPriority,
 };
 pub use core::{
-    AISession, ContextConfig, SessionConfig, SessionError, SessionId, SessionResult, SessionStatus,
-    pty::PtyHandle,
+    AISession, AttentionState, ContextConfig, SessionConfig, SessionError, SessionId,
+    SessionResult, SessionStatus, pty::PtyHandle,
 };
 pub use output::{OutputManager, OutputParser, ParsedOutput};
 

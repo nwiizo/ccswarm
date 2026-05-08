@@ -142,7 +142,7 @@ impl ToolRegistry {
                 let cmd = command.to_string();
 
                 // Use blocking runtime for sync context
-                let result = tokio::task::block_in_place(|| {
+                tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async move {
                         // Get the session
                         let session = sm
@@ -172,9 +172,7 @@ impl ToolRegistry {
                             is_error: false,
                         })
                     })
-                });
-
-                result
+                })
             })
             .unwrap();
 
@@ -221,7 +219,7 @@ impl ToolRegistry {
                 // Create session asynchronously
                 let sm = sm_clone.clone();
 
-                let result = tokio::task::block_in_place(|| {
+                tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async move {
                         // Create the session
                         let session = sm.create_session_with_config(config).await?;
@@ -255,9 +253,7 @@ impl ToolRegistry {
                             is_error: false,
                         })
                     })
-                });
-
-                result
+                })
             })
             .unwrap();
 
@@ -292,7 +288,7 @@ impl ToolRegistry {
                 // Get session info asynchronously
                 let sm = sm_clone.clone();
 
-                let result = tokio::task::block_in_place(|| {
+                tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async move {
                     // Get the session
                     let session = sm.get_session(&session_id)
@@ -321,9 +317,7 @@ impl ToolRegistry {
                         is_error: false,
                     })
                 })
-                });
-
-                result
+                })
             })
             .unwrap();
 

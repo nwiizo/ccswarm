@@ -235,8 +235,10 @@ async fn create_session(
     }
 
     // Create session configuration
-    let mut config = SessionConfig::default();
-    config.enable_ai_features = req.enable_ai_features;
+    let mut config = SessionConfig {
+        enable_ai_features: req.enable_ai_features,
+        ..Default::default()
+    };
 
     if let Some(wd) = req.working_directory {
         config.working_directory = std::path::PathBuf::from(wd);
@@ -370,8 +372,8 @@ async fn execute_command(
             )
         })?;
 
-    // Wait a bit for command execution
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    // Wait for command execution before draining the session output.
+    tokio::time::sleep(tokio::time::Duration::from_millis(req.timeout_ms)).await;
 
     // Read output
     let output = session.read_output().await.map_err(|e| {

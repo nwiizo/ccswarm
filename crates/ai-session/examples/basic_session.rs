@@ -1,7 +1,7 @@
 //! Basic session example - demonstrates core AI session functionality
 
 use ai_session::core::AISession;
-use ai_session::{SessionConfig, SessionManager};
+use ai_session::{ContextConfig, SessionConfig, SessionManager};
 use anyhow::Result;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -20,10 +20,14 @@ async fn main() -> Result<()> {
     println!("✓ Session manager initialized");
 
     // Configure session with AI features
-    let mut config = SessionConfig::default();
-    config.enable_ai_features = true;
-    config.context_config.max_tokens = 4096;
-    config.context_config.compression_threshold = 0.8;
+    let config = SessionConfig {
+        enable_ai_features: true,
+        context_config: ContextConfig {
+            max_tokens: 4096,
+            compression_threshold: 0.8,
+        },
+        ..Default::default()
+    };
 
     println!("\nCreating AI-optimized session...");
     let session = manager.create_session_with_config(config).await?;
