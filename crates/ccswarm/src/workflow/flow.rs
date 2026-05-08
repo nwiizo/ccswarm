@@ -808,6 +808,12 @@ impl FlowEngine {
                 .as_object()
                 .and_then(|o| o.get("tokens_out"))
                 .and_then(|v| v.as_u64());
+            let attention = output
+                .as_object()
+                .and_then(|o| o.get("attention"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("idle")
+                .to_string();
             let mut ev_end = crate::events::Event::new(
                 &run_id,
                 crate::events::EventLevel::Info,
@@ -819,6 +825,7 @@ impl FlowEngine {
                 "duration_ms": movement_duration_ms,
                 "tokens_in": tokens_in,
                 "tokens_out": tokens_out,
+                "attention": attention,
                 "output_preview": output
                     .as_object()
                     .and_then(|o| o.get("output"))
@@ -1082,6 +1089,7 @@ impl FlowEngine {
                         "duration_ms": result.duration_ms,
                         "tokens_in": result.tokens_in,
                         "tokens_out": result.tokens_out,
+                        "attention": result.attention.to_string(),
                     })
                 }
                 Err(e) => {
@@ -2185,7 +2193,7 @@ stages:
 
         for flow in &flows {
             flow.validate()
-                .expect(&format!("Built-in flow '{}' failed validation", flow.name));
+                .unwrap_or_else(|_| panic!("Built-in flow '{}' failed validation", flow.name));
         }
     }
 
@@ -2300,13 +2308,15 @@ stages:
     /// are pinned even if the enforcement site gets refactored.
     #[test]
     fn test_run_token_cap_abort_condition() {
+        let exceeds_cap = |used: u64, cap: u64| used > cap;
+
         // strictly greater than the cap — abort
-        assert!(10u64 > 5u64);
+        assert!(exceeds_cap(10, 5));
         // equal — do NOT abort (the stage that lands exactly on the cap still
         // gets its usage recorded and the next stage is allowed to start; a
         // stricter check would surprise users who set the cap to the exact
         // expected total).
-        assert!(!(5u64 > 5u64));
+        assert!(!exceeds_cap(5, 5));
     }
 
     /// An explicit `tools:` list on a stage is honored verbatim, even if the

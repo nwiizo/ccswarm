@@ -1,5 +1,6 @@
 //! Session lifecycle management
 
+use super::attention::AttentionState;
 use super::headless::HeadlessHandle;
 use super::pty::PtyHandle;
 use super::terminal::TerminalHandle;
@@ -70,6 +71,9 @@ pub async fn start_session(session: &AISession) -> Result<()> {
     // Update last activity
     *session.last_activity.write().await = chrono::Utc::now();
 
+    // Surface to attention rail: session is now actively running.
+    session.set_attention(AttentionState::Running);
+
     Ok(())
 }
 
@@ -104,6 +108,15 @@ pub async fn stop_session(session: &AISession) -> Result<()> {
     {
         let mut status = session.status.write().await;
         *status = SessionStatus::Terminated;
+    }
+
+    // Preserve a terminal Error/Done verdict if the session already produced
+    // one; otherwise mark a clean shutdown as Done.
+    if matches!(
+        session.attention(),
+        AttentionState::Idle | AttentionState::Running | AttentionState::Waiting
+    ) {
+        session.set_attention(AttentionState::Done);
     }
 
     Ok(())

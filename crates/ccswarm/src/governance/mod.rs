@@ -148,7 +148,7 @@ impl CoordinationBus {
     /// Create a new coordination bus
     pub async fn new() -> Result<Self> {
         let (sender, receiver) = async_channel::bounded(1000);
-        let message_dir = PathBuf::from("coordination/messages");
+        let message_dir = PathBuf::from(".ccswarm/coordination/messages");
 
         // Create message directory
         fs::create_dir_all(&message_dir)

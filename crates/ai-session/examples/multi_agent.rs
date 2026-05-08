@@ -35,9 +35,11 @@ async fn main() -> Result<()> {
     let mut sessions = Vec::new();
 
     for (role, description) in agents {
-        let mut config = SessionConfig::default();
-        config.enable_ai_features = true;
-        config.agent_role = Some(role.to_string());
+        let config = SessionConfig {
+            enable_ai_features: true,
+            agent_role: Some(role.to_string()),
+            ..Default::default()
+        };
 
         let session = manager.create_session_with_config(config).await?;
         println!("✓ {} session created: {}", description, session.id);
@@ -78,7 +80,10 @@ async fn main() -> Result<()> {
             };
 
             // In a real implementation, this would broadcast to actual agents
-            println!("    Broadcasting task: {}", task_desc);
+            println!(
+                "    Broadcasting task {} to session {}",
+                message.id, session.id
+            );
 
             // Simulate agent processing
             sleep(Duration::from_millis(500)).await;
@@ -93,7 +98,7 @@ async fn main() -> Result<()> {
             };
 
             // In a real implementation, this would broadcast status
-            println!("    Status update: Processing task");
+            println!("    Status update {}: Processing task", status_message.id);
             println!("  ✓ Agent acknowledged and started processing");
         }
     }

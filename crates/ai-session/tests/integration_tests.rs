@@ -17,6 +17,7 @@ async fn test_ai_session_lifecycle() -> Result<()> {
     let mut config = SessionConfig {
         enable_ai_features: true,
         force_headless: true,
+        shell: Some("/bin/sh".to_string()),
         ..Default::default()
     };
     config.context_config.max_tokens = 8192;
@@ -30,8 +31,7 @@ async fn test_ai_session_lifecycle() -> Result<()> {
 
     // Test session interaction
     session.send_input("echo 'Hello AI Session'\n").await?;
-    sleep(Duration::from_millis(100)).await;
-    let output = session.read_output().await?;
+    let output = read_until_output(&session, Duration::from_secs(1)).await?;
 
     // Verify output is captured
     assert!(!output.is_empty());
@@ -41,6 +41,20 @@ async fn test_ai_session_lifecycle() -> Result<()> {
     assert_eq!(session.status().await, core::SessionStatus::Terminated);
 
     Ok(())
+}
+
+async fn read_until_output(session: &AISession, timeout: Duration) -> Result<Vec<u8>> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        let output = session.read_output().await?;
+        if !output.is_empty() {
+            return Ok(output);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Ok(output);
+        }
+        sleep(Duration::from_millis(25)).await;
+    }
 }
 
 /// Test multi-agent coordination

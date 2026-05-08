@@ -289,6 +289,11 @@ fn print_event_line(line: &str) {
             let ev = v.get("event_type").and_then(|s| s.as_str()).unwrap_or("?");
             let stage = v.get("stage").and_then(|m| m.as_str()).unwrap_or("");
             let message = v.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            let attention = v
+                .get("metadata")
+                .and_then(|md| md.get("attention"))
+                .and_then(|a| a.as_str())
+                .unwrap_or("");
 
             let lvl = match level {
                 "error" => level.bright_red().bold(),
@@ -296,17 +301,59 @@ fn print_event_line(line: &str) {
                 "debug" => level.bright_black(),
                 _ => level.bright_cyan(),
             };
+            let att = format_attention(attention);
             println!(
-                "{}  {:>5}  {:<20} {:<15}  {}",
+                "{}  {:>5}  {:<20} {:<15}  {:<10}  {}",
                 ts.bright_black(),
                 lvl,
                 ev.bright_white(),
                 stage.bright_magenta(),
+                att,
                 message
             );
         }
         Err(_) => {
             println!("{}", line);
         }
+    }
+}
+
+/// Render an attention tag with state-appropriate color. Empty input returns
+/// padded blank space so the column stays aligned for events that don't carry
+/// an attention signal (e.g. RunStart, MovementStart).
+fn format_attention(attention: &str) -> colored::ColoredString {
+    use colored::Colorize;
+    match attention {
+        "done" => "done".bright_green().bold(),
+        "error" => "error".bright_red().bold(),
+        "waiting" => "waiting".bright_yellow().bold(),
+        "running" => "running".bright_cyan(),
+        "idle" => "idle".bright_black(),
+        _ => "".normal(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_attention;
+
+    #[test]
+    fn known_states_render_non_empty() {
+        for state in ["done", "error", "waiting", "running", "idle"] {
+            let rendered = format_attention(state);
+            // Strip ANSI codes by checking the underlying string slice.
+            assert!(
+                rendered.to_string().contains(state),
+                "expected rendered '{state}' to contain its label"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_state_renders_empty() {
+        // Caller pads with a fixed-width column, so an unknown state should
+        // emit an empty label rather than a fallback word.
+        assert_eq!(format_attention("").to_string(), "");
+        assert_eq!(format_attention("garbage").to_string(), "");
     }
 }

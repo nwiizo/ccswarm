@@ -177,7 +177,7 @@ impl Transport for HttpTransport {
         // Try WebSocket first, fall back to HTTP
         if let Some((sink, _)) = &mut self.websocket {
             let json = serde_json::to_string(&message)?;
-            sink.send(Message::Text(json))
+            sink.send(Message::Text(json.into()))
                 .await
                 .map_err(|e| anyhow!("WebSocket send failed: {}", e))?;
             Ok(())

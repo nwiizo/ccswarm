@@ -6,10 +6,12 @@ use tokio::time::{Duration, sleep};
 #[tokio::test]
 async fn ccswarm_starts_ai_session_via_headless_backend() -> Result<()> {
     let manager = AISessionManager::new();
-    let mut config = AISessionConfig::default();
-    config.force_headless = true;
-    config.allow_headless_fallback = true;
-    config.shell = Some("/bin/sh".to_string());
+    let mut config = AISessionConfig {
+        force_headless: true,
+        allow_headless_fallback: true,
+        shell: Some("/bin/sh".to_string()),
+        ..Default::default()
+    };
     config.environment.clear();
 
     let session = manager.create_session_with_config(config).await?;

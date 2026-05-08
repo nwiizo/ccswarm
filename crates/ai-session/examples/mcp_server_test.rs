@@ -40,10 +40,9 @@ async fn main() -> Result<()> {
     match tools.invoke("create_session", create_session_args) {
         Ok(result) => {
             println!("✅ create_session tool executed successfully");
-            if let Some(content) = result.content.first() {
-                if let ai_session::mcp::tools::ToolContent::Text { text } = content {
-                    println!("   Result: {}", text);
-                }
+            if let Some(ai_session::mcp::tools::ToolContent::Text { text }) = result.content.first()
+            {
+                println!("   Result: {}", text);
             }
         }
         Err(e) => {
@@ -59,10 +58,9 @@ async fn main() -> Result<()> {
     match list_sessions_result {
         Ok(result) => {
             println!("✅ list_sessions tool executed successfully");
-            if let Some(content) = result.content.first() {
-                if let ai_session::mcp::tools::ToolContent::Text { text } = content {
-                    println!("   Available sessions: {}", text);
-                }
+            if let Some(ai_session::mcp::tools::ToolContent::Text { text }) = result.content.first()
+            {
+                println!("   Available sessions: {}", text);
             }
         }
         Err(e) => {
