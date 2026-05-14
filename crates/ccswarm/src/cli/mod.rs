@@ -754,9 +754,9 @@ pub enum QueueAction {
         /// Pass `-` to read the task body from stdin.
         #[arg(default_value = "")]
         task: String,
-        /// Load task body from a GitHub issue via `gh issue view`
-        #[arg(long, value_name = "NUMBER")]
-        from_issue: Option<u64>,
+        /// Load task body from a tracker issue
+        #[arg(long, value_name = "ISSUE")]
+        from_issue: Option<String>,
         /// Load task body from a file (convenient for long prompts)
         #[arg(long, value_name = "PATH")]
         file: Option<std::path::PathBuf>,
@@ -768,6 +768,14 @@ pub enum QueueAction {
     List,
     /// Clear pending tasks from the queue
     Clear,
+    /// Manually release a claimed task
+    Release {
+        /// Queue task ID to release
+        id: String,
+        /// Release reason recorded in the queue file
+        #[arg(long)]
+        reason: String,
+    },
     /// Execute all queued tasks through the pipeline.
     /// `drain` runs unattended by default — all commit/PR prompts are suppressed so
     /// the queue fully empties without user input. Pass `--interactive` to restore
@@ -788,6 +796,9 @@ pub enum QueueAction {
         /// Also create a GitHub PR for each successful task (requires `gh` CLI)
         #[arg(long)]
         create_pr: bool,
+        /// Run queue reconciliation and exit without dispatching new work
+        #[arg(long)]
+        reconcile_only: bool,
     },
 }
 

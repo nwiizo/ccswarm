@@ -27,6 +27,19 @@ pub(crate) struct ProviderOptions {
     pub worktree_name: Option<String>,
 }
 
+/// Provider support for continuing a stage in the same conversation thread.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SameThreadContinuation {
+    Unsupported,
+    ExplicitSessionId,
+}
+
+impl SameThreadContinuation {
+    pub(crate) fn supports_explicit_session_id(self) -> bool {
+        matches!(self, Self::ExplicitSessionId)
+    }
+}
+
 /// Identifier for a provider.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProviderKind {
@@ -57,6 +70,10 @@ impl ProviderKind {
 /// Contract every provider must implement to be callable from `AISessionBridge`.
 pub(crate) trait AgentProvider {
     fn kind(&self) -> ProviderKind;
+
+    fn same_thread_continuation(&self) -> SameThreadContinuation {
+        SameThreadContinuation::Unsupported
+    }
 
     /// Construct a `tokio::process::Command` ready to spawn.
     fn build_command(

@@ -287,8 +287,74 @@ impl CliRunner {
         auto_commit: bool,
         create_pr: bool,
     ) -> Result<String> {
+        self.handle_pipeline_returning_id_inner(
+            None,
+            task,
+            flow,
+            output_format,
+            timeout,
+            verbose,
+            output_file,
+            budget,
+            run_budget_tokens,
+            auto_commit,
+            create_pr,
+        )
+        .await
+    }
+
+    /// Same as [`handle_pipeline_returning_id`], but uses a caller-reserved run id.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn handle_pipeline_returning_reserved_id(
+        &self,
+        run_id: &str,
+        task: &str,
+        flow: &str,
+        output_format: &str,
+        timeout: u64,
+        verbose: bool,
+        output_file: Option<&Path>,
+        _isolate: bool,
+        budget: Option<f64>,
+        run_budget_tokens: Option<u64>,
+        _model_override: Option<&str>,
+        auto_commit: bool,
+        create_pr: bool,
+    ) -> Result<String> {
+        self.handle_pipeline_returning_id_inner(
+            Some(run_id),
+            task,
+            flow,
+            output_format,
+            timeout,
+            verbose,
+            output_file,
+            budget,
+            run_budget_tokens,
+            auto_commit,
+            create_pr,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn handle_pipeline_returning_id_inner(
+        &self,
+        reserved_run_id: Option<&str>,
+        task: &str,
+        flow: &str,
+        output_format: &str,
+        timeout: u64,
+        verbose: bool,
+        output_file: Option<&Path>,
+        budget: Option<f64>,
+        run_budget_tokens: Option<u64>,
+        auto_commit: bool,
+        create_pr: bool,
+    ) -> Result<String> {
         let (run_id, result) = self
             .execute_pipeline_core(
+                reserved_run_id,
                 task,
                 flow,
                 output_format,
@@ -299,6 +365,14 @@ impl CliRunner {
                 run_budget_tokens,
             )
             .await?;
+
+        if !result.is_success() {
+            return Err(anyhow!(
+                "pipeline failed with status {:?} (exit code {})",
+                result.status,
+                result.exit_code().as_code()
+            ));
+        }
 
         // Post-pipeline assisted flow: auto-detect → execute → ask OK/NG
         self.run_post_pipeline_flow(task, flow, &run_id, &result, auto_commit, create_pr)
@@ -314,6 +388,7 @@ impl CliRunner {
     #[allow(clippy::too_many_arguments)]
     async fn execute_pipeline_core(
         &self,
+        reserved_run_id: Option<&str>,
         task: &str,
         flow: &str,
         output_format: &str,
@@ -366,10 +441,14 @@ impl CliRunner {
         }
 
         // Configure event recorder for observability
-        let run_id = uuid::Uuid::new_v4().to_string();
-        if let Ok(recorder) = crate::events::EventRecorder::new(&run_id).await {
-            engine.set_event_recorder(recorder);
-        }
+        let run_id = reserved_run_id
+            .map(str::to_string)
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let runs_dir = self.repo_path.join(".ccswarm").join("runs");
+        let recorder = crate::events::EventRecorder::new_in_runs_dir(runs_dir, &run_id)
+            .await
+            .context("Failed to initialize run event recorder")?;
+        engine.set_event_recorder(recorder);
 
         // Set up real-time progress display
         let (progress_tx, mut progress_rx) =
@@ -429,10 +508,6 @@ impl CliRunner {
             );
         } else {
             println!("{}", formatted);
-        }
-
-        if !result.is_success() {
-            std::process::exit(result.exit_code().as_code());
         }
 
         Ok((run_id, result))

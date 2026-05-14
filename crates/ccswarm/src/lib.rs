@@ -17,7 +17,9 @@ pub mod hooks;
 pub mod identity;
 pub(crate) mod providers;
 pub mod resource;
+pub mod run_id;
 pub mod session;
+pub mod tracker;
 pub mod utils;
 pub mod workflow;
 
@@ -30,8 +32,8 @@ pub mod workflow;
 /// crates and can't reach `pub(crate)` items.
 #[doc(hidden)]
 pub mod bdd_api {
-    pub use crate::cli::handlers::run_utils::validate_run_id;
     pub use crate::cli::handlers::workflow::suggest_flow_for_task;
+    pub use crate::run_id::validate_run_id;
 
     /// Resolve which provider kind a flow stage should use, mirroring the
     /// precedence in `FlowEngine::execute_stage`:

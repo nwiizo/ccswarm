@@ -18,6 +18,8 @@ use ai_session::persistence::PersistenceManager;
 use crate::identity::AgentIdentity;
 use crate::providers::{ProviderKind, ProviderOptions};
 
+const DEFAULT_CONTINUATION_PROMPT: &str = "The previous turn completed but the task is still active. Continue with the next sub-step. Stop when the task is fully done or you cannot make progress.";
+
 /// Result of an AISessionBridge execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BridgeResult {
@@ -48,6 +50,32 @@ pub struct BridgeResult {
     pub attention: AttentionState,
 }
 
+/// Controls whether a stage is allowed to continue in the same provider thread.
+#[derive(Debug, Clone)]
+pub enum ContinuationPolicy {
+    SingleTurn,
+    MultiTurn {
+        max_turns: u32,
+        continuation_prompt: String,
+    },
+}
+
+impl ContinuationPolicy {
+    pub fn multi_turn(max_turns: u32) -> Self {
+        Self::MultiTurn {
+            max_turns,
+            continuation_prompt: DEFAULT_CONTINUATION_PROMPT.to_string(),
+        }
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for ContinuationPolicy {
+    fn default() -> Self {
+        Self::SingleTurn
+    }
+}
+
 /// Options for a single stage execution. Provider-specific flag mapping happens in
 /// [`crate::providers`]; unsupported fields are silently ignored by providers that don't
 /// understand them, keeping flow YAML portable.
@@ -67,6 +95,8 @@ pub struct MovementExecOptions {
     pub worktree_name: Option<String>,
     /// Session ID for continuation.
     pub session_id: Option<String>,
+    /// Same-thread continuation policy.
+    pub continuation: ContinuationPolicy,
 }
 
 /// Claude Code CLI execution + ai-session result management layer.
@@ -83,6 +113,19 @@ pub struct AISessionBridge {
     output_parser: OutputParser,
     /// Session persistence manager
     persistence: PersistenceManager,
+}
+
+#[derive(Debug, Clone)]
+struct BridgeExecutionMetadata {
+    provider: ProviderKind,
+    session_id: Option<String>,
+    same_thread_continuation: bool,
+}
+
+#[derive(Debug, Clone)]
+struct BridgeExecution {
+    result: BridgeResult,
+    metadata: BridgeExecutionMetadata,
 }
 
 impl AISessionBridge {
@@ -162,17 +205,36 @@ impl AISessionBridge {
                 tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
             }
 
-            match self
-                .execute_once(
-                    agent_id,
-                    prompt,
-                    _identity,
-                    working_dir,
-                    agent_name,
-                    options,
-                )
-                .await
-            {
+            let attempt_result = match &options.continuation {
+                ContinuationPolicy::SingleTurn => {
+                    self.execute_once(
+                        agent_id,
+                        prompt,
+                        _identity,
+                        working_dir,
+                        agent_name,
+                        options,
+                    )
+                    .await
+                }
+                ContinuationPolicy::MultiTurn { .. } => {
+                    // TODO: per-turn retry.
+                    self.execute_multi_turn(
+                        agent_id,
+                        prompt,
+                        _identity,
+                        working_dir,
+                        agent_name,
+                        max_retries,
+                        retry_delay_ms,
+                        options,
+                        &options.continuation,
+                    )
+                    .await
+                }
+            };
+
+            match attempt_result {
                 Ok(result) => return Ok(result),
                 Err(e) => {
                     tracing::warn!("Claude Code CLI attempt {} failed: {}", attempt + 1, e);
@@ -182,6 +244,139 @@ impl AISessionBridge {
         }
 
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("All retry attempts failed")))
+    }
+
+    /// Execute a stage across multiple turns in the same provider thread.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn execute_multi_turn(
+        &self,
+        agent_id: &str,
+        prompt: &str,
+        _identity: &AgentIdentity,
+        working_dir: &Path,
+        agent_name: Option<&str>,
+        _max_retries: u32,
+        _retry_delay_ms: u64,
+        options: &MovementExecOptions,
+        continuation: &ContinuationPolicy,
+    ) -> Result<BridgeResult> {
+        let (max_turns, continuation_prompt) = match continuation {
+            ContinuationPolicy::SingleTurn => {
+                return self
+                    .execute_once(
+                        agent_id,
+                        prompt,
+                        _identity,
+                        working_dir,
+                        agent_name,
+                        options,
+                    )
+                    .await;
+            }
+            ContinuationPolicy::MultiTurn {
+                max_turns,
+                continuation_prompt,
+            } => ((*max_turns).max(1), continuation_prompt),
+        };
+
+        let provider_kind = options.provider.unwrap_or(ProviderKind::Claude);
+        let provider = crate::providers::resolve(provider_kind);
+        if !provider
+            .same_thread_continuation()
+            .supports_explicit_session_id()
+        {
+            return Err(anyhow::anyhow!(
+                "{} provider does not support same-thread multi-turn continuation",
+                provider_kind.as_str()
+            ));
+        }
+
+        let session_id = options
+            .session_id
+            .clone()
+            .or_else(|| {
+                self.context_histories
+                    .get(agent_id)
+                    .map(|context| context.session_id.to_string())
+            })
+            .unwrap_or_else(|| SessionId::new().to_string());
+
+        let mut turn_options = options.clone();
+        turn_options.session_id = Some(session_id.clone());
+
+        let first_execution = self
+            .execute_once_with_metadata(
+                agent_id,
+                prompt,
+                _identity,
+                working_dir,
+                agent_name,
+                &turn_options,
+            )
+            .await?;
+        ensure_same_thread_continuation(&first_execution.metadata, &session_id)?;
+
+        let mut result = first_execution.result;
+
+        if !result.success {
+            return Ok(result);
+        }
+
+        let mut merged_raw = vec![format!("--- TURN 1 ---\n\n{}", result.raw)];
+        let mut duration_ms = result.duration_ms;
+        let mut tokens_in = result.tokens_in.unwrap_or(0);
+        let mut tokens_out = result.tokens_out.unwrap_or(0);
+        let mut previous_turn_raw = result.raw.clone();
+
+        result.raw = merged_raw.join("\n\n");
+        result.duration_ms = duration_ms;
+        result.tokens_in = Some(tokens_in);
+        result.tokens_out = Some(tokens_out);
+
+        if result.success && is_task_terminal(&result.parsed) {
+            return Ok(result);
+        }
+
+        for turn in 2..=max_turns {
+            let continuation_prompt = format!(
+                "{}\n\n# Previous turn output (truncated)\n{}",
+                continuation_prompt,
+                truncate(&previous_turn_raw, 2048)
+            );
+
+            let next_execution = self
+                .execute_once_with_metadata(
+                    agent_id,
+                    &continuation_prompt,
+                    _identity,
+                    working_dir,
+                    agent_name,
+                    &turn_options,
+                )
+                .await?;
+            ensure_same_thread_continuation(&next_execution.metadata, &session_id)?;
+            let next_result = next_execution.result;
+
+            previous_turn_raw = next_result.raw.clone();
+            result = merge_turn_result(
+                &mut merged_raw,
+                &mut duration_ms,
+                &mut tokens_in,
+                &mut tokens_out,
+                turn,
+                next_result,
+            );
+
+            if !result.success {
+                return Ok(result);
+            }
+
+            if result.success && is_task_terminal(&result.parsed) {
+                return Ok(result);
+            }
+        }
+
+        Ok(result)
     }
 
     /// Single execution attempt — delegates command construction to the selected provider.
@@ -194,6 +389,28 @@ impl AISessionBridge {
         agent_name: Option<&str>,
         options: &MovementExecOptions,
     ) -> Result<BridgeResult> {
+        self.execute_once_with_metadata(
+            agent_id,
+            prompt,
+            _identity,
+            working_dir,
+            agent_name,
+            options,
+        )
+        .await
+        .map(|execution| execution.result)
+    }
+
+    /// Single execution attempt with provider metadata for continuation safety checks.
+    async fn execute_once_with_metadata(
+        &self,
+        agent_id: &str,
+        prompt: &str,
+        _identity: &AgentIdentity,
+        working_dir: &Path,
+        agent_name: Option<&str>,
+        options: &MovementExecOptions,
+    ) -> Result<BridgeExecution> {
         let start = std::time::Instant::now();
 
         let kind = options.provider.unwrap_or(ProviderKind::Claude);
@@ -313,15 +530,27 @@ impl AISessionBridge {
         let tokens_in = Some((input_bytes / 4) as u64);
         let tokens_out = Some((raw_output.len() / 4) as u64);
 
-        Ok(BridgeResult {
-            raw: raw_output,
-            parsed,
-            success,
-            duration_ms: duration.as_millis() as u64,
-            compression_ratio,
-            tokens_in,
-            tokens_out,
-            attention,
+        let same_thread_continuation = provider
+            .same_thread_continuation()
+            .supports_explicit_session_id()
+            && options.session_id.is_some();
+
+        Ok(BridgeExecution {
+            result: BridgeResult {
+                raw: raw_output,
+                parsed,
+                success,
+                duration_ms: duration.as_millis() as u64,
+                compression_ratio,
+                tokens_in,
+                tokens_out,
+                attention,
+            },
+            metadata: BridgeExecutionMetadata {
+                provider: kind,
+                session_id: options.session_id.clone(),
+                same_thread_continuation,
+            },
         })
     }
 
@@ -369,9 +598,79 @@ fn is_parsed_success(parsed: &ParsedOutput) -> bool {
     }
 }
 
+fn is_task_terminal(parsed: &ParsedOutput) -> bool {
+    match parsed {
+        ParsedOutput::BuildOutput { status, .. } => {
+            matches!(status, ai_session::output::BuildStatus::Success)
+        }
+        ParsedOutput::TestResults { failed, .. } => *failed == 0,
+        _ => false,
+    }
+}
+
+fn truncate(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        return s.to_string();
+    }
+
+    let boundary = s
+        .char_indices()
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= max_bytes)
+        .last()
+        .unwrap_or(0);
+
+    s[..boundary].to_string()
+}
+
+fn merge_turn_result(
+    merged_raw: &mut Vec<String>,
+    duration_ms: &mut u64,
+    tokens_in: &mut u64,
+    tokens_out: &mut u64,
+    turn: u32,
+    next_result: BridgeResult,
+) -> BridgeResult {
+    merged_raw.push(format!("--- TURN {} ---\n\n{}", turn, next_result.raw));
+    *duration_ms = duration_ms.saturating_add(next_result.duration_ms);
+    *tokens_in = tokens_in.saturating_add(next_result.tokens_in.unwrap_or(0));
+    *tokens_out = tokens_out.saturating_add(next_result.tokens_out.unwrap_or(0));
+
+    BridgeResult {
+        raw: merged_raw.join("\n\n"),
+        parsed: next_result.parsed,
+        success: next_result.success,
+        duration_ms: *duration_ms,
+        compression_ratio: next_result.compression_ratio,
+        tokens_in: Some(*tokens_in),
+        tokens_out: Some(*tokens_out),
+        attention: next_result.attention,
+    }
+}
+
+fn ensure_same_thread_continuation(
+    metadata: &BridgeExecutionMetadata,
+    expected_session_id: &str,
+) -> Result<()> {
+    if metadata.same_thread_continuation
+        && metadata.session_id.as_deref() == Some(expected_session_id)
+    {
+        return Ok(());
+    }
+
+    Err(anyhow::anyhow!(
+        "{} provider did not confirm same-thread continuation for session {}",
+        metadata.provider.as_str(),
+        expected_session_id
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::AgentRole;
+    use ai_session::output::{BuildStatus, ExecutionMetrics, TestDetails};
+    use std::collections::HashMap;
     use std::path::PathBuf;
 
     #[test]
@@ -401,5 +700,210 @@ mod tests {
                 failed_tests: vec!["test_one".to_string()],
             },
         }));
+    }
+
+    #[test]
+    fn test_continuation_policy_default_is_single_turn() {
+        assert!(matches!(
+            ContinuationPolicy::default(),
+            ContinuationPolicy::SingleTurn
+        ));
+    }
+
+    #[test]
+    fn test_is_task_terminal_strict() {
+        assert!(is_task_terminal(&ParsedOutput::BuildOutput {
+            status: BuildStatus::Success,
+            artifacts: Vec::new(),
+        }));
+        assert!(!is_task_terminal(&ParsedOutput::BuildOutput {
+            status: BuildStatus::Failed("failed".to_string()),
+            artifacts: Vec::new(),
+        }));
+        assert!(is_task_terminal(&ParsedOutput::TestResults {
+            passed: 3,
+            failed: 0,
+            details: TestDetails::default(),
+        }));
+        assert!(!is_task_terminal(&ParsedOutput::TestResults {
+            passed: 3,
+            failed: 1,
+            details: TestDetails::default(),
+        }));
+        assert!(!is_task_terminal(&ParsedOutput::PlainText(
+            "done".to_string()
+        )));
+        assert!(!is_task_terminal(&ParsedOutput::CodeExecution {
+            result: "done".to_string(),
+            metrics: ExecutionMetrics {
+                execution_time: std::time::Duration::from_millis(1),
+                memory_usage: None,
+                cpu_usage: None,
+            },
+        }));
+    }
+
+    #[test]
+    fn test_truncate_is_utf8_safe() {
+        let input = "abあcd";
+
+        assert_eq!(truncate(input, 4), "ab");
+        assert_eq!(truncate(input, 5), "abあ");
+        assert_eq!(truncate(input, 99), input);
+    }
+
+    #[test]
+    fn test_multi_turn_constructor_sets_default_prompt() {
+        match ContinuationPolicy::multi_turn(3) {
+            ContinuationPolicy::MultiTurn {
+                max_turns,
+                continuation_prompt,
+            } => {
+                assert_eq!(max_turns, 3);
+                assert_eq!(continuation_prompt, DEFAULT_CONTINUATION_PROMPT);
+            }
+            ContinuationPolicy::SingleTurn => {
+                panic!("multi_turn constructor returned SingleTurn");
+            }
+        }
+    }
+
+    fn bridge_result(
+        raw: &str,
+        parsed: ParsedOutput,
+        success: bool,
+        duration_ms: u64,
+        tokens_in: Option<u64>,
+        tokens_out: Option<u64>,
+    ) -> BridgeResult {
+        BridgeResult {
+            raw: raw.to_string(),
+            parsed,
+            success,
+            duration_ms,
+            compression_ratio: Some(1.0),
+            tokens_in,
+            tokens_out,
+            attention: AttentionState::Idle,
+        }
+    }
+
+    #[test]
+    fn test_merge_turn_result_aggregates_successful_turn() {
+        let mut merged_raw = vec!["--- TURN 1 ---\n\nfirst".to_string()];
+        let mut duration_ms = 10;
+        let mut tokens_in = 3;
+        let mut tokens_out = 5;
+
+        let result = merge_turn_result(
+            &mut merged_raw,
+            &mut duration_ms,
+            &mut tokens_in,
+            &mut tokens_out,
+            2,
+            bridge_result(
+                "second",
+                ParsedOutput::PlainText("continue".to_string()),
+                true,
+                20,
+                Some(7),
+                Some(11),
+            ),
+        );
+
+        assert_eq!(
+            result.raw,
+            "--- TURN 1 ---\n\nfirst\n\n--- TURN 2 ---\n\nsecond"
+        );
+        assert_eq!(result.duration_ms, 30);
+        assert_eq!(result.tokens_in, Some(10));
+        assert_eq!(result.tokens_out, Some(16));
+        assert!(result.success);
+    }
+
+    #[test]
+    fn test_merge_turn_result_includes_failed_later_turn() {
+        let mut merged_raw = vec!["--- TURN 1 ---\n\nfirst".to_string()];
+        let mut duration_ms = 10;
+        let mut tokens_in = 3;
+        let mut tokens_out = 5;
+
+        let result = merge_turn_result(
+            &mut merged_raw,
+            &mut duration_ms,
+            &mut tokens_in,
+            &mut tokens_out,
+            2,
+            bridge_result(
+                "failed",
+                ParsedOutput::TestResults {
+                    passed: 1,
+                    failed: 1,
+                    details: TestDetails::default(),
+                },
+                false,
+                20,
+                None,
+                Some(11),
+            ),
+        );
+
+        assert_eq!(
+            result.raw,
+            "--- TURN 1 ---\n\nfirst\n\n--- TURN 2 ---\n\nfailed"
+        );
+        assert_eq!(result.duration_ms, 30);
+        assert_eq!(result.tokens_in, Some(3));
+        assert_eq!(result.tokens_out, Some(16));
+        assert!(!result.success);
+        assert!(matches!(
+            result.parsed,
+            ParsedOutput::TestResults { failed: 1, .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_multi_turn_rejects_provider_without_same_thread_continuation() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let bridge = AISessionBridge::new(dir.path().join("sessions"));
+        let identity = AgentIdentity {
+            agent_id: "agent-1".to_string(),
+            specialization: AgentRole::Search {
+                technologies: Vec::new(),
+                responsibilities: Vec::new(),
+                boundaries: Vec::new(),
+            },
+            workspace_path: dir.path().to_path_buf(),
+            env_vars: HashMap::new(),
+            session_id: "session-1".to_string(),
+            parent_process_id: "parent-1".to_string(),
+            initialized_at: chrono::Utc::now(),
+        };
+        let options = MovementExecOptions {
+            provider: Some(ProviderKind::Codex),
+            continuation: ContinuationPolicy::multi_turn(2),
+            ..MovementExecOptions::default()
+        };
+
+        let err = bridge
+            .execute_multi_turn(
+                "agent-1",
+                "do work",
+                &identity,
+                dir.path(),
+                None,
+                0,
+                0,
+                &options,
+                &options.continuation,
+            )
+            .await
+            .expect_err("codex multi-turn should fail before spawning a subprocess");
+
+        assert!(
+            err.to_string()
+                .contains("does not support same-thread multi-turn continuation")
+        );
+        Ok(())
     }
 }

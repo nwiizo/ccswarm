@@ -175,7 +175,13 @@ impl EventRecorder {
     ///
     /// Creates `.ccswarm/runs/{run_id}/` if it does not yet exist.
     pub async fn new(run_id: &str) -> Result<Self> {
-        let run_dir = PathBuf::from(".ccswarm").join("runs").join(run_id);
+        Self::new_in_runs_dir(PathBuf::from(".ccswarm").join("runs"), run_id).await
+    }
+
+    /// Create a new recorder under an explicit runs directory.
+    pub async fn new_in_runs_dir(runs_dir: impl Into<PathBuf>, run_id: &str) -> Result<Self> {
+        crate::run_id::validate_run_id(run_id).context("invalid run ID for event recorder")?;
+        let run_dir = runs_dir.into().join(run_id);
         fs::create_dir_all(&run_dir)
             .await
             .with_context(|| format!("failed to create run directory {:?}", run_dir))?;
@@ -605,6 +611,16 @@ mod tests {
             "run directory should have been created"
         );
         assert_eq!(recorder.run_id(), run_id);
+    }
+
+    #[tokio::test]
+    async fn test_event_recorder_rejects_path_traversal_run_id() {
+        let tmp = tempdir().expect("failed to create temp dir");
+        let result =
+            EventRecorder::new_in_runs_dir(tmp.path().join(".ccswarm").join("runs"), "..").await;
+
+        assert!(result.is_err());
+        assert!(!tmp.path().join(".ccswarm").join("runs").join("..").exists());
     }
 
     #[tokio::test]
