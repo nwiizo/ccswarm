@@ -9,7 +9,7 @@
 //!    friendly error (codex #4 finding — `gh copilot suggest` is not usable as a code
 //!    generation backend).
 
-use super::{ProviderKind, ProviderOptions, resolve};
+use super::{ProviderKind, ProviderOptions, SameThreadContinuation, resolve};
 use std::path::Path;
 
 fn argv_of(cmd: &tokio::process::Command) -> Vec<String> {
@@ -64,11 +64,29 @@ fn claude_command_includes_expected_flags() {
     assert!(argv.iter().any(|a| a == "Read,Bash"));
     assert!(argv.iter().any(|a| a == "--model"));
     assert!(argv.iter().any(|a| a == "sonnet"));
-    assert!(argv.iter().any(|a| a == "--system-prompt"));
+    assert!(argv.iter().any(|a| a == "--append-system-prompt"));
     assert!(argv.iter().any(|a| a == "be careful"));
+    // Sanity: must NOT use --system-prompt (would replace Claude Code's default).
+    assert!(!argv.iter().any(|a| a == "--system-prompt"));
     assert!(argv.iter().any(|a| a == "--max-budget-usd"));
     assert!(argv.iter().any(|a| a == "--worktree"));
     assert!(argv.iter().any(|a| a == "wt-1"));
+}
+
+#[test]
+fn provider_continuation_capabilities_are_explicit() {
+    assert_eq!(
+        resolve(ProviderKind::Claude).same_thread_continuation(),
+        SameThreadContinuation::ExplicitSessionId
+    );
+    assert_eq!(
+        resolve(ProviderKind::Codex).same_thread_continuation(),
+        SameThreadContinuation::Unsupported
+    );
+    assert_eq!(
+        resolve(ProviderKind::Copilot).same_thread_continuation(),
+        SameThreadContinuation::Unsupported
+    );
 }
 
 #[test]

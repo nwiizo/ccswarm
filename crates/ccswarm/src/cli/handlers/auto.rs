@@ -6,9 +6,10 @@
 //! inspect what the loop did via `ccswarm tail` / `ccswarm runs list`.
 
 use super::super::*;
-use super::queue_state::{QUEUE_FILE, load_queue, save_queue};
+use super::queue_state::{QUEUE_FILE, QueueState, load_queue};
 use chrono::Utc;
 use std::path::Path;
+use tracing::info;
 
 const AUTO_LOG: &str = ".ccswarm/auto.ndjson";
 
@@ -54,8 +55,9 @@ impl CliRunner {
 
         // Path 1: a single explicit task bypasses the queue.
         if let Some(task_body) = explicit_task {
+            let run_id = uuid::Uuid::new_v4().to_string();
             let (outcome, _run_id) = self
-                .auto_run_one("direct", task_body, flow, timeout, create_pr)
+                .auto_run_one(&run_id, "direct", task_body, flow, timeout, create_pr)
                 .await;
             processed += 1;
             match outcome {
@@ -131,66 +133,112 @@ impl CliRunner {
         ok: &mut usize,
         ng: &mut usize,
     ) -> Result<LoopSignal> {
-        let mut queue = load_queue(queue_path).await?;
-        let pending_positions: Vec<usize> = queue
+        let queue = load_queue(queue_path).await?;
+        let pending = queue
             .tasks
             .iter()
-            .enumerate()
-            .filter(|(_, t)| t.state == "pending")
-            .map(|(i, _)| i)
-            .collect();
+            .filter(|task| task.state == "pending")
+            .cloned()
+            .collect::<Vec<_>>();
 
-        if pending_positions.is_empty() {
+        if pending.is_empty() {
             return Ok(LoopSignal::Continue);
         }
 
-        for idx in pending_positions {
+        let queue_state = QueueState::new(queue_path.to_path_buf());
+
+        for queued_task in pending {
             if max_iterations > 0 && *processed >= max_iterations {
                 return Ok(LoopSignal::Stop("max iterations reached".to_string()));
             }
 
-            let task_id = queue.tasks[idx].id.clone();
-            let task_body = queue.tasks[idx].task.clone();
-            let flow_name = queue.tasks[idx]
+            let task_id = queued_task.id.clone();
+            let task_body = queued_task.task.clone();
+            let flow_name = queued_task
                 .flow
                 .clone()
                 .unwrap_or_else(|| piece_default.to_string());
+            let run_id = uuid::Uuid::new_v4().to_string();
 
-            queue.tasks[idx].state = "running".to_string();
-            save_queue(queue_path, &queue).await?;
+            if !queue_state.try_claim(&task_id, &run_id).await? {
+                info!(task_id = %task_id, "skipping: already claimed by another drain");
+                continue;
+            }
+
+            if let Err(e) = queue_state
+                .update_task(&task_id, |task| {
+                    task.state = "running".to_string();
+                    Ok(())
+                })
+                .await
+            {
+                queue_state
+                    .release(&task_id, &format!("failed: {e}"))
+                    .await?;
+                return Err(e);
+            }
 
             let (outcome, run_id) = self
-                .auto_run_one(&task_id, &task_body, &flow_name, timeout, create_pr)
+                .auto_run_one(
+                    &run_id, &task_id, &task_body, &flow_name, timeout, create_pr,
+                )
                 .await;
             *processed += 1;
 
-            // Record run_id regardless of outcome so operators can jump from the
-            // queue file to the events.ndjson even for failed tasks.
-            queue.tasks[idx].run_id = run_id;
-
             match outcome {
                 Ok(()) => {
-                    queue.tasks[idx].state = "completed".to_string();
-                    queue.tasks[idx].completed_at = Some(Utc::now());
+                    if let Err(e) = queue_state
+                        .update_task(&task_id, |task| {
+                            task.state = "completed".to_string();
+                            task.completed_at = Some(Utc::now());
+                            // Record run_id so operators can jump from the queue file
+                            // to the run events even for autonomous executions.
+                            task.run_id = run_id.clone();
+                            Ok(())
+                        })
+                        .await
+                    {
+                        queue_state
+                            .release(&task_id, &format!("failed: {e}"))
+                            .await?;
+                        return Err(e);
+                    }
+                    queue_state.release(&task_id, "completed").await?;
                     *ok += 1;
                 }
                 Err(e) => {
-                    queue.tasks[idx].state = "failed".to_string();
-                    queue.tasks[idx].completed_at = Some(Utc::now());
+                    let error_message = e.to_string();
+                    if let Err(update_error) = queue_state
+                        .update_task(&task_id, |task| {
+                            task.state = "failed".to_string();
+                            task.completed_at = Some(Utc::now());
+                            // Record run_id regardless of outcome so operators can jump
+                            // from the queue file to events.ndjson even for failed tasks.
+                            task.run_id = run_id.clone();
+                            Ok(())
+                        })
+                        .await
+                    {
+                        queue_state
+                            .release(&task_id, &format!("failed: {update_error}"))
+                            .await?;
+                        return Err(update_error);
+                    }
+                    queue_state
+                        .release(&task_id, &format!("failed: {error_message}"))
+                        .await?;
                     *ng += 1;
                     eprintln!(
                         "{} {} failed: {}",
                         "✗".bright_red().bold(),
                         task_id.bright_yellow(),
-                        e
+                        error_message
                     );
-                    save_queue(queue_path, &queue).await?;
                     if stop_on_error {
                         return Ok(LoopSignal::Stop(format!("task {} failed", task_id)));
                     }
                 }
             }
-            save_queue(queue_path, &queue).await?;
         }
 
         Ok(LoopSignal::Continue)
@@ -201,6 +249,7 @@ impl CliRunner {
     /// codex #6 (auto.ndjson had no cross-reference to run events.ndjson).
     async fn auto_run_one(
         &self,
+        run_id: &str,
         task_id: &str,
         task_body: &str,
         flow_name: &str,
@@ -226,8 +275,8 @@ impl CliRunner {
         .await;
 
         let result = self
-            .handle_pipeline_returning_id(
-                task_body, flow_name, "text", timeout, false, None, false, None,
+            .handle_pipeline_returning_reserved_id(
+                run_id, task_body, flow_name, "text", timeout, false, None, false, None,
                 None, // run_budget_tokens
                 None, // model override
                 /* auto_commit = */ true, create_pr,
@@ -258,12 +307,13 @@ impl CliRunner {
                     "auto.task_end",
                     serde_json::json!({
                         "task_id": task_id,
+                        "run_id": run_id,
                         "status": "failed",
                         "error": e.to_string(),
                     }),
                 )
                 .await;
-                (Err(anyhow!("{}", e)), None)
+                (Err(anyhow!("{}", e)), Some(run_id.to_string()))
             }
         }
     }

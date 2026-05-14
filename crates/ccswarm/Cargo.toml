@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.6.0"
+version = "0.6.1"
 edition.workspace = true
 authors.workspace = true
 description = "AI Agent Workflow DevOps toolchain complementing Claude Code Agent Teams"
@@ -61,7 +61,7 @@ glob = "0.3"
 
 # Process management
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", features = ["process"] }
+nix = { version = "0.31", features = ["fs", "process"] }
 
 # Configuration
 config = "0.15"

@@ -2,13 +2,19 @@
 
 use std::path::Path;
 
-use super::{AgentProvider, ProviderKind, ProviderOptions, capitalize_first};
+use super::{
+    AgentProvider, ProviderKind, ProviderOptions, SameThreadContinuation, capitalize_first,
+};
 
 pub(crate) struct ClaudeProvider;
 
 impl AgentProvider for ClaudeProvider {
     fn kind(&self) -> ProviderKind {
         ProviderKind::Claude
+    }
+
+    fn same_thread_continuation(&self) -> SameThreadContinuation {
+        SameThreadContinuation::ExplicitSessionId
     }
 
     fn build_command(
@@ -46,7 +52,11 @@ impl AgentProvider for ClaudeProvider {
         }
 
         if let Some(sys) = &options.system_prompt {
-            cmd.args(["--system-prompt", sys]);
+            // Use --append-system-prompt instead of --system-prompt: facet personas
+            // are role *additions*, not replacements. --system-prompt would discard
+            // Claude Code's default system prompt (CLAUDE.md auto-load, tool guidance,
+            // etc.) and degrade behavior; --append-system-prompt preserves those.
+            cmd.args(["--append-system-prompt", sys]);
         }
 
         if let Some(budget) = options.max_budget {

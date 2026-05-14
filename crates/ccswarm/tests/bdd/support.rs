@@ -100,6 +100,6 @@ pub(crate) fn queue_clear(repo: &Path) -> Result<()> {
 pub(crate) fn queue_add_both_sources(_repo: &Path, _positional: &str, _file: &Path) -> Result<()> {
     // Mirror the CLI's guard: refuse when more than one input source is given.
     Err(anyhow!(
-        "choose only one of: --from-issue <N>, --file <path>, or `-` (stdin)"
+        "choose only one of: --from-issue <issue>, --file <path>, or `-` (stdin)"
     ))
 }

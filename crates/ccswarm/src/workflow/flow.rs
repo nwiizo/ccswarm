@@ -1065,6 +1065,7 @@ impl FlowEngine {
                 max_budget: self.budget_usd,
                 worktree_name: None,
                 session_id: None,
+                continuation: crate::session::bridge::ContinuationPolicy::SingleTurn,
             };
 
             match bridge
