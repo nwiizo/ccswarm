@@ -473,6 +473,8 @@ mod tests {
             condition: RuleCondition::Simple(condition.to_string()),
             next: next.to_string(),
             priority: 0,
+            interactive_only: false,
+            requires_user_input: false,
         }
     }
 
@@ -483,6 +485,8 @@ mod tests {
             },
             next: next.to_string(),
             priority: 0,
+            interactive_only: false,
+            requires_user_input: false,
         }
     }
 
@@ -555,6 +559,8 @@ mod tests {
             ])),
             next: "deploy".to_string(),
             priority: 0,
+            interactive_only: false,
+            requires_user_input: false,
         }];
 
         let mut parallel_outputs = HashMap::new();
@@ -578,6 +584,8 @@ mod tests {
             ])),
             next: "fix".to_string(),
             priority: 0,
+            interactive_only: false,
+            requires_user_input: false,
         }];
 
         let mut parallel_outputs = HashMap::new();
