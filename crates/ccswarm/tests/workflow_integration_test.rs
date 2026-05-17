@@ -38,6 +38,8 @@ fn make_movement(id: &str, rules: Vec<(&str, &str)>) -> Stage {
                 condition: RuleCondition::Simple(cond.to_string()),
                 next: next.to_string(),
                 priority: 0,
+                interactive_only: false,
+                requires_user_input: false,
             })
             .collect(),
         parallel: false,
@@ -49,6 +51,7 @@ fn make_movement(id: &str, rules: Vec<(&str, &str)>) -> Stage {
         working_dir: None,
         retry_delay_ms: 1000,
         pass_previous_response: true,
+        call: None,
     }
 }
 
@@ -631,11 +634,15 @@ fn test_facets_judge_prompt_composition() {
             condition: RuleCondition::Simple("success".to_string()),
             next: "deploy".to_string(),
             priority: 0,
+            interactive_only: false,
+            requires_user_input: false,
         },
         MovementRule {
             condition: RuleCondition::Simple("needs_fix".to_string()),
             next: "fix".to_string(),
             priority: 1,
+            interactive_only: false,
+            requires_user_input: false,
         },
     ];
     let tag_instructions = MovementJudge::generate_tag_instructions(&rules);

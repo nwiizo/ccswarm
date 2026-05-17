@@ -336,6 +336,8 @@ mod tests {
                     condition: RuleCondition::Simple(condition.to_string()),
                     next: next.to_string(),
                     priority: 0,
+                    interactive_only: false,
+                    requires_user_input: false,
                 })
                 .collect(),
             parallel: false,
@@ -347,6 +349,7 @@ mod tests {
             working_dir: None,
             retry_delay_ms: 1000,
             pass_previous_response: true,
+            call: None,
         }
     }
 

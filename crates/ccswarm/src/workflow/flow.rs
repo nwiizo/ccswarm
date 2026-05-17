@@ -158,6 +158,34 @@ pub struct Stage {
     /// Set to false for fix stages where fresh context is preferred
     #[serde(default = "default_true")]
     pub pass_previous_response: bool,
+
+    /// Invoke another flow as this stage's body. When set, the stage's
+    /// `instruction` / `persona` / `policy` are ignored and the named child
+    /// flow runs end-to-end; the child's final output becomes this stage's
+    /// output, which downstream rules then evaluate as usual. Adopted from
+    /// takt's `kind: workflow_call`.
+    ///
+    /// Variables in `call.args` are injected into the child's initial state
+    /// after template-expanding values against the parent's variables. The
+    /// child writes reports into the same `.ccswarm/runs/<id>/reports/`
+    /// directory as the parent; declared report names must be globally
+    /// unique within a run (v0.7.0 first-cut; namespacing is deferred).
+    #[serde(default)]
+    pub call: Option<WorkflowCallSpec>,
+}
+
+/// Specification for invoking another flow as a single stage's body.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowCallSpec {
+    /// Name of the child flow to invoke. Must be registered with the
+    /// `FlowEngine` (built-in or loaded). Unknown names fail the stage.
+    pub flow: String,
+
+    /// Variables to seed into the child flow's initial state. Values are
+    /// expanded against the parent's variables (e.g. `"task": "{task}"` pipes
+    /// the parent's `task` through).
+    #[serde(default)]
+    pub args: HashMap<String, String>,
 }
 
 fn default_true() -> bool {
@@ -193,6 +221,19 @@ pub struct MovementRule {
     /// Optional priority for rule ordering (higher = checked first)
     #[serde(default)]
     pub priority: u8,
+
+    /// Skip this rule entirely in non-interactive (pipeline / queue drain / CI)
+    /// runs. Use for review-fix loops that only make sense when a human is in
+    /// the loop. Adopted from takt's `interactive_only` rule field.
+    #[serde(default)]
+    pub interactive_only: bool,
+
+    /// Indicates the rule's `next` stage expects human input. Pipeline runs
+    /// treat this rule as inert (same as `interactive_only`); interactive runs
+    /// flag the upcoming stage as awaiting user reply so the UI can prompt.
+    /// Adopted from takt's `requires_user_input` rule field.
+    #[serde(default)]
+    pub requires_user_input: bool,
 }
 
 /// Condition types for stage routing
@@ -270,6 +311,38 @@ pub struct OutputContract {
     /// added beyond the spec. This closes JTBD issue #44 (spec-drift detection).
     #[serde(default)]
     pub allowed_files: Vec<String>,
+
+    /// Named reports the stage produces under `.ccswarm/runs/<run-id>/reports/`.
+    ///
+    /// Each entry maps to a deterministically named file (e.g. `plan.md`) that
+    /// downstream stages can reference via the `{report:<name>}` template
+    /// variable. Adopted from takt's `output_contracts.report` to replace the
+    /// brittle `{plan_output}` state-variable wiring with a contract that's
+    /// readable from disk after the run.
+    ///
+    /// v0.7.0 semantics: if exactly one report is declared, the stage's full
+    /// response is written verbatim to it. Multi-report support (with AI-emitted
+    /// `<<<REPORT:name>>>` delimiters) is intentionally deferred.
+    #[serde(default)]
+    pub reports: Vec<ReportContract>,
+}
+
+/// A named report file a stage produces under the run's `reports/` directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReportContract {
+    /// File name written under `.ccswarm/runs/<run-id>/reports/`. Must not contain
+    /// path separators — validated at flow-load time.
+    pub name: String,
+
+    /// Format hint surfaced in the prompt to guide the model (e.g. `markdown`,
+    /// `json`, `text`).
+    #[serde(default = "default_format")]
+    pub format: String,
+
+    /// Optional one-line description rendered into the prompt's output-contract
+    /// block to clarify intent (e.g. "investigation summary").
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// Result of output contract validation
@@ -497,6 +570,13 @@ pub struct FlowEngine {
     /// flow aborts before the next stage starts. Complements `budget_usd`, which
     /// only caps a single stage and only works for Claude.
     run_token_cap: Option<u64>,
+    /// Whether this engine instance runs in interactive mode. Pipeline / queue
+    /// drain / CI runs default to `false` and skip rules tagged
+    /// `interactive_only` or `requires_user_input`. Interactive entry points
+    /// (e.g. `ccswarm` with no subcommand) call `set_interactive(true)` so
+    /// human-in-the-loop rules are honored. Adopted from takt's
+    /// interactive_only / requires_user_input rule fields.
+    interactive: bool,
 }
 
 /// Progress notification sent after each stage completes
@@ -538,7 +618,15 @@ impl FlowEngine {
             progress_tx: None,
             budget_usd: None,
             run_token_cap: None,
+            interactive: false,
         }
+    }
+
+    /// Mark this engine as running in interactive mode. Pipeline / queue drain
+    /// runs leave the default (`false`), which filters out rules tagged
+    /// `interactive_only` or `requires_user_input`.
+    pub fn set_interactive(&mut self, interactive: bool) {
+        self.interactive = interactive;
     }
 
     /// Set a per-stage budget cap in USD. Forwarded to Claude via `--max-budget-usd`;
@@ -714,6 +802,17 @@ impl FlowEngine {
             name, state.current_movement
         );
 
+        // Stash run_id in state so expand_template can resolve `{report:<name>}`
+        // by reading from `.ccswarm/runs/<run_id>/reports/`. Uses a double-underscore
+        // prefix to flag as internal — user instructions should never name a variable
+        // `__run_id`.
+        if !run_id.is_empty() {
+            state.variables.insert(
+                "__run_id".to_string(),
+                serde_json::Value::String(run_id.clone()),
+            );
+        }
+
         let mut cumulative_tokens: u64 = 0;
 
         loop {
@@ -883,7 +982,10 @@ impl FlowEngine {
                 .variables
                 .insert(format!("{}_output", stage.id), output.clone());
 
-            // Save stage report to .ccswarm/runs/{run-id}/reports/{stage}.md
+            // Save stage report to .ccswarm/runs/{run-id}/reports/.
+            // Always writes a `<stage.id>.md` for backward-compat; additionally
+            // writes any declared `output_contract.reports[*].name` files so
+            // downstream stages can pull them via `{report:<name>}`.
             if !run_id.is_empty() {
                 let report_dir = std::path::PathBuf::from(".ccswarm")
                     .join("runs")
@@ -896,8 +998,27 @@ impl FlowEngine {
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
                 if !report_content.is_empty() {
-                    let report_path = report_dir.join(format!("{}.md", stage.id));
-                    let _ = tokio::fs::write(&report_path, report_content).await;
+                    let default_path = report_dir.join(format!("{}.md", stage.id));
+                    let _ = tokio::fs::write(&default_path, report_content).await;
+
+                    if let Some(contract) = stage.output_contract.as_ref() {
+                        for report in &contract.reports {
+                            if !is_safe_report_name(&report.name) {
+                                warn!(
+                                    "Skipping declared report '{}' on stage '{}': name must not contain path separators or '..'",
+                                    report.name, stage.id
+                                );
+                                continue;
+                            }
+                            let report_path = report_dir.join(&report.name);
+                            if let Err(e) = tokio::fs::write(&report_path, report_content).await {
+                                warn!(
+                                    "Failed to write declared report '{}' for stage '{}': {}",
+                                    report.name, stage.id, e
+                                );
+                            }
+                        }
+                    }
                 }
             }
 
@@ -986,6 +1107,14 @@ impl FlowEngine {
             "Stage '{}': persona={:?}, permission={:?}",
             stage.id, stage.persona, stage.permission
         );
+
+        // Sub-workflow dispatch (takt-style `kind: workflow_call`). Resolved
+        // before the local/parallel/CLI branches: a workflow_call stage's
+        // instruction is ignored, so the empty-instruction check below would
+        // otherwise short-circuit it to a local summary.
+        if let Some(call) = stage.call.as_ref() {
+            return self.execute_workflow_call(stage, call, state).await;
+        }
 
         // If instruction is empty or starts with "_local", skip Claude and produce local summary
         if stage.instruction.is_empty() || stage.instruction.starts_with("_local") {
@@ -1187,6 +1316,88 @@ impl FlowEngine {
         }))
     }
 
+    /// Execute a sub-workflow as a single stage. The child flow inherits the
+    /// parent's variables, additionally seeded with any `call.args` (with `{key}`
+    /// substitution against parent variables). On success the child's final
+    /// FlowState is collapsed into a JSON value the parent's rules can match
+    /// against; on failure the error bubbles up so the parent can route via a
+    /// FAIL rule. Re-entrant: the child runs through the same `execute_piece_state`
+    /// loop, so nesting depth is bounded only by `flow.max_stages` per level.
+    async fn execute_workflow_call(
+        &self,
+        stage: &Stage,
+        call: &WorkflowCallSpec,
+        parent_state: &FlowState,
+    ) -> Result<serde_json::Value> {
+        // Resolve the child flow up front so misspellings fail fast with a
+        // useful message rather than a downstream "stage not found".
+        let child_flow = self
+            .flows
+            .get(&call.flow)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Stage '{}' calls unknown flow '{}'. Registered flows: {}",
+                    stage.id,
+                    call.flow,
+                    self.flows.keys().cloned().collect::<Vec<_>>().join(", ")
+                )
+            })?
+            .clone();
+
+        info!(
+            "Stage '{}' invoking sub-workflow '{}' (parent_variables={}, args={})",
+            stage.id,
+            call.flow,
+            parent_state.variables.len(),
+            call.args.len()
+        );
+
+        // Seed child state with the parent's variables so `{task}`, prior
+        // `{<stage>_output}`, and `__run_id` flow through unchanged. Then layer
+        // explicit `call.args` on top with template expansion against the parent.
+        let mut child_variables = parent_state.variables.clone();
+        for (k, v) in &call.args {
+            let expanded = expand_template(v, &parent_state.variables);
+            child_variables.insert(k.clone(), serde_json::Value::String(expanded));
+        }
+
+        let child_state = FlowState {
+            flow_name: child_flow.name.clone(),
+            current_movement: child_flow.initial_movement.clone(),
+            movement_count: 0,
+            history: vec![],
+            variables: child_variables,
+            status: FlowStatus::Running,
+            started_at: Utc::now(),
+            completed_at: None,
+        };
+
+        // Box::pin the recursive call: Rust async fns can't have infinite-sized
+        // futures, and execute_workflow_call → execute_piece_state → execute_movement
+        // → execute_workflow_call would otherwise form a cycle.
+        let final_state =
+            Box::pin(self.execute_piece_state(&child_flow.name, &child_flow, child_state))
+                .await
+                .map_err(|e| anyhow::anyhow!("Sub-workflow '{}' failed: {}", call.flow, e))?;
+
+        // Collapse the child's terminal output into a value the parent's rules
+        // can match. Surfacing both `status` and the last `_output` keeps
+        // tag-style ("COMPLETE") and content-style judging both viable.
+        let last_output = final_state
+            .history
+            .last()
+            .and_then(|t| t.output.clone())
+            .unwrap_or(serde_json::Value::Null);
+
+        Ok(serde_json::json!({
+            "stage": stage.id,
+            "workflow_call": call.flow,
+            "status": format!("{:?}", final_state.status).to_lowercase(),
+            "output": last_output,
+            "stages_executed": final_state.movement_count,
+        }))
+    }
+
     /// Build a local summary from state without calling Claude Code CLI.
     /// Used for terminal/complete stages to avoid unnecessary LLM calls.
     fn build_local_summary(&self, state: &FlowState) -> serde_json::Value {
@@ -1240,6 +1451,17 @@ impl FlowEngine {
             }
             if let Some(ref file) = c.output_file {
                 parts.push(format!("Write output to: {}", file));
+            }
+            for report in &c.reports {
+                let mut line = format!(
+                    "This stage produces a named report `{}` ({}); downstream stages reference it as `{{report:{}}}`",
+                    report.name, report.format, report.name
+                );
+                if let Some(desc) = &report.description {
+                    line.push_str(" — ");
+                    line.push_str(desc);
+                }
+                parts.push(line);
             }
             parts.join("\n")
         });
@@ -1344,18 +1566,39 @@ impl FlowEngine {
         output: &serde_json::Value,
         _state: &FlowState,
     ) -> Result<Option<String>> {
+        // Filter rules tagged interactive_only / requires_user_input when this
+        // engine is in pipeline mode. Both flags imply "skip without a human in
+        // the loop"; requires_user_input additionally signals to interactive UIs
+        // that the next stage expects user input (consumed by the front-end, not
+        // here).
+        let filtered: Vec<&MovementRule> = rules
+            .iter()
+            .filter(|r| self.interactive || !(r.interactive_only || r.requires_user_input))
+            .collect();
+
+        if filtered.is_empty() {
+            return Ok(None);
+        }
+
         let output_str = serde_json::to_string(output).unwrap_or_default();
 
-        let judge_result = self.judge.evaluate(&output_str, rules, None)?;
+        // Judge takes a slice of owned rules; clone the filtered references into
+        // a temporary Vec. Rules are tiny structs (4 short strings + flags) so
+        // this is a negligible allocation in practice.
+        let filtered_owned: Vec<MovementRule> = filtered.iter().map(|&r| r.clone()).collect();
+        let judge_result = self.judge.evaluate(&output_str, &filtered_owned, None)?;
 
         if let Some(index) = judge_result.matched_rule_index
-            && index < rules.len()
+            && index < filtered_owned.len()
         {
             debug!(
                 "Judge matched rule {}: method={:?}, confidence={:.2}, next={}",
-                index, judge_result.match_method, judge_result.confidence, rules[index].next
+                index,
+                judge_result.match_method,
+                judge_result.confidence,
+                filtered_owned[index].next
             );
-            return Ok(Some(rules[index].next.clone()));
+            return Ok(Some(filtered_owned[index].next.clone()));
         }
 
         Ok(None)
@@ -1572,7 +1815,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                         condition: RuleCondition::Simple("success".to_string()),
                         next: "implement".to_string(),
                         priority: 0,
-                    }],
+                        interactive_only: false,
+                        requires_user_input: false,                    }],
                     parallel: false,
                     sub_movements: vec![],
                     output_contract: None,
@@ -1582,7 +1826,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 Stage {
                     id: "implement".to_string(),
                     persona: Some("coder".to_string()),
@@ -1603,12 +1847,14 @@ pub fn builtin_flows() -> Vec<Flow> {
                             condition: RuleCondition::Simple("success".to_string()),
                             next: "review".to_string(),
                             priority: 0,
-                        },
+                            interactive_only: false,
+                            requires_user_input: false,                        },
                         MovementRule {
                             condition: RuleCondition::Simple("error".to_string()),
                             next: "fix".to_string(),
                             priority: 1,
-                        },
+                            interactive_only: false,
+                            requires_user_input: false,                        },
                     ],
                     parallel: false,
                     sub_movements: vec![],
@@ -1619,7 +1865,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 Stage {
                     id: "review".to_string(),
                     persona: Some("reviewer".to_string()),
@@ -1636,12 +1882,14 @@ pub fn builtin_flows() -> Vec<Flow> {
                             condition: RuleCondition::Simple("success".to_string()),
                             next: "complete".to_string(),
                             priority: 0,
-                        },
+                            interactive_only: false,
+                            requires_user_input: false,                        },
                         MovementRule {
                             condition: RuleCondition::Simple("fixes_needed".to_string()),
                             next: "fix".to_string(),
                             priority: 1,
-                        },
+                            interactive_only: false,
+                            requires_user_input: false,                        },
                     ],
                     parallel: false,
                     sub_movements: vec![],
@@ -1652,7 +1900,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -1672,7 +1920,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                         condition: RuleCondition::Simple("success".to_string()),
                         next: "review".to_string(),
                         priority: 0,
-                    }],
+                        interactive_only: false,
+                        requires_user_input: false,                    }],
                     parallel: false,
                     sub_movements: vec![],
                     output_contract: None,
@@ -1682,7 +1931,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 Stage {
                     id: "complete".to_string(),
                     persona: None,
@@ -1703,7 +1952,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -1735,7 +1984,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                         condition: RuleCondition::Simple("success".to_string()),
                         next: "summarize".to_string(),
                         priority: 0,
-                    }],
+                        interactive_only: false,
+                        requires_user_input: false,                    }],
                     parallel: false,
                     sub_movements: vec![],
                     output_contract: None,
@@ -1745,7 +1995,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 Stage {
                     id: "summarize".to_string(),
                     persona: Some("writer".to_string()),
@@ -1770,6 +2020,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                         must_match: vec![],
                         must_not_match: vec![],
                         allowed_files: vec![],
+                        reports: vec![],
                     }),
                     timeout: None,
                     max_retries: 0,
@@ -1777,7 +2028,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -1805,12 +2056,14 @@ pub fn builtin_flows() -> Vec<Flow> {
                             condition: RuleCondition::Simple("fixes_needed".to_string()),
                             next: "fix".to_string(),
                             priority: 1,
-                        },
+                            interactive_only: false,
+                            requires_user_input: false,                        },
                         MovementRule {
                             condition: RuleCondition::Simple("success".to_string()),
                             next: "done".to_string(),
                             priority: 0,
-                        },
+                            interactive_only: false,
+                            requires_user_input: false,                        },
                     ],
                     parallel: false,
                     sub_movements: vec![],
@@ -1821,7 +2074,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -1841,7 +2094,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                         condition: RuleCondition::Simple("success".to_string()),
                         next: "review".to_string(),
                         priority: 0,
-                    }],
+                        interactive_only: false,
+                        requires_user_input: false,                    }],
                     parallel: false,
                     sub_movements: vec![],
                     output_contract: None,
@@ -1851,7 +2105,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 Stage {
                     id: "done".to_string(),
                     persona: None,
@@ -1872,7 +2126,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -1912,7 +2166,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                 working_dir: None,
                 retry_delay_ms: default_retry_delay(),
                 pass_previous_response: true,
-            }],
+                call: None,            }],
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,
@@ -1938,7 +2192,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                         condition: RuleCondition::Simple("success".to_string()),
                         next: "parallel-implement".to_string(),
                         priority: 0,
-                    }],
+                        interactive_only: false,
+                        requires_user_input: false,                    }],
                     parallel: false,
                     sub_movements: vec![],
                     output_contract: None,
@@ -1948,7 +2203,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 // Parallel hub: dispatches to frontend-impl and backend-impl simultaneously
                 Stage {
                     id: "parallel-implement".to_string(),
@@ -1964,7 +2219,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                         condition: RuleCondition::Simple("success".to_string()),
                         next: "review".to_string(),
                         priority: 0,
-                    }],
+                        interactive_only: false,
+                        requires_user_input: false,                    }],
                     parallel: true,
                     sub_movements: vec!["frontend-impl".to_string(), "backend-impl".to_string()],
                     output_contract: None,
@@ -1974,7 +2230,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 // Frontend agent (runs in parallel)
                 Stage {
                     id: "frontend-impl".to_string(),
@@ -1996,7 +2252,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 // Backend agent (runs in parallel)
                 Stage {
                     id: "backend-impl".to_string(),
@@ -2018,7 +2274,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 // Supervisor reviews the combined output
                 Stage {
                     id: "review".to_string(),
@@ -2034,7 +2290,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                         condition: RuleCondition::Simple("success".to_string()),
                         next: "complete".to_string(),
                         priority: 0,
-                    }],
+                        interactive_only: false,
+                        requires_user_input: false,                    }],
                     parallel: false,
                     sub_movements: vec![],
                     output_contract: None,
@@ -2044,7 +2301,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
                 // Local completion
                 Stage {
                     id: "complete".to_string(),
@@ -2066,7 +2323,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                },
+                    call: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2075,12 +2332,42 @@ pub fn builtin_flows() -> Vec<Flow> {
     ]
 }
 
-/// Truncate a string for inclusion in prompt context, preserving meaning
+/// Reject report names that could escape `.ccswarm/runs/<id>/reports/`.
+/// Allowed chars: ASCII alphanumerics, '-', '_', '.'. Must not be `.` / `..` /
+/// contain consecutive dots or path separators.
+fn is_safe_report_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > 128 {
+        return false;
+    }
+    if name == "." || name == ".." || name.contains("..") {
+        return false;
+    }
+    name.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+}
+
 /// Expand `{key}` template variables in a string using state variables.
-/// For `{key_output}`, extracts the "output" field from the JSON value if available.
+///
+/// Recognized forms:
+/// - `{key}`: replaced with the string form of `variables[key]`.
+/// - `{key_output}`: prefers the `output` field from a JSON object value (the
+///   standard shape stages emit).
+/// - `{report:<name>}`: reads `.ccswarm/runs/<run_id>/reports/<name>` from disk,
+///   using the `__run_id` variable stashed by `execute_piece_state`. Missing /
+///   unsafe names expand to an empty string so the prompt doesn't leak the
+///   literal token. Adopted from takt's `output_contracts` — replaces brittle
+///   `{plan_output}` state-variable chaining with a named on-disk contract.
 fn expand_template(template: &str, variables: &HashMap<String, serde_json::Value>) -> String {
     let mut result = template.to_string();
+
+    // First handle `{report:<name>}` so it doesn't collide with the `{key}` loop.
+    result = expand_report_references(&result, variables);
+
     for (key, value) in variables {
+        if key.starts_with("__") {
+            // Internal book-keeping (e.g. `__run_id`) — never user-substitutable.
+            continue;
+        }
         let placeholder = format!("{{{}}}", key);
         if result.contains(&placeholder) {
             let replacement = value
@@ -2098,6 +2385,69 @@ fn expand_template(template: &str, variables: &HashMap<String, serde_json::Value
         }
     }
     result
+}
+
+fn expand_report_references(
+    template: &str,
+    variables: &HashMap<String, serde_json::Value>,
+) -> String {
+    const PREFIX: &str = "{report:";
+
+    if !template.contains(PREFIX) {
+        return template.to_string();
+    }
+
+    let run_id = variables
+        .get("__run_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+
+    while let Some(start) = rest.find(PREFIX) {
+        out.push_str(&rest[..start]);
+        let after_prefix = &rest[start + PREFIX.len()..];
+
+        let Some(end) = after_prefix.find('}') else {
+            // Unterminated; emit verbatim and stop.
+            out.push_str(&rest[start..]);
+            return out;
+        };
+
+        let name = &after_prefix[..end];
+        let remainder = &after_prefix[end + 1..];
+
+        if run_id.is_empty() || !is_safe_report_name(name) {
+            // Silent empty-expand: surfacing the raw token would leak internals
+            // into the prompt and confuse the model.
+            tracing::warn!(
+                "Skipping `{{report:{}}}` expansion (run_id_empty={}, unsafe_name={})",
+                name,
+                run_id.is_empty(),
+                !is_safe_report_name(name)
+            );
+        } else {
+            let path = std::path::PathBuf::from(".ccswarm")
+                .join("runs")
+                .join(run_id)
+                .join("reports")
+                .join(name);
+            match std::fs::read_to_string(&path) {
+                Ok(content) => out.push_str(&truncate_for_context(&content, 8000)),
+                Err(e) => tracing::warn!(
+                    "Failed to read report '{}' for template expansion: {}",
+                    path.display(),
+                    e
+                ),
+            }
+        }
+
+        rest = remainder;
+    }
+
+    out.push_str(rest);
+    out
 }
 
 fn truncate_for_context(s: &str, max_len: usize) -> String {
@@ -2344,5 +2694,199 @@ stages:
         let mut sorted = resolved.clone();
         sorted.sort();
         assert_eq!(sorted, vec!["grep".to_string(), "read".to_string()]);
+    }
+
+    #[test]
+    fn is_safe_report_name_rejects_traversal_and_separators() {
+        assert!(super::is_safe_report_name("plan.md"));
+        assert!(super::is_safe_report_name("test-report.json"));
+        assert!(super::is_safe_report_name("a_b_c.txt"));
+        assert!(!super::is_safe_report_name(""));
+        assert!(!super::is_safe_report_name("."));
+        assert!(!super::is_safe_report_name(".."));
+        assert!(!super::is_safe_report_name("a/b"));
+        assert!(!super::is_safe_report_name("a\\b"));
+        assert!(!super::is_safe_report_name("../etc/passwd"));
+        assert!(!super::is_safe_report_name("a..b"));
+        assert!(!super::is_safe_report_name(&"a".repeat(200)));
+    }
+
+    #[test]
+    fn expand_template_resolves_report_reference_from_disk() {
+        use std::collections::HashMap;
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().expect("tempdir");
+        let prev = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(tmp.path()).expect("chdir");
+
+        let reports_dir = std::path::Path::new(".ccswarm")
+            .join("runs")
+            .join("test-run-1")
+            .join("reports");
+        std::fs::create_dir_all(&reports_dir).expect("create reports dir");
+        std::fs::write(reports_dir.join("plan.md"), "PLAN_BODY").expect("write report");
+
+        let mut vars: HashMap<String, serde_json::Value> = HashMap::new();
+        vars.insert(
+            "__run_id".to_string(),
+            serde_json::Value::String("test-run-1".to_string()),
+        );
+
+        let out = super::expand_template("Plan was: {report:plan.md}", &vars);
+
+        // Restore CWD before asserting so a failure doesn't leak directory state.
+        std::env::set_current_dir(prev).expect("restore cwd");
+
+        assert_eq!(out, "Plan was: PLAN_BODY");
+    }
+
+    #[test]
+    fn expand_template_unsafe_report_name_expands_to_empty() {
+        use std::collections::HashMap;
+
+        let mut vars: HashMap<String, serde_json::Value> = HashMap::new();
+        vars.insert(
+            "__run_id".to_string(),
+            serde_json::Value::String("test-run-2".to_string()),
+        );
+
+        let out = super::expand_template("escape: {report:../passwd}", &vars);
+        assert_eq!(out, "escape: ");
+    }
+
+    #[tokio::test]
+    async fn workflow_call_unknown_flow_fails_fast() {
+        let engine = FlowEngine::new();
+        let parent_state = FlowState {
+            flow_name: "parent".to_string(),
+            current_movement: "call-stage".to_string(),
+            movement_count: 0,
+            history: vec![],
+            variables: std::collections::HashMap::new(),
+            status: FlowStatus::Running,
+            started_at: Utc::now(),
+            completed_at: None,
+        };
+        let stage = Stage {
+            id: "call-stage".to_string(),
+            persona: None,
+            policy: None,
+            knowledge: None,
+            provider: None,
+            model: None,
+            instruction: String::new(),
+            tools: vec![],
+            permission: MovementPermission::Readonly,
+            rules: vec![],
+            parallel: false,
+            sub_movements: vec![],
+            output_contract: None,
+            timeout: None,
+            max_retries: 0,
+            agent: None,
+            working_dir: None,
+            retry_delay_ms: 0,
+            pass_previous_response: true,
+            call: Some(WorkflowCallSpec {
+                flow: "no-such-flow".to_string(),
+                args: std::collections::HashMap::new(),
+            }),
+        };
+        let call = stage.call.clone().expect("call");
+
+        let err = engine
+            .execute_workflow_call(&stage, &call, &parent_state)
+            .await
+            .expect_err("unknown flow must error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("no-such-flow"),
+            "error should name the missing flow, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn evaluate_rules_drops_interactive_only_in_pipeline_mode() {
+        let engine = FlowEngine::new(); // interactive defaults to false
+        let rules = vec![
+            MovementRule {
+                condition: RuleCondition::Simple("review".to_string()),
+                next: "ask-human".to_string(),
+                priority: 0,
+                interactive_only: true,
+                requires_user_input: false,
+            },
+            MovementRule {
+                condition: RuleCondition::Simple("review".to_string()),
+                next: "complete".to_string(),
+                priority: 0,
+                interactive_only: false,
+                requires_user_input: false,
+            },
+        ];
+        let state = FlowState {
+            flow_name: "t".to_string(),
+            current_movement: "start".to_string(),
+            movement_count: 0,
+            status: FlowStatus::Running,
+            started_at: Utc::now(),
+            completed_at: None,
+            history: vec![],
+            variables: std::collections::HashMap::new(),
+        };
+        let output = serde_json::json!({"output": "review"});
+
+        let next = engine
+            .evaluate_rules(&rules, &output, &state)
+            .await
+            .expect("evaluate");
+        // In pipeline mode the interactive_only rule is filtered out, so the
+        // fallback "complete" rule wins.
+        assert_eq!(next.as_deref(), Some("complete"));
+    }
+
+    #[tokio::test]
+    async fn evaluate_rules_keeps_interactive_only_in_interactive_mode() {
+        let mut engine = FlowEngine::new();
+        engine.set_interactive(true);
+        let rules = vec![MovementRule {
+            condition: RuleCondition::Simple("review".to_string()),
+            next: "ask-human".to_string(),
+            priority: 0,
+            interactive_only: true,
+            requires_user_input: false,
+        }];
+        let state = FlowState {
+            flow_name: "t".to_string(),
+            current_movement: "start".to_string(),
+            movement_count: 0,
+            status: FlowStatus::Running,
+            started_at: Utc::now(),
+            completed_at: None,
+            history: vec![],
+            variables: std::collections::HashMap::new(),
+        };
+        let output = serde_json::json!({"output": "review"});
+
+        let next = engine
+            .evaluate_rules(&rules, &output, &state)
+            .await
+            .expect("evaluate");
+        assert_eq!(next.as_deref(), Some("ask-human"));
+    }
+
+    #[test]
+    fn expand_template_skips_internal_run_id_variable() {
+        use std::collections::HashMap;
+
+        let mut vars: HashMap<String, serde_json::Value> = HashMap::new();
+        vars.insert(
+            "__run_id".to_string(),
+            serde_json::Value::String("secret-run".to_string()),
+        );
+
+        let out = super::expand_template("run is {__run_id}", &vars);
+        assert_eq!(out, "run is {__run_id}");
     }
 }
