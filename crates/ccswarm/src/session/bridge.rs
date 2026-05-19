@@ -416,6 +416,15 @@ impl AISessionBridge {
         let kind = options.provider.unwrap_or(ProviderKind::Claude);
         let provider = crate::providers::resolve(kind);
 
+        // Opt-in stream-json for Claude. Defaults to off so v0.7.0 doesn't change
+        // the production output path until users explicitly trial it. v0.8.0 is
+        // the candidate to flip the default once we've validated parsing against
+        // real Claude Code releases.
+        let claude_stream_json = kind == ProviderKind::Claude
+            && std::env::var("CCSWARM_CLAUDE_STREAM_JSON")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+
         let provider_options = ProviderOptions {
             allowed_tools: options.tools.clone(),
             model: options.model.clone(),
@@ -426,6 +435,7 @@ impl AISessionBridge {
                 && self.context_histories.contains_key(agent_id),
             max_budget: options.max_budget,
             worktree_name: options.worktree_name.clone(),
+            claude_stream_json,
         };
 
         // code #4 fix: cap prompt size before we hand it to a subprocess. Linux `execve`
@@ -464,7 +474,7 @@ impl AISessionBridge {
 
         let duration = start.elapsed();
 
-        let raw_output = if output.status.success() {
+        let raw_stdout = if output.status.success() {
             String::from_utf8_lossy(&output.stdout).to_string()
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -473,6 +483,30 @@ impl AISessionBridge {
                 provider.kind().as_str(),
                 stderr
             ));
+        };
+
+        // When stream-json is on for Claude, project the NDJSON stream down to
+        // the result text so the rest of the bridge (parsed output, context
+        // history, downstream prompt builders) keeps working unchanged. Tool
+        // uses and usage records are not yet wired into EventRecorder — that's
+        // a follow-up, since wiring needs an EventRecorder handle the bridge
+        // doesn't currently own.
+        let (raw_output, _stream_summary) = if claude_stream_json {
+            let summary = crate::providers::claude_stream::parse_stream(&raw_stdout);
+            if !summary.tool_uses.is_empty() {
+                tracing::debug!(
+                    "stream-json: {} tool_use blocks ({:?})",
+                    summary.tool_uses.len(),
+                    summary
+                        .tool_uses
+                        .iter()
+                        .map(|t| t.name.as_str())
+                        .collect::<Vec<_>>()
+                );
+            }
+            (summary.result_text.clone(), Some(summary))
+        } else {
+            (raw_stdout, None)
         };
 
         // 2. Parse output semantically with ai-session

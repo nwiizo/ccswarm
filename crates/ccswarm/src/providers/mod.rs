@@ -25,6 +25,15 @@ pub(crate) struct ProviderOptions {
     pub max_budget: Option<f64>,
     /// Worktree name (Claude only).
     pub worktree_name: Option<String>,
+    /// Request Claude's streaming JSON output format (`--output-format
+    /// stream-json --verbose`). The bridge parses each NDJSON line to extract
+    /// the final result text and forward `tool_use` / `usage` events to the
+    /// ccswarm EventRecorder. No effect on Codex / Copilot.
+    ///
+    /// Defaults to false in v0.7.0 so existing callers keep getting the simple
+    /// text format. Toggled on by `AISessionBridge` when the environment sets
+    /// `CCSWARM_CLAUDE_STREAM_JSON=1`.
+    pub claude_stream_json: bool,
 }
 
 /// Provider support for continuing a stage in the same conversation thread.
@@ -85,6 +94,7 @@ pub(crate) trait AgentProvider {
 }
 
 pub mod claude;
+pub(crate) mod claude_stream;
 pub mod codex;
 pub mod copilot;
 

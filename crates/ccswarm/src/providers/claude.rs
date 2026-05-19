@@ -24,7 +24,13 @@ impl AgentProvider for ClaudeProvider {
         options: &ProviderOptions,
     ) -> tokio::process::Command {
         let mut cmd = tokio::process::Command::new("claude");
-        cmd.args(["-p", prompt, "--output-format", "text"]);
+        if options.claude_stream_json {
+            // stream-json requires --verbose to actually emit per-event lines;
+            // without it, Claude Code only prints the final result envelope.
+            cmd.args(["-p", prompt, "--output-format", "stream-json", "--verbose"]);
+        } else {
+            cmd.args(["-p", prompt, "--output-format", "text"]);
+        }
         cmd.arg("--dangerously-skip-permissions");
 
         if let Some(name) = &options.agent_name {
