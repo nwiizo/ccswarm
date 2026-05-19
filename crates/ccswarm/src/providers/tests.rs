@@ -48,6 +48,7 @@ fn claude_command_includes_expected_flags() {
         continue_session: false,
         max_budget: Some(0.25),
         worktree_name: Some("wt-1".to_string()),
+        claude_stream_json: false,
     };
     let cmd = provider.build_command("do the thing", Path::new("/tmp"), &opts);
     let argv = argv_of(&cmd);
@@ -71,6 +72,23 @@ fn claude_command_includes_expected_flags() {
     assert!(argv.iter().any(|a| a == "--max-budget-usd"));
     assert!(argv.iter().any(|a| a == "--worktree"));
     assert!(argv.iter().any(|a| a == "wt-1"));
+}
+
+#[test]
+fn claude_command_switches_to_stream_json_when_requested() {
+    let provider = resolve(ProviderKind::Claude);
+    let opts = ProviderOptions {
+        claude_stream_json: true,
+        ..Default::default()
+    };
+    let cmd = provider.build_command("hi", Path::new("/tmp"), &opts);
+    let argv = argv_of(&cmd);
+
+    assert!(argv.iter().any(|a| a == "stream-json"));
+    // stream-json without --verbose only emits the final envelope; assert we
+    // pair them so the bridge can actually see per-event lines.
+    assert!(argv.iter().any(|a| a == "--verbose"));
+    assert!(!argv.iter().any(|a| a == "text"));
 }
 
 #[test]
