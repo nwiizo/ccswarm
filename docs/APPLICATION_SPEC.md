@@ -633,7 +633,17 @@ cargo run --package ai-session --bin server
 
 ## Version History
 
-### v0.6.0 (Current)
+### v0.7.0 (Current)
+- Audit follow-up: wired implemented-but-unreachable features, deleted the rest
+- Deleted unwired workflow modules (~4.2k LOC): arpeggio, watch, legacy DAG engine (graph/node/execution), github_issue
+- Loop guard: `max_stage_visits` flow field bounds per-stage revisits; `flow check` reports structural cycles
+- Parallel `all()`/`any()` aggregation wired into rule evaluation (was judge-only)
+- HITL commit gate: `auto --require-approval` / `queue drain --require-approval` block before commit until `ccswarm approve commit --id <run-id>`; HitlRequest/HitlDecision events recorded
+- Stream-json telemetry: tool names, real token counts, and cost recorded as ProviderCall events; `ccswarm cost` uses real counts when stream-json is on
+- Optional `otel` feature: OTLP span export + flow.run/flow.stage spans
+- docs/COMPETITIVE_LANDSCAPE.md added
+
+### v0.6.0
 - Major restructuring: project identity shifted from "AI multi-agent orchestrator" to "AI Agent Workflow DevOps toolchain"
 - Deleted ~22.6k LOC: orchestrator/, providers/, acp_claude/, subagent/, execution/, tui/, template/, mcp/, ipc/, auto_accept/
 - Wired EventRecorder into FlowEngine with NDJSON events at .ccswarm/runs/
