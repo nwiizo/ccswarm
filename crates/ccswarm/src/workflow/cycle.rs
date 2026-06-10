@@ -276,6 +276,7 @@ mod tests {
             pass_previous_response: true,
             call: None,
             promotion: Vec::new(),
+            gates: Vec::new(),
         }
     }
 
