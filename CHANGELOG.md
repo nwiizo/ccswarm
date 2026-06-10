@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> Versions 0.5.0–0.6.2 were tracked in docs/APPLICATION_SPEC.md Version
+> History rather than here.
+
+## [0.7.0] - 2026-06-10
+
+Follow-up to a feature audit against takt: wire what was implemented but
+unreachable, delete what wasn't worth wiring, and close the HITL/OTel gap.
+
+### Added
+- `max_stage_visits` flow field (default 3): per-stage visit bound that
+  aborts stuck review→fix loops before the next provider call, with the
+  repeating transition pattern in diagnostics. `flow check` now also runs
+  static cycle analysis and reports cycles as warnings.
+- HITL commit gate for unattended runs: `ccswarm auto --require-approval
+  [--approval-timeout 600]` and `queue drain --require-approval` pause
+  before committing until `ccswarm approve commit --id <run-id>` (or
+  reject/timeout, which fail the task with recovery hints). New
+  `approve commit` subcommand; pending records visible via
+  `approve list --status pending`. HitlRequest/HitlDecision events are
+  now actually recorded.
+- Claude stream-json telemetry: tool names, real token counts (replacing
+  bytes/4 estimates in `ccswarm cost`), and run cost are recorded as
+  ProviderCall events when `CCSWARM_CLAUDE_STREAM_JSON=1`.
+- Optional `otel` cargo feature: OTLP span export (activated at runtime
+  by `OTEL_EXPORTER_OTLP_ENDPOINT`) plus `flow.run`/`flow.stage` tracing
+  spans.
+- `docs/COMPETITIVE_LANDSCAPE.md`: takt parity table, orchestrator
+  comparison, and roadmap candidates.
+
+### Changed
+- Parallel stages' `all()`/`any()` aggregate conditions now actually
+  route — parallel outputs were previously never passed to the judge.
+- `ccswarm approve` honors `--repo` and validates `--id` against path
+  traversal.
+
+### Removed (breaking for library consumers)
+- Unwired modules deleted from `workflow/`: arpeggio (stub), watch
+  (unused), the legacy DAG engine (graph/node/execution +
+  WorkflowRegistry), and github_issue (superseded by `tracker/`).
+- `LoopStrategy` / `CycleDetector` collapsed into `analyze_flow()` +
+  `LoopTracker::new(max_visits)`.
+
 ## [0.3.8] - 2026-01-29
 
 > **Note**: v0.3.8 modules added 2025-12-15, Cargo.toml bumped 2026-01-29.

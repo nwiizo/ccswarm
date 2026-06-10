@@ -17,6 +17,8 @@ ccswarm pipeline --task "..."        # single-shot: plan → implement → revie
 ccswarm queue add "..."              # accumulate tasks during the day
 ccswarm queue add --from-issue 42    # ingest a GitHub issue as a task
 ccswarm queue drain                  # run all pending, y/n at commit+PR time
+ccswarm auto --require-approval      # unattended; pauses before commit until
+                                     #   `ccswarm approve commit --id <run-id>`
 ccswarm doctor                       # probe all providers (claude/codex/gh copilot)
 ```
 
@@ -128,6 +130,7 @@ Knowledge: (user-provided under `.ccswarm/facets/knowledge/*.yaml`).
 - `{task}`, `{plan_output}` テンプレート変数で stage 間コンテキスト受け渡し。
 - `pass_previous_response: false` で fix stage のコンテキストをリセット。
 - Empty `agents_used` in a summary means no provider CLI was invoked for that stage.
+- review→fix ループは flow の `max_stage_visits`(default 3)で打ち切られる。超過は Aborted。
 
 ## Rules
 
