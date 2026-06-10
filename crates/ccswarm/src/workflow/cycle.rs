@@ -275,6 +275,7 @@ mod tests {
             retry_delay_ms: 1000,
             pass_previous_response: true,
             call: None,
+            promotion: Vec::new(),
         }
     }
 
@@ -284,6 +285,7 @@ mod tests {
             description: format!("{} test flow", name),
             max_stages: 10,
             max_stage_visits: 3,
+            on_rate_limit: Vec::new(),
             initial_movement: initial.to_string(),
             stages,
             variables: HashMap::new(),

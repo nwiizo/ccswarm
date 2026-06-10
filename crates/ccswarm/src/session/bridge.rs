@@ -58,6 +58,58 @@ pub struct BridgeResult {
     /// (stream-json only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_cost_usd: Option<f64>,
+    /// Providers that were rate-limited and skipped before this result was
+    /// produced (empty when the first provider answered). The engine records
+    /// these as ProviderError events.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fallbacks_used: Vec<String>,
+}
+
+/// Heuristic rate-limit detection on provider CLI failure text. Provider CLIs
+/// don't expose structured error kinds, so match the common phrasings.
+fn is_rate_limit_error(err: &anyhow::Error) -> bool {
+    let text = err.to_string().to_lowercase();
+    [
+        "rate limit",
+        "rate_limit",
+        "429",
+        "too many requests",
+        "quota",
+        "overloaded",
+    ]
+    .iter()
+    .any(|marker| text.contains(marker))
+}
+
+/// Switch `options` to a fallback provider after a rate limit. Clears any
+/// session continuation — a new provider cannot resume another provider's
+/// thread (including codex's provider-assigned thread IDs). Returns the name
+/// of the provider being abandoned.
+fn apply_rate_limit_fallback(
+    options: &mut MovementExecOptions,
+    (next_provider, next_model): (ProviderKind, Option<String>),
+) -> String {
+    let from = options
+        .provider
+        .unwrap_or(ProviderKind::Claude)
+        .as_str()
+        .to_string();
+    options.provider = Some(next_provider);
+    if next_model.is_some() {
+        options.model = next_model;
+    }
+    options.session_id = None;
+    options.continuation = ContinuationPolicy::SingleTurn;
+    from
+}
+
+/// Prompt prefix telling the fallback provider it's picking up mid-task.
+fn fallback_notice_prompt(original_prompt: &str) -> String {
+    format!(
+        "# Provider fallback notice\nA previous provider hit a rate limit mid-task. \
+         You are taking over fresh — no prior session context is available beyond this prompt.\n\n{}",
+        original_prompt
+    )
 }
 
 /// Projection of a Claude stream-json stdout buffer down to the pieces the
@@ -148,6 +200,10 @@ pub struct MovementExecOptions {
     pub session_id: Option<String>,
     /// Same-thread continuation policy.
     pub continuation: ContinuationPolicy,
+    /// Providers to fall back to (in order) when this stage's provider hits a
+    /// rate limit. Each entry is `(provider, optional model override)`. Comes
+    /// from the flow-level `on_rate_limit` YAML field.
+    pub(crate) rate_limit_fallbacks: Vec<(ProviderKind, Option<String>)>,
 }
 
 /// Claude Code CLI execution + ai-session result management layer.
@@ -228,7 +284,15 @@ impl AISessionBridge {
         .await
     }
 
-    /// Execute with retry logic and exponential backoff
+    /// Execute with retry logic and exponential backoff.
+    ///
+    /// When the provider fails with a rate-limit error and
+    /// `options.rate_limit_fallbacks` is non-empty, the call switches to the
+    /// next provider in the chain instead of burning retries on the limited
+    /// one (takt's `rate_limit_fallback.switch_chain`). The switch resets the
+    /// retry budget, clears any session continuation (a new provider can't
+    /// resume another provider's thread), and prepends a fallback notice so
+    /// the model knows it's picking up mid-task.
     #[allow(clippy::too_many_arguments)]
     pub async fn execute_with_retry(
         &self,
@@ -241,60 +305,99 @@ impl AISessionBridge {
         retry_delay_ms: u64,
         options: &MovementExecOptions,
     ) -> Result<BridgeResult> {
-        let mut last_err = None;
-        let attempts = max_retries + 1;
+        let mut current_options = options.clone();
+        let mut current_prompt = prompt.to_string();
+        let mut fallback_index = 0usize;
+        let mut fallbacks_used: Vec<String> = Vec::new();
 
-        for attempt in 0..attempts {
-            if attempt > 0 {
-                let delay = retry_delay_ms * 2u64.pow(attempt - 1);
-                tracing::info!(
-                    "Retrying Claude Code CLI (attempt {}/{}, delay {}ms)",
-                    attempt + 1,
-                    attempts,
-                    delay
+        loop {
+            let mut last_err = None;
+            let attempts = max_retries + 1;
+
+            'attempts: for attempt in 0..attempts {
+                if attempt > 0 {
+                    let delay = retry_delay_ms * 2u64.pow(attempt - 1);
+                    tracing::info!(
+                        "Retrying provider CLI (attempt {}/{}, delay {}ms)",
+                        attempt + 1,
+                        attempts,
+                        delay
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                }
+
+                let attempt_result = match &current_options.continuation {
+                    ContinuationPolicy::SingleTurn => {
+                        self.execute_once(
+                            agent_id,
+                            &current_prompt,
+                            _identity,
+                            working_dir,
+                            agent_name,
+                            &current_options,
+                        )
+                        .await
+                    }
+                    ContinuationPolicy::MultiTurn { .. } => {
+                        // TODO: per-turn retry.
+                        self.execute_multi_turn(
+                            agent_id,
+                            &current_prompt,
+                            _identity,
+                            working_dir,
+                            agent_name,
+                            max_retries,
+                            retry_delay_ms,
+                            &current_options,
+                            &current_options.continuation.clone(),
+                        )
+                        .await
+                    }
+                };
+
+                match attempt_result {
+                    Ok(mut result) => {
+                        result.fallbacks_used = fallbacks_used;
+                        return Ok(result);
+                    }
+                    Err(e) => {
+                        // A rate-limited provider won't recover within our
+                        // backoff window; jump to the fallback chain instead
+                        // of spending the remaining attempts.
+                        if is_rate_limit_error(&e)
+                            && fallback_index < current_options.rate_limit_fallbacks.len()
+                        {
+                            last_err = Some(e);
+                            break 'attempts;
+                        }
+                        tracing::warn!("Provider CLI attempt {} failed: {}", attempt + 1, e);
+                        last_err = Some(e);
+                    }
+                }
+            }
+
+            // Out of attempts (or rate-limited): advance the fallback chain if
+            // the failure was a rate limit and targets remain.
+            let rate_limited = last_err.as_ref().is_some_and(is_rate_limit_error);
+            if rate_limited && fallback_index < current_options.rate_limit_fallbacks.len() {
+                let target = current_options.rate_limit_fallbacks[fallback_index].clone();
+                fallback_index += 1;
+                let from = apply_rate_limit_fallback(&mut current_options, target);
+                tracing::warn!(
+                    "Rate limit on '{}' — falling back to '{}'",
+                    from,
+                    current_options
+                        .provider
+                        .unwrap_or(ProviderKind::Claude)
+                        .as_str()
                 );
-                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                fallbacks_used.push(from);
+                current_prompt = fallback_notice_prompt(prompt);
+                continue;
             }
 
-            let attempt_result = match &options.continuation {
-                ContinuationPolicy::SingleTurn => {
-                    self.execute_once(
-                        agent_id,
-                        prompt,
-                        _identity,
-                        working_dir,
-                        agent_name,
-                        options,
-                    )
-                    .await
-                }
-                ContinuationPolicy::MultiTurn { .. } => {
-                    // TODO: per-turn retry.
-                    self.execute_multi_turn(
-                        agent_id,
-                        prompt,
-                        _identity,
-                        working_dir,
-                        agent_name,
-                        max_retries,
-                        retry_delay_ms,
-                        options,
-                        &options.continuation,
-                    )
-                    .await
-                }
-            };
-
-            match attempt_result {
-                Ok(result) => return Ok(result),
-                Err(e) => {
-                    tracing::warn!("Claude Code CLI attempt {} failed: {}", attempt + 1, e);
-                    last_err = Some(e);
-                }
-            }
+            return Err(last_err.unwrap_or_else(|| anyhow::anyhow!("All retry attempts failed")));
         }
-
-        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("All retry attempts failed")))
     }
 
     /// Execute a stage across multiple turns in the same provider thread.
@@ -698,6 +801,7 @@ impl AISessionBridge {
                     .map(|p| p.tool_names.clone())
                     .unwrap_or_default(),
                 total_cost_usd: stream_meta.as_ref().and_then(|p| p.total_cost_usd),
+                fallbacks_used: Vec::new(),
             },
             metadata: BridgeExecutionMetadata {
                 provider: kind,
@@ -808,6 +912,7 @@ fn merge_turn_result(
         attention: next_result.attention,
         tool_names: tool_names.clone(),
         total_cost_usd: *total_cost_usd,
+        fallbacks_used: next_result.fallbacks_used,
     }
 }
 
@@ -950,7 +1055,78 @@ mod tests {
             attention: AttentionState::Idle,
             tool_names: Vec::new(),
             total_cost_usd: None,
+            fallbacks_used: Vec::new(),
         }
+    }
+
+    #[test]
+    fn test_is_rate_limit_error_matches_common_phrasings() {
+        for msg in [
+            "claude provider CLI failed: API rate limit exceeded",
+            "codex provider CLI failed: HTTP 429",
+            "Too Many Requests",
+            "quota exhausted for this billing period",
+            "Error: model overloaded, retry later",
+        ] {
+            assert!(
+                is_rate_limit_error(&anyhow::anyhow!("{msg}")),
+                "should match: {msg}"
+            );
+        }
+        for msg in [
+            "compile error in main.rs",
+            "provider CLI failed: connection refused",
+        ] {
+            assert!(
+                !is_rate_limit_error(&anyhow::anyhow!("{msg}")),
+                "should NOT match: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn provider_switch_drops_provider_assigned_id() {
+        // Shared guard between the fallback chain and codex's
+        // ProviderAssignedId continuation: switching providers must clear
+        // session state, since the new provider can't resume the old thread.
+        let mut options = MovementExecOptions {
+            provider: Some(ProviderKind::Codex),
+            session_id: Some("thread-from-codex".to_string()),
+            continuation: ContinuationPolicy::multi_turn(3),
+            model: Some("gpt-5".to_string()),
+            ..Default::default()
+        };
+
+        let from =
+            apply_rate_limit_fallback(&mut options, (ProviderKind::Claude, Some("opus".into())));
+
+        assert_eq!(from, "codex");
+        assert_eq!(options.provider, Some(ProviderKind::Claude));
+        assert_eq!(options.model.as_deref(), Some("opus"));
+        assert!(options.session_id.is_none());
+        assert!(matches!(
+            options.continuation,
+            ContinuationPolicy::SingleTurn
+        ));
+    }
+
+    #[test]
+    fn fallback_without_model_keeps_current_model() {
+        let mut options = MovementExecOptions {
+            provider: Some(ProviderKind::Claude),
+            model: Some("sonnet".to_string()),
+            ..Default::default()
+        };
+        apply_rate_limit_fallback(&mut options, (ProviderKind::Codex, None));
+        assert_eq!(options.provider, Some(ProviderKind::Codex));
+        assert_eq!(options.model.as_deref(), Some("sonnet"));
+    }
+
+    #[test]
+    fn fallback_notice_prepends_original_prompt() {
+        let notice = fallback_notice_prompt("original task");
+        assert!(notice.starts_with("# Provider fallback notice"));
+        assert!(notice.ends_with("original task"));
     }
 
     #[test]

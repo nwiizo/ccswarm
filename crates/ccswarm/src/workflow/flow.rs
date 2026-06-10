@@ -63,6 +63,12 @@ pub struct Flow {
     #[serde(default = "default_max_stage_visits")]
     pub max_stage_visits: u32,
 
+    /// Fallback providers to try, in order, when a provider call fails with a
+    /// rate-limit error (takt's `rate_limit_fallback.switch_chain`). Empty by
+    /// default: rate limits surface as ordinary provider errors.
+    #[serde(default)]
+    pub on_rate_limit: Vec<FallbackTarget>,
+
     /// ID of the first stage to execute
     pub initial_movement: String,
 
@@ -88,6 +94,16 @@ fn default_max_movements() -> u32 {
 
 fn default_max_stage_visits() -> u32 {
     3
+}
+
+/// One entry in a flow's `on_rate_limit` fallback chain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FallbackTarget {
+    /// Provider to switch to (claude | codex).
+    pub provider: String,
+    /// Optional model override for the fallback provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 /// A Stage is a single step in a Flow workflow
@@ -182,6 +198,25 @@ pub struct Stage {
     /// unique within a run (v0.7.0 first-cut; namespacing is deferred).
     #[serde(default)]
     pub call: Option<WorkflowCallSpec>,
+
+    /// Provider/model escalation rules applied from the Nth visit of this
+    /// stage onward (takt's `promotion`). The last matching entry wins.
+    /// Ignored on parallel sub-stages, where visit counts track the parent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub promotion: Vec<PromotionRule>,
+}
+
+/// One provider/model escalation rule on a stage.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromotionRule {
+    /// Applies from this visit number onward (1 = first execution).
+    pub at: u32,
+    /// Provider to switch to (claude | codex). `None` keeps the current one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Model to switch to. `None` keeps the current one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 /// Specification for invoking another flow as a single stage's body.
@@ -681,6 +716,66 @@ impl FlowEngine {
         self.default_provider = Some(provider);
     }
 
+    /// Resolve the provider and model a stage execution should use.
+    ///
+    /// Base precedence: stage YAML `provider:` > `--provider` flag >
+    /// `CCSWARM_PROVIDER` env > Claude default (stage YAML wins because it
+    /// expresses deliberate per-stage intent). On top of that, `promotion`
+    /// rules escalate provider/model from the Nth visit of the stage onward
+    /// (takt-style, last matching entry wins). Promotion is skipped when no
+    /// visit count is available — notably for parallel sub-stages, whose
+    /// count would otherwise reflect the parent stage.
+    fn resolve_effective_provider(
+        &self,
+        stage: &Stage,
+        state: &FlowState,
+    ) -> (Option<crate::providers::ProviderKind>, Option<String>) {
+        let mut provider = stage
+            .provider
+            .as_deref()
+            .and_then(crate::providers::ProviderKind::parse)
+            .or(self.default_provider)
+            .or_else(|| {
+                std::env::var("CCSWARM_PROVIDER")
+                    .ok()
+                    .as_deref()
+                    .and_then(crate::providers::ProviderKind::parse)
+            });
+        let mut model = stage.model.clone();
+
+        let visit_count = state
+            .variables
+            .get("__visit_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        if visit_count >= 1 {
+            // Reverse scan = last matching entry wins (takt semantics).
+            if let Some(rule) = stage
+                .promotion
+                .iter()
+                .rev()
+                .find(|rule| visit_count >= rule.at.max(1))
+            {
+                info!(
+                    "Stage '{}' visit {} matched promotion rule (at: {}): provider={:?} model={:?}",
+                    stage.id, visit_count, rule.at, rule.provider, rule.model
+                );
+                if let Some(p) = rule
+                    .provider
+                    .as_deref()
+                    .and_then(crate::providers::ProviderKind::parse)
+                {
+                    provider = Some(p);
+                }
+                if rule.model.is_some() {
+                    model = rule.model.clone();
+                }
+            }
+        }
+
+        (provider, model)
+    }
+
     /// Set the working directory for agent execution
     pub fn set_working_dir(&mut self, dir: std::path::PathBuf) {
         self.working_dir = dir;
@@ -901,6 +996,14 @@ impl FlowEngine {
                 state.completed_at = Some(Utc::now());
                 break;
             }
+
+            // Expose the per-stage visit count so promotion rules can match
+            // (internal `__` prefix keeps it out of prompt template expansion,
+            // same convention as `__run_id`).
+            state.variables.insert(
+                "__visit_count".to_string(),
+                serde_json::json!(loop_tracker.visit_count(&stage.id)),
+            );
 
             debug!(
                 "Executing stage '{}' (#{}) in flow '{}'",
@@ -1225,22 +1328,7 @@ impl FlowEngine {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| self.working_dir.clone());
 
-            // Build MovementExecOptions from Stage fields.
-            // Provider flag mapping is handled per-provider in crate::providers.
-            // Precedence: stage YAML `provider:` > `--provider` flag >
-            // `CCSWARM_PROVIDER` env > Claude default. Stage YAML wins over the
-            // flag because it expresses deliberate per-stage intent.
-            let provider = stage
-                .provider
-                .as_deref()
-                .and_then(crate::providers::ProviderKind::parse)
-                .or(self.default_provider)
-                .or_else(|| {
-                    std::env::var("CCSWARM_PROVIDER")
-                        .ok()
-                        .as_deref()
-                        .and_then(crate::providers::ProviderKind::parse)
-                });
+            let (provider, model) = self.resolve_effective_provider(stage, state);
             // Resolve effective tool list from the stage's permission level + explicit `tools:`.
             // Without this, `permission: readonly` would still send no `--allowed-tools`,
             // so the provider CLI would fall back to its own (permissive) default.
@@ -1250,10 +1338,25 @@ impl FlowEngine {
             )
             .available_tools();
 
+            // Flow-level rate-limit fallback chain, parsed into provider kinds.
+            let rate_limit_fallbacks: Vec<(crate::providers::ProviderKind, Option<String>)> = self
+                .flows
+                .get(&state.flow_name)
+                .map(|flow| {
+                    flow.on_rate_limit
+                        .iter()
+                        .filter_map(|target| {
+                            crate::providers::ProviderKind::parse(&target.provider)
+                                .map(|kind| (kind, target.model.clone()))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
             let exec_options = crate::session::bridge::MovementExecOptions {
                 provider,
                 tools: effective_tools,
-                model: stage.model.clone(),
+                model,
                 system_prompt: stage.persona.as_ref().and_then(|p| {
                     self.facet_registry.get_persona(p).and_then(|f| {
                         if f.system_prompt.is_empty() {
@@ -1267,6 +1370,7 @@ impl FlowEngine {
                 worktree_name: None,
                 session_id: None,
                 continuation: crate::session::bridge::ContinuationPolicy::SingleTurn,
+                rate_limit_fallbacks,
             };
 
             match bridge
@@ -1283,6 +1387,34 @@ impl FlowEngine {
                 .await
             {
                 Ok(result) => {
+                    // Rate-limit fallbacks that fired on the way to this result
+                    // are recorded as ProviderError events so the switch is
+                    // visible in the run's audit trail.
+                    if !result.fallbacks_used.is_empty() {
+                        let run_id = self
+                            .event_recorder
+                            .as_ref()
+                            .map(|r| r.run_id().to_string())
+                            .unwrap_or_default();
+                        self.record_event(
+                            crate::events::Event::new(
+                                &run_id,
+                                crate::events::EventLevel::Warn,
+                                crate::events::EventType::ProviderError,
+                                format!(
+                                    "Rate-limit fallback engaged for stage '{}': skipped [{}]",
+                                    stage.id,
+                                    result.fallbacks_used.join(", ")
+                                ),
+                            )
+                            .with_movement(&stage.id)
+                            .with_metadata(serde_json::json!({
+                                "reason": "rate_limit_fallback",
+                                "rate_limited_providers": result.fallbacks_used,
+                            })),
+                        )
+                        .await;
+                    }
                     // Stream-json metadata (tool names, cost) rides on
                     // BridgeResult; surface it as a ProviderCall event so
                     // events.ndjson carries per-call telemetry. Token counts are
@@ -1379,10 +1511,14 @@ impl FlowEngine {
             ));
         }
 
-        // Execute all sub-stages concurrently
+        // Execute all sub-stages concurrently. Strip the parent's visit count
+        // so promotion rules don't fire on sub-stages (takt excludes promotion
+        // on parallel sub-steps — the count tracks the parent, not them).
+        let mut sub_state = state.clone();
+        sub_state.variables.remove("__visit_count");
         let futures: Vec<_> = sub_movs
             .iter()
-            .map(|m| self.execute_movement(m, state))
+            .map(|m| self.execute_movement(m, &sub_state))
             .collect();
 
         let results = futures::future::join_all(futures).await;
@@ -1924,6 +2060,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                 .to_string(),
             max_stages: 30,
             max_stage_visits: 3,
+            on_rate_limit: Vec::new(),
             initial_movement: "plan".to_string(),
             stages: vec![
                 Stage {
@@ -1951,7 +2088,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 Stage {
                     id: "implement".to_string(),
                     persona: Some("coder".to_string()),
@@ -1990,7 +2127,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 Stage {
                     id: "review".to_string(),
                     persona: Some("reviewer".to_string()),
@@ -2025,7 +2162,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2056,7 +2193,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 Stage {
                     id: "complete".to_string(),
                     persona: None,
@@ -2077,7 +2214,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2089,6 +2226,7 @@ pub fn builtin_flows() -> Vec<Flow> {
             description: "Autonomous research and investigation workflow".to_string(),
             max_stages: 20,
             max_stage_visits: 3,
+            on_rate_limit: Vec::new(),
             initial_movement: "investigate".to_string(),
             stages: vec![
                 Stage {
@@ -2121,7 +2259,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 Stage {
                     id: "summarize".to_string(),
                     persona: Some("writer".to_string()),
@@ -2154,7 +2292,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2166,6 +2304,7 @@ pub fn builtin_flows() -> Vec<Flow> {
             description: "Minimal review and fix cycle".to_string(),
             max_stages: 10,
             max_stage_visits: 3,
+            on_rate_limit: Vec::new(),
             initial_movement: "review".to_string(),
             stages: vec![
                 Stage {
@@ -2201,7 +2340,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2232,7 +2371,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 Stage {
                     id: "done".to_string(),
                     persona: None,
@@ -2253,7 +2392,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2266,6 +2405,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                 .to_string(),
             max_stages: 1,
             max_stage_visits: 3,
+            on_rate_limit: Vec::new(),
             initial_movement: "execute".to_string(),
             stages: vec![Stage {
                 id: "execute".to_string(),
@@ -2294,7 +2434,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                 working_dir: None,
                 retry_delay_ms: default_retry_delay(),
                 pass_previous_response: true,
-                call: None,            }],
+                call: None, promotion: Vec::new(),            }],
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,
@@ -2305,6 +2445,7 @@ pub fn builtin_flows() -> Vec<Flow> {
             description: "Multi-agent orchestration: planner designs, frontend & backend agents execute in parallel, reviewer validates".to_string(),
             max_stages: 10,
             max_stage_visits: 3,
+            on_rate_limit: Vec::new(),
             initial_movement: "plan".to_string(),
             stages: vec![
                 Stage {
@@ -2332,7 +2473,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 // Parallel hub: dispatches to frontend-impl and backend-impl simultaneously
                 Stage {
                     id: "parallel-implement".to_string(),
@@ -2359,7 +2500,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 // Frontend agent (runs in parallel)
                 Stage {
                     id: "frontend-impl".to_string(),
@@ -2381,7 +2522,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 // Backend agent (runs in parallel)
                 Stage {
                     id: "backend-impl".to_string(),
@@ -2403,7 +2544,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 // Supervisor reviews the combined output
                 Stage {
                     id: "review".to_string(),
@@ -2430,7 +2571,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
                 // Local completion
                 Stage {
                     id: "complete".to_string(),
@@ -2452,7 +2593,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None,                },
+                    call: None, promotion: Vec::new(),                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2866,6 +3007,91 @@ stages:
     }
 
     #[test]
+    fn test_promotion_last_match_wins() {
+        let yaml = r#"
+name: promo
+initial_movement: fix
+stages:
+  - id: fix
+    instruction: "fix it"
+    promotion:
+      - { at: 2, model: opus }
+      - { at: 3, provider: codex, model: gpt-5 }
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let mut engine = FlowEngine::new();
+        engine.flows.insert("promo".to_string(), flow);
+        let stage = engine.flows["promo"].stages[0].clone();
+        let mut state = engine.flows["promo"].create_state();
+
+        // Visit 1: no rule matches — base resolution.
+        state
+            .variables
+            .insert("__visit_count".to_string(), serde_json::json!(1));
+        let (provider, model) = engine.resolve_effective_provider(&stage, &state);
+        assert_eq!(provider, None);
+        assert_eq!(model, None);
+
+        // Visit 2: only `at: 2` matches.
+        state
+            .variables
+            .insert("__visit_count".to_string(), serde_json::json!(2));
+        let (_, model) = engine.resolve_effective_provider(&stage, &state);
+        assert_eq!(model.as_deref(), Some("opus"));
+
+        // Visit 3+: both match — the LAST entry wins.
+        state
+            .variables
+            .insert("__visit_count".to_string(), serde_json::json!(5));
+        let (provider, model) = engine.resolve_effective_provider(&stage, &state);
+        assert_eq!(provider, Some(crate::providers::ProviderKind::Codex));
+        assert_eq!(model.as_deref(), Some("gpt-5"));
+    }
+
+    #[test]
+    fn test_promotion_skipped_without_visit_count() {
+        // Parallel sub-stages run with __visit_count stripped; promotion must
+        // not fire there.
+        let yaml = r#"
+name: promo-skip
+initial_movement: a
+stages:
+  - id: a
+    instruction: "x"
+    promotion:
+      - { at: 1, model: opus }
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let mut engine = FlowEngine::new();
+        engine.flows.insert("promo-skip".to_string(), flow);
+        let stage = engine.flows["promo-skip"].stages[0].clone();
+        let state = engine.flows["promo-skip"].create_state(); // no __visit_count
+
+        let (_, model) = engine.resolve_effective_provider(&stage, &state);
+        assert_eq!(model, None, "promotion must not fire without a visit count");
+    }
+
+    #[test]
+    fn test_on_rate_limit_parses_from_yaml() {
+        let yaml = r#"
+name: fallback
+initial_movement: a
+on_rate_limit:
+  - { provider: codex, model: gpt-5 }
+  - { provider: claude }
+stages:
+  - id: a
+    instruction: "x"
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        assert_eq!(flow.on_rate_limit.len(), 2);
+        assert_eq!(flow.on_rate_limit[0].provider, "codex");
+        assert_eq!(flow.on_rate_limit[0].model.as_deref(), Some("gpt-5"));
+        assert_eq!(flow.on_rate_limit[1].provider, "claude");
+        assert!(flow.on_rate_limit[1].model.is_none());
+    }
+
+    #[test]
     fn test_max_stage_visits_defaults_to_three() {
         let yaml = r#"
 name: defaults
@@ -3060,6 +3286,7 @@ stages:
                 flow: "no-such-flow".to_string(),
                 args: std::collections::HashMap::new(),
             }),
+            promotion: Vec::new(),
         };
         let call = stage.call.clone().expect("call");
 
