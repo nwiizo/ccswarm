@@ -57,6 +57,10 @@ pub struct Flow {
     #[serde(default = "default_max_movements")]
     pub max_stages: u32,
 
+    /// Maximum visits per individual stage before abort (bounds review→fix loops)
+    #[serde(default = "default_max_stage_visits")]
+    pub max_stage_visits: u32,
+
     /// ID of the first stage to execute
     pub initial_movement: String,
 
@@ -78,6 +82,10 @@ pub struct Flow {
 
 fn default_max_movements() -> u32 {
     30
+}
+
+fn default_max_stage_visits() -> u32 {
+    3
 }
 
 /// A Stage is a single step in a Flow workflow
@@ -814,6 +822,7 @@ impl FlowEngine {
         }
 
         let mut cumulative_tokens: u64 = 0;
+        let mut loop_tracker = super::cycle::LoopTracker::new(flow.max_stage_visits);
 
         loop {
             // Check max stages
@@ -837,6 +846,47 @@ impl FlowEngine {
                     ));
                 }
             };
+
+            // Per-stage loop guard: abort before executing a stage whose visit
+            // count exceeds max_stage_visits, so a stuck review→fix loop stops
+            // before burning another provider call.
+            if loop_tracker.record_visit(&stage.id) {
+                let pattern = loop_tracker.detect_pattern();
+                warn!(
+                    "Flow '{}' aborted: stage '{}' visited {} times (max {}){}",
+                    name,
+                    stage.id,
+                    loop_tracker.visit_count(&stage.id),
+                    flow.max_stage_visits,
+                    pattern
+                        .as_ref()
+                        .map(|p| format!(", repeating pattern: {}", p.join(" -> ")))
+                        .unwrap_or_default()
+                );
+                self.record_event(
+                    crate::events::Event::new(
+                        &run_id,
+                        crate::events::EventLevel::Warn,
+                        crate::events::EventType::TaskEnd,
+                        format!(
+                            "Loop detected: stage '{}' exceeded max_stage_visits ({})",
+                            stage.id, flow.max_stage_visits
+                        ),
+                    )
+                    .with_movement(&stage.id)
+                    .with_metadata(serde_json::json!({
+                        "reason": "loop_detected",
+                        "stage": stage.id,
+                        "visits": loop_tracker.visit_count(&stage.id),
+                        "max_stage_visits": flow.max_stage_visits,
+                        "pattern": pattern,
+                    })),
+                )
+                .await;
+                state.status = FlowStatus::Aborted;
+                state.completed_at = Some(Utc::now());
+                break;
+            }
 
             debug!(
                 "Executing stage '{}' (#{}) in flow '{}'",
@@ -1799,6 +1849,7 @@ pub fn builtin_flows() -> Vec<Flow> {
             description: "Standard development workflow: plan → implement → review → fix"
                 .to_string(),
             max_stages: 30,
+            max_stage_visits: 3,
             initial_movement: "plan".to_string(),
             stages: vec![
                 Stage {
@@ -1963,6 +2014,7 @@ pub fn builtin_flows() -> Vec<Flow> {
             name: "research".to_string(),
             description: "Autonomous research and investigation workflow".to_string(),
             max_stages: 20,
+            max_stage_visits: 3,
             initial_movement: "investigate".to_string(),
             stages: vec![
                 Stage {
@@ -2039,6 +2091,7 @@ pub fn builtin_flows() -> Vec<Flow> {
             name: "review-fix".to_string(),
             description: "Minimal review and fix cycle".to_string(),
             max_stages: 10,
+            max_stage_visits: 3,
             initial_movement: "review".to_string(),
             stages: vec![
                 Stage {
@@ -2138,6 +2191,7 @@ pub fn builtin_flows() -> Vec<Flow> {
             description: "Single-shot execution: one Claude call, no plan/review overhead"
                 .to_string(),
             max_stages: 1,
+            max_stage_visits: 3,
             initial_movement: "execute".to_string(),
             stages: vec![Stage {
                 id: "execute".to_string(),
@@ -2176,6 +2230,7 @@ pub fn builtin_flows() -> Vec<Flow> {
             name: "team".to_string(),
             description: "Multi-agent orchestration: planner designs, frontend & backend agents execute in parallel, reviewer validates".to_string(),
             max_stages: 10,
+            max_stage_visits: 3,
             initial_movement: "plan".to_string(),
             stages: vec![
                 Stage {
@@ -2608,6 +2663,53 @@ stages:
             .expect("execution failed");
         assert_eq!(state.status, FlowStatus::Completed);
         assert_eq!(state.movement_count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_loop_guard_aborts_cyclic_flow() {
+        // ping <-> pong cycle, bounded by max_stage_visits rather than max_stages
+        let yaml = r#"
+name: loop-test
+max_stages: 30
+max_stage_visits: 2
+initial_movement: ping
+stages:
+  - id: ping
+    instruction: "Ping"
+    rules:
+      - condition: success
+        next: pong
+  - id: pong
+    instruction: "Pong"
+    rules:
+      - condition: success
+        next: ping
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let mut engine = FlowEngine::new();
+        engine.flows.insert("loop-test".to_string(), flow);
+
+        let state = engine
+            .execute_piece("loop-test")
+            .await
+            .expect("execution failed");
+        assert_eq!(state.status, FlowStatus::Aborted);
+        // Two visits each executed; the third visit to 'ping' aborts before
+        // execution, so only 4 stages ran.
+        assert_eq!(state.movement_count, 4);
+    }
+
+    #[test]
+    fn test_max_stage_visits_defaults_to_three() {
+        let yaml = r#"
+name: defaults
+initial_movement: a
+stages:
+  - id: a
+    instruction: "x"
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        assert_eq!(flow.max_stage_visits, 3);
     }
 
     /// `readonly` stages without an explicit `tools:` list must still restrict the
