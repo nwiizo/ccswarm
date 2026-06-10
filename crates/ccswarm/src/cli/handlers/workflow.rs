@@ -533,7 +533,6 @@ impl CliRunner {
     /// Post-pipeline assisted flow: auto-detect tests, run them, then guide
     /// the user through OK/NG decisions for commit and PR.
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::too_many_arguments)]
     async fn run_post_pipeline_flow(
         &self,
         task: &str,
@@ -646,6 +645,10 @@ impl CliRunner {
     /// poll `.ccswarm/approvals/` until a human decides or `timeout` elapses.
     /// Emits HitlRequest/HitlDecision into the run's events.ndjson (a second
     /// recorder appending to the same file — record() is open-append-close).
+    ///
+    /// Known limitation: summary.json is written when the flow completes,
+    /// before this gate runs, so its `total_events` count does not include the
+    /// two HITL events. The events themselves are in events.ndjson.
     async fn gate_commit(
         &self,
         run_id: &str,
@@ -695,7 +698,12 @@ impl CliRunner {
         );
 
         let outcome = store
-            .wait_for_decision(run_id, std::time::Duration::from_secs(2), timeout)
+            .wait_for_decision(
+                run_id,
+                Gate::Commit,
+                std::time::Duration::from_secs(2),
+                timeout,
+            )
             .await?;
 
         if let Some(ref rec) = recorder {

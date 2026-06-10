@@ -5,6 +5,16 @@ use ccswarm::cli::{Cli, CliRunner};
 
 #[tokio::main]
 async fn main() {
+    let exit_code = run_main().await;
+    // Flush buffered OTel spans before the process exits — the batch exporter
+    // would otherwise silently drop them for short-lived invocations.
+    shutdown_otel();
+    if exit_code != 0 {
+        std::process::exit(exit_code);
+    }
+}
+
+async fn run_main() -> i32 {
     // Check if first arg looks like a task (not a subcommand or flag)
     let args: Vec<String> = std::env::args().collect();
     let is_direct_task = args.len() >= 2
@@ -17,9 +27,9 @@ async fn main() {
         init_logging(false, "text");
         if let Err(e) = run_interactive().await {
             display_error(&e, false);
-            std::process::exit(1);
+            return 1;
         }
-        return;
+        return 0;
     }
 
     if is_direct_task {
@@ -28,9 +38,9 @@ async fn main() {
         let task = args[1..].join(" ");
         if let Err(e) = run_direct_task(&task).await {
             display_error(&e, false);
-            std::process::exit(1);
+            return 1;
         }
-        return;
+        return 0;
     }
 
     let cli = Cli::parse();
@@ -39,8 +49,9 @@ async fn main() {
 
     if let Err(e) = run_cli(&cli).await {
         display_error(&e, cli.verbose);
-        std::process::exit(1);
+        return 1;
     }
+    0
 }
 
 fn is_known_subcommand(arg: &str) -> bool {
@@ -136,6 +147,12 @@ fn init_logging(verbose: bool, format: &str) {
 /// OTLP span export layer. Built only with `--features otel`, and active only
 /// when `OTEL_EXPORTER_OTLP_ENDPOINT` is set — so the feature can ship in a
 /// binary without affecting runs that don't opt in.
+/// The active tracer provider, kept so `shutdown_otel` can flush the batch
+/// exporter at process exit.
+#[cfg(feature = "otel")]
+static OTEL_PROVIDER: std::sync::OnceLock<opentelemetry_sdk::trace::SdkTracerProvider> =
+    std::sync::OnceLock::new();
+
 #[cfg(feature = "otel")]
 fn otel_layer<S>() -> Option<impl tracing_subscriber::Layer<S>>
 where
@@ -155,14 +172,27 @@ where
         .with_batch_exporter(exporter)
         .build();
     let tracer = provider.tracer("ccswarm");
-    opentelemetry::global::set_tracer_provider(provider);
+    opentelemetry::global::set_tracer_provider(provider.clone());
+    let _ = OTEL_PROVIDER.set(provider);
     Some(tracing_opentelemetry::layer().with_tracer(tracer))
+}
+
+#[cfg(feature = "otel")]
+fn shutdown_otel() {
+    if let Some(provider) = OTEL_PROVIDER.get()
+        && let Err(e) = provider.shutdown()
+    {
+        eprintln!("otel: failed to flush spans on shutdown: {e}");
+    }
 }
 
 #[cfg(not(feature = "otel"))]
 fn otel_layer() -> Option<tracing_subscriber::layer::Identity> {
     None
 }
+
+#[cfg(not(feature = "otel"))]
+fn shutdown_otel() {}
 
 /// Interactive mode: `ccswarm` with no arguments
 /// Asks what to build, then runs the full pipeline with OK/NG flow.

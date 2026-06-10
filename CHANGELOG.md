@@ -25,9 +25,10 @@ unreachable, delete what wasn't worth wiring, and close the HITL/OTel gap.
   `approve commit` subcommand; pending records visible via
   `approve list --status pending`. HitlRequest/HitlDecision events are
   now actually recorded.
-- Claude stream-json telemetry: tool names, real token counts (replacing
-  bytes/4 estimates in `ccswarm cost`), and run cost are recorded as
-  ProviderCall events when `CCSWARM_CLAUDE_STREAM_JSON=1`.
+- Claude stream-json telemetry (`CCSWARM_CLAUDE_STREAM_JSON=1`): real
+  token counts replace the bytes/4 estimates in stage events (so
+  `ccswarm cost` is accurate), and tool names + run cost are recorded as
+  ProviderCall events.
 - Optional `otel` cargo feature: OTLP span export (activated at runtime
   by `OTEL_EXPORTER_OTLP_ENDPOINT`) plus `flow.run`/`flow.stage` tracing
   spans.

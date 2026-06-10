@@ -53,11 +53,13 @@ pub struct Flow {
     #[serde(default)]
     pub description: String,
 
-    /// Maximum number of stage transitions before abort
+    /// Maximum *total* stage executions across the whole run before abort
+    /// (complementary to `max_stage_visits`, which bounds each stage
+    /// individually)
     #[serde(default = "default_max_movements")]
     pub max_stages: u32,
 
-    /// Maximum visits per individual stage before abort (bounds review→fix loops)
+    /// Maximum visits per *individual* stage before abort (bounds review→fix loops)
     #[serde(default = "default_max_stage_visits")]
     pub max_stage_visits: u32,
 
@@ -1267,9 +1269,12 @@ impl FlowEngine {
                 .await
             {
                 Ok(result) => {
-                    // Stream-json metadata (tool names, real token counts, cost)
-                    // rides on BridgeResult; surface it as a ProviderCall event so
-                    // events.ndjson finally carries per-call telemetry.
+                    // Stream-json metadata (tool names, cost) rides on
+                    // BridgeResult; surface it as a ProviderCall event so
+                    // events.ndjson carries per-call telemetry. Token counts are
+                    // deliberately NOT repeated here — they ride on the stage's
+                    // MovementEnd event, and `ccswarm cost` sums token fields
+                    // across all events, so duplicating them would double-count.
                     if !result.tool_names.is_empty() || result.total_cost_usd.is_some() {
                         let run_id = self
                             .event_recorder
@@ -1286,8 +1291,6 @@ impl FlowEngine {
                             .with_movement(&stage.id)
                             .with_metadata(serde_json::json!({
                                 "tool_names": result.tool_names,
-                                "tokens_in": result.tokens_in,
-                                "tokens_out": result.tokens_out,
                                 "cost_usd": result.total_cost_usd,
                             })),
                         )

@@ -176,29 +176,37 @@ impl ApprovalStore {
         Ok(records)
     }
 
-    /// Poll until `id` is decided or `timeout` elapses. A missing or corrupt
-    /// record counts as still-pending (tolerates a decision write racing the
-    /// read).
+    /// Poll until `id` is decided for `expected_gate` or `timeout` elapses.
+    /// A missing or corrupt record counts as still-pending (tolerates a
+    /// decision write racing the read), as does a decision recorded for a
+    /// *different* gate — `ccswarm approve plan --id <run-id>` must not
+    /// release a waiting commit gate.
     pub async fn wait_for_decision(
         &self,
         id: &str,
+        expected_gate: Gate,
         poll: Duration,
         timeout: Duration,
     ) -> Result<GateOutcome> {
         crate::run_id::validate_run_id(id).context("invalid approval ID")?;
         let deadline = tokio::time::Instant::now() + timeout;
         loop {
-            if let Some(record) = self.get(id).await? {
+            if let Some(record) = self.get(id).await?
+                && record.gate == expected_gate
+            {
                 match record.status {
                     ApprovalStatus::Approved => return Ok(GateOutcome::Approved),
                     ApprovalStatus::Rejected => return Ok(GateOutcome::Rejected(record.reason)),
                     ApprovalStatus::Pending => {}
                 }
             }
-            if tokio::time::Instant::now() >= deadline {
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
                 return Ok(GateOutcome::TimedOut);
             }
-            tokio::time::sleep(poll).await;
+            // Cap the sleep at the remaining budget so the effective wait
+            // never overshoots `timeout` by a full poll interval.
+            tokio::time::sleep(poll.min(deadline - now)).await;
         }
     }
 
@@ -307,10 +315,42 @@ mod tests {
         });
 
         let outcome = store
-            .wait_for_decision("run-4", Duration::from_millis(10), Duration::from_secs(5))
+            .wait_for_decision(
+                "run-4",
+                Gate::Commit,
+                Duration::from_millis(10),
+                Duration::from_secs(5),
+            )
             .await
             .expect("wait");
         assert_eq!(outcome, GateOutcome::Approved);
+    }
+
+    #[tokio::test]
+    async fn wait_for_decision_ignores_decisions_for_other_gates() {
+        // `approve plan --id <run-id>` must not release a waiting commit gate.
+        let (dir, store) = store();
+        store
+            .request("run-7", Gate::Commit, "t", "auto")
+            .await
+            .expect("request");
+
+        let decider = ApprovalStore::new(dir.path());
+        decider
+            .decide("run-7", Gate::Plan, true, None)
+            .await
+            .expect("decide");
+
+        let outcome = store
+            .wait_for_decision(
+                "run-7",
+                Gate::Commit,
+                Duration::from_millis(10),
+                Duration::from_millis(60),
+            )
+            .await
+            .expect("wait");
+        assert_eq!(outcome, GateOutcome::TimedOut);
     }
 
     #[tokio::test]
@@ -331,7 +371,12 @@ mod tests {
         });
 
         let outcome = store
-            .wait_for_decision("run-5", Duration::from_millis(10), Duration::from_secs(5))
+            .wait_for_decision(
+                "run-5",
+                Gate::Commit,
+                Duration::from_millis(10),
+                Duration::from_secs(5),
+            )
             .await
             .expect("wait");
         assert_eq!(outcome, GateOutcome::Rejected(Some("no".to_string())));
@@ -355,6 +400,7 @@ mod tests {
         let outcome = store
             .wait_for_decision(
                 "run-6",
+                Gate::Commit,
                 Duration::from_millis(10),
                 Duration::from_millis(60),
             )
