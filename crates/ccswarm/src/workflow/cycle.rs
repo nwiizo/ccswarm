@@ -277,6 +277,7 @@ mod tests {
             call: None,
             promotion: Vec::new(),
             gates: Vec::new(),
+            team_leader: None,
         }
     }
 

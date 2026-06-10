@@ -213,6 +213,14 @@ pub struct Stage {
     /// prompts, so gates add no new trust surface.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gates: Vec<CommandGate>,
+
+    /// Orchestrator-worker decomposition (takt's `team_leader`): a leader
+    /// call splits this stage's task into parts at runtime, the parts execute
+    /// concurrently as synthesized worker stages, and their outputs aggregate
+    /// into the parallel shape so `all()`/`any()` rules work unchanged.
+    /// Mutually exclusive with `parallel` and `call`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_leader: Option<super::team_leader::TeamLeaderSpec>,
 }
 
 /// One machine-executed gate command on a stage.
@@ -324,7 +332,7 @@ pub enum RuleCondition {
 }
 
 /// Compound condition with logical operators
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum CompoundCondition {
     /// All conditions must match
     #[serde(rename = "all")]
@@ -332,6 +340,23 @@ pub enum CompoundCondition {
     /// Any condition must match
     #[serde(rename = "any")]
     Any(Vec<String>),
+}
+
+// Hand-written Serialize: the derived (externally tagged) form serializes to
+// a YAML `!all`/`!any` tag, which the untagged `RuleCondition` wrapper cannot
+// re-parse — breaking the serialize→parse round trip `flow check` does on
+// builtin flows. Emitting a single-entry map (`all: [..]`) matches the YAML
+// authors write and what the derived Deserialize accepts.
+impl Serialize for CompoundCondition {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(1))?;
+        match self {
+            Self::All(conditions) => map.serialize_entry("all", conditions)?,
+            Self::Any(conditions) => map.serialize_entry("any", conditions)?,
+        }
+        map.end()
+    }
 }
 
 /// Output contract for validating stage results
@@ -569,6 +594,29 @@ impl Flow {
                             sub
                         ));
                     }
+                }
+            }
+
+            // team_leader is its own execution mode — combining it with
+            // declared-parallel or workflow_call would be ambiguous.
+            if let Some(spec) = &stage.team_leader {
+                if stage.parallel {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}' combines team_leader with parallel — pick one",
+                        stage.id
+                    ));
+                }
+                if stage.call.is_some() {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}' combines team_leader with call — pick one",
+                        stage.id
+                    ));
+                }
+                if spec.max_parts == 0 {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}': team_leader.max_parts must be >= 1",
+                        stage.id
+                    ));
                 }
             }
         }
@@ -1319,6 +1367,13 @@ impl FlowEngine {
             return Ok(summary);
         }
 
+        // Orchestrator-worker: the leader decomposes, workers run in parallel.
+        // Dispatched before the declared-parallel branch (validate() rejects
+        // combining the two).
+        if let Some(spec) = stage.team_leader.as_ref() {
+            return self.execute_team_leader(stage, spec, state).await;
+        }
+
         // Parallel execution: run sub-stages concurrently
         if stage.parallel && !stage.sub_movements.is_empty() {
             return self.execute_parallel_movements(stage, state).await;
@@ -1565,10 +1620,11 @@ impl FlowEngine {
             .find(|p| p.stages.iter().any(|m| m.id == parent.id))
             .ok_or_else(|| anyhow::anyhow!("Parent flow not found for stage '{}'", parent.id))?;
 
-        let sub_movs: Vec<&Stage> = parent
+        let sub_movs: Vec<Stage> = parent
             .sub_movements
             .iter()
             .filter_map(|id| flow.stages.iter().find(|m| m.id == *id))
+            .cloned()
             .collect();
 
         if sub_movs.is_empty() {
@@ -1577,12 +1633,25 @@ impl FlowEngine {
             ));
         }
 
-        // Execute all sub-stages concurrently. Strip the parent's visit count
-        // so promotion rules don't fire on sub-stages (takt excludes promotion
-        // on parallel sub-steps — the count tracks the parent, not them).
+        self.run_stages_parallel(&parent.id, &sub_movs, state).await
+    }
+
+    /// Run a set of stages concurrently and aggregate their outputs into the
+    /// parallel shape `{"parallel": true, "agents": {id: output}, ...}` that
+    /// `evaluate_rules` and `all()`/`any()` aggregation understand. Shared by
+    /// declared `parallel:` stages and team_leader-synthesized workers.
+    async fn run_stages_parallel(
+        &self,
+        parent_id: &str,
+        stages: &[Stage],
+        state: &FlowState,
+    ) -> Result<serde_json::Value> {
+        // Strip the parent's visit count so promotion rules don't fire on
+        // sub-stages (takt excludes promotion on parallel sub-steps — the
+        // count tracks the parent, not them).
         let mut sub_state = state.clone();
         sub_state.variables.remove("__visit_count");
-        let futures: Vec<_> = sub_movs
+        let futures: Vec<_> = stages
             .iter()
             .map(|m| self.execute_movement(m, &sub_state))
             .collect();
@@ -1593,7 +1662,7 @@ impl FlowEngine {
         let mut outputs = serde_json::Map::new();
         let mut all_success = true;
         for (i, result) in results.into_iter().enumerate() {
-            let sub_id = &sub_movs[i].id;
+            let sub_id = &stages[i].id;
             match result {
                 Ok(output) => {
                     outputs.insert(sub_id.clone(), output);
@@ -1610,11 +1679,108 @@ impl FlowEngine {
         }
 
         Ok(serde_json::json!({
-            "stage": parent.id,
+            "stage": parent_id,
             "parallel": true,
             "status": if all_success { "completed" } else { "partial" },
             "agents": outputs,
         }))
+    }
+
+    /// Execute a team_leader stage: a leader call decomposes the task into
+    /// parts (JSON), the parts run concurrently as synthesized worker stages,
+    /// and the outputs aggregate into the parallel shape.
+    ///
+    /// Robustness ladder: a malformed leader reply gets ONE retry with the
+    /// parse error attached; if that also fails, the stage degrades to a
+    /// single worker executing the original instruction — a decomposition
+    /// failure must not kill work a single agent could do.
+    async fn execute_team_leader(
+        &self,
+        stage: &Stage,
+        spec: &super::team_leader::TeamLeaderSpec,
+        state: &FlowState,
+    ) -> Result<serde_json::Value> {
+        use super::team_leader;
+
+        let expanded_instruction = expand_template(&stage.instruction, &state.variables);
+        let max_parts = spec.max_parts.max(1);
+
+        // Leader phase: readonly decomposition call (the leader plans; the
+        // workers edit).
+        let mut leader_stage = stage.clone();
+        leader_stage.team_leader = None;
+        leader_stage.gates = Vec::new();
+        leader_stage.permission = MovementPermission::Readonly;
+        leader_stage.tools = Vec::new();
+
+        let mut parts = None;
+        let mut last_parse_error = String::new();
+        for attempt in 0..2 {
+            let mut prompt_stage = leader_stage.clone();
+            prompt_stage.instruction =
+                team_leader::decomposition_prompt(&expanded_instruction, max_parts);
+            if attempt > 0 {
+                prompt_stage.instruction.push_str(&format!(
+                    "\n\n# Previous attempt failed\n{}\nReply with ONLY the JSON array this time.",
+                    last_parse_error
+                ));
+            }
+
+            // Box::pin: execute_movement → execute_team_leader →
+            // execute_movement would otherwise be an infinite-sized future.
+            let leader_output = Box::pin(self.execute_movement(&prompt_stage, state)).await?;
+            let leader_text = leader_output
+                .get("output")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+
+            match team_leader::parse_parts(leader_text, max_parts) {
+                Ok(p) => {
+                    parts = Some(p);
+                    break;
+                }
+                Err(e) => {
+                    warn!(
+                        "team_leader '{}' decomposition attempt {} unparsable: {}",
+                        stage.id,
+                        attempt + 1,
+                        e
+                    );
+                    last_parse_error = e;
+                }
+            }
+        }
+
+        // Graceful degradation: run the whole task as one worker.
+        let parts = parts.unwrap_or_else(|| {
+            warn!(
+                "team_leader '{}' falling back to a single worker (decomposition failed twice)",
+                stage.id
+            );
+            vec![super::team_leader::TaskPart {
+                id: format!("{}-worker", stage.id),
+                title: String::new(),
+                instruction: expanded_instruction.clone(),
+            }]
+        });
+
+        info!(
+            "team_leader '{}' decomposed into {} part(s): [{}]",
+            stage.id,
+            parts.len(),
+            parts
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        let workers: Vec<Stage> = parts
+            .iter()
+            .map(|part| team_leader::worker_stage(stage, spec, part))
+            .collect();
+
+        Box::pin(self.run_stages_parallel(&stage.id, &workers, state)).await
     }
 
     /// Execute a sub-workflow as a single stage. The child flow inherits the
@@ -2223,8 +2389,70 @@ impl Default for FlowEngine {
 }
 
 /// Built-in flow templates
+/// Builtin `team-dynamic` flow: plan → team_leader implement → review.
+/// Defined in YAML for legibility; parse+validate happen once at registry
+/// construction and the unit tests cover both.
+fn team_dynamic_flow() -> Flow {
+    const YAML: &str = r#"
+name: team-dynamic
+description: "Orchestrator-worker: planner designs, a team leader decomposes the implementation into parallel parts at runtime, reviewer validates"
+max_stages: 12
+initial_movement: plan
+stages:
+  - id: plan
+    persona: planner
+    instruction: |
+      Analyze the following task and produce a concise implementation plan
+      (key components, order of work, risks):
+
+      {task}
+    permission: readonly
+    rules:
+      - condition: success
+        next: implement
+  - id: implement
+    persona: coder
+    instruction: |
+      Implement the following task according to the plan.
+
+      # Task
+      {task}
+
+      # Plan
+      {plan_output}
+    permission: edit
+    team_leader:
+      max_parts: 3
+      part_persona: coder
+      part_permission: edit
+    rules:
+      - condition:
+          all: ["completed"]
+        next: review
+      - condition:
+          any: ["failed"]
+        next: review
+  - id: review
+    persona: reviewer
+    instruction: |
+      Review the implementation work for the task below. Identify bugs,
+      missing pieces, and quality issues. End with APPROVED or NEEDS_FIX.
+
+      # Task
+      {task}
+    permission: readonly
+    rules:
+      - condition: success
+        next: complete
+  - id: complete
+    instruction: "_local"
+"#;
+    Flow::from_yaml(YAML).expect("builtin team-dynamic flow must parse")
+}
+
 pub fn builtin_flows() -> Vec<Flow> {
     vec![
+        team_dynamic_flow(),
         // Default development workflow
         Flow {
             name: "default".to_string(),
@@ -2261,7 +2489,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 Stage {
                     id: "implement".to_string(),
                     persona: Some("coder".to_string()),
@@ -2301,7 +2530,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 Stage {
                     id: "review".to_string(),
                     persona: Some("reviewer".to_string()),
@@ -2337,7 +2567,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2369,7 +2600,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 Stage {
                     id: "complete".to_string(),
                     persona: None,
@@ -2391,7 +2623,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2437,7 +2670,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 Stage {
                     id: "summarize".to_string(),
                     persona: Some("writer".to_string()),
@@ -2471,7 +2705,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2520,7 +2755,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2552,7 +2788,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 Stage {
                     id: "done".to_string(),
                     persona: None,
@@ -2574,7 +2811,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2617,7 +2855,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                 retry_delay_ms: default_retry_delay(),
                 pass_previous_response: true,
                 call: None, promotion: Vec::new(),
-            gates: Vec::new(),            }],
+            gates: Vec::new(),
+            team_leader: None,            }],
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,
@@ -2657,7 +2896,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 // Parallel hub: dispatches to frontend-impl and backend-impl simultaneously
                 Stage {
                     id: "parallel-implement".to_string(),
@@ -2685,7 +2925,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 // Frontend agent (runs in parallel)
                 Stage {
                     id: "frontend-impl".to_string(),
@@ -2708,7 +2949,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 // Backend agent (runs in parallel)
                 Stage {
                     id: "backend-impl".to_string(),
@@ -2731,7 +2973,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 // Supervisor reviews the combined output
                 Stage {
                     id: "review".to_string(),
@@ -2759,7 +3002,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
                 // Local completion
                 Stage {
                     id: "complete".to_string(),
@@ -2782,7 +3026,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
-            gates: Vec::new(),                },
+            gates: Vec::new(),
+            team_leader: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -3419,6 +3664,152 @@ stages:
     }
 
     #[test]
+    fn test_team_leader_parses_with_defaults_and_legacy_yaml_unaffected() {
+        let yaml = r#"
+name: tl
+initial_movement: build
+stages:
+  - id: build
+    instruction: "implement {task}"
+    team_leader:
+      part_persona: coder
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let spec = flow.stages[0].team_leader.as_ref().expect("spec");
+        assert_eq!(spec.max_parts, 3, "default max_parts");
+        assert_eq!(spec.part_persona.as_deref(), Some("coder"));
+
+        // Legacy YAML without the field still parses.
+        let legacy = r#"
+name: legacy
+initial_movement: a
+stages:
+  - id: a
+    instruction: "x"
+"#;
+        let flow = Flow::from_yaml(legacy).expect("legacy parse failed");
+        assert!(flow.stages[0].team_leader.is_none());
+    }
+
+    #[test]
+    fn test_team_leader_validate_rejects_parallel_and_call_combos() {
+        let with_parallel = r#"
+name: bad1
+initial_movement: a
+stages:
+  - id: a
+    instruction: "x"
+    parallel: true
+    sub_movements: [b]
+    team_leader: {}
+  - id: b
+    instruction: "y"
+"#;
+        assert!(
+            Flow::from_yaml(with_parallel)
+                .expect_err("must reject")
+                .to_string()
+                .contains("team_leader with parallel")
+        );
+
+        let with_call = r#"
+name: bad2
+initial_movement: a
+stages:
+  - id: a
+    instruction: "x"
+    team_leader: {}
+    call:
+      flow: other
+"#;
+        assert!(
+            Flow::from_yaml(with_call)
+                .expect_err("must reject")
+                .to_string()
+                .contains("team_leader with call")
+        );
+
+        let zero_parts = r#"
+name: bad3
+initial_movement: a
+stages:
+  - id: a
+    instruction: "x"
+    team_leader:
+      max_parts: 0
+"#;
+        assert!(
+            Flow::from_yaml(zero_parts)
+                .expect_err("must reject")
+                .to_string()
+                .contains("max_parts")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_team_leader_offline_aggregates_parallel_shape() {
+        // Without a bridge, the leader's "output" is the prompt echo (no JSON
+        // array with parts)… the no-bridge path returns {"instruction", "prompt"}
+        // with no "output" key, so decomposition fails twice and degrades to a
+        // single worker — exercising the graceful-degradation path end-to-end.
+        let yaml = r#"
+name: tl-offline
+initial_movement: build
+stages:
+  - id: build
+    instruction: "implement the thing"
+    team_leader:
+      max_parts: 2
+    rules:
+      - condition:
+          all: ["completed"]
+        next: done
+  - id: done
+    instruction: "terminal"
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let mut engine = FlowEngine::new();
+        engine.flows.insert("tl-offline".to_string(), flow);
+
+        let state = engine
+            .execute_piece("tl-offline")
+            .await
+            .expect("execution failed");
+        assert_eq!(state.status, FlowStatus::Completed);
+        // The team_leader stage output must carry the parallel shape with the
+        // degraded single worker, and all("completed") must route to done.
+        let visited: Vec<&str> = state.history.iter().map(|t| t.to.as_str()).collect();
+        assert_eq!(visited, vec!["done"]);
+        let build_output = state
+            .history
+            .first()
+            .and_then(|t| t.output.as_ref())
+            .expect("build output");
+        assert_eq!(build_output.get("parallel"), Some(&serde_json::json!(true)));
+        let agents = build_output
+            .get("agents")
+            .and_then(|v| v.as_object())
+            .expect("agents map");
+        assert_eq!(agents.len(), 1, "degraded to a single worker");
+        assert!(agents.contains_key("build-worker"));
+    }
+
+    #[test]
+    fn test_builtin_flows_roundtrip_through_yaml() {
+        // `flow check <builtin>` serializes a builtin flow to YAML and
+        // re-parses it; every builtin must survive the round trip.
+        for flow in builtin_flows() {
+            let yaml = serde_yml::to_string(&flow).expect("serialize");
+            if let Err(e) = Flow::from_yaml(&yaml) {
+                panic!(
+                    "builtin flow '{}' failed YAML round-trip: {:#}\n--- yaml ---\n{}",
+                    flow.name, e, yaml
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_max_stage_visits_defaults_to_three() {
         let yaml = r#"
 name: defaults
@@ -3615,6 +4006,7 @@ stages:
             }),
             promotion: Vec::new(),
             gates: Vec::new(),
+            team_leader: None,
         };
         let call = stage.call.clone().expect("call");
 
