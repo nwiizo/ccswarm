@@ -618,6 +618,47 @@ fn test_pipeline_dry_run_includes_task_body() {
 }
 
 #[test]
+fn test_pipeline_dry_run_shows_sangha_member_prompts() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_path = temp_dir.path();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project_path)
+        .output()
+        .unwrap();
+
+    let _ = run_ccswarm(&["init", "--name", "SanghaDryRunTest"], Some(project_path));
+    let output = run_ccswarm(
+        &[
+            "pipeline",
+            "--task",
+            "Add validation",
+            "--flow",
+            "default",
+            "--dry-run",
+        ],
+        Some(project_path),
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        output.status.success(),
+        "default dry-run should succeed. stdout: {}, stderr: {}",
+        stdout,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("stage: sangha/member: planner"),
+        "dry-run should show Sangha member prompts: {stdout}"
+    );
+    assert!(
+        stdout.contains("SANGHA_DECISION=APPROVE"),
+        "dry-run should show the Sangha decision contract: {stdout}"
+    );
+}
+
+#[test]
 fn test_scaffold_returns_failure_when_pipeline_fails() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path().join("missing-flow-app");
@@ -647,6 +688,72 @@ fn test_scaffold_returns_failure_when_pipeline_fails() {
     assert!(
         !stderr.contains("Project ready"),
         "failed scaffold must not claim the project is ready: {stderr}"
+    );
+}
+
+#[test]
+fn test_extend_auto_propose_creates_sangha_proposal() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_path = temp_dir.path();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project_path)
+        .output()
+        .unwrap();
+
+    let output = run_ccswarm(
+        &[
+            "--json",
+            "lab",
+            "extend",
+            "auto-propose",
+            "--agent",
+            "backend",
+            "--reason",
+            "Repeated API review issues",
+        ],
+        Some(project_path),
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "auto-propose should succeed. stdout: {stdout}, stderr: {stderr}"
+    );
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("auto-propose --json should emit valid JSON");
+    let proposal_id = parsed["data"]["sangha_proposal_id"]
+        .as_str()
+        .expect("extension should link to a Sangha proposal");
+    assert_eq!(parsed["data"]["status"], "pending_consensus");
+
+    let proposal_path = project_path
+        .join("coordination")
+        .join("proposals")
+        .join(format!("{proposal_id}.json"));
+    assert!(proposal_path.exists(), "Sangha proposal should be written");
+}
+
+#[test]
+fn test_sangha_rejects_unsafe_proposal_id() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_path = temp_dir.path();
+
+    let output = run_ccswarm(
+        &["lab", "sangha", "status", "../../etc/passwd"],
+        Some(project_path),
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        !output.status.success(),
+        "unsafe proposal id should fail. stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("safe coordination ID"),
+        "error should explain unsafe IDs: {stderr}"
     );
 }
 

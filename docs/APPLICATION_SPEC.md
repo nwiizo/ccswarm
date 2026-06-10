@@ -302,8 +302,9 @@ ccswarm can instantiate specialized agents (Frontend/Backend/DevOps/QA) and also
 
 ### Interaction Protocols
 - Flow Pipeline (current): Workflow engine executes stages, routing to agents via AISessionBridge.
+- Sangha Consensus (current): `sangha:` stages collect independent member
+  decisions and require quorum before implementation or policy changes proceed.
 - Contract Net/Auction (planned): Agents bid on tasks using capability/cost/latency scores.
-- Vote/Consensus (planned): Sangha voting on competing proposals; quorum and tie-break rules.
 - Blackboard Bus: Shared topics for proposals, status, and decisions, with retention and replay.
 
 ### Task Contract (Canonical Schema)
@@ -439,7 +440,7 @@ See docs/HARNESS_ENGINEERING.md for scenario format and CLI. Harness executes fl
 ## Scheduling & Assignment (Advanced)
 
 - Matching policy computes suitability score per agent: skills match, past success, queue length, SLA.
-- Policies: greedy (default), auction (bid by cost/latency/confidence), consensus (future with Sangha).
+- Policies: greedy, Sangha consensus (default workflow governance), auction (future bid by cost/latency/confidence).
 - DAG barriers respected: downstream tasks activate only when prerequisites complete.
 - Acceptance criteria: selected policy and decision rationale recorded in events.ndjson.
 
@@ -480,7 +481,8 @@ This section re‑introduces four CLI surfaces with takt‑aligned patterns. The
   - list: `[--status <open|accepted|rejected>]`
   - status: `<id>`
 - extend
-  - propose: `--title <str> --description <str> [--agent <frontend|backend|devops|qa|all=all>]`
+  - propose: `--title <str> --description <str> [--agent <frontend|backend|devops|qa|all=all>] [--auto-sangha]`
+  - auto-propose: `[--agent <frontend|backend|devops|qa|all=all>] [--reason <str>] [--no-auto-sangha]`
   - list: `[--status <proposed|approved|active|deprecated>]`
   - status: `<id>`
   - history: `[<limit=20>]`
@@ -496,7 +498,7 @@ This section re‑introduces four CLI surfaces with takt‑aligned patterns. The
 - `coordination/proposals/{id}.json`
   - `{ id, title, description, type, created_at, status, votes: [{agent, approve, reason, ts}] }`
 - `coordination/extensions/{id}.json`
-  - `{ id, title, description, agent, status, history: [{event, detail, ts}] }`
+  - `{ id, title, description, agent, status, sangha_proposal_id?, source?, history?: [{event, detail, ts}] }`
 - `coordination/agent-status/{agent}.json`
   - `{ agent_id, status, metrics, timestamp }`
 - `coordination/task-queue/{id}.json`
@@ -514,6 +516,7 @@ JSON writes use pretty‑printed `serde_json`, filenames are UUID‑based, and d
 - AC‑C2: `sangha propose` 実行で `coordination/proposals/` に JSON が作成され、`sangha list/status` で参照できる。
 - AC‑C3: `sangha vote <id> [--approve]` 実行で既存 proposal に投票が追記され、集計が反映される。
 - AC‑C4: `extend propose` 実行で `coordination/extensions/` に JSON が作成され、`extend list/status/history` で参照できる。
+- AC‑C4b: `extend auto-propose` は extension JSON と linked Sangha proposal JSON を作成し、extension に `sangha_proposal_id` を記録する。
 - AC‑C5: `search docs/code` はローカル検索（docs/ とリポジトリ）で結果を返し、外部 API を不要とする。
 - AC‑C6: `evolution metrics/patterns/report` は `coordination/*` の履歴から集計/分析を生成し、`--format json` で構造化出力を返す。
 
@@ -641,7 +644,21 @@ cargo run --package ai-session --bin server
 
 ## Version History
 
-### v0.8.0 (Current)
+### v0.9.0 (Current)
+- Sangha consensus is a workflow primitive (`sangha:` stage) with quorum
+  approval and independent member decisions.
+- Builtin `default` flow is Sangha-first: plan → quorum → implement → review
+  → fix, while `team-dynamic` remains available for leader/worker
+  compatibility.
+- Governed auto-extension: `extend auto-propose` and `extend propose
+  --auto-sangha` create linked Sangha proposals before extension adoption.
+- ccswarm live provider calls use ai-session execution primitives for prompt
+  sizing, working-directory context, cwd enforcement, structured subprocess
+  execution, output parsing, and persistence.
+- Pipeline `--model` and `--isolate` are forwarded into the live
+  `AISessionBridge` execution options.
+
+### v0.8.0
 - takt feature adoption + codex first-class support
 - Global `--provider <claude|codex>` flag; codex JSONL telemetry (`CCSWARM_CODEX_JSON=1`) and session resume (`codex exec resume`) — multi-turn works on codex
 - Rate-limit fallback chain (flow-level `on_rate_limit`) and stage `promotion` rules (provider/model escalation from the Nth visit)

@@ -387,6 +387,28 @@ fn test_cli_parse_extend_propose() {
 }
 
 #[test]
+fn test_cli_parse_extend_auto_propose() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "lab",
+        "extend",
+        "auto-propose",
+        "--agent",
+        "backend",
+        "--reason",
+        "Repeated API review issues",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Commands::Lab {
+            action: LabAction::Extend { .. },
+        } => {}
+        _ => panic!("Expected Extend command"),
+    }
+}
+
+#[test]
 fn test_cli_parse_extend_list() {
     let cli = Cli::try_parse_from(["ccswarm", "lab", "extend", "list"]).unwrap();
 

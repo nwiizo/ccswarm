@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Versions 0.5.0–0.6.2 were tracked in docs/APPLICATION_SPEC.md Version
 > History rather than here.
 
+## [0.9.0] - 2026-06-10
+
+Sangha consensus workflow and governed auto-extension.
+
+### Added
+- **Sangha consensus stages**: flow YAML can now declare `sangha:` on a
+  stage. Multiple independent members evaluate the same decision, emit
+  `SANGHA_DECISION=APPROVE|REVISE`, and the stage advances only when
+  approvals meet quorum. This restores consensus as a first-class workflow
+  primitive instead of routing dynamic work through a single team leader.
+- **Sangha-first default workflow**: the builtin `default` flow now runs
+  plan → Sangha quorum → implement → review → fix. `team_leader` remains
+  available for compatibility as the `team-dynamic` flow, but the default
+  governance path is consensus-based.
+- **Governed auto-extension**: `ccswarm lab extend auto-propose` creates an
+  extension proposal from local workflow context and, by default, creates a
+  linked Sangha proposal for consensus approval. `extend propose
+  --auto-sangha` links manual extension proposals to the same voting ledger.
+- **ai-session execution primitives**: `ai-session` now exposes provider-neutral
+  helpers for prompt size validation, working-directory prompt context, cwd
+  enforcement, and structured subprocess execution. `ccswarm` routes live
+  provider calls through these helpers via `AISessionBridge`.
+
+### Changed
+- Lab Sangha/extension state now respects `--repo` and writes under the target
+  repository's `coordination/` directory instead of the process working
+  directory.
+- Pipeline `--model` and `--isolate` now reach live `AISessionBridge`
+  execution options instead of being parsed and ignored.
+
 ## [0.8.0] - 2026-06-10
 
 takt feature adoption + codex first-class support.

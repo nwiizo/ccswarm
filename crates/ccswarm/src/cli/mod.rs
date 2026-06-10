@@ -648,6 +648,21 @@ pub enum ExtendAction {
         /// Target agent: frontend | backend | devops | qa | all
         #[arg(short, long, default_value = "all")]
         agent: String,
+        /// Also create a Sangha proposal for consensus approval
+        #[arg(long)]
+        auto_sangha: bool,
+    },
+    /// Generate an extension proposal from local workflow context
+    AutoPropose {
+        /// Target agent: frontend | backend | devops | qa | all
+        #[arg(short, long, default_value = "all")]
+        agent: String,
+        /// Optional reason or observed gap to include in the proposal
+        #[arg(short, long)]
+        reason: Option<String>,
+        /// Do not create a linked Sangha proposal
+        #[arg(long = "no-auto-sangha", action = clap::ArgAction::SetFalse, default_value_t = true)]
+        auto_sangha: bool,
     },
     /// List extensions
     List {

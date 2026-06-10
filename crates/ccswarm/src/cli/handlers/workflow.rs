@@ -135,10 +135,10 @@ impl CliRunner {
         timeout: u64,
         verbose: bool,
         output_file: Option<&Path>,
-        _isolate: bool, // TODO: pass to MovementExecOptions.worktree_name
+        isolate: bool,
         budget: Option<f64>,
         run_budget_tokens: Option<u64>,
-        _model_override: Option<&str>, // TODO: pass to MovementExecOptions.model
+        model_override: Option<&str>,
         auto_commit: bool,
         create_pr: bool,
         approval_gate: Option<std::time::Duration>,
@@ -150,10 +150,10 @@ impl CliRunner {
             timeout,
             verbose,
             output_file,
-            _isolate,
+            isolate,
             budget,
             run_budget_tokens,
-            _model_override,
+            model_override,
             auto_commit,
             create_pr,
             approval_gate,
@@ -209,6 +209,7 @@ impl CliRunner {
     async fn handle_pipeline_dry_run(&self, task: &str, flow_name: &str) -> Result<()> {
         use crate::workflow::facets::FacetRegistry;
         use crate::workflow::flow::{Flow, builtin_flows};
+        use crate::workflow::sangha;
 
         // Resolve flow: builtin → .ccswarm/flows/<name>.yaml
         let flow_obj: Flow = builtin_flows()
@@ -268,6 +269,34 @@ impl CliRunner {
             }
             println!("{}", composed.user);
             println!();
+
+            if let Some(spec) = &stage.sangha {
+                let mut parent = stage.clone();
+                parent.instruction = instruction.clone();
+                for member in sangha::members_or_default(spec) {
+                    let member_stage = sangha::member_stage(&parent, spec, &member);
+                    let member_composed = registry.compose(
+                        member_stage.persona.as_deref(),
+                        member_stage.policy.as_deref(),
+                        member_stage.knowledge.as_deref(),
+                        &member_stage.instruction,
+                        None,
+                    );
+                    println!(
+                        "{}",
+                        format!("=== stage: {}/member: {} ===", stage.id, member.id)
+                            .bright_cyan()
+                            .bold()
+                    );
+                    if !member_composed.system.is_empty() {
+                        println!("{}", "--- system ---".bright_black());
+                        println!("{}", member_composed.system);
+                    }
+                    println!("{}", "--- user ---".bright_black());
+                    println!("{}", member_composed.user);
+                    println!();
+                }
+            }
         }
         Ok(())
     }
@@ -284,10 +313,10 @@ impl CliRunner {
         timeout: u64,
         verbose: bool,
         output_file: Option<&Path>,
-        _isolate: bool,
+        isolate: bool,
         budget: Option<f64>,
         run_budget_tokens: Option<u64>,
-        _model_override: Option<&str>,
+        model_override: Option<&str>,
         auto_commit: bool,
         create_pr: bool,
         approval_gate: Option<std::time::Duration>,
@@ -300,8 +329,10 @@ impl CliRunner {
             timeout,
             verbose,
             output_file,
+            isolate,
             budget,
             run_budget_tokens,
+            model_override,
             auto_commit,
             create_pr,
             approval_gate,
@@ -320,10 +351,10 @@ impl CliRunner {
         timeout: u64,
         verbose: bool,
         output_file: Option<&Path>,
-        _isolate: bool,
+        isolate: bool,
         budget: Option<f64>,
         run_budget_tokens: Option<u64>,
-        _model_override: Option<&str>,
+        model_override: Option<&str>,
         auto_commit: bool,
         create_pr: bool,
         approval_gate: Option<std::time::Duration>,
@@ -336,8 +367,10 @@ impl CliRunner {
             timeout,
             verbose,
             output_file,
+            isolate,
             budget,
             run_budget_tokens,
+            model_override,
             auto_commit,
             create_pr,
             approval_gate,
@@ -355,8 +388,10 @@ impl CliRunner {
         timeout: u64,
         verbose: bool,
         output_file: Option<&Path>,
+        isolate: bool,
         budget: Option<f64>,
         run_budget_tokens: Option<u64>,
+        model_override: Option<&str>,
         auto_commit: bool,
         create_pr: bool,
         approval_gate: Option<std::time::Duration>,
@@ -370,8 +405,10 @@ impl CliRunner {
                 timeout,
                 verbose,
                 output_file,
+                isolate,
                 budget,
                 run_budget_tokens,
+                model_override,
             )
             .await?;
 
@@ -412,8 +449,10 @@ impl CliRunner {
         timeout: u64,
         verbose: bool,
         output_file: Option<&Path>,
+        isolate: bool,
         budget: Option<f64>,
         run_budget_tokens: Option<u64>,
+        model_override: Option<&str>,
     ) -> Result<(String, crate::workflow::pipeline::PipelineOutput)> {
         use crate::workflow::pipeline::{PipelineConfig, PipelineRunner};
         use std::time::Duration;
@@ -429,7 +468,11 @@ impl CliRunner {
             .build()
             .context("Failed to build pipeline configuration")?;
 
-        // Configure bridge for real Claude Code CLI execution
+        let run_id = reserved_run_id
+            .map(str::to_string)
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        // Configure bridge for real provider CLI execution through ai-session.
         let mut engine = crate::workflow::flow::FlowEngine::new();
         let bridge = crate::session::bridge::AISessionBridge::new(
             self.repo_path.join(".ccswarm").join("sessions"),
@@ -444,6 +487,13 @@ impl CliRunner {
         }
         if let Some(provider) = self.default_provider {
             engine.set_default_provider(provider);
+        }
+        if let Some(model) = model_override {
+            engine.set_model_override(model);
+        }
+        if isolate {
+            let suffix = run_id.chars().take(8).collect::<String>();
+            engine.set_worktree_name(format!("ccswarm-{suffix}"));
         }
 
         // Load layered facets (repertoire < user < project) into the engine.
@@ -469,9 +519,6 @@ impl CliRunner {
         }
 
         // Configure event recorder for observability
-        let run_id = reserved_run_id
-            .map(str::to_string)
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let runs_dir = self.repo_path.join(".ccswarm").join("runs");
         let recorder = crate::events::EventRecorder::new_in_runs_dir(runs_dir, &run_id)
             .await
@@ -569,10 +616,9 @@ impl CliRunner {
                 fix_attempts, MAX_FIX_ATTEMPTS
             );
 
-            // codex #5 fix: route the fix call through crate::providers instead of
-            // hardcoding `claude`. Otherwise a Codex/Copilot-configured project silently
-            // reverts to Claude on every test failure (and bills the wrong account).
-            // `--provider` takes precedence over the env var, same as in the engine.
+            // Route auto-fix through AISessionBridge so post-pipeline repair
+            // gets the same ai-session parsing, persistence, retry handling,
+            // and provider selection as normal flow stages.
             let provider_kind = self
                 .default_provider
                 .or_else(|| {
@@ -582,19 +628,54 @@ impl CliRunner {
                         .and_then(crate::providers::ProviderKind::parse)
                 })
                 .unwrap_or(crate::providers::ProviderKind::Claude);
-            let provider = crate::providers::resolve(provider_kind);
-            let options = crate::providers::ProviderOptions::default();
-            let mut fix_cmd = provider.build_command(
-                "Fix the failing tests. Read the test output, identify the issue, and fix the code.",
-                repo,
-                &options,
+            let bridge = crate::session::bridge::AISessionBridge::new(
+                repo.join(".ccswarm").join("sessions"),
             );
-            // The centrally enforced cwd in bridge.rs doesn't apply here because we bypass
-            // the bridge; do it ourselves.
-            fix_cmd.current_dir(repo);
-            let fix_output = fix_cmd.output().await;
+            let identity = crate::identity::AgentIdentity {
+                agent_id: "auto-fix".to_string(),
+                specialization: crate::identity::AgentRole::Frontend {
+                    technologies: Vec::new(),
+                    responsibilities: Vec::new(),
+                    boundaries: Vec::new(),
+                },
+                workspace_path: repo.clone(),
+                env_vars: std::collections::HashMap::new(),
+                session_id: uuid::Uuid::new_v4().to_string(),
+                parent_process_id: std::process::id().to_string(),
+                initialized_at: chrono::Utc::now(),
+            };
+            let options = crate::session::bridge::MovementExecOptions {
+                provider: Some(provider_kind),
+                tools: vec![
+                    "read".to_string(),
+                    "write".to_string(),
+                    "edit".to_string(),
+                    "bash".to_string(),
+                    "grep".to_string(),
+                    "glob".to_string(),
+                ],
+                model: None,
+                system_prompt: None,
+                max_budget: None,
+                worktree_name: None,
+                session_id: None,
+                continuation: crate::session::bridge::ContinuationPolicy::SingleTurn,
+                rate_limit_fallbacks: Vec::new(),
+            };
+            let fix_output = bridge
+                .execute_with_retry(
+                    "auto-fix",
+                "Fix the failing tests. Read the test output, identify the issue, and fix the code.",
+                    &identity,
+                    repo,
+                    None,
+                    0,
+                    1000,
+                    &options,
+                )
+                .await;
 
-            if fix_output.is_err() || !fix_output.as_ref().is_ok_and(|o| o.status.success()) {
+            if fix_output.is_err() || !fix_output.as_ref().is_ok_and(|result| result.success) {
                 eprintln!("  {} Fix attempt failed", "\u{2717}".bright_red());
                 break;
             }

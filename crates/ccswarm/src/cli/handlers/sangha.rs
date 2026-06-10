@@ -2,7 +2,7 @@ use super::super::*;
 
 impl CliRunner {
     pub(crate) async fn handle_sangha(&self, action: &SanghaAction) -> Result<()> {
-        let proposals_dir = PathBuf::from("coordination/proposals");
+        let proposals_dir = self.repo_path.join("coordination/proposals");
         tokio::fs::create_dir_all(&proposals_dir).await?;
 
         match action {
@@ -11,20 +11,13 @@ impl CliRunner {
                 description,
                 proposal_type,
             } => {
-                let id = format!("prop-{}", &uuid::Uuid::new_v4().to_string()[..8]);
-                let proposal = serde_json::json!({
-                    "id": id,
-                    "title": title,
-                    "description": description,
-                    "proposal_type": proposal_type,
-                    "status": "open",
-                    "votes": [],
-                    "created_at": chrono::Utc::now().to_rfc3339(),
-                });
-
-                let filepath = proposals_dir.join(format!("{}.json", id));
-                let content = serde_json::to_string_pretty(&proposal)?;
-                tokio::fs::write(&filepath, content).await?;
+                let proposal =
+                    create_sangha_proposal(&proposals_dir, title, description, proposal_type, None)
+                        .await?;
+                let id = proposal
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("?");
 
                 if self.json_output {
                     println!(
@@ -54,7 +47,7 @@ impl CliRunner {
                 approve,
                 reason,
             } => {
-                let filepath = proposals_dir.join(format!("{}.json", id));
+                let filepath = coordination_json_path(&proposals_dir, id, "Proposal")?;
                 if !filepath.exists() {
                     anyhow::bail!("Proposal '{}' not found", id);
                 }
@@ -151,7 +144,7 @@ impl CliRunner {
                 }
             }
             SanghaAction::Status { id } => {
-                let filepath = proposals_dir.join(format!("{}.json", id));
+                let filepath = coordination_json_path(&proposals_dir, id, "Proposal")?;
                 if !filepath.exists() {
                     anyhow::bail!("Proposal '{}' not found", id);
                 }
@@ -215,17 +208,20 @@ impl CliRunner {
     }
 
     pub(crate) async fn handle_extend(&self, action: &ExtendAction) -> Result<()> {
-        let extensions_dir = PathBuf::from("coordination/extensions");
+        let extensions_dir = self.repo_path.join("coordination/extensions");
+        let proposals_dir = self.repo_path.join("coordination/proposals");
         tokio::fs::create_dir_all(&extensions_dir).await?;
+        tokio::fs::create_dir_all(&proposals_dir).await?;
 
         match action {
             ExtendAction::Propose {
                 title,
                 description,
                 agent,
+                auto_sangha,
             } => {
                 let id = format!("ext-{}", &uuid::Uuid::new_v4().to_string()[..8]);
-                let extension = serde_json::json!({
+                let mut extension = serde_json::json!({
                     "id": id,
                     "title": title,
                     "description": description,
@@ -233,6 +229,27 @@ impl CliRunner {
                     "status": "proposed",
                     "created_at": chrono::Utc::now().to_rfc3339(),
                 });
+
+                let sangha_proposal_id = if *auto_sangha {
+                    let proposal = create_sangha_proposal(
+                        &proposals_dir,
+                        title,
+                        description,
+                        "extension",
+                        Some(&id),
+                    )
+                    .await?;
+                    proposal
+                        .get("id")
+                        .and_then(|value| value.as_str())
+                        .map(str::to_string)
+                } else {
+                    None
+                };
+                if let Some(proposal_id) = &sangha_proposal_id {
+                    extension["sangha_proposal_id"] = serde_json::json!(proposal_id);
+                    extension["status"] = serde_json::json!("pending_consensus");
+                }
 
                 let filepath = extensions_dir.join(format!("{}.json", id));
                 let content = serde_json::to_string_pretty(&extension)?;
@@ -255,6 +272,82 @@ impl CliRunner {
                     );
                     println!("  Title: {}", title);
                     println!("  Agent: {}", agent);
+                    if let Some(proposal_id) = sangha_proposal_id {
+                        println!(
+                            "  Sangha: ccswarm lab sangha vote {} --approve",
+                            proposal_id.bright_yellow()
+                        );
+                    }
+                }
+            }
+            ExtendAction::AutoPropose {
+                agent,
+                reason,
+                auto_sangha,
+            } => {
+                let title = format!("Extend {} agent capabilities", agent);
+                let description = reason.clone().unwrap_or_else(|| {
+                    "Automatically proposed from local workflow context: add or update agent facets, validation commands, and operating guidance where repeated work would benefit from specialized capability.".to_string()
+                });
+                let id = format!("ext-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+                let mut extension = serde_json::json!({
+                    "id": id,
+                    "title": title,
+                    "description": description,
+                    "agent": agent,
+                    "status": "proposed",
+                    "source": "auto",
+                    "created_at": chrono::Utc::now().to_rfc3339(),
+                });
+
+                let sangha_proposal_id = if *auto_sangha {
+                    let proposal = create_sangha_proposal(
+                        &proposals_dir,
+                        &title,
+                        &description,
+                        "extension",
+                        Some(&id),
+                    )
+                    .await?;
+                    proposal
+                        .get("id")
+                        .and_then(|value| value.as_str())
+                        .map(str::to_string)
+                } else {
+                    None
+                };
+                if let Some(proposal_id) = &sangha_proposal_id {
+                    extension["sangha_proposal_id"] = serde_json::json!(proposal_id);
+                    extension["status"] = serde_json::json!("pending_consensus");
+                }
+
+                let filepath = extensions_dir.join(format!("{}.json", id));
+                let content = serde_json::to_string_pretty(&extension)?;
+                tokio::fs::write(&filepath, content).await?;
+
+                if self.json_output {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "status": "success",
+                            "message": "Extension auto-proposed",
+                            "data": extension,
+                        }))?
+                    );
+                } else {
+                    println!(
+                        "{} Extension auto-proposed: {}",
+                        "OK".bright_green().bold(),
+                        id.bright_cyan()
+                    );
+                    println!("  Title: {}", title);
+                    println!("  Agent: {}", agent);
+                    if let Some(proposal_id) = sangha_proposal_id {
+                        println!(
+                            "  Sangha: ccswarm lab sangha vote {} --approve",
+                            proposal_id.bright_yellow()
+                        );
+                    }
                 }
             }
             ExtendAction::List { status } => {
@@ -311,7 +404,7 @@ impl CliRunner {
                 }
             }
             ExtendAction::Status { id } => {
-                let filepath = extensions_dir.join(format!("{}.json", id));
+                let filepath = coordination_json_path(&extensions_dir, id, "Extension")?;
                 if !filepath.exists() {
                     anyhow::bail!("Extension '{}' not found", id);
                 }
@@ -418,4 +511,54 @@ impl CliRunner {
 
         Ok(())
     }
+}
+
+async fn create_sangha_proposal(
+    proposals_dir: &std::path::Path,
+    title: &str,
+    description: &str,
+    proposal_type: &str,
+    related_extension_id: Option<&str>,
+) -> Result<serde_json::Value> {
+    let id = format!("prop-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+    let mut proposal = serde_json::json!({
+        "id": id,
+        "title": title,
+        "description": description,
+        "proposal_type": proposal_type,
+        "status": "open",
+        "votes": [],
+        "created_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    if let Some(extension_id) = related_extension_id {
+        proposal["related_extension_id"] = serde_json::json!(extension_id);
+    }
+
+    let proposal_id = proposal
+        .get("id")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| anyhow::anyhow!("generated proposal is missing id"))?;
+    let filepath = proposals_dir.join(format!("{}.json", proposal_id));
+    let content = serde_json::to_string_pretty(&proposal)?;
+    tokio::fs::write(&filepath, content).await?;
+
+    Ok(proposal)
+}
+
+fn coordination_json_path(
+    base_dir: &std::path::Path,
+    id: &str,
+    label: &str,
+) -> Result<std::path::PathBuf> {
+    if id.is_empty()
+        || id.len() > 128
+        || !id
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        anyhow::bail!("{} ID '{}' is not a safe coordination ID", label, id);
+    }
+
+    Ok(base_dir.join(format!("{}.json", id)))
 }

@@ -221,6 +221,12 @@ pub struct Stage {
     /// Mutually exclusive with `parallel` and `call`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub team_leader: Option<super::team_leader::TeamLeaderSpec>,
+
+    /// Sangha consensus round: multiple independent members evaluate the
+    /// stage and quorum decides whether the stage advances. Mutually
+    /// exclusive with `parallel`, `call`, and `team_leader`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sangha: Option<super::sangha::SanghaSpec>,
 }
 
 /// One machine-executed gate command on a stage.
@@ -651,6 +657,35 @@ impl Flow {
                     ));
                 }
             }
+
+            // sangha is its own execution mode — combining consensus with
+            // other body execution modes would make routing ambiguous.
+            if let Some(spec) = &stage.sangha {
+                if stage.parallel {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}' combines sangha with parallel — pick one",
+                        stage.id
+                    ));
+                }
+                if stage.call.is_some() {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}' combines sangha with call — pick one",
+                        stage.id
+                    ));
+                }
+                if stage.team_leader.is_some() {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}' combines sangha with team_leader — pick one",
+                        stage.id
+                    ));
+                }
+                if spec.quorum == 0 {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}': sangha.quorum must be >= 1",
+                        stage.id
+                    ));
+                }
+            }
         }
 
         // Check for duplicate stage IDs
@@ -731,6 +766,10 @@ pub struct FlowEngine {
     /// (`--provider` flag). Sits between stage YAML and the CCSWARM_PROVIDER
     /// env var in the resolution order.
     default_provider: Option<crate::providers::ProviderKind>,
+    /// CLI model override applied to every live stage.
+    model_override: Option<String>,
+    /// Optional isolated worktree name forwarded through AISessionBridge.
+    worktree_name: Option<String>,
 }
 
 /// Progress notification sent after each stage completes
@@ -774,6 +813,8 @@ impl FlowEngine {
             run_token_cap: None,
             interactive: false,
             default_provider: None,
+            model_override: None,
+            worktree_name: None,
         }
     }
 
@@ -819,6 +860,16 @@ impl FlowEngine {
     /// (`--provider` flag). Overrides the CCSWARM_PROVIDER env var.
     pub(crate) fn set_default_provider(&mut self, provider: crate::providers::ProviderKind) {
         self.default_provider = Some(provider);
+    }
+
+    /// Set a CLI model override for all stages in this engine run.
+    pub(crate) fn set_model_override(&mut self, model: impl Into<String>) {
+        self.model_override = Some(model.into());
+    }
+
+    /// Set the provider worktree isolation name for live stage execution.
+    pub(crate) fn set_worktree_name(&mut self, name: impl Into<String>) {
+        self.worktree_name = Some(name.into());
     }
 
     /// Resolve the provider and model a stage execution should use.
@@ -876,6 +927,10 @@ impl FlowEngine {
                     model = rule.model.clone();
                 }
             }
+        }
+
+        if self.model_override.is_some() {
+            model = self.model_override.clone();
         }
 
         (provider, model)
@@ -1417,6 +1472,11 @@ impl FlowEngine {
             return self.execute_team_leader(stage, spec, state).await;
         }
 
+        // Sangha consensus: multiple independent members vote; no leader.
+        if let Some(spec) = stage.sangha.as_ref() {
+            return self.execute_sangha(stage, spec, state).await;
+        }
+
         // Parallel execution: run sub-stages concurrently
         if stage.parallel && !stage.sub_movements.is_empty() {
             return self.execute_parallel_movements(stage, state).await;
@@ -1490,7 +1550,7 @@ impl FlowEngine {
                     })
                 }),
                 max_budget: self.budget_usd,
-                worktree_name: None,
+                worktree_name: self.worktree_name.clone(),
                 session_id: None,
                 continuation: crate::session::bridge::ContinuationPolicy::SingleTurn,
                 rate_limit_fallbacks,
@@ -1824,6 +1884,84 @@ impl FlowEngine {
             .collect();
 
         Box::pin(self.run_stages_parallel(&stage.id, &workers, state)).await
+    }
+
+    /// Execute a Sangha consensus stage. Members run independently, then their
+    /// explicit `SANGHA_DECISION=*` lines are tallied. The stage succeeds only
+    /// when approvals meet quorum.
+    async fn execute_sangha(
+        &self,
+        stage: &Stage,
+        spec: &super::sangha::SanghaSpec,
+        state: &FlowState,
+    ) -> Result<serde_json::Value> {
+        use super::sangha;
+
+        let expanded_instruction = expand_template(&stage.instruction, &state.variables);
+        let mut prompt_parent = stage.clone();
+        prompt_parent.instruction = expanded_instruction;
+
+        let members = sangha::members_or_default(spec);
+        let quorum = spec.quorum.max(1) as usize;
+        let member_stages = members
+            .iter()
+            .map(|member| sangha::member_stage(&prompt_parent, spec, member))
+            .collect::<Vec<_>>();
+
+        info!(
+            "sangha '{}' collecting consensus from {} member(s), quorum={}",
+            stage.id,
+            member_stages.len(),
+            quorum
+        );
+
+        let parallel_output =
+            Box::pin(self.run_stages_parallel(&stage.id, &member_stages, state)).await?;
+        let member_outputs = parallel_output
+            .get("agents")
+            .and_then(|agents| agents.as_object())
+            .cloned()
+            .unwrap_or_default();
+
+        let mut approvals = 0usize;
+        let mut revisions = 0usize;
+        let mut abstentions = 0usize;
+        let mut decisions = serde_json::Map::new();
+
+        for (member_id, output) in &member_outputs {
+            let text = output
+                .get("output")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            let decision = sangha::extract_decision(text);
+            match decision {
+                sangha::SanghaDecision::Approve => approvals += 1,
+                sangha::SanghaDecision::Revise => revisions += 1,
+                sangha::SanghaDecision::Abstain => abstentions += 1,
+            }
+            decisions.insert(
+                member_id.clone(),
+                serde_json::json!({
+                    "decision": decision.as_str(),
+                    "status": output.get("status").cloned().unwrap_or_else(|| serde_json::json!("unknown")),
+                }),
+            );
+        }
+
+        let accepted = approvals >= quorum;
+        Ok(serde_json::json!({
+            "stage": stage.id,
+            "sangha": true,
+            "parallel": true,
+            "status": if accepted { "completed" } else { "failed" },
+            "decision": if accepted { "accepted" } else { "needs_revision" },
+            "quorum": quorum,
+            "approvals": approvals,
+            "revisions": revisions,
+            "abstentions": abstentions,
+            "decisions": decisions,
+            "members": member_outputs,
+        }))
     }
 
     /// Execute a sub-workflow as a single stage. The child flow inherits the
@@ -2499,7 +2637,7 @@ pub fn builtin_flows() -> Vec<Flow> {
         // Default development workflow
         Flow {
             name: "default".to_string(),
-            description: "Standard development workflow: plan → implement → review → fix"
+            description: "Sangha consensus workflow: plan → sangha consensus → implement → review → fix"
                 .to_string(),
             max_stages: 30,
             max_stage_visits: 3,
@@ -2518,7 +2656,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     permission: MovementPermission::Readonly,
                     rules: vec![MovementRule {
                         condition: RuleCondition::Simple("success".to_string()),
-                        next: "implement".to_string(),
+                        next: "sangha".to_string(),
                         priority: 0,
                         interactive_only: false,
                         requires_user_input: false,                    }],
@@ -2533,7 +2671,46 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
+                Stage {
+                    id: "sangha".to_string(),
+                    persona: Some("planner".to_string()),
+                    policy: Some("review".to_string()),
+                    knowledge: None,
+                    provider: None,
+                    model: None,
+                    instruction: "Review the plan and task as a Sangha. Approve only when the implementation direction is clear, scoped, and testable.\n\n# Task\n{task}\n\n# Plan\n{plan_output}".to_string(),
+                    tools: vec!["read".to_string(), "grep".to_string(), "glob".to_string()],
+                    permission: MovementPermission::Readonly,
+                    rules: vec![MovementRule {
+                        condition: RuleCondition::Simple("success".to_string()),
+                        next: "implement".to_string(),
+                        priority: 0,
+                        interactive_only: false,
+                        requires_user_input: false,
+                    }],
+                    parallel: false,
+                    sub_movements: vec![],
+                    output_contract: None,
+                    timeout: None,
+                    max_retries: 0,
+                    agent: None,
+                    working_dir: None,
+                    retry_delay_ms: default_retry_delay(),
+                    pass_previous_response: true,
+                    call: None,
+                    promotion: Vec::new(),
+                    gates: Vec::new(),
+                    team_leader: None,
+                    sangha: Some(super::sangha::SanghaSpec {
+                        quorum: 2,
+                        members: Vec::new(),
+                        member_permission: None,
+                        member_tools: None,
+                        member_timeout_secs: None,
+                    }),
+                },
                 Stage {
                     id: "implement".to_string(),
                     persona: Some("coder".to_string()),
@@ -2541,7 +2718,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                     knowledge: None,
                     provider: None,
                     model: None,
-                    instruction: "Implement the planned changes".to_string(),
+                    instruction: "Implement the planned changes according to the Sangha consensus.\n\n# Consensus\n{sangha_output}".to_string(),
                     tools: vec![
                         "read".to_string(),
                         "write".to_string(),
@@ -2574,7 +2751,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 Stage {
                     id: "review".to_string(),
                     persona: Some("reviewer".to_string()),
@@ -2611,7 +2789,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2644,7 +2823,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 Stage {
                     id: "complete".to_string(),
                     persona: None,
@@ -2667,7 +2847,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2714,7 +2895,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 Stage {
                     id: "summarize".to_string(),
                     persona: Some("writer".to_string()),
@@ -2749,7 +2931,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2799,7 +2982,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2832,7 +3016,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 Stage {
                     id: "done".to_string(),
                     persona: None,
@@ -2855,7 +3040,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2899,7 +3085,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                 pass_previous_response: true,
                 call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,            }],
+            team_leader: None,
+                    sangha: None,            }],
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,
@@ -2940,7 +3127,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 // Parallel hub: dispatches to frontend-impl and backend-impl simultaneously
                 Stage {
                     id: "parallel-implement".to_string(),
@@ -2969,7 +3157,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 // Frontend agent (runs in parallel)
                 Stage {
                     id: "frontend-impl".to_string(),
@@ -2993,7 +3182,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 // Backend agent (runs in parallel)
                 Stage {
                     id: "backend-impl".to_string(),
@@ -3017,7 +3207,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 // Supervisor reviews the combined output
                 Stage {
                     id: "review".to_string(),
@@ -3046,7 +3237,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
                 // Local completion
                 Stage {
                     id: "complete".to_string(),
@@ -3070,7 +3262,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     pass_previous_response: true,
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
-            team_leader: None,                },
+            team_leader: None,
+                    sangha: None,                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -3852,6 +4045,96 @@ stages:
         );
     }
 
+    #[test]
+    fn test_sangha_parses_and_rejects_ambiguous_modes() {
+        let yaml = r#"
+name: sangha-test
+initial_movement: decide
+stages:
+  - id: decide
+    instruction: "Review the task"
+    sangha:
+      quorum: 2
+      members:
+        - { id: planner, persona: planner }
+        - { id: reviewer, persona: reviewer }
+"#;
+        let flow = Flow::from_yaml(yaml).expect("sangha flow should parse");
+        let spec = flow.stages[0].sangha.as_ref().expect("sangha spec");
+        assert_eq!(spec.quorum, 2);
+        assert_eq!(spec.members.len(), 2);
+
+        let bad = r#"
+name: bad-sangha
+initial_movement: decide
+stages:
+  - id: decide
+    instruction: "Review the task"
+    parallel: true
+    sangha: {}
+"#;
+        assert!(
+            Flow::from_yaml(bad)
+                .expect_err("sangha must reject ambiguous execution modes")
+                .to_string()
+                .contains("sangha with parallel")
+        );
+    }
+
+    #[test]
+    fn default_flow_uses_sangha_consensus() {
+        let default = builtin_flows()
+            .into_iter()
+            .find(|flow| flow.name == "default")
+            .expect("default flow should exist");
+        let stage_ids = default
+            .stages
+            .iter()
+            .map(|stage| stage.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(stage_ids.contains(&"sangha"));
+        assert!(
+            default
+                .stages
+                .iter()
+                .any(|stage| stage.id == "sangha" && stage.sangha.is_some())
+        );
+    }
+
+    #[test]
+    fn cli_model_override_wins_for_all_stage_execution() {
+        let flow = Flow::from_yaml(
+            r#"
+name: model-test
+initial_movement: build
+stages:
+  - id: build
+    provider: codex
+    model: stage-model
+    instruction: "Build"
+    promotion:
+      - at: 1
+        model: promoted-model
+"#,
+        )
+        .expect("flow should parse");
+        let mut state = flow.create_state();
+        state
+            .variables
+            .insert("__visit_count".to_string(), serde_json::json!(1));
+        let stage = flow.stages[0].clone();
+
+        let mut engine = FlowEngine::new();
+        engine.set_model_override("cli-model");
+        engine.set_worktree_name("ccswarm-test-run");
+
+        let (_, model) = engine.resolve_effective_provider(&stage, &state);
+
+        assert_eq!(model.as_deref(), Some("cli-model"));
+        assert_eq!(engine.worktree_name.as_deref(), Some("ccswarm-test-run"));
+    }
+
     #[tokio::test]
     async fn test_team_leader_offline_aggregates_parallel_shape() {
         // Without a bridge, the leader's "output" is the prompt echo (no JSON
@@ -4145,6 +4428,7 @@ stages:
             promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
+            sangha: None,
         };
         let call = stage.call.clone().expect("call");
 
