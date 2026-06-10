@@ -66,6 +66,11 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub fix: bool,
 
+    /// Default provider for stages that don't pin one in flow YAML
+    /// (claude | codex). Overrides CCSWARM_PROVIDER.
+    #[arg(long, global = true)]
+    pub provider: Option<String>,
+
     /// Log format: text (default), ndjson
     #[arg(long, default_value = "text")]
     pub log_format: String,
@@ -1667,6 +1672,9 @@ pub struct CliRunner {
     repo_path: PathBuf,
     json_output: bool,
     formatter: OutputFormatter,
+    /// `--provider` flag: default provider for stages that don't pin one in
+    /// flow YAML. Overrides the CCSWARM_PROVIDER env var.
+    default_provider: Option<crate::providers::ProviderKind>,
 }
 
 impl CliRunner {
@@ -1684,11 +1692,21 @@ impl CliRunner {
 
         let formatter = create_formatter(cli.json);
 
+        // Fail fast on an unknown provider name rather than silently running
+        // everything on the claude default.
+        let default_provider = match cli.provider.as_deref() {
+            Some(name) => Some(crate::providers::ProviderKind::parse(name).ok_or_else(|| {
+                anyhow::anyhow!("unknown provider '{}' (expected: claude | codex)", name)
+            })?),
+            None => None,
+        };
+
         Ok(Self {
             config,
             repo_path: cli.repo.clone(),
             json_output: cli.json,
             formatter,
+            default_provider,
         })
     }
 

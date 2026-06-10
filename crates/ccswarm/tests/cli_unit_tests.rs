@@ -557,6 +557,17 @@ fn test_cli_parse_approve_commit_reject() {
 }
 
 #[test]
+fn test_cli_parse_provider_flag_is_global() {
+    // --provider is a global flag, valid after the subcommand too.
+    let cli =
+        Cli::try_parse_from(["ccswarm", "pipeline", "--task", "t", "--provider", "codex"]).unwrap();
+    assert_eq!(cli.provider.as_deref(), Some("codex"));
+
+    let cli = Cli::try_parse_from(["ccswarm", "--provider", "claude", "auto"]).unwrap();
+    assert_eq!(cli.provider.as_deref(), Some("claude"));
+}
+
+#[test]
 fn test_cli_parse_auto_require_approval() {
     let cli = Cli::try_parse_from([
         "ccswarm",

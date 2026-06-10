@@ -332,28 +332,36 @@ impl AISessionBridge {
 
         let provider_kind = options.provider.unwrap_or(ProviderKind::Claude);
         let provider = crate::providers::resolve(provider_kind);
-        if !provider
-            .same_thread_continuation()
-            .supports_explicit_session_id()
-        {
+        let continuation_mode = provider.same_thread_continuation();
+        if !continuation_mode.supports_multi_turn() {
             return Err(anyhow::anyhow!(
                 "{} provider does not support same-thread multi-turn continuation",
                 provider_kind.as_str()
             ));
         }
 
-        let session_id = options
-            .session_id
-            .clone()
-            .or_else(|| {
-                self.context_histories
-                    .get(agent_id)
-                    .map(|context| context.session_id.to_string())
-            })
-            .unwrap_or_else(|| SessionId::new().to_string());
-
         let mut turn_options = options.clone();
-        turn_options.session_id = Some(session_id.clone());
+
+        // ExplicitSessionId (claude): pick the ID up front and pass it every
+        // turn. ProviderAssignedId (codex): the first turn runs without an ID;
+        // the provider assigns one and the bridge learns it from the turn's
+        // metadata (codex --json thread.started event).
+        let mut session_id = match continuation_mode {
+            crate::providers::SameThreadContinuation::ExplicitSessionId => {
+                let sid = options
+                    .session_id
+                    .clone()
+                    .or_else(|| {
+                        self.context_histories
+                            .get(agent_id)
+                            .map(|context| context.session_id.to_string())
+                    })
+                    .unwrap_or_else(|| SessionId::new().to_string());
+                turn_options.session_id = Some(sid.clone());
+                Some(sid)
+            }
+            _ => options.session_id.clone(),
+        };
 
         let first_execution = self
             .execute_once_with_metadata(
@@ -365,7 +373,24 @@ impl AISessionBridge {
                 &turn_options,
             )
             .await?;
-        ensure_same_thread_continuation(&first_execution.metadata, &session_id)?;
+        match (&session_id, &first_execution.metadata.session_id) {
+            // Caller-chosen ID (claude): the turn must confirm it ran under it.
+            (Some(expected), _) => {
+                ensure_same_thread_continuation(&first_execution.metadata, expected)?;
+            }
+            // Provider-assigned ID (codex): adopt it for the remaining turns.
+            (None, Some(assigned)) => {
+                session_id = Some(assigned.clone());
+                turn_options.session_id = Some(assigned.clone());
+            }
+            (None, None) => {
+                return Err(anyhow::anyhow!(
+                    "{} did not report a session/thread ID on the first turn; cannot continue multi-turn",
+                    provider_kind.as_str()
+                ));
+            }
+        }
+        let session_id = session_id.unwrap_or_default();
 
         let mut result = first_execution.result;
 
@@ -480,6 +505,16 @@ impl AISessionBridge {
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false);
 
+        // JSONL output for Codex: opt-in via env for telemetry, but forced on
+        // whenever session continuation is in play — the thread ID needed for
+        // `codex exec resume` only arrives via the `thread.started` event.
+        let codex_json = kind == ProviderKind::Codex
+            && (std::env::var("CCSWARM_CODEX_JSON")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+                || options.session_id.is_some()
+                || matches!(options.continuation, ContinuationPolicy::MultiTurn { .. }));
+
         let provider_options = ProviderOptions {
             allowed_tools: options.tools.clone(),
             model: options.model.clone(),
@@ -491,6 +526,7 @@ impl AISessionBridge {
             max_budget: options.max_budget,
             worktree_name: options.worktree_name.clone(),
             claude_stream_json,
+            codex_json,
         };
 
         // code #4 fix: cap prompt size before we hand it to a subprocess. Linux `execve`
@@ -540,12 +576,31 @@ impl AISessionBridge {
             ));
         };
 
-        // When stream-json is on for Claude, project the NDJSON stream down to
-        // the result text so the rest of the bridge (parsed output, context
-        // history, downstream prompt builders) keeps working unchanged. Tool
-        // names, real token totals, and cost ride along on BridgeResult so the
-        // engine (which owns the EventRecorder) can emit ProviderCall events.
-        let stream_meta = claude_stream_json.then(|| project_stream(&raw_stdout));
+        // When structured output is on (Claude stream-json / Codex JSONL),
+        // project the event stream down to the result text so the rest of the
+        // bridge (parsed output, context history, downstream prompt builders)
+        // keeps working unchanged. Tool names, real token totals, and cost ride
+        // along on BridgeResult so the engine (which owns the EventRecorder)
+        // can emit ProviderCall events.
+        let mut learned_session_id: Option<String> = None;
+        let stream_meta = if claude_stream_json {
+            Some(project_stream(&raw_stdout))
+        } else if codex_json {
+            let summary = crate::providers::codex_stream::parse_stream(&raw_stdout);
+            if let Some(message) = summary.failed {
+                return Err(anyhow::anyhow!("codex turn failed: {}", message));
+            }
+            // Codex assigns the thread ID; capture it so multi-turn can resume.
+            learned_session_id = summary.thread_id;
+            Some(StreamProjection {
+                text: summary.result_text,
+                tool_names: summary.tool_names,
+                tokens: summary.tokens,
+                total_cost_usd: None, // codex does not report cost
+            })
+        } else {
+            None
+        };
         let raw_output = match &stream_meta {
             Some(projection) => projection.text.clone(),
             None => raw_stdout,
@@ -614,10 +669,19 @@ impl AISessionBridge {
             }
         };
 
-        let same_thread_continuation = provider
-            .same_thread_continuation()
-            .supports_explicit_session_id()
-            && options.session_id.is_some();
+        // The session ID this turn actually ran under: provider-assigned IDs
+        // (codex thread.started) win over the caller-supplied one, so the
+        // multi-turn loop can learn the ID after the first turn.
+        let session_id_for_metadata = learned_session_id.or_else(|| options.session_id.clone());
+        let same_thread_continuation = match provider.same_thread_continuation() {
+            crate::providers::SameThreadContinuation::ExplicitSessionId => {
+                options.session_id.is_some()
+            }
+            crate::providers::SameThreadContinuation::ProviderAssignedId => {
+                session_id_for_metadata.is_some()
+            }
+            crate::providers::SameThreadContinuation::Unsupported => false,
+        };
 
         Ok(BridgeExecution {
             result: BridgeResult {
@@ -637,7 +701,7 @@ impl AISessionBridge {
             },
             metadata: BridgeExecutionMetadata {
                 provider: kind,
-                session_id: options.session_id.clone(),
+                session_id: session_id_for_metadata,
                 same_thread_continuation,
             },
         })
@@ -1020,8 +1084,10 @@ mod tests {
             parent_process_id: "parent-1".to_string(),
             initialized_at: chrono::Utc::now(),
         };
+        // Copilot is the remaining provider with no continuation support
+        // (codex gained ProviderAssignedId continuation in v0.8.0).
         let options = MovementExecOptions {
-            provider: Some(ProviderKind::Codex),
+            provider: Some(ProviderKind::Copilot),
             continuation: ContinuationPolicy::multi_turn(2),
             ..MovementExecOptions::default()
         };
@@ -1039,7 +1105,7 @@ mod tests {
                 &options.continuation,
             )
             .await
-            .expect_err("codex multi-turn should fail before spawning a subprocess");
+            .expect_err("copilot multi-turn should fail before spawning a subprocess");
 
         assert!(
             err.to_string()
