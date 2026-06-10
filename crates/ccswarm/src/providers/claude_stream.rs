@@ -35,15 +35,16 @@ pub(crate) struct StreamSummary {
 
 /// Parsed tool invocation.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // `input` is captured for v0.8.0 EventRecorder wiring; the bridge currently only logs `name`.
+#[allow(dead_code)] // `input` is deliberately not propagated past the bridge — it can embed whole file contents. Only `name` reaches events.
 pub(crate) struct ToolUse {
     pub name: String,
     /// Raw input JSON; opaque to us but useful when logged.
     pub input: serde_json::Value,
 }
 
+/// Token usage record. The bridge propagates the last record (the result
+/// envelope's cumulative totals) into BridgeResult / ProviderCall events.
 #[derive(Debug, Clone, Copy, Default)]
-#[allow(dead_code)] // Fields are populated for v0.8.0 EventRecorder wiring; until that lands the bridge only emits a debug log.
 pub(crate) struct Usage {
     pub input_tokens: u64,
     pub output_tokens: u64,

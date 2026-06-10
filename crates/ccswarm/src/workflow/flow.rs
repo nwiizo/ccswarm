@@ -1261,6 +1261,32 @@ impl FlowEngine {
                 .await
             {
                 Ok(result) => {
+                    // Stream-json metadata (tool names, real token counts, cost)
+                    // rides on BridgeResult; surface it as a ProviderCall event so
+                    // events.ndjson finally carries per-call telemetry.
+                    if !result.tool_names.is_empty() || result.total_cost_usd.is_some() {
+                        let run_id = self
+                            .event_recorder
+                            .as_ref()
+                            .map(|r| r.run_id().to_string())
+                            .unwrap_or_default();
+                        self.record_event(
+                            crate::events::Event::new(
+                                &run_id,
+                                crate::events::EventLevel::Info,
+                                crate::events::EventType::ProviderCall,
+                                format!("Provider call completed for stage '{}'", stage.id),
+                            )
+                            .with_movement(&stage.id)
+                            .with_metadata(serde_json::json!({
+                                "tool_names": result.tool_names,
+                                "tokens_in": result.tokens_in,
+                                "tokens_out": result.tokens_out,
+                                "cost_usd": result.total_cost_usd,
+                            })),
+                        )
+                        .await;
+                    }
                     serde_json::json!({
                         "stage": stage.id,
                         "output": result.raw,
