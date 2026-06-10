@@ -34,10 +34,16 @@ impl CliRunner {
         stop_on_error: bool,
         timeout: u64,
         create_pr: bool,
+        approval_gate: Option<std::time::Duration>,
     ) -> Result<()> {
         let banner = format!(
-            "▶ auto mode — flow={} watch={} stop_on_error={} timeout={}s create_pr={}",
-            flow, watch, stop_on_error, timeout, create_pr
+            "▶ auto mode — flow={} watch={} stop_on_error={} timeout={}s create_pr={} require_approval={}",
+            flow,
+            watch,
+            stop_on_error,
+            timeout,
+            create_pr,
+            approval_gate.is_some()
         );
         println!("{}", banner.bright_cyan().bold());
         self.auto_log("auto.start", serde_json::json!({ "flow": flow }))
@@ -57,7 +63,15 @@ impl CliRunner {
         if let Some(task_body) = explicit_task {
             let run_id = uuid::Uuid::new_v4().to_string();
             let (outcome, _run_id) = self
-                .auto_run_one(&run_id, "direct", task_body, flow, timeout, create_pr)
+                .auto_run_one(
+                    &run_id,
+                    "direct",
+                    task_body,
+                    flow,
+                    timeout,
+                    create_pr,
+                    approval_gate,
+                )
                 .await;
             processed += 1;
             match outcome {
@@ -92,6 +106,7 @@ impl CliRunner {
                     flow,
                     timeout,
                     create_pr,
+                    approval_gate,
                     stop_on_error,
                     max_iterations,
                     &mut processed,
@@ -127,6 +142,7 @@ impl CliRunner {
         piece_default: &str,
         timeout: u64,
         create_pr: bool,
+        approval_gate: Option<std::time::Duration>,
         stop_on_error: bool,
         max_iterations: usize,
         processed: &mut usize,
@@ -180,7 +196,13 @@ impl CliRunner {
 
             let (outcome, run_id) = self
                 .auto_run_one(
-                    &run_id, &task_id, &task_body, &flow_name, timeout, create_pr,
+                    &run_id,
+                    &task_id,
+                    &task_body,
+                    &flow_name,
+                    timeout,
+                    create_pr,
+                    approval_gate,
                 )
                 .await;
             *processed += 1;
@@ -247,6 +269,7 @@ impl CliRunner {
     /// Execute a single task through the pipeline. Returns `(result, Option<run_id>)`
     /// so the caller can record the run_id back into `QueueTask.run_id` — this closes
     /// codex #6 (auto.ndjson had no cross-reference to run events.ndjson).
+    #[allow(clippy::too_many_arguments)]
     async fn auto_run_one(
         &self,
         run_id: &str,
@@ -255,6 +278,7 @@ impl CliRunner {
         flow_name: &str,
         timeout: u64,
         create_pr: bool,
+        approval_gate: Option<std::time::Duration>,
     ) -> (Result<()>, Option<String>) {
         println!();
         println!(
@@ -276,10 +300,20 @@ impl CliRunner {
 
         let result = self
             .handle_pipeline_returning_reserved_id(
-                run_id, task_body, flow_name, "text", timeout, false, None, false, None,
+                run_id,
+                task_body,
+                flow_name,
+                "text",
+                timeout,
+                false,
+                None,
+                false,
+                None,
                 None, // run_budget_tokens
                 None, // model override
-                /* auto_commit = */ true, create_pr,
+                /* auto_commit = */ true,
+                create_pr,
+                approval_gate,
             )
             .await;
 
