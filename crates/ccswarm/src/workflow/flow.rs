@@ -1910,9 +1910,20 @@ impl FlowEngine {
         // a temporary Vec. Rules are tiny structs (4 short strings + flags) so
         // this is a negligible allocation in practice.
         let filtered_owned: Vec<MovementRule> = filtered.iter().map(|&r| r.clone()).collect();
-        let judge_result =
-            self.judge
-                .evaluate(&output_str, &filtered_owned, parallel_outputs.as_ref())?;
+
+        // Real-LLM judgments for ai() rules (opt-in via CCSWARM_LLM_JUDGE=1).
+        // Computed here — the async side — and handed to the sync judge as a
+        // verdict map so rule-priority ordering stays intact.
+        let llm_verdicts = self
+            .llm_evaluate_ai_rules(&filtered_owned, &output_str)
+            .await;
+
+        let judge_result = self.judge.evaluate(
+            &output_str,
+            &filtered_owned,
+            parallel_outputs.as_ref(),
+            llm_verdicts.as_ref(),
+        )?;
 
         if let Some(index) = judge_result.matched_rule_index
             && index < filtered_owned.len()
@@ -1928,6 +1939,101 @@ impl FlowEngine {
         }
 
         Ok(None)
+    }
+
+    /// Evaluate `ai()` rule conditions with a real LLM call (one short YES/NO
+    /// question per rule). Returns a verdict map keyed by rule index, or
+    /// `None` when disabled (`CCSWARM_LLM_JUDGE` unset), no bridge is
+    /// configured, or no `ai()` rules exist. Per-rule failures are logged at
+    /// warn and left out of the map so the lexical heuristic covers them —
+    /// never a silent fallback.
+    async fn llm_evaluate_ai_rules(
+        &self,
+        rules: &[MovementRule],
+        output: &str,
+    ) -> Option<HashMap<usize, bool>> {
+        let enabled = std::env::var("CCSWARM_LLM_JUDGE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if !enabled {
+            return None;
+        }
+        let bridge = self.bridge.as_ref()?;
+        if !rules
+            .iter()
+            .any(|r| matches!(r.condition, RuleCondition::AiCondition { .. }))
+        {
+            return None;
+        }
+
+        let identity = crate::identity::AgentIdentity {
+            agent_id: "llm-judge".to_string(),
+            specialization: crate::identity::AgentRole::Frontend {
+                technologies: Vec::new(),
+                responsibilities: Vec::new(),
+                boundaries: Vec::new(),
+            },
+            workspace_path: self.working_dir.clone(),
+            env_vars: std::collections::HashMap::new(),
+            session_id: uuid::Uuid::new_v4().to_string(),
+            parent_process_id: std::process::id().to_string(),
+            initialized_at: chrono::Utc::now(),
+        };
+        let options = crate::session::bridge::MovementExecOptions {
+            provider: self.default_provider.or_else(|| {
+                std::env::var("CCSWARM_PROVIDER")
+                    .ok()
+                    .as_deref()
+                    .and_then(crate::providers::ProviderKind::parse)
+            }),
+            ..Default::default()
+        };
+
+        let mut verdicts = HashMap::new();
+        for (index, rule) in rules.iter().enumerate() {
+            let RuleCondition::AiCondition { ai: condition } = &rule.condition else {
+                continue;
+            };
+            let prompt = format!(
+                "You are a routing judge for an automated workflow. Decide whether \
+                 the condition holds for the agent output below.\n\n\
+                 # Condition\n{}\n\n# Agent output (truncated)\n{}\n\n\
+                 Reply with exactly YES or NO on the first line. No other text.",
+                condition,
+                truncate_for_context(output, 1500)
+            );
+            match bridge
+                .execute_with_retry(
+                    "llm-judge",
+                    &prompt,
+                    &identity,
+                    &self.working_dir,
+                    None,
+                    0,
+                    0,
+                    &options,
+                )
+                .await
+            {
+                Ok(result) => match super::judge::parse_judge_reply(&result.raw) {
+                    Some(verdict) => {
+                        verdicts.insert(index, verdict);
+                    }
+                    None => warn!(
+                        "LLM judge gave an ambiguous reply for ai() rule {} — \
+                         falling back to the lexical heuristic for it",
+                        index
+                    ),
+                },
+                Err(e) => warn!(
+                    "LLM judge call failed for ai() rule {}: {} — \
+                     falling back to the lexical heuristic for it",
+                    index, e
+                ),
+            }
+        }
+
+        (!verdicts.is_empty()).then_some(verdicts)
     }
 
     /// Validate output against a contract, returning detailed violation info.
