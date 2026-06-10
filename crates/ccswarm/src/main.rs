@@ -117,6 +117,7 @@ fn init_logging(verbose: bool, format: &str) {
             tracing_subscriber::registry()
                 .with(filter_layer)
                 .with(json_layer)
+                .with(otel_layer())
                 .init();
         }
         _ => {
@@ -126,9 +127,41 @@ fn init_logging(verbose: bool, format: &str) {
             tracing_subscriber::registry()
                 .with(filter_layer)
                 .with(fmt_layer)
+                .with(otel_layer())
                 .init();
         }
     }
+}
+
+/// OTLP span export layer. Built only with `--features otel`, and active only
+/// when `OTEL_EXPORTER_OTLP_ENDPOINT` is set — so the feature can ship in a
+/// binary without affecting runs that don't opt in.
+#[cfg(feature = "otel")]
+fn otel_layer<S>() -> Option<impl tracing_subscriber::Layer<S>>
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    use opentelemetry::trace::TracerProvider as _;
+
+    if std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_err() {
+        return None;
+    }
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .build()
+        .map_err(|e| eprintln!("otel: failed to build OTLP exporter: {e}"))
+        .ok()?;
+    let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        .build();
+    let tracer = provider.tracer("ccswarm");
+    opentelemetry::global::set_tracer_provider(provider);
+    Some(tracing_opentelemetry::layer().with_tracer(tracer))
+}
+
+#[cfg(not(feature = "otel"))]
+fn otel_layer() -> Option<tracing_subscriber::layer::Identity> {
+    None
 }
 
 /// Interactive mode: `ccswarm` with no arguments
