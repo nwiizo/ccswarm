@@ -161,7 +161,7 @@ pub struct RunSummary {
 
 /// Appends events as NDJSON to `.ccswarm/runs/{run_id}/events.ndjson`.
 ///
-/// The recorder is cheap to clone (all state lives behind [`Arc`]-equivalent
+/// The recorder is cheap to clone (all state lives behind `Arc`-equivalent
 /// primitives internally), but in practice a single recorder per run is
 /// sufficient.
 pub struct EventRecorder {

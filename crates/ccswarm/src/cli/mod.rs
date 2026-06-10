@@ -67,7 +67,7 @@ pub struct Cli {
     pub fix: bool,
 
     /// Default provider for stages that don't pin one in flow YAML
-    /// (claude | codex). Overrides CCSWARM_PROVIDER.
+    /// (claude | codex | copilot). Overrides CCSWARM_PROVIDER.
     #[arg(long, global = true)]
     pub provider: Option<String>,
 
@@ -1686,7 +1686,9 @@ impl CliRunner {
                 .await
                 .context("Failed to load configuration")?
         } else {
-            warn!("Configuration file not found, using defaults");
+            if !cli.json {
+                warn!("Configuration file not found, using defaults");
+            }
             create_default_config(&cli.repo)?
         };
 
@@ -1696,7 +1698,10 @@ impl CliRunner {
         // everything on the claude default.
         let default_provider = match cli.provider.as_deref() {
             Some(name) => Some(crate::providers::ProviderKind::parse(name).ok_or_else(|| {
-                anyhow::anyhow!("unknown provider '{}' (expected: claude | codex)", name)
+                anyhow::anyhow!(
+                    "unknown provider '{}' (expected: claude | codex | copilot)",
+                    name
+                )
             })?),
             None => None,
         };
@@ -1725,7 +1730,7 @@ impl CliRunner {
         flow: &str,
         timeout: u64,
     ) -> Result<()> {
-        handlers::scaffold::handle_scaffold(dir, task, flow, timeout).await
+        handlers::scaffold::handle_scaffold(dir, task, flow, timeout, self.default_provider).await
     }
 
     /// Handle agent-gen subcommands

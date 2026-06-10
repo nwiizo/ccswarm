@@ -1,7 +1,7 @@
 //! AISessionBridge: multi-provider CLI execution + ai-session result management
 //!
 //! This module bridges the gap between ccswarm's orchestration layer and the ai-session
-//! crate. Provider-specific command construction is delegated to [`crate::providers`];
+//! crate. Provider-specific command construction is delegated to the providers module;
 //! everything else (context compression, output parsing, persistence, retry) is neutral
 //! to which CLI is spoken.
 
@@ -180,7 +180,7 @@ impl Default for ContinuationPolicy {
 }
 
 /// Options for a single stage execution. Provider-specific flag mapping happens in
-/// [`crate::providers`]; unsupported fields are silently ignored by providers that don't
+/// the providers module; unsupported fields are silently ignored by providers that don't
 /// understand them, keeping flow YAML portable.
 #[derive(Debug, Clone, Default)]
 pub struct MovementExecOptions {

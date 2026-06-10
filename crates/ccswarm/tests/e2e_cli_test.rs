@@ -9,6 +9,10 @@ use tempfile::TempDir;
 
 /// Get the path to the ccswarm binary
 fn get_binary_path() -> PathBuf {
+    if let Some(path) = option_env!("CARGO_BIN_EXE_ccswarm") {
+        return PathBuf::from(path);
+    }
+
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.pop(); // Go up from crates/ccswarm
     path.pop(); // Go up to workspace root
@@ -107,6 +111,35 @@ fn test_init_creates_config() {
         stdout,
         stderr
     );
+}
+
+#[test]
+fn test_init_json_reports_configured_agents() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_path = temp_dir.path();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project_path)
+        .output()
+        .expect("Failed to init git");
+
+    let output = run_ccswarm(
+        &["--json", "init", "--name", "JsonInit"],
+        Some(project_path),
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "init should succeed: {stdout}");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("init --json should emit valid JSON");
+    assert_eq!(parsed["status"], "success");
+    let agents = parsed["data"]["agents"]
+        .as_array()
+        .expect("agents should be an array");
+    assert!(agents.contains(&serde_json::Value::String("frontend".to_string())));
+    assert!(agents.contains(&serde_json::Value::String("backend".to_string())));
+    assert!(agents.contains(&serde_json::Value::String("devops".to_string())));
 }
 
 #[test]
@@ -370,6 +403,36 @@ fn test_json_output_flag() {
     }
 }
 
+#[test]
+fn test_queue_list_json_output() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_path = temp_dir.path();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project_path)
+        .output()
+        .unwrap();
+
+    let _ = run_ccswarm(&["init", "--name", "QueueJsonTest"], Some(project_path));
+    let _ = run_ccswarm(&["queue", "add", "Smoke check task"], Some(project_path));
+
+    let output = run_ccswarm(&["--json", "queue", "list"], Some(project_path));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        output.status.success(),
+        "queue list should succeed. stdout: {}, stderr: {}",
+        stdout,
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("queue list --json should emit valid JSON");
+    assert_eq!(parsed["total"], 1);
+    assert_eq!(parsed["tasks"][0]["task"], "Smoke check task");
+}
+
 // ============================================================================
 // Error Handling Tests
 // ============================================================================
@@ -514,6 +577,76 @@ fn test_flow_check_reports_cycles() {
         stdout.contains("contains cycle") && stdout.contains("max_stage_visits"),
         "flow check should warn about the review<->fix cycle. stdout: {}",
         stdout
+    );
+}
+
+#[test]
+fn test_pipeline_dry_run_includes_task_body() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_path = temp_dir.path();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project_path)
+        .output()
+        .unwrap();
+
+    let _ = run_ccswarm(&["init", "--name", "DryRunTest"], Some(project_path));
+    let output = run_ccswarm(
+        &[
+            "pipeline",
+            "--task",
+            "Fix the onboarding typo",
+            "--flow",
+            "quick",
+            "--dry-run",
+        ],
+        Some(project_path),
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        output.status.success(),
+        "dry-run should succeed. stdout: {}, stderr: {}",
+        stdout,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("Fix the onboarding typo"),
+        "dry-run prompt preview should include the task body: {stdout}"
+    );
+}
+
+#[test]
+fn test_scaffold_returns_failure_when_pipeline_fails() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_path = temp_dir.path().join("missing-flow-app");
+    let dir_arg = project_path.to_string_lossy().to_string();
+
+    let output = run_ccswarm(
+        &[
+            "scaffold",
+            "--dir",
+            &dir_arg,
+            "--task",
+            "Create a tiny app",
+            "--flow",
+            "missing-flow-for-test",
+            "--timeout",
+            "5",
+        ],
+        None,
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        !output.status.success(),
+        "scaffold should fail when the child pipeline fails. stdout: {stdout}, stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Project ready"),
+        "failed scaffold must not claim the project is ready: {stderr}"
     );
 }
 

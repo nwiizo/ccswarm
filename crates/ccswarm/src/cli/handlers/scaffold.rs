@@ -5,7 +5,13 @@ use colored::Colorize;
 use std::path::Path;
 
 /// Scaffold a new project: create directory, git init, run pipeline
-pub async fn handle_scaffold(dir: &Path, task: &str, flow: &str, timeout: u64) -> Result<()> {
+pub async fn handle_scaffold(
+    dir: &Path,
+    task: &str,
+    flow: &str,
+    timeout: u64,
+    default_provider: Option<crate::providers::ProviderKind>,
+) -> Result<()> {
     eprintln!("{} {}", "Scaffolding:".bright_cyan().bold(), dir.display());
 
     // 1. Create directory
@@ -41,7 +47,12 @@ pub async fn handle_scaffold(dir: &Path, task: &str, flow: &str, timeout: u64) -
         .await;
 
     // 3. Create minimal project files
-    tokio::fs::write(dir.join("package.json"), "{}\n").await?;
+    tokio::fs::write(
+        dir.join("package.json"),
+        r#"{"scripts":{"test":"node -e \"console.log('No tests configured yet')\""}}
+"#,
+    )
+    .await?;
     tokio::fs::create_dir_all(dir.join("public")).await?;
     tokio::fs::create_dir_all(dir.join("e2e")).await?;
 
@@ -69,18 +80,7 @@ pub async fn handle_scaffold(dir: &Path, task: &str, flow: &str, timeout: u64) -
 
     let ccswarm_bin = std::env::current_exe().unwrap_or_else(|_| "ccswarm".into());
     let output = tokio::process::Command::new(&ccswarm_bin)
-        .args([
-            "--repo",
-            &dir.to_string_lossy(),
-            "pipeline",
-            "--task",
-            task,
-            "--flow",
-            flow,
-            "--timeout",
-            &timeout.to_string(),
-            "--verbose",
-        ])
+        .args(pipeline_args(dir, task, flow, timeout, default_provider))
         .output()
         .await
         .context("Failed to run pipeline")?;
@@ -103,13 +103,64 @@ pub async fn handle_scaffold(dir: &Path, task: &str, flow: &str, timeout: u64) -
             dir.display()
         );
     } else {
+        let exit_code = output.status.code().unwrap_or(-1);
         eprintln!();
         eprintln!(
             "{} Pipeline exited with code {}",
             "\u{2717}".bright_red().bold(),
-            output.status.code().unwrap_or(-1)
+            exit_code
         );
+        anyhow::bail!("pipeline failed during scaffold (exit code {})", exit_code);
     }
 
     Ok(())
+}
+
+fn pipeline_args(
+    dir: &Path,
+    task: &str,
+    flow: &str,
+    timeout: u64,
+    default_provider: Option<crate::providers::ProviderKind>,
+) -> Vec<String> {
+    let mut args = vec!["--repo".to_string(), dir.to_string_lossy().into_owned()];
+
+    if let Some(provider) = default_provider {
+        args.push("--provider".to_string());
+        args.push(provider.as_str().to_string());
+    }
+
+    args.extend([
+        "pipeline".to_string(),
+        "--task".to_string(),
+        task.to_string(),
+        "--flow".to_string(),
+        flow.to_string(),
+        "--timeout".to_string(),
+        timeout.to_string(),
+        "--verbose".to_string(),
+    ]);
+
+    args
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pipeline_args;
+    use crate::providers::ProviderKind;
+    use std::path::Path;
+
+    #[test]
+    fn pipeline_args_forward_default_provider() {
+        let args = pipeline_args(
+            Path::new("/tmp/app"),
+            "Create an app",
+            "quick",
+            45,
+            Some(ProviderKind::Codex),
+        );
+
+        assert!(args.windows(2).any(|pair| pair == ["--provider", "codex"]));
+        assert!(args.windows(2).any(|pair| pair == ["--repo", "/tmp/app"]));
+    }
 }

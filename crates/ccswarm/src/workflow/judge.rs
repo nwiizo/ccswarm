@@ -32,7 +32,7 @@ pub struct JudgeResult {
 /// How the match was determined
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MatchMethod {
-    /// Matched via [STEP:N] tag in output
+    /// Matched via `[STEP:N]` tag in output
     StepTag,
     /// Matched via simple string condition
     SimpleCondition,

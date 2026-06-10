@@ -9,16 +9,19 @@ impl CliRunner {
     ) -> Result<()> {
         use crate::utils::user_error::CommonErrors;
 
-        info!("Initializing ccswarm project: {}", name);
+        if !self.json_output {
+            info!("Initializing ccswarm project: {}", name);
+        }
 
-        // Show progress to user
-        println!(
-            "{}",
-            format!("🚀 Initializing ccswarm project: {}", name)
-                .bright_cyan()
-                .bold()
-        );
-        println!();
+        if !self.json_output {
+            println!(
+                "{}",
+                format!("🚀 Initializing ccswarm project: {}", name)
+                    .bright_cyan()
+                    .bold()
+            );
+            println!();
+        }
 
         // Check if git is available
         if !crate::git::shell::ShellWorktreeManager::is_git_available() {
@@ -27,7 +30,9 @@ impl CliRunner {
         }
 
         // Initialize Git repository if needed
-        crate::utils::user_error::show_progress("Setting up git repository...");
+        if !self.json_output {
+            crate::utils::user_error::show_progress("Setting up git repository...");
+        }
         crate::git::shell::ShellWorktreeManager::init_if_needed(&self.repo_path)
             .await
             .inspect_err(|e| {
@@ -36,10 +41,14 @@ impl CliRunner {
                     .with_details(e.to_string())
                     .display();
             })?;
-        println!("✅ Git repository ready");
+        if !self.json_output {
+            println!("✅ Git repository ready");
+        }
 
         // Create configuration
-        crate::utils::user_error::show_progress("Creating project configuration...");
+        if !self.json_output {
+            crate::utils::user_error::show_progress("Creating project configuration...");
+        }
         let mut config = create_default_config(&self.repo_path)?;
         config.project.name = name.to_string();
 
@@ -63,9 +72,12 @@ impl CliRunner {
         let config_file = self.repo_path.join("ccswarm.json");
         config.to_file(config_file).await?;
 
+        let mut configured_agents = config.agents.keys().cloned().collect::<Vec<_>>();
+        configured_agents.sort();
+
         let data = serde_json::json!({
             "project": name,
-            "agents": agents,
+            "agents": configured_agents,
         });
 
         println!(

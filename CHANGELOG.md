@@ -44,6 +44,31 @@ takt feature adoption + codex first-class support.
   flow `team-dynamic`.
 
 ### Fixed
+- `--json` command output is now safe to parse: tracing goes to stderr,
+  `init --json` suppresses human progress lines and reports the actual
+  configured default agents, and `queue list --json` emits structured queue
+  state instead of a table.
+- `doctor` treats missing `ANTHROPIC_API_KEY` as an informational warning when
+  provider CLIs can be authenticated directly, so a usable Codex/Claude CLI
+  setup is not reported as a broken system.
+- `pipeline --dry-run` now includes the task body in every previewed stage even
+  when a flow instruction does not explicitly contain `{task}`.
+- Flow validation now rejects unknown providers in `provider:`,
+  `promotion.provider`, and `on_rate_limit.provider` instead of silently
+  falling back to Claude.
+- Live prompt construction no longer duplicates persona/system content or
+  repeats task text when `{task}` was already expanded into a stage
+  instruction.
+- Command-gate context truncation is UTF-8 safe and no longer risks panics on
+  non-ASCII output boundaries.
+- `scaffold` now forwards the global `--provider` flag to its child pipeline,
+  exits non-zero when that pipeline fails or times out, and initializes a
+  minimal npm project whose default `npm test` command succeeds.
+- Pipeline runs now fail when a terminal stage returns `status: failed`
+  instead of reporting the flow as completed; post-pipeline test failures also
+  return an error after printing the run view hint.
+- CLI e2e tests now prefer Cargo's `CARGO_BIN_EXE_ccswarm` path so tests
+  exercise the freshly built binary instead of a stale `target/debug/ccswarm`.
 - Live pipeline runs now load custom facets: `execute_pipeline_core`
   previously loaded none, so project personas/policies applied to
   `--dry-run`/`flow render` but silently not to real executions.

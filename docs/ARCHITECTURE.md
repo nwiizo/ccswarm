@@ -2,7 +2,11 @@
 
 ## System Architecture Overview
 
-ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Agent Teams. It provides workflow orchestration via flow/stage pipelines, NDJSON event recording, and an AISessionBridge for Claude Code CLI execution with session resumption and retry.
+ccswarm is an AI Agent Workflow DevOps toolchain that complements AI coding
+provider CLIs. It provides workflow orchestration via flow/stage pipelines,
+NDJSON event recording, and a provider-agnostic AISessionBridge for CLI
+execution with session resumption, retry, telemetry projection, and fallback
+handling.
 
 ## Workspace Structure
 
@@ -43,9 +47,9 @@ The workspace configuration enables:
                       │
 ┌─────────────────────▼───────────────────────────────────────┐
 │              AISessionBridge (session/bridge.rs)             │
-│  - Claude Code CLI subprocess execution                     │
-│  - --resume flag for session continuation                   │
-│  - --agent routing to .claude/agents/*.md                   │
+│  - Provider CLI subprocess execution (Claude/Codex/Copilot)│
+│  - Provider-specific continuation handles                   │
+│  - Claude --agent routing to .claude/agents/*.md            │
 │  - Retry with exponential backoff                           │
 │  - Semantic output parsing via ai-session                   │
 └─────────────────────┬───────────────────────────────────────┘
@@ -80,7 +84,7 @@ The core of ccswarm, driving flow-based workflow pipelines.
 #### FacetRegistry
 - Composes prompts from independent facets (persona, policy, knowledge, instruction)
 - Builtin personas with enriched system prompts
-- Resolution order: builtin < project < user
+- Resolution order: builtin < repertoire package < user < project
 
 ### 2. Agent System (`crates/ccswarm/src/agent/`)
 Agent definitions and task modeling for Claude Code Agent Teams.
@@ -101,12 +105,14 @@ Agent definitions and task modeling for Claude Code Agent Teams.
 - Enforces agent scope constraints
 
 ### 3. AISessionBridge (`crates/ccswarm/src/session/bridge.rs`)
-Bridge between ccswarm workflows and Claude Code CLI execution.
+Bridge between ccswarm workflows and provider CLI execution.
 
 #### Key Features
-- **Claude Code CLI Execution**: Spawns `claude` subprocess with task prompts
-- **Session Resumption**: Uses `--resume` flag to continue existing sessions
-- **Agent Routing**: Routes to `.claude/agents/*.md` via `--agent` flag
+- **Provider CLI Execution**: Spawns provider subprocesses through the
+  `AgentProvider` abstraction
+- **Session Resumption**: Uses provider-specific continuation, including
+  Claude `--resume` and Codex `codex exec resume <thread-id>`
+- **Agent Routing**: Routes Claude stages to `.claude/agents/*.md` via `--agent`
 - **Retry with Exponential Backoff**: Automatic retry on transient failures
 - **Semantic Output Parsing**: Uses ai-session's OutputParser for structured results
 - **Context Compression**: Leverages ai-session for token-efficient context management
@@ -138,7 +144,10 @@ Multi-provider subprocess command builders, added in the multi-provider refactor
 - `AgentProvider` trait: `build_command(prompt, working_dir, options) -> Command`
 - `ClaudeProvider` (default), `CodexProvider`, `CopilotProvider` (currently unsupported
   for code generation — see `providers/copilot.rs` for rationale)
-- Selection precedence: stage YAML `provider:` > `CCSWARM_PROVIDER` env > Claude
+- Selection precedence: stage YAML `provider:` > global `--provider` flag >
+  `CCSWARM_PROVIDER` env > Claude
+- Flow validation rejects unknown providers in `provider:`,
+  `promotion.provider`, and `on_rate_limit.provider`.
 
 ## Data Flow
 
@@ -148,7 +157,7 @@ User Input → CLI Parser → FlowEngine loads YAML
     ↓
 Stage Iteration → FacetRegistry composes prompt
     ↓
-AISessionBridge → Claude Code CLI (--resume, --agent)
+AISessionBridge → provider CLI (Claude/Codex/Copilot command builder)
     ↓
 Output Parsing → EventRecorder (NDJSON) → Next Stage or COMPLETE
     ↓

@@ -27,7 +27,7 @@ impl TaskBuilder {
     }
 
     /// Parse task description with modifiers
-    /// Format: "Task description [priority] [type]"
+    /// Format: `Task description [priority] [type]`
     pub fn parse(input: &str) -> Self {
         let (desc, priority, task_type) = Self::parse_modifiers(input);
 

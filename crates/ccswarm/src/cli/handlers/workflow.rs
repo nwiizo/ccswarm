@@ -263,13 +263,16 @@ impl CliRunner {
                 println!("{}", composed.system);
             }
             println!("{}", "--- user ---".bright_black());
+            if !instruction.contains(task) {
+                println!("## User Task\n\n{}\n", task);
+            }
             println!("{}", composed.user);
             println!();
         }
         Ok(())
     }
 
-    /// Same as [`handle_pipeline`] but surfaces the `run_id` so autonomous callers
+    /// Same as `handle_pipeline` but surfaces the `run_id` so autonomous callers
     /// (`ccswarm auto`) can cross-reference their own `auto.ndjson` with the run's
     /// `events.ndjson`. Addresses codex #6.
     #[allow(clippy::too_many_arguments)]
@@ -608,6 +611,17 @@ impl CliRunner {
             );
         }
 
+        let short_id = &run_id[..8.min(run_id.len())];
+        if !test_passed {
+            eprintln!(
+                "\n  {} ccswarm run view {short_id}",
+                "View details:".bright_cyan()
+            );
+            return Err(anyhow!(
+                "post-pipeline tests failed; changes left uncommitted in the working tree"
+            ));
+        }
+
         // Step 2: Commit (auto or ask), optionally gated on a human approval
         // when running unattended (`auto --require-approval` / `queue drain
         // --require-approval`).
@@ -646,7 +660,6 @@ impl CliRunner {
             self.do_create_pr(repo, task, flow, result, run_id).await;
         }
 
-        let short_id = &run_id[..8.min(run_id.len())];
         eprintln!(
             "\n  {} ccswarm run view {short_id}",
             "View details:".bright_cyan()
