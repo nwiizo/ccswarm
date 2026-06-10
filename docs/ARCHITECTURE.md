@@ -115,6 +115,8 @@ Bridge between ccswarm workflows and provider CLI execution.
 - **Agent Routing**: Routes Claude stages to `.claude/agents/*.md` via `--agent`
 - **Retry with Exponential Backoff**: Automatic retry on transient failures
 - **Semantic Output Parsing**: Uses ai-session's OutputParser for structured results
+- **Execution Primitives**: Uses ai-session helpers for prompt size validation,
+  working-directory context, cwd enforcement, and subprocess result capture
 - **Context Compression**: Leverages ai-session for token-efficient context management
 - **Message Bus Integration**: Inter-agent communication via ai-session coordination layer
 
@@ -132,11 +134,19 @@ Renamed from `coordination/` to disambiguate from `ai-session::coordination` (wh
 technical message bus, while this is governance / HITL state).
 
 #### Components
-- **Proposals**: `.ccswarm/coordination/proposals/*.json` (sangha votes — still on-disk
+- **Proposals**: `coordination/proposals/*.json` (sangha votes — still on-disk
   name kept for back-compat with existing data)
-- **Extensions**: `.ccswarm/coordination/extensions/*.json` (agent self-extension)
+- **Extensions**: `coordination/extensions/*.json` (agent self-extension)
 - **Approvals**: `.ccswarm/approvals/*.json` (HITL gate state)
 - **Agent Messages**: in-process channels for orchestration
+
+### 5.1 Sangha Workflow Consensus (`crates/ccswarm/src/workflow/sangha.rs`)
+v0.9.0 restores consensus as a workflow primitive. A stage with `sangha:`
+creates independent member stages (default perspectives: planner, reviewer,
+QA), runs them in parallel, extracts `SANGHA_DECISION=APPROVE|REVISE`, and
+advances only when approvals meet quorum. This is intentionally separate from
+`team_leader`: Sangha governs decisions, while `team_leader` remains a
+compatibility mechanism for orchestrator-worker decomposition.
 
 ### 6. Providers Layer (`crates/ccswarm/src/providers/`)
 Multi-provider subprocess command builders, added in the multi-provider refactor.
@@ -156,6 +166,8 @@ Multi-provider subprocess command builders, added in the multi-provider refactor
 User Input → CLI Parser → FlowEngine loads YAML
     ↓
 Stage Iteration → FacetRegistry composes prompt
+    ↓
+Sangha quorum stage when configured
     ↓
 AISessionBridge → provider CLI (Claude/Codex/Copilot command builder)
     ↓

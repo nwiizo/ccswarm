@@ -129,6 +129,7 @@
 pub mod context;
 pub mod coordination;
 pub mod core;
+pub mod execution;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 pub mod output;
@@ -148,6 +149,9 @@ pub use coordination::{
 pub use core::{
     AISession, AttentionState, ContextConfig, SessionConfig, SessionError, SessionId,
     SessionResult, SessionStatus, pty::PtyHandle,
+};
+pub use execution::{
+    CommandExecution, DEFAULT_MAX_PROMPT_BYTES, prepare_provider_prompt, run_provider_command,
 };
 pub use output::{OutputManager, OutputParser, ParsedOutput};
 

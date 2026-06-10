@@ -7,15 +7,15 @@
 
 `ccswarm` is a workflow engine for AI coding agents. You describe a task, pick a flow
 (declarative YAML workflow), and ccswarm drives the provider CLI through plan →
-implement → review → fix → commit → PR, with full NDJSON audit trails you can replay,
-diff, and roll back.
+Sangha consensus → implement → review → fix → commit → PR, with full NDJSON
+audit trails you can replay, diff, and roll back.
 
 **OK/NG driven**: the only keys you press during a run are `y` and `n`.
 
 ## Hire ccswarm when
 
-- You want a quality-gated change (plan → implement → review → fix) without rebuilding
-  the workflow each task.
+- You want a quality-gated change (plan → Sangha consensus → implement → review → fix)
+  without rebuilding the workflow each task.
 - You need reproducibility: the same flow YAML yields the same quality process,
   whether Alice or Bob runs it.
 - You want to replay, diff, or undo what the agent did yesterday.
@@ -74,6 +74,23 @@ ccswarm facets                          # browse personas / policies / knowledge
 ccswarm repertoire add <git-url>        # install shared workflow packages
 ```
 
+Stages can opt into consensus with `sangha:`. Each member evaluates the same
+decision independently and must end with `SANGHA_DECISION=APPROVE` or
+`SANGHA_DECISION=REVISE`; the stage advances only when approvals meet quorum.
+
+```yaml
+stages:
+  - id: sangha
+    instruction: "Review the plan before implementation"
+    permission: readonly
+    sangha:
+      quorum: 2
+      members:
+        - { id: planner, persona: planner }
+        - { id: reviewer, persona: reviewer }
+        - { id: qa, persona: qa }
+```
+
 ## Multi-provider
 
 ```yaml
@@ -108,8 +125,9 @@ ccswarm --json config show
 
 | Flow | Steps | Agents |
 |-------|------|--------|
-| `default` | plan → implement → review → fix → complete | planner, coder, reviewer |
+| `default` | plan → sangha quorum → implement → review → fix → complete | planner, reviewer, qa, coder |
 | `team` | plan → parallel(frontend + backend) → supervisor review | planner, frontend-specialist, backend-specialist, supervisor |
+| `team-dynamic` | plan → team_leader workers → review | planner, coder, reviewer |
 | `quick` | single-shot | coder |
 | `review-fix` | review → fix loop | reviewer, coder |
 | `research` | investigate → report | researcher |
@@ -125,6 +143,7 @@ May change without notice.
 ```bash
 ccswarm lab sangha propose ...          # collective voting on proposals
 ccswarm lab extend propose ...          # agent self-extension tracking
+ccswarm lab extend auto-propose ...     # generate an extension proposal + Sangha vote
 ccswarm lab evolution report            # per-agent performance analytics
 ccswarm lab search docs "..."           # ripgrep over docs/ and source
 ```

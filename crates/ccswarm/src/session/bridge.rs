@@ -5,13 +5,16 @@
 //! everything else (context compression, output parsing, persistence, retry) is neutral
 //! to which CLI is spoken.
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use ai_session::context::{MessageRole, SessionContext};
 use ai_session::core::{AttentionState, SessionId};
+use ai_session::execution::{
+    DEFAULT_MAX_PROMPT_BYTES, prepare_provider_prompt, run_provider_command,
+};
 use ai_session::output::{OutputParser, ParsedOutput};
 use ai_session::persistence::PersistenceManager;
 
@@ -594,8 +597,6 @@ impl AISessionBridge {
         agent_name: Option<&str>,
         options: &MovementExecOptions,
     ) -> Result<BridgeExecution> {
-        let start = std::time::Instant::now();
-
         let kind = options.provider.unwrap_or(ProviderKind::Claude);
         let provider = crate::providers::resolve(kind);
 
@@ -632,50 +633,18 @@ impl AISessionBridge {
             codex_json,
         };
 
-        // code #4 fix: cap prompt size before we hand it to a subprocess. Linux `execve`
-        // truncates near ~2 MB of total argv with a cryptic E2BIG; surfacing a clear
-        // error is friendlier than chasing "Failed to execute provider CLI".
-        const MAX_PROMPT_BYTES: usize = 200_000;
-        if prompt.len() > MAX_PROMPT_BYTES {
-            return Err(anyhow::anyhow!(
-                "prompt is {} bytes (cap is {}) — shorten the task description or split it",
-                prompt.len(),
-                MAX_PROMPT_BYTES
-            ));
-        }
-
-        // Issue #22 fix: prepend the working directory as explicit context so the
-        // provider LLM uses relative paths anchored here, not $HOME or random absolute
-        // paths. Separate marker line keeps the original prompt intact and scannable.
-        let prompt_with_cwd = format!(
-            "# Working directory\n{}\nUse this directory as the current working directory. Prefer relative paths anchored here.\n\n# Task\n{}",
-            working_dir.display(),
-            prompt
-        );
-
-        let mut cmd = provider.build_command(&prompt_with_cwd, working_dir, &provider_options);
-        // code #7 fix: centrally enforce working_dir regardless of what each provider did.
-        // A future provider implementation that forgets `.current_dir(...)` would otherwise
-        // silently run against ccswarm's own cwd and scatter generated files into $HOME.
-        cmd.current_dir(working_dir);
-
-        let output = cmd.output().await.with_context(|| {
-            format!(
-                "Failed to execute provider CLI: {}",
-                provider.kind().as_str()
-            )
-        })?;
-
-        let duration = start.elapsed();
+        let prompt_with_cwd =
+            prepare_provider_prompt(prompt, working_dir, DEFAULT_MAX_PROMPT_BYTES)?;
+        let cmd = provider.build_command(&prompt_with_cwd, working_dir, &provider_options);
+        let output = run_provider_command(cmd, working_dir, provider.kind().as_str()).await?;
 
         let raw_stdout = if output.status.success() {
-            String::from_utf8_lossy(&output.stdout).to_string()
+            output.stdout.clone()
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(anyhow::anyhow!(
                 "{} provider CLI failed: {}",
                 provider.kind().as_str(),
-                stderr
+                output.stderr
             ));
         };
 
@@ -791,7 +760,7 @@ impl AISessionBridge {
                 raw: raw_output,
                 parsed,
                 success,
-                duration_ms: duration.as_millis() as u64,
+                duration_ms: output.duration_ms,
                 compression_ratio,
                 tokens_in,
                 tokens_out,

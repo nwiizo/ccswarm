@@ -12,6 +12,7 @@ pub mod judge;
 pub mod permissions;
 pub mod pipeline;
 pub mod repertoire;
+pub mod sangha;
 pub mod team_leader;
 
 pub use cycle::{CycleAnalysis, LoopTracker, analyze_flow};

@@ -278,6 +278,7 @@ mod tests {
             promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
+            sangha: None,
         }
     }
 
