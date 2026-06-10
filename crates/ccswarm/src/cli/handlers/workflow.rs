@@ -1084,6 +1084,21 @@ impl CliRunner {
                         warnings.push(format!("stage '{}' has no routing rules (terminal?)", m.id));
                     }
                 }
+                // Static cycle analysis: cycles are legal (review→fix loops are
+                // cycles by design) but worth surfacing with the runtime bound.
+                match crate::workflow::cycle::analyze_flow(&flow) {
+                    Ok(analysis) if analysis.has_cycles => {
+                        for path in &analysis.cycle_paths {
+                            warnings.push(format!(
+                                "flow contains cycle: {} (bounded at runtime by max_stage_visits={})",
+                                path.join(" -> "),
+                                flow.max_stage_visits
+                            ));
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(e) => warnings.push(format!("cycle analysis failed: {}", e)),
+                }
             }
             Err(e) => issues.push(e.to_string()),
         }

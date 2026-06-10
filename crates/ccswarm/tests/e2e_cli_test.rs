@@ -463,6 +463,27 @@ fn test_full_workflow_init_to_task() {
     );
 }
 
+#[test]
+fn test_flow_check_reports_cycles() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // The builtin review-fix flow contains a review <-> fix cycle by design;
+    // `flow check` should surface it as a warning with the runtime bound.
+    let output = run_ccswarm(&["flow", "check", "review-fix"], Some(temp_dir.path()));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        output.status.success(),
+        "flow check should succeed (cycles are warnings, not errors). stdout: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("contains cycle") && stdout.contains("max_stage_visits"),
+        "flow check should warn about the review<->fix cycle. stdout: {}",
+        stdout
+    );
+}
+
 // ============================================================================
 // Verbose Mode Tests
 // ============================================================================

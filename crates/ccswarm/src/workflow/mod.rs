@@ -13,7 +13,7 @@ pub mod permissions;
 pub mod pipeline;
 pub mod repertoire;
 
-pub use cycle::{CycleAnalysis, CycleDetector, LoopStrategy, LoopTracker};
+pub use cycle::{CycleAnalysis, LoopTracker, analyze_flow};
 pub use facets::{
     ComposedPrompt, FacetRegistry, KnowledgeFacet, PersonaFacet, PolicyFacet, builtin_personas,
     builtin_policies,

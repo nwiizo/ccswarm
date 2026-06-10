@@ -1,17 +1,11 @@
 //! Cycle and loop detection for Flow/Stage workflows.
 //!
-//! Provides takt-style cycle detection to prevent infinite loops in stage routing:
-//! - **Static analysis**: Detect structural cycles before execution
-//! - **Runtime tracking**: Monitor stage visits during execution
-//! - **Loop strategies**: Configurable breakout behaviors (abort, skip, force-advance)
-//!
-//! Example usage:
-//! ```rust,no_run
-//! use ccswarm::workflow::cycle::{CycleDetector, LoopStrategy};
-//!
-//! let detector = CycleDetector::new(LoopStrategy::AllowN(3));
-//! // let analysis = detector.analyze_piece(&flow);
-//! ```
+//! Two complementary guards against runaway stage routing:
+//! - **Static analysis** (`analyze_flow`): detect structural cycles in a
+//!   flow's rule graph before execution (`ccswarm flow check`).
+//! - **Runtime tracking** (`LoopTracker`): count per-stage visits during
+//!   execution and signal when a stage exceeds `Flow::max_stage_visits`,
+//!   so review→fix loops stay bounded even when `max_stages` is generous.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -19,25 +13,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{debug, info, warn};
 
 use super::flow::Flow;
-
-/// Strategy for handling loops in workflow execution
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum LoopStrategy {
-    /// Abort execution when loop detected
-    Abort,
-    /// Skip the looping stage and continue
-    Skip,
-    /// Force advance to next stage (ignore rules)
-    ForceAdvance,
-    /// Allow up to N iterations before taking action
-    AllowN(u32),
-}
-
-impl Default for LoopStrategy {
-    fn default() -> Self {
-        LoopStrategy::AllowN(3)
-    }
-}
 
 /// Result of static cycle analysis on a flow
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,196 +27,162 @@ pub struct CycleAnalysis {
     pub cyclic_movements: HashSet<String>,
 }
 
-/// Cycle detector analyzes flow workflows for cycles
-pub struct CycleDetector {
-    /// Loop handling strategy
-    strategy: LoopStrategy,
-    /// Maximum iterations per stage before triggering strategy
-    max_iterations: u32,
-}
+/// Perform static analysis on a flow to detect cycles in the stage graph.
+///
+/// Cycles are not inherently errors (review→fix loops are cycles by design);
+/// callers should surface them as informational warnings noting that runtime
+/// execution bounds them via `max_stage_visits`.
+pub fn analyze_flow(flow: &Flow) -> Result<CycleAnalysis> {
+    debug!("Starting static cycle analysis for flow '{}'", flow.name);
 
-impl CycleDetector {
-    /// Create a new cycle detector with the given strategy
-    pub fn new(strategy: LoopStrategy) -> Self {
-        let max_iterations = match strategy {
-            LoopStrategy::AllowN(n) => n,
-            _ => 1,
-        };
-        Self {
-            strategy,
-            max_iterations,
+    // Build adjacency list for the stage graph
+    let mut graph: HashMap<String, Vec<String>> = HashMap::new();
+    for stage in &flow.stages {
+        let edges: Vec<String> = stage.rules.iter().map(|r| r.next.clone()).collect();
+        graph.insert(stage.id.clone(), edges);
+    }
+
+    // Detect cycles using DFS with path tracking
+    let mut cycle_paths = Vec::new();
+    let mut visited = HashSet::new();
+    let mut rec_stack = HashSet::new();
+    let mut path = Vec::new();
+
+    for stage in &flow.stages {
+        if !visited.contains(&stage.id) {
+            dfs_detect_cycles(
+                &stage.id,
+                &graph,
+                &mut visited,
+                &mut rec_stack,
+                &mut path,
+                &mut cycle_paths,
+            )?;
         }
     }
 
-    /// Perform static analysis on a flow to detect cycles in the stage graph
-    pub fn analyze_piece(&self, flow: &Flow) -> Result<CycleAnalysis> {
-        debug!("Starting static cycle analysis for flow '{}'", flow.name);
+    // Calculate max depth
+    let max_depth = calculate_max_depth(flow);
 
-        // Build adjacency list for the stage graph
-        let mut graph: HashMap<String, Vec<String>> = HashMap::new();
-        for stage in &flow.stages {
-            let edges: Vec<String> = stage.rules.iter().map(|r| r.next.clone()).collect();
-            graph.insert(stage.id.clone(), edges);
+    // Collect all stages that are part of cycles
+    let mut cyclic_movements = HashSet::new();
+    for cycle_path in &cycle_paths {
+        for movement_id in cycle_path {
+            cyclic_movements.insert(movement_id.clone());
         }
+    }
 
-        // Detect cycles using DFS with path tracking
-        let mut cycle_paths = Vec::new();
-        let mut visited = HashSet::new();
-        let mut rec_stack = HashSet::new();
-        let mut path = Vec::new();
+    let has_cycles = !cycle_paths.is_empty();
 
-        for stage in &flow.stages {
-            if !visited.contains(&stage.id) {
-                self.dfs_detect_cycles(
-                    &stage.id,
-                    &graph,
-                    &mut visited,
-                    &mut rec_stack,
-                    &mut path,
-                    &mut cycle_paths,
-                )?;
-            }
-        }
-
-        // Calculate max depth
-        let max_depth = self.calculate_max_depth(flow)?;
-
-        // Collect all stages that are part of cycles
-        let mut cyclic_movements = HashSet::new();
-        for cycle_path in &cycle_paths {
-            for movement_id in cycle_path {
-                cyclic_movements.insert(movement_id.clone());
-            }
-        }
-
-        let has_cycles = !cycle_paths.is_empty();
-
-        if has_cycles {
-            warn!(
-                "Flow '{}' contains {} cycle(s): max_depth={}, cyclic_movements={}",
-                flow.name,
-                cycle_paths.len(),
-                max_depth,
-                cyclic_movements.len()
-            );
-        } else {
-            info!("Flow '{}' is acyclic: max_depth={}", flow.name, max_depth);
-        }
-
-        Ok(CycleAnalysis {
-            has_cycles,
-            cycle_paths,
+    if has_cycles {
+        info!(
+            "Flow '{}' contains {} cycle(s): max_depth={}, cyclic_movements={}",
+            flow.name,
+            cycle_paths.len(),
             max_depth,
-            cyclic_movements,
-        })
+            cyclic_movements.len()
+        );
+    } else {
+        info!("Flow '{}' is acyclic: max_depth={}", flow.name, max_depth);
     }
 
-    /// DFS-based cycle detection with path tracking
-    fn dfs_detect_cycles(
-        &self,
-        node: &str,
-        graph: &HashMap<String, Vec<String>>,
-        visited: &mut HashSet<String>,
-        rec_stack: &mut HashSet<String>,
-        path: &mut Vec<String>,
-        cycle_paths: &mut Vec<Vec<String>>,
-    ) -> Result<()> {
-        visited.insert(node.to_string());
-        rec_stack.insert(node.to_string());
-        path.push(node.to_string());
+    Ok(CycleAnalysis {
+        has_cycles,
+        cycle_paths,
+        max_depth,
+        cyclic_movements,
+    })
+}
 
-        if let Some(neighbors) = graph.get(node) {
+/// DFS-based cycle detection with path tracking
+fn dfs_detect_cycles(
+    node: &str,
+    graph: &HashMap<String, Vec<String>>,
+    visited: &mut HashSet<String>,
+    rec_stack: &mut HashSet<String>,
+    path: &mut Vec<String>,
+    cycle_paths: &mut Vec<Vec<String>>,
+) -> Result<()> {
+    visited.insert(node.to_string());
+    rec_stack.insert(node.to_string());
+    path.push(node.to_string());
+
+    if let Some(neighbors) = graph.get(node) {
+        for neighbor in neighbors {
+            if !visited.contains(neighbor) {
+                dfs_detect_cycles(neighbor, graph, visited, rec_stack, path, cycle_paths)?;
+            } else if rec_stack.contains(neighbor) {
+                // Cycle detected - extract the cycle path
+                let cycle_start = path
+                    .iter()
+                    .position(|n| n == neighbor)
+                    .context("Cycle start not found in path")?;
+                let cycle_path = path[cycle_start..].to_vec();
+                debug!("Detected cycle: {:?}", cycle_path);
+                cycle_paths.push(cycle_path);
+            }
+        }
+    }
+
+    path.pop();
+    rec_stack.remove(node);
+    Ok(())
+}
+
+/// Calculate the maximum depth of the workflow graph using BFS
+fn calculate_max_depth(flow: &Flow) -> usize {
+    let mut graph: HashMap<String, Vec<String>> = HashMap::new();
+    for stage in &flow.stages {
+        let edges: Vec<String> = stage.rules.iter().map(|r| r.next.clone()).collect();
+        graph.insert(stage.id.clone(), edges);
+    }
+
+    let mut max_depth = 0;
+    let mut queue = VecDeque::new();
+    queue.push_back((flow.initial_movement.clone(), 0));
+
+    let mut visited = HashSet::new();
+    visited.insert(flow.initial_movement.clone());
+
+    while let Some((node, depth)) = queue.pop_front() {
+        max_depth = max_depth.max(depth);
+
+        if let Some(neighbors) = graph.get(&node) {
             for neighbor in neighbors {
+                // Only visit each node once to avoid infinite loops
                 if !visited.contains(neighbor) {
-                    self.dfs_detect_cycles(neighbor, graph, visited, rec_stack, path, cycle_paths)?;
-                } else if rec_stack.contains(neighbor) {
-                    // Cycle detected - extract the cycle path
-                    let cycle_start = path
-                        .iter()
-                        .position(|n| n == neighbor)
-                        .context("Cycle start not found in path")?;
-                    let cycle_path = path[cycle_start..].to_vec();
-                    debug!("Detected cycle: {:?}", cycle_path);
-                    cycle_paths.push(cycle_path);
+                    visited.insert(neighbor.clone());
+                    queue.push_back((neighbor.clone(), depth + 1));
                 }
             }
         }
-
-        path.pop();
-        rec_stack.remove(node);
-        Ok(())
     }
 
-    /// Calculate the maximum depth of the workflow graph using BFS
-    fn calculate_max_depth(&self, flow: &Flow) -> Result<usize> {
-        let mut graph: HashMap<String, Vec<String>> = HashMap::new();
-        for stage in &flow.stages {
-            let edges: Vec<String> = stage.rules.iter().map(|r| r.next.clone()).collect();
-            graph.insert(stage.id.clone(), edges);
-        }
-
-        let mut max_depth = 0;
-        let mut queue = VecDeque::new();
-        queue.push_back((flow.initial_movement.clone(), 0));
-
-        let mut visited = HashSet::new();
-        visited.insert(flow.initial_movement.clone());
-
-        while let Some((node, depth)) = queue.pop_front() {
-            max_depth = max_depth.max(depth);
-
-            if let Some(neighbors) = graph.get(&node) {
-                for neighbor in neighbors {
-                    // Only visit each node once to avoid infinite loops
-                    if !visited.contains(neighbor) {
-                        visited.insert(neighbor.clone());
-                        queue.push_back((neighbor.clone(), depth + 1));
-                    }
-                }
-            }
-        }
-
-        Ok(max_depth)
-    }
-
-    /// Create a runtime loop tracker for execution monitoring
-    pub fn create_tracker(&self) -> LoopTracker {
-        LoopTracker::new(self.strategy, self.max_iterations)
-    }
-
-    /// Get the configured strategy
-    pub fn strategy(&self) -> LoopStrategy {
-        self.strategy
-    }
+    max_depth
 }
 
-impl Default for CycleDetector {
-    fn default() -> Self {
-        Self::new(LoopStrategy::default())
-    }
-}
-
-/// Runtime tracker for monitoring stage visits during execution
+/// Runtime tracker for monitoring stage visits during execution.
+///
+/// `FlowEngine` records each stage visit; when a stage is visited more than
+/// `max_visits` times the flow is aborted, with the repeating transition
+/// pattern (if any) included in the diagnostics.
 #[derive(Debug, Clone)]
 pub struct LoopTracker {
     /// Visit count per stage ID
     visit_counts: HashMap<String, u32>,
     /// History of stage transitions (for pattern detection)
     transition_history: Vec<String>,
-    /// Loop handling strategy
-    strategy: LoopStrategy,
-    /// Maximum iterations before triggering strategy
-    max_iterations: u32,
+    /// Maximum visits per stage before the flow aborts
+    max_visits: u32,
 }
 
 impl LoopTracker {
-    /// Create a new loop tracker
-    pub fn new(strategy: LoopStrategy, max_iterations: u32) -> Self {
+    /// Create a new loop tracker allowing up to `max_visits` visits per stage
+    pub fn new(max_visits: u32) -> Self {
         Self {
             visit_counts: HashMap::new(),
             transition_history: Vec::new(),
-            strategy,
-            max_iterations,
+            max_visits,
         }
     }
 
@@ -255,12 +196,12 @@ impl LoopTracker {
 
         self.transition_history.push(movement_id.to_string());
 
-        let exceeded = *count > self.max_iterations;
+        let exceeded = *count > self.max_visits;
 
         if exceeded {
             warn!(
                 "Loop threshold exceeded for stage '{}': {} visits (max: {})",
-                movement_id, count, self.max_iterations
+                movement_id, count, self.max_visits
             );
         }
 
@@ -295,22 +236,6 @@ impl LoopTracker {
         }
 
         None
-    }
-
-    /// Get the current strategy
-    pub fn strategy(&self) -> LoopStrategy {
-        self.strategy
-    }
-
-    /// Get the transition history
-    pub fn history(&self) -> &[String] {
-        &self.transition_history
-    }
-
-    /// Reset the tracker state
-    pub fn reset(&mut self) {
-        self.visit_counts.clear();
-        self.transition_history.clear();
     }
 }
 
@@ -353,25 +278,33 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_simple_cycle_detection() {
-        // A -> B -> A
-        let flow = Flow {
-            name: "simple-cycle".to_string(),
-            description: "Simple A-B cycle".to_string(),
+    fn make_flow(name: &str, initial: &str, stages: Vec<Stage>) -> Flow {
+        Flow {
+            name: name.to_string(),
+            description: format!("{} test flow", name),
             max_stages: 10,
-            initial_movement: "A".to_string(),
-            stages: vec![
-                make_movement("A", vec![("success", "B")]),
-                make_movement("B", vec![("success", "A")]),
-            ],
+            max_stage_visits: 3,
+            initial_movement: initial.to_string(),
+            stages,
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,
-        };
+        }
+    }
 
-        let detector = CycleDetector::default();
-        let analysis = detector.analyze_piece(&flow).unwrap();
+    #[test]
+    fn test_simple_cycle_detection() {
+        // A -> B -> A
+        let flow = make_flow(
+            "simple-cycle",
+            "A",
+            vec![
+                make_movement("A", vec![("success", "B")]),
+                make_movement("B", vec![("success", "A")]),
+            ],
+        );
+
+        let analysis = analyze_flow(&flow).unwrap();
 
         assert!(analysis.has_cycles);
         assert_eq!(analysis.cycle_paths.len(), 1);
@@ -382,23 +315,17 @@ mod tests {
     #[test]
     fn test_complex_cycle_detection() {
         // A -> B -> C -> A
-        let flow = Flow {
-            name: "complex-cycle".to_string(),
-            description: "A-B-C cycle".to_string(),
-            max_stages: 10,
-            initial_movement: "A".to_string(),
-            stages: vec![
+        let flow = make_flow(
+            "complex-cycle",
+            "A",
+            vec![
                 make_movement("A", vec![("success", "B")]),
                 make_movement("B", vec![("success", "C")]),
                 make_movement("C", vec![("success", "A")]),
             ],
-            variables: HashMap::new(),
-            metadata: HashMap::new(),
-            interactive_mode: None,
-        };
+        );
 
-        let detector = CycleDetector::default();
-        let analysis = detector.analyze_piece(&flow).unwrap();
+        let analysis = analyze_flow(&flow).unwrap();
 
         assert!(analysis.has_cycles);
         assert_eq!(analysis.cycle_paths.len(), 1);
@@ -408,23 +335,17 @@ mod tests {
     #[test]
     fn test_no_cycle_linear_workflow() {
         // A -> B -> C (no cycles)
-        let flow = Flow {
-            name: "linear".to_string(),
-            description: "Linear workflow".to_string(),
-            max_stages: 10,
-            initial_movement: "A".to_string(),
-            stages: vec![
+        let flow = make_flow(
+            "linear",
+            "A",
+            vec![
                 make_movement("A", vec![("success", "B")]),
                 make_movement("B", vec![("success", "C")]),
                 make_movement("C", vec![]),
             ],
-            variables: HashMap::new(),
-            metadata: HashMap::new(),
-            interactive_mode: None,
-        };
+        );
 
-        let detector = CycleDetector::default();
-        let analysis = detector.analyze_piece(&flow).unwrap();
+        let analysis = analyze_flow(&flow).unwrap();
 
         assert!(!analysis.has_cycles);
         assert_eq!(analysis.cycle_paths.len(), 0);
@@ -434,7 +355,7 @@ mod tests {
 
     #[test]
     fn test_runtime_loop_tracking() {
-        let mut tracker = LoopTracker::new(LoopStrategy::AllowN(3), 3);
+        let mut tracker = LoopTracker::new(3);
 
         assert!(!tracker.record_visit("A"));
         assert_eq!(tracker.visit_count("A"), 1);
@@ -455,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_pattern_detection() {
-        let mut tracker = LoopTracker::new(LoopStrategy::AllowN(5), 5);
+        let mut tracker = LoopTracker::new(5);
 
         // Create pattern: A -> B -> A -> B
         tracker.record_visit("A");
@@ -470,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_pattern_detection_no_pattern() {
-        let mut tracker = LoopTracker::new(LoopStrategy::AllowN(5), 5);
+        let mut tracker = LoopTracker::new(5);
 
         tracker.record_visit("A");
         tracker.record_visit("B");
@@ -482,71 +403,20 @@ mod tests {
     }
 
     #[test]
-    fn test_max_iterations_enforcement() {
-        let detector = CycleDetector::new(LoopStrategy::AllowN(2));
-        let mut tracker = detector.create_tracker();
-
-        assert!(!tracker.record_visit("loop"));
-        assert!(!tracker.record_visit("loop"));
-        assert!(tracker.record_visit("loop")); // Exceeds max_iterations=2
-    }
-
-    #[test]
-    fn test_loop_strategy_abort() {
-        let detector = CycleDetector::new(LoopStrategy::Abort);
-        assert_eq!(detector.strategy(), LoopStrategy::Abort);
-
-        let tracker = detector.create_tracker();
-        assert_eq!(tracker.strategy(), LoopStrategy::Abort);
-    }
-
-    #[test]
-    fn test_loop_strategy_skip() {
-        let detector = CycleDetector::new(LoopStrategy::Skip);
-        assert_eq!(detector.strategy(), LoopStrategy::Skip);
-    }
-
-    #[test]
-    fn test_loop_strategy_force_advance() {
-        let detector = CycleDetector::new(LoopStrategy::ForceAdvance);
-        assert_eq!(detector.strategy(), LoopStrategy::ForceAdvance);
-    }
-
-    #[test]
-    fn test_tracker_reset() {
-        let mut tracker = LoopTracker::new(LoopStrategy::AllowN(3), 3);
-
-        tracker.record_visit("A");
-        tracker.record_visit("B");
-        assert_eq!(tracker.visit_count("A"), 1);
-        assert_eq!(tracker.history().len(), 2);
-
-        tracker.reset();
-        assert_eq!(tracker.visit_count("A"), 0);
-        assert_eq!(tracker.history().len(), 0);
-    }
-
-    #[test]
     fn test_multiple_cycles() {
         // A -> B -> A and C -> D -> C
-        let flow = Flow {
-            name: "multi-cycle".to_string(),
-            description: "Multiple independent cycles".to_string(),
-            max_stages: 20,
-            initial_movement: "A".to_string(),
-            stages: vec![
+        let flow = make_flow(
+            "multi-cycle",
+            "A",
+            vec![
                 make_movement("A", vec![("success", "B")]),
                 make_movement("B", vec![("success", "A"), ("alt", "C")]),
                 make_movement("C", vec![("success", "D")]),
                 make_movement("D", vec![("success", "C")]),
             ],
-            variables: HashMap::new(),
-            metadata: HashMap::new(),
-            interactive_mode: None,
-        };
+        );
 
-        let detector = CycleDetector::default();
-        let analysis = detector.analyze_piece(&flow).unwrap();
+        let analysis = analyze_flow(&flow).unwrap();
 
         assert!(analysis.has_cycles);
         // Should detect at least one cycle (may detect both)
