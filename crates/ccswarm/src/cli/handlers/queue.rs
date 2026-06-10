@@ -339,6 +339,16 @@ impl CliRunner {
 
     async fn queue_list(&self, path: &std::path::Path) -> Result<()> {
         let queue = load_queue(path).await?;
+        if self.json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "tasks": queue.tasks,
+                    "total": queue.tasks.len(),
+                }))?
+            );
+            return Ok(());
+        }
         if queue.tasks.is_empty() {
             println!("Queue is empty.");
             return Ok(());

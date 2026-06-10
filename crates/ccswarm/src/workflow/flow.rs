@@ -572,8 +572,40 @@ impl Flow {
             ));
         }
 
+        for target in &self.on_rate_limit {
+            if crate::providers::ProviderKind::parse(&target.provider).is_none() {
+                return Err(anyhow::anyhow!(
+                    "Flow '{}' has unknown on_rate_limit provider '{}' (expected: claude | codex | copilot)",
+                    self.name,
+                    target.provider
+                ));
+            }
+        }
+
         // Check all rule targets reference valid stages
         for stage in &self.stages {
+            if let Some(provider) = &stage.provider
+                && crate::providers::ProviderKind::parse(provider).is_none()
+            {
+                return Err(anyhow::anyhow!(
+                    "Stage '{}' has unknown provider '{}' (expected: claude | codex | copilot)",
+                    stage.id,
+                    provider
+                ));
+            }
+
+            for rule in &stage.promotion {
+                if let Some(provider) = &rule.provider
+                    && crate::providers::ProviderKind::parse(provider).is_none()
+                {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}' has unknown promotion provider '{}' (expected: claude | codex | copilot)",
+                        stage.id,
+                        provider
+                    ));
+                }
+            }
+
             for rule in &stage.rules {
                 if !self.stages.iter().any(|m| m.id == rule.next) {
                     return Err(anyhow::anyhow!(
@@ -1122,6 +1154,7 @@ impl FlowEngine {
             };
             let movement_duration_ms = movement_start.elapsed().as_millis() as u64;
             state.movement_count += 1;
+            let movement_succeeded = stage_output_succeeded(&output);
 
             // Save intermediate state for timeout recovery
             *self.last_state.write().await = Some(state.clone());
@@ -1131,7 +1164,7 @@ impl FlowEngine {
                 let _ = tx.send(MovementProgress {
                     movement_id: stage.id.clone(),
                     duration_ms: movement_duration_ms,
-                    success: true,
+                    success: movement_succeeded,
                     movements_completed: state.movement_count as usize,
                 });
             }
@@ -1264,8 +1297,13 @@ impl FlowEngine {
 
             // Check if terminal (no rules = done)
             if stage.rules.is_empty() {
-                info!("Flow '{}' completed at terminal stage '{}'", name, stage.id);
-                state.status = FlowStatus::Completed;
+                if movement_succeeded {
+                    info!("Flow '{}' completed at terminal stage '{}'", name, stage.id);
+                    state.status = FlowStatus::Completed;
+                } else {
+                    warn!("Flow '{}' failed at terminal stage '{}'", name, stage.id);
+                    state.status = FlowStatus::Failed;
+                }
                 state.completed_at = Some(Utc::now());
                 break;
             }
@@ -1286,8 +1324,13 @@ impl FlowEngine {
                 }
                 None => {
                     // No rule matched - treat as completion
-                    info!("No rule matched in stage '{}', completing flow", stage.id);
-                    state.status = FlowStatus::Completed;
+                    if movement_succeeded {
+                        info!("No rule matched in stage '{}', completing flow", stage.id);
+                        state.status = FlowStatus::Completed;
+                    } else {
+                        warn!("No rule matched failed stage '{}'", stage.id);
+                        state.status = FlowStatus::Failed;
+                    }
                     state.completed_at = Some(Utc::now());
                     break;
                 }
@@ -1947,17 +1990,17 @@ impl FlowEngine {
 
         let mut parts = Vec::new();
 
-        // System prompt (persona)
-        if !composed.system.is_empty() {
-            parts.push(composed.system);
+        // Inject task description when the stage instruction did not already
+        // expand `{task}` into the user prompt.
+        if let Some(task_text) = state.variables.get("task").and_then(|v| v.as_str())
+            && !expanded_instruction.contains(task_text)
+        {
+            parts.push(format!("## User Task\n\n{}", task_text));
         }
 
-        // Inject task description if available
-        if let Some(task_text) = state.variables.get("task").and_then(|v| v.as_str()) {
-            parts.push(format!("## Task\n\n{}", task_text));
-        }
-
-        // User message (knowledge → instruction → policy → output contract)
+        // User message (knowledge → instruction → policy → output contract).
+        // The persona system prompt is forwarded separately through
+        // ProviderOptions.system_prompt during live execution.
         if !composed.user.is_empty() {
             parts.push(composed.user);
         }
@@ -3158,7 +3201,13 @@ fn truncate_for_context(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else {
-        format!("{}... [truncated]", &s[..max_len])
+        let boundary = s
+            .char_indices()
+            .map(|(index, _)| index)
+            .take_while(|index| *index <= max_len)
+            .last()
+            .unwrap_or(0);
+        format!("{}... [truncated]", &s[..boundary])
     }
 }
 
@@ -3212,6 +3261,13 @@ async fn run_command_gates(
         return Some((gate.name.clone(), feedback));
     }
     None
+}
+
+fn stage_output_succeeded(output: &serde_json::Value) -> bool {
+    output
+        .get("status")
+        .and_then(|status| status.as_str())
+        .is_some_and(|status| status == "completed")
 }
 
 #[cfg(test)]
@@ -3577,6 +3633,56 @@ stages:
         assert!(flow.on_rate_limit[1].model.is_none());
     }
 
+    #[test]
+    fn test_flow_validation_rejects_unknown_providers() {
+        let stage_provider = r#"
+name: bad-stage-provider
+initial_movement: a
+stages:
+  - id: a
+    provider: madeup
+    instruction: "x"
+"#;
+        assert!(
+            Flow::from_yaml(stage_provider)
+                .expect_err("unknown stage provider must fail validation")
+                .to_string()
+                .contains("unknown provider")
+        );
+
+        let promotion_provider = r#"
+name: bad-promotion-provider
+initial_movement: a
+stages:
+  - id: a
+    instruction: "x"
+    promotion:
+      - { at: 2, provider: madeup }
+"#;
+        assert!(
+            Flow::from_yaml(promotion_provider)
+                .expect_err("unknown promotion provider must fail validation")
+                .to_string()
+                .contains("unknown promotion provider")
+        );
+
+        let fallback_provider = r#"
+name: bad-fallback-provider
+initial_movement: a
+on_rate_limit:
+  - { provider: madeup }
+stages:
+  - id: a
+    instruction: "x"
+"#;
+        assert!(
+            Flow::from_yaml(fallback_provider)
+                .expect_err("unknown fallback provider must fail validation")
+                .to_string()
+                .contains("unknown on_rate_limit provider")
+        );
+    }
+
     #[tokio::test]
     async fn test_command_gates_pass_returns_none() {
         let gates = vec![CommandGate {
@@ -3882,6 +3988,38 @@ stages:
         assert!(!exceeds_cap(5, 5));
     }
 
+    #[test]
+    fn build_prompt_does_not_duplicate_persona_or_expanded_task() {
+        let yaml = r#"
+name: prompt-test
+initial_movement: plan
+stages:
+  - id: plan
+    persona: coder
+    instruction: "Plan this task: {task}"
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let stage = &flow.stages[0];
+        let mut state = flow.create_state();
+        state.variables.insert(
+            "task".to_string(),
+            serde_json::Value::String("Fix duplicated prompt content".to_string()),
+        );
+        let engine = FlowEngine::new();
+
+        let prompt = engine.build_movement_prompt(stage, &state);
+
+        assert!(
+            !prompt.contains("You are the implementer"),
+            "persona system prompt must be passed via ProviderOptions, not duplicated in the user prompt"
+        );
+        assert_eq!(
+            prompt.matches("Fix duplicated prompt content").count(),
+            1,
+            "task text should appear once when instruction already expands {{task}}"
+        );
+    }
+
     /// An explicit `tools:` list on a stage is honored verbatim, even if the
     /// permission level would allow a broader set.
     #[test]
@@ -4103,5 +4241,28 @@ stages:
 
         let out = super::expand_template("run is {__run_id}", &vars);
         assert_eq!(out, "run is {__run_id}");
+    }
+
+    #[test]
+    fn truncate_for_context_is_utf8_safe() {
+        let input = "abあcd";
+
+        assert_eq!(super::truncate_for_context(input, 4), "ab... [truncated]");
+        assert_eq!(super::truncate_for_context(input, 5), "abあ... [truncated]");
+        assert_eq!(super::truncate_for_context(input, 99), input);
+    }
+
+    #[test]
+    fn stage_output_succeeded_only_accepts_completed_status() {
+        assert!(super::stage_output_succeeded(&serde_json::json!({
+            "status": "completed"
+        })));
+        assert!(!super::stage_output_succeeded(&serde_json::json!({
+            "status": "failed"
+        })));
+        assert!(!super::stage_output_succeeded(&serde_json::json!({
+            "status": "timeout"
+        })));
+        assert!(!super::stage_output_succeeded(&serde_json::json!({})));
     }
 }

@@ -96,7 +96,7 @@ impl TypedTaskBuilder<NoDescription> {
     }
 
     /// Parse task description with modifiers and transition to HasDescription
-    /// Format: "Task description [priority] [type]"
+    /// Format: `Task description [priority] [type]`
     pub fn parse(input: &str) -> TypedTaskBuilder<Complete> {
         let (desc, priority, task_type) = Self::parse_modifiers(input);
 

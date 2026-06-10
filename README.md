@@ -19,7 +19,8 @@ diff, and roll back.
 - You need reproducibility: the same flow YAML yields the same quality process,
   whether Alice or Bob runs it.
 - You want to replay, diff, or undo what the agent did yesterday.
-- You use multiple provider CLIs (Claude Code / Codex) and don't want to pick one.
+- You use multiple provider CLIs (Claude Code / Codex, with gh copilot probed for
+  diagnostics) and don't want to pick one.
 
 ## Quick start
 
@@ -27,14 +28,25 @@ diff, and roll back.
 cargo install --path crates/ccswarm
 ccswarm doctor                        # probe Claude / Codex / gh copilot CLIs
 ccswarm pipeline --task "Add login"   # one-shot
+ccswarm pipeline --task "..." --dry-run --provider codex  # preview prompts
+ccswarm scaffold --dir ./myapp --task "Create a todo app" --provider codex
 ccswarm                               # interactive: asks what to build
 ```
+
+`doctor` reports missing `ANTHROPIC_API_KEY` as a warning, not a hard failure,
+when you use provider CLIs that are already authenticated locally.
+
+`scaffold` creates a new git repository, writes a minimal npm project with a
+passing `npm test` script, then runs the selected flow in that project. The
+global `--provider` flag is forwarded into the child pipeline, and scaffold
+exits non-zero if the pipeline fails or times out.
 
 ## Daily flow
 
 ```bash
 ccswarm queue add "..."                 # accumulate during the day
 ccswarm queue add --from-issue 42       # ingest a GitHub issue
+ccswarm --json queue list               # machine-readable queue state
 ccswarm queue drain                     # run all pending; y/n at commit + PR
 ccswarm auto --watch                    # unattended: no y/n, auto-commit + PR
 ```
@@ -70,13 +82,27 @@ provider: claude          # claude | codex | copilot
 model: sonnet
 ```
 
-Precedence: stage YAML `provider:` > `CCSWARM_PROVIDER` env > Claude default.
+Precedence: stage YAML `provider:` > global `--provider` flag >
+`CCSWARM_PROVIDER` env > Claude default. Unknown providers in `provider:`,
+`promotion.provider`, or `on_rate_limit.provider` fail validation instead of
+falling back silently.
 
 | Provider | Status | Notes |
 |----------|--------|-------|
 | `claude` | Full support | All flags: --allowed-tools, --agent, --resume, --system-prompt, --max-budget-usd, --worktree |
-| `codex` | Non-interactive `codex exec` | System prompt is prepended to the user prompt (Codex has no dedicated flag). Session resume not yet wired |
+| `codex` | Non-interactive `codex exec` | System prompt is prepended to the user prompt (Codex has no dedicated flag). `codex exec resume <thread-id>` is used for same-thread continuation when Codex JSON telemetry provides a thread ID |
 | `copilot` | **Unsupported for code generation** | `gh copilot suggest` is interactive and returns shell-command strings, not file edits. The provider fails fast with a friendly error — see `providers/copilot.rs` for rationale |
+
+## Machine-readable output
+
+Use `--json` when scripting commands. Application data is written to stdout as
+JSON; tracing/log output is written to stderr so stdout remains parseable.
+
+```bash
+ccswarm --json init --name MyApp
+ccswarm --json queue list
+ccswarm --json config show
+```
 
 ## Builtin flows
 

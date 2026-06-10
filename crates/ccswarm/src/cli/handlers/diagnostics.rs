@@ -143,8 +143,11 @@ impl CliRunner {
         if std::env::var("ANTHROPIC_API_KEY").is_ok() {
             println!("{}", "✅ Set".bright_green());
         } else {
-            println!("{}", "⚠️  Not set".bright_yellow());
-            issues.push("api_key");
+            println!(
+                "{}",
+                "⚠️  Not set (optional when provider CLIs are already authenticated)"
+                    .bright_yellow()
+            );
         }
 
         // Check config

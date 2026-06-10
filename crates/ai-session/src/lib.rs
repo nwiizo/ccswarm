@@ -107,10 +107,10 @@
 //! - [`context`] - AI context and conversation history management  
 //! - [`coordination`] - Multi-agent communication and task distribution
 //! - [`output`] - Intelligent output parsing and semantic analysis
-//! - [`security`] - Access control, isolation, and rate limiting
-//! - [`observability`] - Monitoring, decision tracking, and performance analysis
+//! - security - Access control, isolation, and rate limiting
+//! - observability - Monitoring, decision tracking, and performance analysis
 //! - [`persistence`] - Session state storage and recovery
-//! - [`integration`] - Compatibility layers (tmux, VS Code, etc.)
+//! - integration - Compatibility layers (tmux, VS Code, etc.)
 //!
 //! ## Performance Characteristics
 //!

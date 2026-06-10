@@ -121,6 +121,7 @@ fn init_logging(verbose: bool, format: &str) {
         "ndjson" | "json" => {
             let json_layer = tracing_subscriber::fmt::layer()
                 .json()
+                .with_writer(std::io::stderr)
                 .with_target(true)
                 .with_thread_ids(false)
                 .with_file(false)
@@ -133,6 +134,7 @@ fn init_logging(verbose: bool, format: &str) {
         }
         _ => {
             let fmt_layer = tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
                 .with_target(false)
                 .compact();
             tracing_subscriber::registry()

@@ -2,13 +2,18 @@
 
 ## Overview
 
-ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Agent Teams. It provides flow-based workflow pipelines, NDJSON event recording, AISessionBridge for Claude Code CLI execution, and agent definition generation. Built in Rust for performance and reliability with native ai-session terminal management.
+ccswarm is an AI Agent Workflow DevOps toolchain that complements AI coding
+provider CLIs. It provides flow-based workflow pipelines, NDJSON event
+recording, provider-agnostic AISessionBridge execution, and agent definition
+generation. Built in Rust for performance and reliability with native
+ai-session terminal management.
 
 ## Key Features
 
 ### Core Capabilities
 - **Flow-Based Workflows**: YAML-driven multi-step pipelines with stage context passing
-- **AISessionBridge**: Claude Code CLI execution with --resume, --agent routing, retry with exponential backoff
+- **AISessionBridge**: provider CLI execution with continuation, Claude
+  --agent routing, retry with exponential backoff, and stream telemetry
 - **NDJSON Event Recording**: Observability via `.ccswarm/runs/{run-id}/events.ndjson` with duration tracking
 - **Agent Definition Generation**: `agent-gen` command generates/validates `.claude/agents/*.md` from facets
 - **Cross-Platform Support**: Native PTY implementation for Linux, macOS (Windows not supported)
@@ -38,7 +43,9 @@ ccswarm is an AI Agent Workflow DevOps toolchain that complements Claude Code Ag
 ### Dependencies
 - Rust 1.70+
 - Git 2.20+
-- Claude Code CLI (for AISessionBridge execution)
+- At least one provider CLI for live execution: Claude Code CLI or Codex CLI.
+  `gh copilot` can be probed but is intentionally unsupported for code
+  generation.
 
 ### Build Requirements
 The project uses a Cargo workspace structure:
@@ -263,7 +270,7 @@ use crate::session::bridge::AISessionBridge;
 // ccswarm creates bridge instances for workflow execution
 let bridge = AISessionBridge::new(config);
 
-// Execute via Claude Code CLI with session resumption and agent routing
+// Execute via the selected provider CLI with session continuation and routing
 let result = bridge.execute(task_prompt, agent_identity).await?;
 // Result includes parsed output, success status, and duration
 ```
@@ -537,7 +544,8 @@ Project configurations are stored in the project directory, not within the ccswa
 Example configurations can be found in `crates/ccswarm/examples_disabled/`.
 
 ### Environment Variables
-- `ANTHROPIC_API_KEY`: Required for Claude Code CLI
+- `ANTHROPIC_API_KEY`: Required for Claude API-backed flows when Claude Code
+  CLI is not already authenticated
 - `RUST_LOG`: Control logging verbosity
 - `CCSWARM_HOME`: Configuration directory (default: ~/.ccswarm)
 
@@ -642,6 +650,11 @@ cargo run --package ai-session --bin server
 - LLM-backed ai() judge (`CCSWARM_LLM_JUDGE=1`) with the lexical heuristic as offline fallback
 - team_leader orchestrator-worker: runtime task decomposition into parallel workers; builtin `team-dynamic` flow
 - Fixed CompoundCondition YAML round-trip (`flow check` on flows with all()/any() rules)
+- Final readiness fixes: parseable `--json` stdout for init/queue workflows,
+  provider validation for flow-level fallback/promotion fields, non-duplicated
+  live prompt construction, UTF-8-safe gate-output truncation, and scaffold
+  failure/provider propagation fixes informed by an actual static app creation
+  smoke run
 
 ### v0.7.0
 - Audit follow-up: wired implemented-but-unreachable features, deleted the rest
