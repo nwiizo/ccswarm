@@ -1632,11 +1632,36 @@ impl FlowEngine {
 
         let output_str = serde_json::to_string(output).unwrap_or_default();
 
+        // Parallel stages return {"parallel": true, "agents": {sub_id: output}}
+        // (built by execute_parallel_movements). Extract per-agent texts so the
+        // judge can evaluate all()/any() aggregate conditions across them.
+        let parallel_outputs: Option<HashMap<String, String>> = output
+            .get("parallel")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+            .then(|| output.get("agents").and_then(|v| v.as_object()))
+            .flatten()
+            .map(|agents| {
+                agents
+                    .iter()
+                    .map(|(sub_id, val)| {
+                        let text = val
+                            .get("output")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string)
+                            .unwrap_or_else(|| serde_json::to_string(val).unwrap_or_default());
+                        (sub_id.clone(), text)
+                    })
+                    .collect()
+            });
+
         // Judge takes a slice of owned rules; clone the filtered references into
         // a temporary Vec. Rules are tiny structs (4 short strings + flags) so
         // this is a negligible allocation in practice.
         let filtered_owned: Vec<MovementRule> = filtered.iter().map(|&r| r.clone()).collect();
-        let judge_result = self.judge.evaluate(&output_str, &filtered_owned, None)?;
+        let judge_result =
+            self.judge
+                .evaluate(&output_str, &filtered_owned, parallel_outputs.as_ref())?;
 
         if let Some(index) = judge_result.matched_rule_index
             && index < filtered_owned.len()
@@ -2697,6 +2722,98 @@ stages:
         // Two visits each executed; the third visit to 'ping' aborts before
         // execution, so only 4 stages ran.
         assert_eq!(state.movement_count, 4);
+    }
+
+    #[tokio::test]
+    async fn test_parallel_all_aggregate_routes_when_every_output_matches() {
+        // Without a bridge, sub-stage output JSON embeds the instruction text,
+        // so marker words in instructions drive the aggregate conditions.
+        let yaml = r#"
+name: par-all
+max_stages: 10
+initial_movement: fanout
+stages:
+  - id: fanout
+    instruction: "Fan out to reviewers"
+    parallel: true
+    sub_movements: [left, right]
+    rules:
+      - condition:
+          all: ["approved"]
+        next: done
+      - condition:
+          any: ["needs_fix"]
+        next: fixit
+  - id: left
+    instruction: "left review approved"
+  - id: right
+    instruction: "right review approved"
+  - id: fixit
+    instruction: "apply fixes"
+  - id: done
+    instruction: "terminal"
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let mut engine = FlowEngine::new();
+        engine.flows.insert("par-all".to_string(), flow);
+
+        let state = engine
+            .execute_piece("par-all")
+            .await
+            .expect("execution failed");
+        assert_eq!(state.status, FlowStatus::Completed);
+        let visited: Vec<&str> = state.history.iter().map(|t| t.to.as_str()).collect();
+        assert_eq!(
+            visited,
+            vec!["done"],
+            "all(approved) should route fanout -> done, got history: {:?}",
+            visited
+        );
+    }
+
+    #[tokio::test]
+    async fn test_parallel_any_aggregate_routes_on_single_match() {
+        let yaml = r#"
+name: par-any
+max_stages: 10
+initial_movement: fanout
+stages:
+  - id: fanout
+    instruction: "Fan out to reviewers"
+    parallel: true
+    sub_movements: [left, right]
+    rules:
+      - condition:
+          all: ["approved"]
+        next: done
+      - condition:
+          any: ["needs_fix"]
+        next: fixit
+  - id: left
+    instruction: "left review approved"
+  - id: right
+    instruction: "right review needs_fix"
+  - id: fixit
+    instruction: "apply fixes"
+  - id: done
+    instruction: "terminal"
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let mut engine = FlowEngine::new();
+        engine.flows.insert("par-any".to_string(), flow);
+
+        let state = engine
+            .execute_piece("par-any")
+            .await
+            .expect("execution failed");
+        assert_eq!(state.status, FlowStatus::Completed);
+        let visited: Vec<&str> = state.history.iter().map(|t| t.to.as_str()).collect();
+        assert_eq!(
+            visited,
+            vec!["fixit"],
+            "any(needs_fix) should route fanout -> fixit when all(approved) fails, got history: {:?}",
+            visited
+        );
     }
 
     #[test]
