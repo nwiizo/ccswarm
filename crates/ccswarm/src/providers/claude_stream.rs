@@ -122,6 +122,12 @@ fn extract_assistant(value: &serde_json::Value, summary: &mut StreamSummary) {
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string();
+                    // A tool_use block without a name is malformed (or a
+                    // future format change); an empty entry in events.ndjson
+                    // is noise, so skip it.
+                    if name.is_empty() {
+                        continue;
+                    }
                     let input = block
                         .get("input")
                         .cloned()

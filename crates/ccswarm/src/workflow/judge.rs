@@ -315,11 +315,16 @@ impl MovementJudge {
             if let RuleCondition::Compound(compound) = &rule.condition {
                 let matched = match compound {
                     super::flow::CompoundCondition::All(conditions) => {
-                        conditions.iter().all(|cond| {
-                            parallel_outputs
-                                .values()
-                                .all(|out| out.to_lowercase().contains(&cond.to_lowercase()))
-                        })
+                        // Guard the vacuous truth: `all: []` would match
+                        // unconditionally and silently hijack routing. An
+                        // empty condition list is an authoring error, not a
+                        // match-everything wildcard.
+                        !conditions.is_empty()
+                            && conditions.iter().all(|cond| {
+                                parallel_outputs
+                                    .values()
+                                    .all(|out| out.to_lowercase().contains(&cond.to_lowercase()))
+                            })
                     }
                     super::flow::CompoundCondition::Any(conditions) => {
                         conditions.iter().any(|cond| {
