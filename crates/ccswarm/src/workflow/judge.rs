@@ -125,11 +125,16 @@ impl MovementJudge {
     /// Evaluate stage output against rules and determine the next stage.
     ///
     /// Returns the ID of the next stage, or None if no rule matched.
+    /// `llm_verdicts` carries real-LLM judgments for `ai()` rules keyed by
+    /// rule index (computed asynchronously by the engine when
+    /// `CCSWARM_LLM_JUDGE=1`). Rules absent from the map fall back to the
+    /// lexical heuristic, preserving offline behavior.
     pub fn evaluate(
         &self,
         output: &str,
         rules: &[MovementRule],
         parallel_outputs: Option<&HashMap<String, String>>,
+        llm_verdicts: Option<&HashMap<usize, bool>>,
     ) -> Result<JudgeResult> {
         if rules.is_empty() {
             return Ok(JudgeResult {
@@ -159,7 +164,7 @@ impl MovementJudge {
 
         // 4. AI judge evaluation (if enabled)
         if self.config.enable_ai_judge
-            && let Some(result) = self.evaluate_ai_conditions(output, rules)?
+            && let Some(result) = self.evaluate_ai_conditions(output, rules, llm_verdicts)?
         {
             return Ok(result);
         }
@@ -277,12 +282,29 @@ impl MovementJudge {
         &self,
         output: &str,
         rules: &[MovementRule],
+        llm_verdicts: Option<&HashMap<usize, bool>>,
     ) -> Result<Option<JudgeResult>> {
         for (index, rule) in rules.iter().enumerate() {
             if let RuleCondition::AiCondition { ai: condition } = &rule.condition {
                 debug!("Evaluating AI condition: '{}' against output", condition);
 
-                // Build a judgment prompt
+                // A real-LLM verdict (when present) is authoritative for this
+                // rule — both YES and NO. The heuristic only covers rules the
+                // LLM pass didn't answer.
+                if let Some(&verdict) = llm_verdicts.and_then(|m| m.get(&index)) {
+                    if verdict {
+                        info!("LLM judge matched condition '{}'", condition);
+                        return Ok(Some(JudgeResult {
+                            matched_rule_index: Some(index),
+                            match_method: MatchMethod::AiJudge,
+                            confidence: 0.95,
+                            explanation: format!("LLM judge confirmed: {}", condition),
+                        }));
+                    }
+                    continue;
+                }
+
+                // Lexical-overlap heuristic (offline fallback)
                 let judgment = self.ai_judge_evaluate(condition, output)?;
 
                 if judgment.matched {
@@ -451,6 +473,23 @@ struct AiJudgment {
     explanation: String,
 }
 
+/// Parse an LLM judge reply into a verdict. Expects the model to lead with
+/// YES or NO; returns `None` for ambiguous replies so the caller can fall
+/// back to the lexical heuristic instead of guessing.
+pub fn parse_judge_reply(reply: &str) -> Option<bool> {
+    let normalized = reply.trim().to_uppercase();
+    // Tolerate light preamble/markdown: judge the first non-empty line.
+    let first_line = normalized.lines().find(|l| !l.trim().is_empty())?;
+    let lead = first_line.trim().trim_start_matches(['*', '#', '`', ' ']);
+    if lead.starts_with("YES") {
+        Some(true)
+    } else if lead.starts_with("NO") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
 /// Extract the argument from a function-style syntax: `fn_name("arg")`
 fn extract_function_arg(input: &str, fn_name: &str) -> Option<String> {
     let prefix = format!("{}(", fn_name);
@@ -504,12 +543,12 @@ mod tests {
         ];
 
         let output = "Task completed successfully.\n[STEP:0]\nAll good.";
-        let result = judge.evaluate(output, &rules, None).unwrap();
+        let result = judge.evaluate(output, &rules, None, None).unwrap();
         assert_eq!(result.matched_rule_index, Some(0));
         assert_eq!(result.match_method, MatchMethod::StepTag);
 
         let output2 = "Found issues.\n[STEP:1]\nNeeds fixing.";
-        let result2 = judge.evaluate(output2, &rules, None).unwrap();
+        let result2 = judge.evaluate(output2, &rules, None, None).unwrap();
         assert_eq!(result2.matched_rule_index, Some(1));
         assert_eq!(result2.match_method, MatchMethod::StepTag);
     }
@@ -524,7 +563,7 @@ mod tests {
 
         // Output with no error keywords -> matches "success"
         let output = "All tasks completed without issues.";
-        let result = judge.evaluate(output, &rules, None).unwrap();
+        let result = judge.evaluate(output, &rules, None, None).unwrap();
         assert_eq!(result.matched_rule_index, Some(0));
         assert_eq!(result.match_method, MatchMethod::SimpleCondition);
     }
@@ -538,7 +577,7 @@ mod tests {
         ];
 
         let output = "Build failed with 3 errors.";
-        let result = judge.evaluate(output, &rules, None).unwrap();
+        let result = judge.evaluate(output, &rules, None, None).unwrap();
         assert_eq!(result.matched_rule_index, Some(0));
         assert_eq!(result.match_method, MatchMethod::SimpleCondition);
     }
@@ -550,7 +589,7 @@ mod tests {
 
         // Output contains words from the condition
         let output = "The code quality is excellent and meets all standards.";
-        let result = judge.evaluate(output, &rules, None).unwrap();
+        let result = judge.evaluate(output, &rules, None, None).unwrap();
         assert_eq!(result.matched_rule_index, Some(0));
         assert_eq!(result.match_method, MatchMethod::AiJudge);
     }
@@ -575,7 +614,9 @@ mod tests {
             "Approved with minor nits".to_string(),
         );
 
-        let result = judge.evaluate("", &rules, Some(&parallel_outputs)).unwrap();
+        let result = judge
+            .evaluate("", &rules, Some(&parallel_outputs), None)
+            .unwrap();
         assert_eq!(result.matched_rule_index, Some(0));
         assert_eq!(result.match_method, MatchMethod::Aggregate);
     }
@@ -600,7 +641,9 @@ mod tests {
             "Code rejected - security issue".to_string(),
         );
 
-        let result = judge.evaluate("", &rules, Some(&parallel_outputs)).unwrap();
+        let result = judge
+            .evaluate("", &rules, Some(&parallel_outputs), None)
+            .unwrap();
         assert_eq!(result.matched_rule_index, Some(0));
         assert_eq!(result.match_method, MatchMethod::Aggregate);
     }
@@ -648,9 +691,65 @@ mod tests {
     #[test]
     fn test_empty_rules() {
         let judge = MovementJudge::default();
-        let result = judge.evaluate("some output", &[], None).unwrap();
+        let result = judge.evaluate("some output", &[], None, None).unwrap();
         assert!(result.matched_rule_index.is_none());
         assert_eq!(result.match_method, MatchMethod::NoMatch);
+    }
+
+    #[test]
+    fn test_parse_judge_reply() {
+        assert_eq!(parse_judge_reply("YES"), Some(true));
+        assert_eq!(parse_judge_reply("yes, the condition holds"), Some(true));
+        assert_eq!(parse_judge_reply("NO"), Some(false));
+        assert_eq!(parse_judge_reply("\n  No.\n"), Some(false));
+        assert_eq!(parse_judge_reply("**YES**"), Some(true));
+        // Ambiguous replies must not be guessed.
+        assert_eq!(parse_judge_reply("It depends on the context"), None);
+        assert_eq!(parse_judge_reply(""), None);
+        // "NOT" leads with NO as a prefix — current contract treats the
+        // leading token prefix as the verdict; document via NOTE if changed.
+        assert_eq!(parse_judge_reply("Maybe yes"), None);
+    }
+
+    #[test]
+    fn test_llm_verdict_overrides_heuristic() {
+        let judge = MovementJudge::default();
+        // The second rule uses "failure", which only matches outputs that
+        // contain error markers — "x" has none, so only the ai() rule is in
+        // play. (A "success" rule would short-circuit at the simple-condition
+        // phase: it matches any output without error markers.)
+        let rules = vec![
+            make_ai_rule(
+                "output mentions absolutely nothing relevant",
+                "matched-next",
+            ),
+            make_simple_rule("failure", "failed-next"),
+        ];
+        // The heuristic would never match this condition against "x", but an
+        // LLM verdict of true must route to the ai() rule.
+        let mut verdicts = HashMap::new();
+        verdicts.insert(0usize, true);
+        let result = judge.evaluate("x", &rules, None, Some(&verdicts)).unwrap();
+        assert_eq!(result.matched_rule_index, Some(0));
+        assert_eq!(result.match_method, MatchMethod::AiJudge);
+    }
+
+    #[test]
+    fn test_llm_negative_verdict_skips_heuristic() {
+        let judge = MovementJudge::default();
+        // Heuristic WOULD match (high word overlap), but the LLM said no —
+        // the ai() rule must be skipped.
+        let rules = vec![
+            make_ai_rule("tests passed successfully", "ai-next"),
+            make_simple_rule("failure", "failed-next"),
+        ];
+        let output = "tests passed successfully";
+        let mut verdicts = HashMap::new();
+        verdicts.insert(0usize, false);
+        let result = judge
+            .evaluate(output, &rules, None, Some(&verdicts))
+            .unwrap();
+        assert_ne!(result.matched_rule_index, Some(0));
     }
 
     #[test]
@@ -663,7 +762,7 @@ mod tests {
 
         // Output that doesn't match the AI condition
         let output = "x";
-        let result = judge.evaluate(output, &rules, None).unwrap();
+        let result = judge.evaluate(output, &rules, None, None).unwrap();
         // Should fallback to "success" rule
         assert_eq!(result.matched_rule_index, Some(1));
     }
