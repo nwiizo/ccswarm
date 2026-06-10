@@ -204,6 +204,31 @@ pub struct Stage {
     /// Ignored on parallel sub-stages, where visit counts track the parent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub promotion: Vec<PromotionRule>,
+
+    /// Machine-executed quality gates run after the agent completes this
+    /// stage (takt's command quality gates). On failure, bounded command
+    /// output is appended to the instruction and the stage re-runs, up to
+    /// `max_retries` additional attempts. Gates run in the stage's working
+    /// directory. Flow YAML already executes arbitrary edit-permission
+    /// prompts, so gates add no new trust surface.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gates: Vec<CommandGate>,
+}
+
+/// One machine-executed gate command on a stage.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandGate {
+    /// Display name, used in events and failure feedback.
+    pub name: String,
+    /// Shell command executed via `sh -c` in the stage's working directory.
+    pub command: String,
+    /// Per-gate timeout in seconds (default 300).
+    #[serde(default = "default_gate_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+fn default_gate_timeout_secs() -> u64 {
+    300
 }
 
 /// One provider/model escalation rule on a stage.
@@ -1373,93 +1398,134 @@ impl FlowEngine {
                 rate_limit_fallbacks,
             };
 
-            match bridge
-                .execute_with_retry(
-                    agent_id,
-                    &prompt,
-                    &identity,
-                    &work_dir,
-                    stage.agent.as_deref(),
-                    stage.max_retries,
-                    stage.retry_delay_ms,
-                    &exec_options,
-                )
-                .await
-            {
-                Ok(result) => {
-                    // Rate-limit fallbacks that fired on the way to this result
-                    // are recorded as ProviderError events so the switch is
-                    // visible in the run's audit trail.
-                    if !result.fallbacks_used.is_empty() {
-                        let run_id = self
-                            .event_recorder
-                            .as_ref()
-                            .map(|r| r.run_id().to_string())
-                            .unwrap_or_default();
-                        self.record_event(
-                            crate::events::Event::new(
-                                &run_id,
-                                crate::events::EventLevel::Warn,
-                                crate::events::EventType::ProviderError,
-                                format!(
-                                    "Rate-limit fallback engaged for stage '{}': skipped [{}]",
-                                    stage.id,
-                                    result.fallbacks_used.join(", ")
-                                ),
+            // Command-gate loop: when the agent call succeeds but a declared
+            // gate fails, bounded gate output is appended to the prompt and
+            // the stage re-runs (up to max_retries additional attempts).
+            let mut gate_feedback: Option<String> = None;
+            let mut gate_attempts_left = stage.max_retries;
+            loop {
+                let effective_prompt = match &gate_feedback {
+                    Some(feedback) => format!("{}\n\n{}", prompt, feedback),
+                    None => prompt.clone(),
+                };
+                let attempt_output = match bridge
+                    .execute_with_retry(
+                        agent_id,
+                        &effective_prompt,
+                        &identity,
+                        &work_dir,
+                        stage.agent.as_deref(),
+                        stage.max_retries,
+                        stage.retry_delay_ms,
+                        &exec_options,
+                    )
+                    .await
+                {
+                    Ok(result) => {
+                        // Rate-limit fallbacks that fired on the way to this result
+                        // are recorded as ProviderError events so the switch is
+                        // visible in the run's audit trail.
+                        if !result.fallbacks_used.is_empty() {
+                            let run_id = self
+                                .event_recorder
+                                .as_ref()
+                                .map(|r| r.run_id().to_string())
+                                .unwrap_or_default();
+                            self.record_event(
+                                crate::events::Event::new(
+                                    &run_id,
+                                    crate::events::EventLevel::Warn,
+                                    crate::events::EventType::ProviderError,
+                                    format!(
+                                        "Rate-limit fallback engaged for stage '{}': skipped [{}]",
+                                        stage.id,
+                                        result.fallbacks_used.join(", ")
+                                    ),
+                                )
+                                .with_movement(&stage.id)
+                                .with_metadata(serde_json::json!({
+                                    "reason": "rate_limit_fallback",
+                                    "rate_limited_providers": result.fallbacks_used,
+                                })),
                             )
-                            .with_movement(&stage.id)
-                            .with_metadata(serde_json::json!({
-                                "reason": "rate_limit_fallback",
-                                "rate_limited_providers": result.fallbacks_used,
-                            })),
-                        )
-                        .await;
-                    }
-                    // Stream-json metadata (tool names, cost) rides on
-                    // BridgeResult; surface it as a ProviderCall event so
-                    // events.ndjson carries per-call telemetry. Token counts are
-                    // deliberately NOT repeated here — they ride on the stage's
-                    // MovementEnd event, and `ccswarm cost` sums token fields
-                    // across all events, so duplicating them would double-count.
-                    if !result.tool_names.is_empty() || result.total_cost_usd.is_some() {
-                        let run_id = self
-                            .event_recorder
-                            .as_ref()
-                            .map(|r| r.run_id().to_string())
-                            .unwrap_or_default();
-                        self.record_event(
-                            crate::events::Event::new(
-                                &run_id,
-                                crate::events::EventLevel::Info,
-                                crate::events::EventType::ProviderCall,
-                                format!("Provider call completed for stage '{}'", stage.id),
+                            .await;
+                        }
+                        // Stream-json metadata (tool names, cost) rides on
+                        // BridgeResult; surface it as a ProviderCall event so
+                        // events.ndjson carries per-call telemetry. Token counts are
+                        // deliberately NOT repeated here — they ride on the stage's
+                        // MovementEnd event, and `ccswarm cost` sums token fields
+                        // across all events, so duplicating them would double-count.
+                        if !result.tool_names.is_empty() || result.total_cost_usd.is_some() {
+                            let run_id = self
+                                .event_recorder
+                                .as_ref()
+                                .map(|r| r.run_id().to_string())
+                                .unwrap_or_default();
+                            self.record_event(
+                                crate::events::Event::new(
+                                    &run_id,
+                                    crate::events::EventLevel::Info,
+                                    crate::events::EventType::ProviderCall,
+                                    format!("Provider call completed for stage '{}'", stage.id),
+                                )
+                                .with_movement(&stage.id)
+                                .with_metadata(serde_json::json!({
+                                    "tool_names": result.tool_names,
+                                    "cost_usd": result.total_cost_usd,
+                                })),
                             )
-                            .with_movement(&stage.id)
-                            .with_metadata(serde_json::json!({
-                                "tool_names": result.tool_names,
-                                "cost_usd": result.total_cost_usd,
-                            })),
-                        )
-                        .await;
+                            .await;
+                        }
+                        serde_json::json!({
+                            "stage": stage.id,
+                            "output": result.raw,
+                            "parsed": format!("{:?}", result.parsed),
+                            "status": if result.success { "completed" } else { "failed" },
+                            "duration_ms": result.duration_ms,
+                            "tokens_in": result.tokens_in,
+                            "tokens_out": result.tokens_out,
+                            "attention": result.attention.to_string(),
+                        })
                     }
-                    serde_json::json!({
-                        "stage": stage.id,
-                        "output": result.raw,
-                        "parsed": format!("{:?}", result.parsed),
-                        "status": if result.success { "completed" } else { "failed" },
-                        "duration_ms": result.duration_ms,
-                        "tokens_in": result.tokens_in,
-                        "tokens_out": result.tokens_out,
-                        "attention": result.attention.to_string(),
-                    })
+                    Err(e) => {
+                        warn!("Stage '{}' execution failed: {}", stage.id, e);
+                        serde_json::json!({
+                            "stage": stage.id,
+                            "error": e.to_string(),
+                            "status": "failed",
+                        })
+                    }
+                };
+
+                // Gates only run after a successful agent call; a failed call
+                // already routes through the stage's failure rules.
+                let call_succeeded = attempt_output
+                    .get("status")
+                    .and_then(|s| s.as_str())
+                    .is_some_and(|s| s == "completed");
+                if stage.gates.is_empty() || !call_succeeded {
+                    break attempt_output;
                 }
-                Err(e) => {
-                    warn!("Stage '{}' execution failed: {}", stage.id, e);
-                    serde_json::json!({
-                        "stage": stage.id,
-                        "error": e.to_string(),
-                        "status": "failed",
-                    })
+
+                match run_command_gates(&stage.gates, &work_dir).await {
+                    None => break attempt_output,
+                    Some((gate_name, feedback)) => {
+                        warn!(
+                            "Stage '{}' gate '{}' failed ({} retry attempts left)",
+                            stage.id, gate_name, gate_attempts_left
+                        );
+                        if gate_attempts_left == 0 {
+                            let mut failed = attempt_output;
+                            if let Some(obj) = failed.as_object_mut() {
+                                obj.insert("status".into(), serde_json::json!("failed"));
+                                obj.insert("gate_failed".into(), serde_json::json!(gate_name));
+                            }
+                            break failed;
+                        }
+                        gate_attempts_left -= 1;
+                        gate_feedback = Some(feedback);
+                    }
                 }
             }
         } else {
@@ -2088,7 +2154,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 Stage {
                     id: "implement".to_string(),
                     persona: Some("coder".to_string()),
@@ -2127,7 +2194,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 Stage {
                     id: "review".to_string(),
                     persona: Some("reviewer".to_string()),
@@ -2162,7 +2230,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2193,7 +2262,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 Stage {
                     id: "complete".to_string(),
                     persona: None,
@@ -2214,7 +2284,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2259,7 +2330,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 Stage {
                     id: "summarize".to_string(),
                     persona: Some("writer".to_string()),
@@ -2292,7 +2364,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2340,7 +2413,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2371,7 +2445,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 Stage {
                     id: "done".to_string(),
                     persona: None,
@@ -2392,7 +2467,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2434,7 +2510,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                 working_dir: None,
                 retry_delay_ms: default_retry_delay(),
                 pass_previous_response: true,
-                call: None, promotion: Vec::new(),            }],
+                call: None, promotion: Vec::new(),
+            gates: Vec::new(),            }],
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,
@@ -2473,7 +2550,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 // Parallel hub: dispatches to frontend-impl and backend-impl simultaneously
                 Stage {
                     id: "parallel-implement".to_string(),
@@ -2500,7 +2578,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 // Frontend agent (runs in parallel)
                 Stage {
                     id: "frontend-impl".to_string(),
@@ -2522,7 +2601,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 // Backend agent (runs in parallel)
                 Stage {
                     id: "backend-impl".to_string(),
@@ -2544,7 +2624,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 // Supervisor reviews the combined output
                 Stage {
                     id: "review".to_string(),
@@ -2571,7 +2652,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
                 // Local completion
                 Stage {
                     id: "complete".to_string(),
@@ -2593,7 +2675,8 @@ pub fn builtin_flows() -> Vec<Flow> {
                     working_dir: None,
                     retry_delay_ms: default_retry_delay(),
                     pass_previous_response: true,
-                    call: None, promotion: Vec::new(),                },
+                    call: None, promotion: Vec::new(),
+            gates: Vec::new(),                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2726,6 +2809,58 @@ fn truncate_for_context(s: &str, max_len: usize) -> String {
     } else {
         format!("{}... [truncated]", &s[..max_len])
     }
+}
+
+/// Run a stage's command gates sequentially in `work_dir`. Returns `None`
+/// when every gate passes, or `Some((gate_name, feedback))` for the first
+/// failure — a bounded, prompt-ready block (stdout/stderr each ≤1000 chars)
+/// the engine appends to the instruction before re-running the stage.
+async fn run_command_gates(
+    gates: &[CommandGate],
+    work_dir: &std::path::Path,
+) -> Option<(String, String)> {
+    for gate in gates {
+        info!("Running gate '{}': {}", gate.name, gate.command);
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(gate.timeout_secs),
+            tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(&gate.command)
+                .current_dir(work_dir)
+                .output(),
+        )
+        .await;
+
+        let feedback = match result {
+            Err(_) => format!(
+                "# Gate failure: {}\nCommand `{}` timed out after {}s. \
+                 Make the change converge faster or fix what the command checks.",
+                gate.name, gate.command, gate.timeout_secs
+            ),
+            Ok(Err(e)) => format!(
+                "# Gate failure: {}\nCommand `{}` could not be spawned: {}",
+                gate.name, gate.command, e
+            ),
+            Ok(Ok(output)) if output.status.success() => continue,
+            Ok(Ok(output)) => {
+                let stdout = truncate_for_context(&String::from_utf8_lossy(&output.stdout), 1000);
+                let stderr = truncate_for_context(&String::from_utf8_lossy(&output.stderr), 1000);
+                format!(
+                    "# Gate failure: {} (exit code {})\nCommand: `{}`\n\n\
+                     ## stdout\n{}\n\n## stderr\n{}\n\n\
+                     Fix the issues above and ensure `{}` passes.",
+                    gate.name,
+                    output.status.code().unwrap_or(-1),
+                    gate.command,
+                    stdout,
+                    stderr,
+                    gate.command
+                )
+            }
+        };
+        return Some((gate.name.clone(), feedback));
+    }
+    None
 }
 
 #[cfg(test)]
@@ -3091,6 +3226,92 @@ stages:
         assert!(flow.on_rate_limit[1].model.is_none());
     }
 
+    #[tokio::test]
+    async fn test_command_gates_pass_returns_none() {
+        let gates = vec![CommandGate {
+            name: "noop".to_string(),
+            command: "true".to_string(),
+            timeout_secs: 30,
+        }];
+        let result = run_command_gates(&gates, std::path::Path::new("/tmp")).await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_command_gates_failure_returns_bounded_feedback() {
+        let gates = vec![
+            CommandGate {
+                name: "ok".to_string(),
+                command: "true".to_string(),
+                timeout_secs: 30,
+            },
+            CommandGate {
+                name: "boom".to_string(),
+                command: "echo broken output; echo to stderr 1>&2; exit 3".to_string(),
+                timeout_secs: 30,
+            },
+        ];
+        let (name, feedback) = run_command_gates(&gates, std::path::Path::new("/tmp"))
+            .await
+            .expect("second gate fails");
+        assert_eq!(name, "boom");
+        assert!(feedback.contains("# Gate failure: boom (exit code 3)"));
+        assert!(feedback.contains("broken output"));
+        assert!(feedback.contains("to stderr"));
+    }
+
+    #[tokio::test]
+    async fn test_command_gates_truncate_long_output() {
+        let gates = vec![CommandGate {
+            name: "noisy".to_string(),
+            command: "yes x | head -c 5000; exit 1".to_string(),
+            timeout_secs: 30,
+        }];
+        let (_, feedback) = run_command_gates(&gates, std::path::Path::new("/tmp"))
+            .await
+            .expect("gate fails");
+        assert!(feedback.contains("[truncated]"));
+        // 5000 chars of stdout must have been bounded to ~1000.
+        assert!(
+            feedback.len() < 2500,
+            "feedback too long: {}",
+            feedback.len()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_command_gates_timeout_is_reported() {
+        let gates = vec![CommandGate {
+            name: "slow".to_string(),
+            command: "sleep 5".to_string(),
+            timeout_secs: 1,
+        }];
+        let (name, feedback) = run_command_gates(&gates, std::path::Path::new("/tmp"))
+            .await
+            .expect("gate times out");
+        assert_eq!(name, "slow");
+        assert!(feedback.contains("timed out after 1s"));
+    }
+
+    #[test]
+    fn test_gates_parse_from_yaml_with_default_timeout() {
+        let yaml = r#"
+name: gated
+initial_movement: build
+stages:
+  - id: build
+    instruction: "implement"
+    gates:
+      - { name: build, command: "cargo build" }
+      - { name: lint, command: "cargo clippy", timeout_secs: 120 }
+"#;
+        let flow = Flow::from_yaml(yaml).expect("parse failed");
+        let gates = &flow.stages[0].gates;
+        assert_eq!(gates.len(), 2);
+        assert_eq!(gates[0].timeout_secs, 300, "default timeout");
+        assert_eq!(gates[1].timeout_secs, 120);
+    }
+
     #[test]
     fn test_max_stage_visits_defaults_to_three() {
         let yaml = r#"
@@ -3287,6 +3508,7 @@ stages:
                 args: std::collections::HashMap::new(),
             }),
             promotion: Vec::new(),
+            gates: Vec::new(),
         };
         let call = stage.call.clone().expect("call");
 
