@@ -527,6 +527,59 @@ fn test_cli_parse_approve_list() {
     }
 }
 
+#[test]
+fn test_cli_parse_approve_commit_reject() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "approve",
+        "commit",
+        "--id",
+        "run-789",
+        "--reject",
+        "--reason",
+        "wrong direction",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Commands::Approve {
+            action:
+                ccswarm::cli::ApproveAction::Commit {
+                    id, reject, reason, ..
+                },
+        } => {
+            assert_eq!(id, "run-789");
+            assert!(reject);
+            assert_eq!(reason.as_deref(), Some("wrong direction"));
+        }
+        _ => panic!("Expected Approve Commit command"),
+    }
+}
+
+#[test]
+fn test_cli_parse_auto_require_approval() {
+    let cli = Cli::try_parse_from([
+        "ccswarm",
+        "auto",
+        "--require-approval",
+        "--approval-timeout",
+        "30",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Commands::Auto {
+            require_approval,
+            approval_timeout,
+            ..
+        } => {
+            assert!(require_approval);
+            assert_eq!(approval_timeout, 30);
+        }
+        _ => panic!("Expected Auto command"),
+    }
+}
+
 // ============================================================================
 // Session CLI Parse Tests
 // ============================================================================

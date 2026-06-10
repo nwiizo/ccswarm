@@ -13,6 +13,7 @@ pub mod error;
 pub mod events;
 pub mod git;
 pub mod governance;
+pub mod hitl;
 pub mod hooks;
 pub mod identity;
 pub(crate) mod providers;

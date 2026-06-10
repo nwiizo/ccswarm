@@ -141,6 +141,7 @@ impl CliRunner {
         _model_override: Option<&str>, // TODO: pass to MovementExecOptions.model
         auto_commit: bool,
         create_pr: bool,
+        approval_gate: Option<std::time::Duration>,
     ) -> Result<()> {
         self.handle_pipeline_returning_id(
             task,
@@ -155,6 +156,7 @@ impl CliRunner {
             _model_override,
             auto_commit,
             create_pr,
+            approval_gate,
         )
         .await
         .map(|_run_id| ())
@@ -177,6 +179,7 @@ impl CliRunner {
         model_override: Option<&str>,
         auto_commit: bool,
         create_pr: bool,
+        approval_gate: Option<std::time::Duration>,
         dry_run: bool,
     ) -> Result<()> {
         if dry_run {
@@ -195,6 +198,7 @@ impl CliRunner {
             model_override,
             auto_commit,
             create_pr,
+            approval_gate,
         )
         .await
     }
@@ -286,6 +290,7 @@ impl CliRunner {
         _model_override: Option<&str>,
         auto_commit: bool,
         create_pr: bool,
+        approval_gate: Option<std::time::Duration>,
     ) -> Result<String> {
         self.handle_pipeline_returning_id_inner(
             None,
@@ -299,6 +304,7 @@ impl CliRunner {
             run_budget_tokens,
             auto_commit,
             create_pr,
+            approval_gate,
         )
         .await
     }
@@ -320,6 +326,7 @@ impl CliRunner {
         _model_override: Option<&str>,
         auto_commit: bool,
         create_pr: bool,
+        approval_gate: Option<std::time::Duration>,
     ) -> Result<String> {
         self.handle_pipeline_returning_id_inner(
             Some(run_id),
@@ -333,6 +340,7 @@ impl CliRunner {
             run_budget_tokens,
             auto_commit,
             create_pr,
+            approval_gate,
         )
         .await
     }
@@ -351,6 +359,7 @@ impl CliRunner {
         run_budget_tokens: Option<u64>,
         auto_commit: bool,
         create_pr: bool,
+        approval_gate: Option<std::time::Duration>,
     ) -> Result<String> {
         let (run_id, result) = self
             .execute_pipeline_core(
@@ -375,8 +384,16 @@ impl CliRunner {
         }
 
         // Post-pipeline assisted flow: auto-detect → execute → ask OK/NG
-        self.run_post_pipeline_flow(task, flow, &run_id, &result, auto_commit, create_pr)
-            .await;
+        self.run_post_pipeline_flow(
+            task,
+            flow,
+            &run_id,
+            &result,
+            auto_commit,
+            create_pr,
+            approval_gate,
+        )
+        .await?;
 
         Ok(run_id)
     }
@@ -516,6 +533,7 @@ impl CliRunner {
     /// Post-pipeline assisted flow: auto-detect tests, run them, then guide
     /// the user through OK/NG decisions for commit and PR.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn run_post_pipeline_flow(
         &self,
         task: &str,
@@ -524,7 +542,8 @@ impl CliRunner {
         result: &crate::workflow::pipeline::PipelineOutput,
         auto_commit: bool,
         create_pr: bool,
-    ) {
+        approval_gate: Option<std::time::Duration>,
+    ) -> Result<()> {
         let repo = &self.repo_path;
         eprintln!();
 
@@ -577,9 +596,29 @@ impl CliRunner {
             );
         }
 
-        // Step 2: Commit (auto or ask)
+        // Step 2: Commit (auto or ask), optionally gated on a human approval
+        // when running unattended (`auto --require-approval` / `queue drain
+        // --require-approval`).
         let committed = if auto_commit && test_passed {
-            self.do_commit(repo, task).await
+            match approval_gate {
+                Some(timeout) => match self.gate_commit(run_id, task, create_pr, timeout).await? {
+                    crate::hitl::GateOutcome::Approved => self.do_commit(repo, task).await,
+                    crate::hitl::GateOutcome::Rejected(reason) => {
+                        return Err(anyhow!(
+                            "commit gate rejected{} — changes left uncommitted in the working tree",
+                            reason.map(|r| format!(": {}", r)).unwrap_or_default()
+                        ));
+                    }
+                    crate::hitl::GateOutcome::TimedOut => {
+                        return Err(anyhow!(
+                            "commit gate timed out after {}s — approve with `ccswarm approve commit --id {}` and commit manually, or re-queue the task",
+                            timeout.as_secs(),
+                            run_id
+                        ));
+                    }
+                },
+                None => self.do_commit(repo, task).await,
+            }
         } else if test_passed {
             if ask_yn("Commit changes?") {
                 self.do_commit(repo, task).await
@@ -600,6 +639,93 @@ impl CliRunner {
             "\n  {} ccswarm run view {short_id}",
             "View details:".bright_cyan()
         );
+        Ok(())
+    }
+
+    /// Request a commit approval for `run_id`, print the decision commands, and
+    /// poll `.ccswarm/approvals/` until a human decides or `timeout` elapses.
+    /// Emits HitlRequest/HitlDecision into the run's events.ndjson (a second
+    /// recorder appending to the same file — record() is open-append-close).
+    async fn gate_commit(
+        &self,
+        run_id: &str,
+        task: &str,
+        create_pr: bool,
+        timeout: std::time::Duration,
+    ) -> Result<crate::hitl::GateOutcome> {
+        use crate::hitl::{ApprovalStore, Gate, GateOutcome};
+
+        let store = ApprovalStore::new(&self.repo_path);
+        store.request(run_id, Gate::Commit, task, "auto").await?;
+
+        let recorder = crate::events::EventRecorder::new_in_runs_dir(
+            self.repo_path.join(".ccswarm").join("runs"),
+            run_id,
+        )
+        .await
+        .ok();
+        if let Some(ref rec) = recorder {
+            let _ = rec
+                .record(
+                    crate::events::Event::new(
+                        run_id,
+                        crate::events::EventLevel::Info,
+                        crate::events::EventType::HitlRequest,
+                        "Commit approval requested",
+                    )
+                    .with_metadata(serde_json::json!({
+                        "gate": "commit",
+                        "create_pr": create_pr,
+                        "timeout_secs": timeout.as_secs(),
+                    })),
+                )
+                .await;
+        }
+
+        eprintln!();
+        eprintln!(
+            "  {} commit approval required (waiting up to {}s):",
+            "⏸".bright_yellow().bold(),
+            timeout.as_secs()
+        );
+        eprintln!("    approve: ccswarm approve commit --id {}", run_id);
+        eprintln!(
+            "    reject:  ccswarm approve commit --id {} --reject --reason \"...\"",
+            run_id
+        );
+
+        let outcome = store
+            .wait_for_decision(run_id, std::time::Duration::from_secs(2), timeout)
+            .await?;
+
+        if let Some(ref rec) = recorder {
+            let (status, reason) = match &outcome {
+                GateOutcome::Approved => ("approved", None),
+                GateOutcome::Rejected(reason) => ("rejected", reason.as_deref()),
+                GateOutcome::TimedOut => ("timed_out", None),
+            };
+            let _ = rec
+                .record(
+                    crate::events::Event::new(
+                        run_id,
+                        if matches!(outcome, GateOutcome::Approved) {
+                            crate::events::EventLevel::Info
+                        } else {
+                            crate::events::EventLevel::Warn
+                        },
+                        crate::events::EventType::HitlDecision,
+                        format!("Commit gate {}", status),
+                    )
+                    .with_metadata(serde_json::json!({
+                        "gate": "commit",
+                        "decision": status,
+                        "reason": reason,
+                    })),
+                )
+                .await;
+        }
+
+        Ok(outcome)
     }
 
     /// Detect and run tests automatically. Returns true if tests pass.

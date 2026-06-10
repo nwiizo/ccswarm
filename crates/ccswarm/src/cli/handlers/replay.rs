@@ -159,6 +159,7 @@ impl CliRunner {
             None, // model override
             false,
             false,
+            None, // approval_gate (interactive ask is the gate)
         )
         .await
     }

@@ -52,6 +52,7 @@ struct QueueDrainOptions<'a> {
     interactive: bool,
     create_pr: bool,
     reconcile_only: bool,
+    approval_gate: Option<std::time::Duration>,
 }
 
 pub async fn reconcile_active_runs(state: &QueueState, runs_dir: &Path) -> Result<ReconcileReport> {
@@ -221,6 +222,8 @@ impl CliRunner {
                 interactive,
                 create_pr,
                 reconcile_only,
+                require_approval,
+                approval_timeout,
             } => {
                 self.queue_drain(
                     &path,
@@ -231,6 +234,8 @@ impl CliRunner {
                         interactive: *interactive,
                         create_pr: *create_pr,
                         reconcile_only: *reconcile_only,
+                        approval_gate: require_approval
+                            .then(|| std::time::Duration::from_secs(*approval_timeout)),
                     },
                 )
                 .await
@@ -524,6 +529,7 @@ impl CliRunner {
                     None, // model override
                     auto_commit,
                     options.create_pr,
+                    options.approval_gate,
                 )
                 .await;
 

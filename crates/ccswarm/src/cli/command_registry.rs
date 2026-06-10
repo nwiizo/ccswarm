@@ -98,7 +98,7 @@ impl CommandRegistry {
 
         register_command!(self, "pipeline", runner, cmd,
             Commands::Pipeline { task, flow, output_format, timeout, verbose, output_file, isolate, budget, run_budget_tokens, model_override, auto_commit, create_pr, dry_run, .. } =>
-            runner.handle_pipeline_with_dry_run(task, flow, output_format, *timeout, *verbose, output_file.as_deref(), *isolate, *budget, *run_budget_tokens, model_override.as_deref(), *auto_commit, *create_pr, *dry_run)
+            runner.handle_pipeline_with_dry_run(task, flow, output_format, *timeout, *verbose, output_file.as_deref(), *isolate, *budget, *run_budget_tokens, model_override.as_deref(), *auto_commit, *create_pr, None, *dry_run)
         );
 
         register_command!(self, "doctor", runner, cmd,
@@ -182,8 +182,8 @@ impl CommandRegistry {
         );
 
         register_command!(self, "auto", runner, cmd,
-            Commands::Auto { task, flow, watch, poll_secs, max_iterations, wall_budget_secs, stop_on_error, timeout, create_pr } =>
-            runner.handle_auto(task.as_deref(), flow, *watch, *poll_secs, *max_iterations, *wall_budget_secs, *stop_on_error, *timeout, *create_pr)
+            Commands::Auto { task, flow, watch, poll_secs, max_iterations, wall_budget_secs, stop_on_error, timeout, create_pr, require_approval, approval_timeout } =>
+            runner.handle_auto(task.as_deref(), flow, *watch, *poll_secs, *max_iterations, *wall_budget_secs, *stop_on_error, *timeout, *create_pr, require_approval.then(|| std::time::Duration::from_secs(*approval_timeout)))
         );
     }
 

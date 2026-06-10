@@ -464,6 +464,39 @@ fn test_full_workflow_init_to_task() {
 }
 
 #[test]
+fn test_approve_commit_writes_decision_record() {
+    let temp_dir = TempDir::new().unwrap();
+    let project = temp_dir.path();
+
+    let output = run_ccswarm(
+        &[
+            "approve", "commit", "--id", "run-1", "--reject", "--reason", "no",
+        ],
+        Some(project),
+    );
+    assert!(
+        output.status.success(),
+        "approve commit should succeed. stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let record_path = project.join(".ccswarm/approvals/run-1.json");
+    let content = std::fs::read_to_string(&record_path).expect("approval record written");
+    let record: serde_json::Value = serde_json::from_str(&content).expect("valid JSON");
+    assert_eq!(record["gate"], "commit");
+    assert_eq!(record["status"], "rejected");
+    assert_eq!(record["reason"], "no");
+
+    let list = run_ccswarm(&["approve", "list", "--status", "rejected"], Some(project));
+    let stdout = String::from_utf8_lossy(&list.stdout);
+    assert!(
+        stdout.contains("run-1"),
+        "approve list should show the rejected record. stdout: {}",
+        stdout
+    );
+}
+
+#[test]
 fn test_flow_check_reports_cycles() {
     let temp_dir = TempDir::new().unwrap();
 

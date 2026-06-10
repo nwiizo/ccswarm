@@ -459,6 +459,14 @@ pub enum Commands {
         /// Create a GitHub PR after each successful task (requires gh cli)
         #[arg(long)]
         create_pr: bool,
+
+        /// Pause before each commit until `ccswarm approve commit --id <run-id>`
+        #[arg(long)]
+        require_approval: bool,
+
+        /// Seconds to wait for a commit approval before failing the task
+        #[arg(long, default_value_t = 600)]
+        approval_timeout: u64,
     },
 
     /// Revert-advisory for a past run (shows git commits since run started)
@@ -739,6 +747,15 @@ pub enum ApproveAction {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Approve or reject a pending commit gate (unattended runs)
+    Commit {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        reject: bool,
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// List approval requests
     List {
         #[arg(short, long)]
@@ -799,6 +816,12 @@ pub enum QueueAction {
         /// Run queue reconciliation and exit without dispatching new work
         #[arg(long)]
         reconcile_only: bool,
+        /// Pause before each commit until `ccswarm approve commit --id <run-id>`
+        #[arg(long)]
+        require_approval: bool,
+        /// Seconds to wait for a commit approval before failing the task
+        #[arg(long, default_value_t = 600)]
+        approval_timeout: u64,
     },
 }
 

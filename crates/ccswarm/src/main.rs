@@ -230,6 +230,7 @@ async fn run_direct_task(task: &str) -> anyhow::Result<()> {
             None,  // model
             false, // auto_commit (ask instead)
             false, // create_pr (ask instead)
+            None,  // approval_gate (interactive ask is the gate)
         )
         .await
 }
