@@ -9,10 +9,7 @@ impl CliRunner {
         use crate::workflow::facets::FacetRegistry;
 
         let mut registry = FacetRegistry::new_with_builtins();
-        let project_facets = self.repo_path.join(".ccswarm").join("facets");
-        if project_facets.exists() {
-            let _ = registry.load_from_dir(&project_facets).await;
-        }
+        registry.load_standard_layers(&self.repo_path).await;
 
         let k = kind.to_lowercase();
         let show_all = matches!(k.as_str(), "all" | "");

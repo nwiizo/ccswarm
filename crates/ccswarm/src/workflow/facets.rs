@@ -17,6 +17,15 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
 
+/// ccswarm's home directory: `$CCSWARM_HOME` if set, else `~/.ccswarm`.
+/// Shared convention with `workflow::repertoire`.
+pub fn ccswarm_home() -> Option<PathBuf> {
+    if let Ok(custom) = std::env::var("CCSWARM_HOME") {
+        return Some(PathBuf::from(custom));
+    }
+    dirs::home_dir().map(|home| home.join(".ccswarm"))
+}
+
 /// A facet definition that can be inline text or a file reference
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -172,6 +181,47 @@ impl FacetRegistry {
         }
 
         Ok(())
+    }
+
+    /// Load the standard facet layers on top of whatever the registry already
+    /// holds (typically builtins). Resolution order, later wins:
+    ///
+    /// 1. repertoire packages — `~/.ccswarm/repertoire/*/facets/`
+    /// 2. user layer — `~/.ccswarm/facets/`
+    /// 3. project layer — `<repo>/.ccswarm/facets/`
+    ///
+    /// Missing or unreadable layers are skipped (a broken user file must not
+    /// take down a pipeline run); failures are logged at debug.
+    pub async fn load_standard_layers(&mut self, repo_path: &Path) {
+        let home = ccswarm_home();
+
+        if let Some(ref home) = home {
+            let repertoire_dir = home.join("repertoire");
+            if let Ok(mut entries) = tokio::fs::read_dir(&repertoire_dir).await {
+                while let Ok(Some(entry)) = entries.next_entry().await {
+                    let facets = entry.path().join("facets");
+                    if facets.is_dir()
+                        && let Err(e) = self.load_from_dir(&facets).await
+                    {
+                        tracing::debug!("skipping repertoire facets {:?}: {}", facets, e);
+                    }
+                }
+            }
+
+            let user_facets = home.join("facets");
+            if user_facets.is_dir()
+                && let Err(e) = self.load_from_dir(&user_facets).await
+            {
+                tracing::debug!("skipping user facets {:?}: {}", user_facets, e);
+            }
+        }
+
+        let project_facets = repo_path.join(".ccswarm").join("facets");
+        if project_facets.is_dir()
+            && let Err(e) = self.load_from_dir(&project_facets).await
+        {
+            tracing::debug!("skipping project facets {:?}: {}", project_facets, e);
+        }
     }
 
     async fn load_personas(&mut self, dir: &Path) -> Result<()> {
@@ -624,6 +674,85 @@ pub fn builtin_policies() -> Vec<PolicyFacet> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// CCSWARM_HOME is process-global; serialize the tests that mutate it.
+    /// Async-aware mutex because the guard spans `.await` points.
+    static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    fn write_persona(dir: &Path, name: &str, role: &str) {
+        let personas = dir.join("personas");
+        std::fs::create_dir_all(&personas).expect("mkdir");
+        std::fs::write(
+            personas.join(format!("{name}.yaml")),
+            format!("name: {name}\nrole: {role}\nsystem_prompt: \"{role} prompt\"\n"),
+        )
+        .expect("write persona");
+    }
+
+    #[tokio::test]
+    async fn test_standard_layers_later_wins() {
+        // user layer defines `coder` and `custom`; project layer overrides
+        // `coder`. Expectation: project wins for coder, user's custom remains,
+        // builtins stay available for untouched names.
+        let home = tempfile::tempdir().expect("home");
+        let repo = tempfile::tempdir().expect("repo");
+        write_persona(&home.path().join("facets"), "coder", "user-coder");
+        write_persona(&home.path().join("facets"), "custom", "user-custom");
+        write_persona(
+            &repo.path().join(".ccswarm/facets"),
+            "coder",
+            "project-coder",
+        );
+
+        // CCSWARM_HOME routes the home layer to the tempdir. Env mutation is
+        // process-global, so hold the lock and restore before asserting.
+        let _guard = ENV_LOCK.lock().await;
+        unsafe { std::env::set_var("CCSWARM_HOME", home.path()) };
+        let mut registry = FacetRegistry::new_with_builtins();
+        registry.load_standard_layers(repo.path()).await;
+        unsafe { std::env::remove_var("CCSWARM_HOME") };
+
+        assert_eq!(
+            registry.get_persona("coder").map(|p| p.role.as_str()),
+            Some("project-coder"),
+            "project layer must override user layer"
+        );
+        assert_eq!(
+            registry.get_persona("custom").map(|p| p.role.as_str()),
+            Some("user-custom"),
+            "user layer must extend builtins"
+        );
+        assert!(
+            registry.get_persona("planner").is_some(),
+            "builtins must survive layering"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_standard_layers_loads_repertoire_packages() {
+        // RepertoireManager installs flat: ~/.ccswarm/repertoire/<repo-name>/.
+        let home = tempfile::tempdir().expect("home");
+        let repo = tempfile::tempdir().expect("repo");
+        write_persona(
+            &home.path().join("repertoire/acme-pack/facets"),
+            "acme-reviewer",
+            "package-reviewer",
+        );
+
+        let _guard = ENV_LOCK.lock().await;
+        unsafe { std::env::set_var("CCSWARM_HOME", home.path()) };
+        let mut registry = FacetRegistry::new_with_builtins();
+        registry.load_standard_layers(repo.path()).await;
+        unsafe { std::env::remove_var("CCSWARM_HOME") };
+
+        assert_eq!(
+            registry
+                .get_persona("acme-reviewer")
+                .map(|p| p.role.as_str()),
+            Some("package-reviewer"),
+            "repertoire package facets must load"
+        );
+    }
 
     #[test]
     fn test_compose_full_prompt() {
