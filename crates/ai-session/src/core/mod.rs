@@ -389,22 +389,43 @@ impl AISession {
     pub async fn execute_command(&self, command: &str) -> Result<String> {
         let start_time = Utc::now();
 
-        // Send the command
-        self.send_input(&format!("{}\n", command)).await?;
+        let shell_env = std::env::var("SHELL").ok();
+        let shell = self
+            .config
+            .shell
+            .as_deref()
+            .or(shell_env.as_deref())
+            .unwrap_or("/bin/sh");
+        let mut cmd = tokio::process::Command::new(shell);
+        cmd.arg("-lc")
+            .arg(command)
+            .current_dir(&self.config.working_directory);
+        for (key, value) in &self.config.environment {
+            cmd.env(key, value);
+        }
 
-        // Wait for output
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        let output_bytes = self.read_output().await?;
-        let output = String::from_utf8_lossy(&output_bytes).to_string();
+        let execution =
+            crate::execution::run_provider_command(cmd, &self.config.working_directory, shell)
+                .await?;
+        *self.last_activity.write().await = Utc::now();
+        let output = if execution.stderr.is_empty() {
+            execution.stdout
+        } else if execution.stdout.is_empty() {
+            execution.stderr
+        } else {
+            format!("{}{}", execution.stdout, execution.stderr)
+        };
 
         // Record the command in history
         let end_time = Utc::now();
-        let duration_ms = (end_time - start_time).num_milliseconds() as u64;
+        let duration_ms = execution
+            .duration_ms
+            .max((end_time - start_time).num_milliseconds() as u64);
 
         let record = CommandRecord {
             command: command.to_string(),
             timestamp: start_time,
-            exit_code: None, // TODO: Extract exit code from output
+            exit_code: execution.status.code(),
             output_preview: if output.len() > 200 {
                 format!("{}...", &output[..200])
             } else {
@@ -787,5 +808,28 @@ mod tests {
 
         manager.remove_session(&session.id).await.unwrap();
         assert!(manager.get_session(&session.id).is_none());
+    }
+
+    #[tokio::test]
+    async fn execute_command_runs_in_session_working_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = SessionConfig {
+            working_directory: dir.path().to_path_buf(),
+            shell: Some("/bin/sh".to_string()),
+            ..SessionConfig::default()
+        };
+        let session = AISession::new(config).await.unwrap();
+
+        let output = session
+            .execute_command("printf ai-session-ok && pwd")
+            .await
+            .unwrap();
+
+        assert!(output.contains("ai-session-ok"));
+        assert!(output.contains(&dir.path().to_string_lossy().to_string()));
+
+        let history = session.get_command_history().await;
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].exit_code, Some(0));
     }
 }

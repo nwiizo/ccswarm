@@ -6,8 +6,10 @@ use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use ai_session::session_persistence::get_session_manager;
+use ai_session::core::SessionId;
+use ai_session::session_persistence::{PersistentSessionManager, get_session_manager};
 
 #[derive(Parser)]
 #[command(name = "ai-session")]
@@ -445,7 +447,7 @@ async fn list_sessions(detailed: bool) -> Result<()> {
 
 async fn attach_session(session: String) -> Result<()> {
     let manager = get_session_manager().await?;
-    let session_id = ai_session::core::SessionId::parse_str(&session)?;
+    let session_id = resolve_session_id(&manager, &session).await?;
 
     if let Some(session) = manager.get_session(&session_id).await {
         println!("Attaching to session: {}", session_id);
@@ -469,17 +471,16 @@ async fn attach_session(session: String) -> Result<()> {
 
 async fn exec_command(session: String, command: Vec<String>, capture: bool) -> Result<()> {
     let manager = get_session_manager().await?;
-    let session_id = ai_session::core::SessionId::parse_str(&session)?;
+    let session_id = resolve_session_id(&manager, &session).await?;
 
     let cmd = command.join(" ");
     println!("Executing in session {}: {}", session, cmd);
 
     let output_str = if let Some(session) = manager.get_session(&session_id).await {
-        session.send_input(&cmd).await?;
-        let output = session.read_output().await?;
-        let result = String::from_utf8_lossy(&output);
+        let result = session.execute_command(&cmd).await?;
+        manager.update_session_state(&session).await?;
         println!("{}", result);
-        result.to_string()
+        result
     } else {
         eprintln!("Session not found: {}", session_id);
         std::process::exit(1);
@@ -496,7 +497,7 @@ async fn exec_command(session: String, command: Vec<String>, capture: bool) -> R
 
 async fn kill_session(session: String, force: bool) -> Result<()> {
     let manager = get_session_manager().await?;
-    let session_id = ai_session::core::SessionId::parse_str(&session)?;
+    let session_id = resolve_session_id(&manager, &session).await?;
 
     if force {
         println!("Force killing session: {}", session);
@@ -521,6 +522,30 @@ async fn show_context(session: String, lines: usize) -> Result<()> {
     println!("  - Performance metrics");
 
     Ok(())
+}
+
+async fn resolve_session_id(
+    manager: &Arc<PersistentSessionManager>,
+    selector: &str,
+) -> Result<SessionId> {
+    if let Ok(id) = SessionId::parse_str(selector) {
+        return Ok(id);
+    }
+
+    let mut matches = Vec::new();
+    for session_id in manager.list_all_sessions().await? {
+        if let Some(session) = manager.get_session(&session_id).await
+            && session.config.name.as_deref() == Some(selector)
+        {
+            matches.push(session_id);
+        }
+    }
+
+    match matches.len() {
+        0 => anyhow::bail!("session '{selector}' not found by ID or name"),
+        1 => Ok(matches.remove(0)),
+        _ => anyhow::bail!("session name '{selector}' is ambiguous"),
+    }
 }
 
 // Remote command handlers
