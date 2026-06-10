@@ -230,10 +230,7 @@ impl CliRunner {
             .ok_or_else(|| anyhow!("flow '{}' not found", flow_name))?;
 
         let mut registry = FacetRegistry::new_with_builtins();
-        let project_facets = self.repo_path.join(".ccswarm").join("facets");
-        if project_facets.exists() {
-            let _ = registry.load_from_dir(&project_facets).await;
-        }
+        registry.load_standard_layers(&self.repo_path).await;
 
         println!(
             "{} dry-run — flow={} task={}",
@@ -445,6 +442,14 @@ impl CliRunner {
         if let Some(provider) = self.default_provider {
             engine.set_default_provider(provider);
         }
+
+        // Load layered facets (repertoire < user < project) into the engine.
+        // Before v0.8.0 live runs only saw builtins — project facets applied
+        // to `--dry-run` previews but not to the actual execution.
+        engine
+            .facet_registry_mut()
+            .load_standard_layers(&self.repo_path)
+            .await;
 
         // Load custom flows from .ccswarm/flows/
         let custom_pieces_dir = self.repo_path.join(".ccswarm").join("flows");
@@ -1334,12 +1339,9 @@ impl CliRunner {
         let flow =
             Flow::from_yaml(&yaml).with_context(|| format!("Failed to parse flow '{}'", name))?;
 
-        // Project-local facets under .ccswarm/facets override builtins
+        // Layered facets: builtin < repertoire < user < project (later wins)
         let mut registry = FacetRegistry::new_with_builtins();
-        let project_facets = self.repo_path.join(".ccswarm").join("facets");
-        if project_facets.exists() {
-            let _ = registry.load_from_dir(&project_facets).await;
-        }
+        registry.load_standard_layers(&self.repo_path).await;
 
         for m in &flow.stages {
             if let Some(only) = stage
