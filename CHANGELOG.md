@@ -8,6 +8,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Versions 0.5.0–0.6.2 were tracked in docs/APPLICATION_SPEC.md Version
 > History rather than here.
 
+## [0.8.0] - 2026-06-10
+
+takt feature adoption + codex first-class support.
+
+### Added
+- **Codex first-class**: global `--provider <claude|codex>` flag
+  (precedence: stage YAML > flag > `CCSWARM_PROVIDER` > claude); codex
+  JSONL telemetry (`CCSWARM_CODEX_JSON=1` adds `--json`, real token
+  counts and thread IDs parsed defensively); codex session resume via
+  `codex exec resume <thread-id>` — multi-turn continuation now works on
+  codex (`SameThreadContinuation::ProviderAssignedId`).
+- **Rate-limit fallback chain**: flow-level `on_rate_limit:
+  [{provider, model?}]` switches providers when a call fails with a
+  rate-limit error; switch clears session continuation, injects a
+  fallback notice, and records ProviderError events.
+- **Stage promotion**: `promotion: [{at: N, provider?, model?}]`
+  escalates provider/model from the Nth visit of a stage (last matching
+  entry wins; excluded on parallel sub-stages).
+- **Command quality gates**: stage-level `gates: [{name, command,
+  timeout_secs?}]` run after the agent; failures feed bounded
+  stdout/stderr back into the same stage for up to `max_retries`
+  re-runs.
+- **3-layer facets**: `~/.ccswarm/facets` (user) and repertoire package
+  facets now load under project facets (later wins); `CCSWARM_HOME`
+  honored.
+- **LLM-backed ai() judge** (`CCSWARM_LLM_JUDGE=1`): ai() rule
+  conditions ask a real model YES/NO instead of the lexical heuristic,
+  which remains the offline fallback (failures logged, never silent).
+- **team_leader orchestrator-worker**: `team_leader: {max_parts, ...}`
+  on a stage has a leader call decompose the task into parts at runtime;
+  parts run concurrently as synthesized workers and aggregate into the
+  parallel shape (all()/any() rules work unchanged). Graceful
+  degradation to a single worker on decomposition failure. New builtin
+  flow `team-dynamic`.
+
+### Fixed
+- Live pipeline runs now load custom facets: `execute_pipeline_core`
+  previously loaded none, so project personas/policies applied to
+  `--dry-run`/`flow render` but silently not to real executions.
+  Projects with an existing `.ccswarm/facets/` will see their overrides
+  take effect.
+- `flow check` no longer fails on builtin flows with all()/any() rules:
+  CompoundCondition serialized as a YAML enum tag the untagged rule
+  wrapper couldn't re-parse; it now serializes as the `all: [...]` map
+  form.
+
 ## [0.7.0] - 2026-06-10
 
 Follow-up to a feature audit against takt: wire what was implemented but

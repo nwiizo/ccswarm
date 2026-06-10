@@ -19,19 +19,19 @@ YAML workflows with review loops, faceted prompting, and guardrails.
 | Rule fields (`interactive_only`, `requires_user_input`) | Implemented |
 | Output contracts + `{report:<name>}` | Implemented (multi-report delimiters deferred) |
 | Sub-workflow dispatch (`call:`) | Implemented (no `returns` schema) |
-| Faceted prompting | Partial — builtin + project layers; no `~/.ccswarm/facets` user layer. 6 personas / 4 policies vs takt's 26 / richer set |
-| Providers | claude (deep) / codex / copilot (intentional no-op); takt adds cursor, kiro, opencode, claude-sdk |
-| Stream-json structured output | Implemented (opt-in `CCSWARM_CLAUDE_STREAM_JSON=1`; tool/usage telemetry → events.ndjson) |
-| Repertoire packages | Partial — install/list/remove work; no 3-layer nearest-override resolution |
+| Faceted prompting | Implemented — builtin < repertoire < user < project layers (v0.8.0). 6 personas / 4 policies vs takt's 26 / richer set |
+| Providers | claude (deep) / codex (first-class since v0.8.0: `--provider` flag, JSONL telemetry, session resume) / copilot (intentional no-op); takt adds cursor, kiro, opencode, claude-sdk |
+| Stream-json structured output | Implemented for both claude (`CCSWARM_CLAUDE_STREAM_JSON=1`) and codex (`CCSWARM_CODEX_JSON=1`) |
+| Repertoire packages | Implemented — install/list/remove + package facets participate in layer resolution (v0.8.0) |
 | Queue + GitHub issue ingestion + worktrees | Implemented (`tracker/` with github + linear adapters) |
 | Parallel stages + all()/any() aggregation | Implemented (v0.7.0 wired aggregation into the engine) |
 | Loop/cycle detection | Implemented (v0.7.0: `max_stage_visits` runtime bound + `flow check` static analysis) |
 | HITL gates that block execution | Implemented (v0.7.0: commit gate on `auto`/`drain --require-approval`) |
-| AI judge (`ai("...")` conditions) | Heuristic (lexical overlap), not an LLM call |
-| Rate-limit fallback chain | Missing |
-| Step-level provider promotion | Missing |
-| Team-leader dynamic decomposition | Missing (`team` flow is a static split) |
-| Command quality gates | Missing (post-pipeline auto-test/fix loop covers part of this) |
+| AI judge (`ai("...")` conditions) | Implemented (v0.8.0, opt-in `CCSWARM_LLM_JUDGE=1`; lexical heuristic as offline fallback) |
+| Rate-limit fallback chain | Implemented (v0.8.0, flow-level `on_rate_limit`) |
+| Step-level provider promotion | Implemented (v0.8.0, stage `promotion`, `at: N` last-match-wins) |
+| Team-leader dynamic decomposition | Implemented (v0.8.0, stage `team_leader`, single wave; takt's iterative "more parts?" waves deferred) |
+| Command quality gates | Implemented (v0.8.0, stage `gates`, feedback re-runs the stage) |
 | OpenTelemetry | Implemented (v0.7.0: opt-in `otel` feature, OTLP spans) |
 | Builtin workflows | 5 vs takt's 48 |
 
@@ -85,20 +85,21 @@ hatch.
 
 ## Roadmap candidates (not committed)
 
-Priority-ordered from the audit; none are implemented:
+The v0.8.0 cycle implemented all six items from the original audit
+roadmap (team_leader, rate-limit fallback, promotion, command gates,
+facet layers, LLM judge). Remaining candidates:
 
-1. **Orchestrator-worker escape hatch** — the one industry-standard
-   pattern static YAML cannot express: an LLM decomposing a task into N
-   subtasks at runtime (takt's team_leader). Most strategically
-   significant gap.
-2. **Rate-limit fallback chain** — detect 429s in the bridge and retry
-   on the next provider in a configured chain (takt v0.41.0).
-3. **Step-level provider promotion** — escalate model/provider after N
-   executions of the same stage (takt v0.41.0).
-4. **Command quality gates** — machine-executed gates (build/lint) whose
-   failure feeds back into the same stage (takt v0.43.0).
-5. **Facet user layer + repertoire 3-layer resolution** — finish the
-   documented builtin < project < user precedence.
-6. **LLM-backed `ai("...")` judge** — replace the lexical-overlap
-   heuristic with a real (cheap-model) call, keeping the heuristic as
-   offline fallback.
+1. **team_leader iterative waves** — takt asks the leader "more parts or
+   done?" after each wave; v1 is single-wave.
+2. **Worker isolation** — worktree (or container) per team_leader part;
+   parts currently share the working directory.
+3. **`--output-schema` hardening** — codex supports JSON Schema-
+   constrained responses; the leader decomposition and LLM judge could
+   use it instead of prompt-based JSON.
+4. **More providers** — takt supports cursor, kiro, opencode,
+   claude-sdk; ccswarm's AgentProvider trait makes additions cheap.
+5. **Persona library depth** — 6 builtin personas vs takt's 26; the
+   review specialists (security/architecture/qa) are the obvious next
+   tranche.
+6. **Mid-run checkpoint-resume** — session persistence + `replay` exist,
+   but resuming a partially completed flow run does not.

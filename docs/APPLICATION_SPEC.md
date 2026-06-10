@@ -633,7 +633,17 @@ cargo run --package ai-session --bin server
 
 ## Version History
 
-### v0.7.0 (Current)
+### v0.8.0 (Current)
+- takt feature adoption + codex first-class support
+- Global `--provider <claude|codex>` flag; codex JSONL telemetry (`CCSWARM_CODEX_JSON=1`) and session resume (`codex exec resume`) — multi-turn works on codex
+- Rate-limit fallback chain (flow-level `on_rate_limit`) and stage `promotion` rules (provider/model escalation from the Nth visit)
+- Command quality gates (stage `gates:` run commands post-agent; failures feed back into the same stage)
+- 3-layer facet resolution (repertoire < user `~/.ccswarm/facets` < project); fixed live runs not loading custom facets at all
+- LLM-backed ai() judge (`CCSWARM_LLM_JUDGE=1`) with the lexical heuristic as offline fallback
+- team_leader orchestrator-worker: runtime task decomposition into parallel workers; builtin `team-dynamic` flow
+- Fixed CompoundCondition YAML round-trip (`flow check` on flows with all()/any() rules)
+
+### v0.7.0
 - Audit follow-up: wired implemented-but-unreachable features, deleted the rest
 - Deleted unwired workflow modules (~4.2k LOC): arpeggio, watch, legacy DAG engine (graph/node/execution), github_issue
 - Loop guard: `max_stage_visits` flow field bounds per-stage revisits; `flow check` reports structural cycles

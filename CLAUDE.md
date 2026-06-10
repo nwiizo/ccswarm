@@ -95,16 +95,34 @@ Don't add workflow logic to ai-session.
 ## Providers
 
 ```yaml
-# ccswarm.json or flow YAML (per-stage override)
+# flow YAML (per-stage override)
 provider: claude   # claude | codex | copilot (default: claude)
 model: sonnet
 ```
 
-- **claude**: full flag coverage (--allowed-tools, --agent, --resume, --system-prompt, --max-budget-usd, --worktree)
-- **codex**: `codex exec "<prompt>"`, system prompt prepended to user prompt
+- Selection precedence: stage YAML > `--provider` flag (global) > `CCSWARM_PROVIDER` env > claude
+- **claude**: full flag coverage (--allowed-tools, --agent, --resume, --system-prompt, --max-budget-usd, --worktree). `CCSWARM_CLAUDE_STREAM_JSON=1` for real token telemetry.
+- **codex**: `codex exec`, multi-turn via `codex exec resume <thread-id>`. `CCSWARM_CODEX_JSON=1` for real token telemetry (forced on for multi-turn). No worktree/budget/allowed-tools.
 - **copilot**: unsupported for code generation (gh copilot suggest is interactive); falls back to friendly error
 
 `ccswarm doctor` probes all three CLIs.
+
+Reliability (flow/stage YAML):
+
+```yaml
+on_rate_limit:                  # flow-level: switch provider on rate limit
+  - { provider: codex }
+stages:
+  - id: fix
+    promotion:                  # escalate from the Nth visit (last match wins)
+      - { at: 2, model: opus }
+    gates:                      # machine gates; failure re-runs the stage
+      - { name: build, command: "cargo build" }
+    team_leader:                # orchestrator-worker: leader decomposes at runtime
+      max_parts: 3
+```
+
+`CCSWARM_LLM_JUDGE=1` makes `ai("...")` rule conditions ask a real model (YES/NO) instead of the lexical heuristic.
 
 ## Builtin flows
 
@@ -112,6 +130,7 @@ model: sonnet
 |-------|-------------|--------|
 | `default` | plan → implement → review → fix → complete | planner, coder, reviewer |
 | `team` | plan → parallel(frontend + backend) → supervisor review | planner, frontend-specialist, backend-specialist, supervisor |
+| `team-dynamic` | plan → team_leader decomposes at runtime → parallel workers → review | planner, coder (leader + workers), reviewer |
 | `quick` | single-shot (1 stage) | coder |
 | `review-fix` | review → fix loop | reviewer, coder |
 | `research` | investigate → report | researcher |
