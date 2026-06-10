@@ -785,6 +785,7 @@ impl FlowEngine {
     }
 
     /// Internal flow execution with pre-configured state
+    #[tracing::instrument(name = "flow.run", skip_all, fields(flow = %name))]
     async fn execute_piece_state(
         &self,
         name: &str,
@@ -1148,6 +1149,11 @@ impl FlowEngine {
     }
 
     /// Execute a single stage via Claude Code CLI (through AISessionBridge) or prompt-only fallback
+    #[tracing::instrument(
+        name = "flow.stage",
+        skip_all,
+        fields(stage = %stage.id, persona = stage.persona.as_deref(), provider = stage.provider.as_deref())
+    )]
     async fn execute_movement(
         &self,
         stage: &Stage,
