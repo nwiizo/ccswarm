@@ -587,6 +587,10 @@ pub struct FlowEngine {
     /// human-in-the-loop rules are honored. Adopted from takt's
     /// interactive_only / requires_user_input rule fields.
     interactive: bool,
+    /// Default provider for stages that don't pin one in flow YAML
+    /// (`--provider` flag). Sits between stage YAML and the CCSWARM_PROVIDER
+    /// env var in the resolution order.
+    default_provider: Option<crate::providers::ProviderKind>,
 }
 
 /// Progress notification sent after each stage completes
@@ -629,6 +633,7 @@ impl FlowEngine {
             budget_usd: None,
             run_token_cap: None,
             interactive: false,
+            default_provider: None,
         }
     }
 
@@ -668,6 +673,12 @@ impl FlowEngine {
     /// Set the AISessionBridge for real Claude Code CLI execution
     pub fn set_bridge(&mut self, bridge: std::sync::Arc<crate::session::bridge::AISessionBridge>) {
         self.bridge = Some(bridge);
+    }
+
+    /// Set the default provider for stages that don't pin one in flow YAML
+    /// (`--provider` flag). Overrides the CCSWARM_PROVIDER env var.
+    pub(crate) fn set_default_provider(&mut self, provider: crate::providers::ProviderKind) {
+        self.default_provider = Some(provider);
     }
 
     /// Set the working directory for agent execution
@@ -1216,11 +1227,14 @@ impl FlowEngine {
 
             // Build MovementExecOptions from Stage fields.
             // Provider flag mapping is handled per-provider in crate::providers.
-            // Precedence: stage YAML `provider:` > `CCSWARM_PROVIDER` env > Claude default.
+            // Precedence: stage YAML `provider:` > `--provider` flag >
+            // `CCSWARM_PROVIDER` env > Claude default. Stage YAML wins over the
+            // flag because it expresses deliberate per-stage intent.
             let provider = stage
                 .provider
                 .as_deref()
                 .and_then(crate::providers::ProviderKind::parse)
+                .or(self.default_provider)
                 .or_else(|| {
                     std::env::var("CCSWARM_PROVIDER")
                         .ok()

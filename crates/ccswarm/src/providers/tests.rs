@@ -49,6 +49,7 @@ fn claude_command_includes_expected_flags() {
         max_budget: Some(0.25),
         worktree_name: Some("wt-1".to_string()),
         claude_stream_json: false,
+        codex_json: false,
     };
     let cmd = provider.build_command("do the thing", Path::new("/tmp"), &opts);
     let argv = argv_of(&cmd);
@@ -99,7 +100,7 @@ fn provider_continuation_capabilities_are_explicit() {
     );
     assert_eq!(
         resolve(ProviderKind::Codex).same_thread_continuation(),
-        SameThreadContinuation::Unsupported
+        SameThreadContinuation::ProviderAssignedId
     );
     assert_eq!(
         resolve(ProviderKind::Copilot).same_thread_continuation(),
@@ -109,12 +110,12 @@ fn provider_continuation_capabilities_are_explicit() {
 
 #[test]
 fn codex_command_merges_system_prompt_and_has_no_session_flag() {
-    // codex #3 regression guard: Codex CLI has no `--session` flag.
+    // codex #3 regression guard: Codex CLI has no `--session` flag — resume
+    // goes through the `exec resume` subcommand instead.
     let provider = resolve(ProviderKind::Codex);
     let opts = ProviderOptions {
         model: Some("gpt-5".to_string()),
         system_prompt: Some("SYS".to_string()),
-        session_id: Some("ignored".to_string()),
         ..Default::default()
     };
     let cmd = provider.build_command("USER", Path::new("/tmp"), &opts);
@@ -133,7 +134,29 @@ fn codex_command_merges_system_prompt_and_has_no_session_flag() {
     assert!(argv.iter().any(|a| a == "gpt-5"));
     // The Codex `--session` flag does not exist; make sure we don't emit it.
     assert!(!argv.iter().any(|a| a == "--session"));
-    assert!(!argv.iter().any(|a| a == "ignored"));
+    // No resume subcommand without a session id.
+    assert!(!argv.iter().any(|a| a == "resume"));
+    assert!(!argv.iter().any(|a| a == "--json"));
+}
+
+#[test]
+fn codex_command_with_session_id_uses_resume_subcommand() {
+    let provider = resolve(ProviderKind::Codex);
+    let opts = ProviderOptions {
+        session_id: Some("thread-42".to_string()),
+        codex_json: true,
+        ..Default::default()
+    };
+    let cmd = provider.build_command("CONTINUE", Path::new("/tmp"), &opts);
+    let argv = argv_of(&cmd);
+
+    // `codex exec resume <thread-id> [flags] <prompt>`
+    assert_eq!(argv[0], "codex");
+    assert_eq!(argv[1], "exec");
+    assert_eq!(argv[2], "resume");
+    assert_eq!(argv[3], "thread-42");
+    assert!(argv.iter().any(|a| a == "--json"));
+    assert_eq!(argv.last().map(String::as_str), Some("CONTINUE"));
 }
 
 #[test]

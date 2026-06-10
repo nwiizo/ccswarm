@@ -34,18 +34,31 @@ pub(crate) struct ProviderOptions {
     /// text format. Toggled on by `AISessionBridge` when the environment sets
     /// `CCSWARM_CLAUDE_STREAM_JSON=1`.
     pub claude_stream_json: bool,
+    /// Request Codex's JSONL event output (`codex exec --json`). The bridge
+    /// parses each line to extract the final agent message, real token usage,
+    /// and the thread ID needed for `codex exec resume`. No effect on Claude /
+    /// Copilot. Toggled on by `AISessionBridge` when the environment sets
+    /// `CCSWARM_CODEX_JSON=1` — and forced on during codex multi-turn runs,
+    /// which need the thread ID to continue.
+    pub codex_json: bool,
 }
 
 /// Provider support for continuing a stage in the same conversation thread.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SameThreadContinuation {
     Unsupported,
+    /// Caller supplies the session ID up front (Claude `--session-id`).
     ExplicitSessionId,
+    /// Provider assigns an ID on the first turn; the caller learns it from the
+    /// provider's output and passes it back to resume (Codex `exec resume <id>`,
+    /// learned from the `--json` thread.started event).
+    ProviderAssignedId,
 }
 
 impl SameThreadContinuation {
-    pub(crate) fn supports_explicit_session_id(self) -> bool {
-        matches!(self, Self::ExplicitSessionId)
+    /// Whether multi-turn continuation is possible at all (by either model).
+    pub(crate) fn supports_multi_turn(self) -> bool {
+        !matches!(self, Self::Unsupported)
     }
 }
 
@@ -96,6 +109,7 @@ pub(crate) trait AgentProvider {
 pub mod claude;
 pub(crate) mod claude_stream;
 pub mod codex;
+pub(crate) mod codex_stream;
 pub mod copilot;
 
 #[cfg(test)]

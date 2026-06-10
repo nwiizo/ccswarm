@@ -516,6 +516,7 @@ mod tests {
             repo_path: PathBuf::from("."),
             json_output,
             formatter: create_formatter(json_output),
+            default_provider: None,
         }
     }
 

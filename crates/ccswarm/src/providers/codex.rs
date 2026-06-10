@@ -2,16 +2,25 @@
 //!
 //! Codex CLI is non-interactive via `codex exec "<prompt>"`. System prompt is prepended to
 //! the user prompt because Codex has no dedicated `--system-prompt` flag.
+//!
+//! Session continuation uses `codex exec resume <thread-id> "<prompt>"` — a
+//! subcommand with its own argv shape, selected when `options.session_id` is
+//! set. The thread ID is provider-assigned: ccswarm learns it from the
+//! `thread.started` event in `--json` output (see `codex_stream`).
 
 use std::path::Path;
 
-use super::{AgentProvider, ProviderKind, ProviderOptions};
+use super::{AgentProvider, ProviderKind, ProviderOptions, SameThreadContinuation};
 
 pub(crate) struct CodexProvider;
 
 impl AgentProvider for CodexProvider {
     fn kind(&self) -> ProviderKind {
         ProviderKind::Codex
+    }
+
+    fn same_thread_continuation(&self) -> SameThreadContinuation {
+        SameThreadContinuation::ProviderAssignedId
     }
 
     fn build_command(
@@ -22,6 +31,12 @@ impl AgentProvider for CodexProvider {
     ) -> tokio::process::Command {
         let mut cmd = tokio::process::Command::new("codex");
         cmd.arg("exec");
+
+        // Resume is a subcommand: `codex exec resume <thread-id> <prompt>`.
+        // It must come before the option flags that follow.
+        if let Some(session_id) = &options.session_id {
+            cmd.args(["resume", session_id]);
+        }
 
         // Non-interactive pipeline execution:
         //   1. `--sandbox workspace-write` lets Codex write inside the cwd the way
@@ -36,11 +51,12 @@ impl AgentProvider for CodexProvider {
             cmd.args(["--model", model]);
         }
 
-        // NOTE: `codex exec` has no `--session` flag; resumption goes through a separate
-        // `codex exec resume` subcommand that takes a different argv shape. We therefore
-        // drop `session_id` silently for now — this is better than sending a flag Codex
-        // will reject. Proper resume support is tracked as follow-up work.
-        let _ = &options.session_id;
+        // JSONL event output: needed for telemetry (real token counts) and
+        // mandatory for multi-turn, where the thread ID arrives via the
+        // `thread.started` event.
+        if options.codex_json {
+            cmd.arg("--json");
+        }
 
         // Codex has no allow-list, worktree, or budget flag. Unsupported options are
         // silently ignored so the same flow YAML stays portable across providers.

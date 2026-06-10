@@ -442,6 +442,9 @@ impl CliRunner {
         if let Some(cap) = run_budget_tokens {
             engine.set_run_token_cap(cap);
         }
+        if let Some(provider) = self.default_provider {
+            engine.set_default_provider(provider);
+        }
 
         // Load custom flows from .ccswarm/flows/
         let custom_pieces_dir = self.repo_path.join(".ccswarm").join("flows");
@@ -561,10 +564,15 @@ impl CliRunner {
             // codex #5 fix: route the fix call through crate::providers instead of
             // hardcoding `claude`. Otherwise a Codex/Copilot-configured project silently
             // reverts to Claude on every test failure (and bills the wrong account).
-            let provider_kind = std::env::var("CCSWARM_PROVIDER")
-                .ok()
-                .as_deref()
-                .and_then(crate::providers::ProviderKind::parse)
+            // `--provider` takes precedence over the env var, same as in the engine.
+            let provider_kind = self
+                .default_provider
+                .or_else(|| {
+                    std::env::var("CCSWARM_PROVIDER")
+                        .ok()
+                        .as_deref()
+                        .and_then(crate::providers::ProviderKind::parse)
+                })
                 .unwrap_or(crate::providers::ProviderKind::Claude);
             let provider = crate::providers::resolve(provider_kind);
             let options = crate::providers::ProviderOptions::default();
