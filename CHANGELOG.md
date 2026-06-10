@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Versions 0.5.0–0.6.2 were tracked in docs/APPLICATION_SPEC.md Version
 > History rather than here.
 
+## [0.9.1] - 2026-06-10
+
+Patch release from real published-package smoke testing.
+
+### Fixed
+- `ai-session exec <session-name> ...` now resolves session names as documented
+  instead of accepting only UUIDs.
+- `ai-session exec` now executes commands through the session working directory
+  using a bounded subprocess path, records command history, and avoids PTY read
+  hangs observed during real CLI smoke testing.
+
 ## [0.9.0] - 2026-06-10
 
 Sangha consensus workflow and governed auto-extension.
