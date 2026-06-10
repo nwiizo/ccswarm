@@ -35,12 +35,13 @@ pub struct BridgeResult {
     /// Context compression ratio (if available)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compression_ratio: Option<f64>,
-    /// Rough input-token estimate (prompt + system_prompt bytes / 4). Non-authoritative —
-    /// provider CLIs don't surface real counts, but this is useful for `ccswarm cost` to
-    /// show relative stage weight.
+    /// Input tokens for the call. Real counts (incl. cache reads/writes) from
+    /// the stream-json result envelope when `CCSWARM_CLAUDE_STREAM_JSON=1`;
+    /// otherwise a rough bytes/4 estimate so `ccswarm cost` still has relative
+    /// stage weights.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens_in: Option<u64>,
-    /// Rough output-token estimate (raw output bytes / 4).
+    /// Output tokens for the call (real when stream-json is on, else bytes/4).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens_out: Option<u64>,
     /// Attention triage state derived from the parsed output. Falls back to
@@ -48,6 +49,56 @@ pub struct BridgeResult {
     /// signal.
     #[serde(default)]
     pub attention: AttentionState,
+    /// Tool names invoked during the call, parsed from Claude stream-json
+    /// output (empty unless `CCSWARM_CLAUDE_STREAM_JSON=1`). Tool inputs are
+    /// deliberately not propagated — they can embed entire file contents.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_names: Vec<String>,
+    /// Total cost in USD as reported by the provider's result envelope
+    /// (stream-json only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_cost_usd: Option<f64>,
+}
+
+/// Projection of a Claude stream-json stdout buffer down to the pieces the
+/// bridge propagates.
+struct StreamProjection {
+    /// Final answer text (`result.result`, or concatenated assistant text).
+    text: String,
+    /// Tool names in invocation order.
+    tool_names: Vec<String>,
+    /// Real token totals `(input incl. cache, output)` from the last usage
+    /// record — the result envelope's usage is cumulative for the run, so
+    /// summing all records would double-count the per-turn entries.
+    tokens: Option<(u64, u64)>,
+    total_cost_usd: Option<f64>,
+}
+
+fn project_stream(raw_stdout: &str) -> StreamProjection {
+    let summary = crate::providers::claude_stream::parse_stream(raw_stdout);
+    if !summary.tool_uses.is_empty() {
+        tracing::debug!(
+            "stream-json: {} tool_use blocks ({:?})",
+            summary.tool_uses.len(),
+            summary
+                .tool_uses
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+    let tokens = summary.usage.last().map(|u| {
+        (
+            u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens,
+            u.output_tokens,
+        )
+    });
+    StreamProjection {
+        text: summary.result_text,
+        tool_names: summary.tool_uses.into_iter().map(|t| t.name).collect(),
+        tokens,
+        total_cost_usd: summary.total_cost_usd,
+    }
 }
 
 /// Controls whether a stage is allowed to continue in the same provider thread.
@@ -326,6 +377,8 @@ impl AISessionBridge {
         let mut duration_ms = result.duration_ms;
         let mut tokens_in = result.tokens_in.unwrap_or(0);
         let mut tokens_out = result.tokens_out.unwrap_or(0);
+        let mut tool_names = result.tool_names.clone();
+        let mut total_cost_usd = result.total_cost_usd;
         let mut previous_turn_raw = result.raw.clone();
 
         result.raw = merged_raw.join("\n\n");
@@ -363,6 +416,8 @@ impl AISessionBridge {
                 &mut duration_ms,
                 &mut tokens_in,
                 &mut tokens_out,
+                &mut tool_names,
+                &mut total_cost_usd,
                 turn,
                 next_result,
             );
@@ -488,25 +543,12 @@ impl AISessionBridge {
         // When stream-json is on for Claude, project the NDJSON stream down to
         // the result text so the rest of the bridge (parsed output, context
         // history, downstream prompt builders) keeps working unchanged. Tool
-        // uses and usage records are not yet wired into EventRecorder — that's
-        // a follow-up, since wiring needs an EventRecorder handle the bridge
-        // doesn't currently own.
-        let (raw_output, _stream_summary) = if claude_stream_json {
-            let summary = crate::providers::claude_stream::parse_stream(&raw_stdout);
-            if !summary.tool_uses.is_empty() {
-                tracing::debug!(
-                    "stream-json: {} tool_use blocks ({:?})",
-                    summary.tool_uses.len(),
-                    summary
-                        .tool_uses
-                        .iter()
-                        .map(|t| t.name.as_str())
-                        .collect::<Vec<_>>()
-                );
-            }
-            (summary.result_text.clone(), Some(summary))
-        } else {
-            (raw_stdout, None)
+        // names, real token totals, and cost ride along on BridgeResult so the
+        // engine (which owns the EventRecorder) can emit ProviderCall events.
+        let stream_meta = claude_stream_json.then(|| project_stream(&raw_stdout));
+        let raw_output = match &stream_meta {
+            Some(projection) => projection.text.clone(),
+            None => raw_stdout,
         };
 
         // 2. Parse output semantically with ai-session
@@ -556,13 +598,21 @@ impl AISessionBridge {
             .get_compression_stats(agent_id)
             .map(|stats| stats.compression_ratio);
 
-        // Issue #28 fix: emit rough byte→token estimates so `ccswarm cost` has data to
-        // aggregate. We don't claim accuracy — provider CLIs don't expose real token
-        // counts. Divide by 4 as a GPT-family rule of thumb (actual ratio varies).
-        let input_bytes =
-            prompt.len() + options.system_prompt.as_ref().map(|s| s.len()).unwrap_or(0);
-        let tokens_in = Some((input_bytes / 4) as u64);
-        let tokens_out = Some((raw_output.len() / 4) as u64);
+        // Token accounting: prefer the real counts from the stream-json result
+        // envelope when available; otherwise fall back to the Issue #28 rough
+        // byte→token estimates (divide by 4, GPT-family rule of thumb) so
+        // `ccswarm cost` always has data to aggregate.
+        let (tokens_in, tokens_out) = match stream_meta.as_ref().and_then(|p| p.tokens) {
+            Some((real_in, real_out)) => (Some(real_in), Some(real_out)),
+            None => {
+                let input_bytes =
+                    prompt.len() + options.system_prompt.as_ref().map(|s| s.len()).unwrap_or(0);
+                (
+                    Some((input_bytes / 4) as u64),
+                    Some((raw_output.len() / 4) as u64),
+                )
+            }
+        };
 
         let same_thread_continuation = provider
             .same_thread_continuation()
@@ -579,6 +629,11 @@ impl AISessionBridge {
                 tokens_in,
                 tokens_out,
                 attention,
+                tool_names: stream_meta
+                    .as_ref()
+                    .map(|p| p.tool_names.clone())
+                    .unwrap_or_default(),
+                total_cost_usd: stream_meta.as_ref().and_then(|p| p.total_cost_usd),
             },
             metadata: BridgeExecutionMetadata {
                 provider: kind,
@@ -657,11 +712,14 @@ fn truncate(s: &str, max_bytes: usize) -> String {
     s[..boundary].to_string()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn merge_turn_result(
     merged_raw: &mut Vec<String>,
     duration_ms: &mut u64,
     tokens_in: &mut u64,
     tokens_out: &mut u64,
+    tool_names: &mut Vec<String>,
+    total_cost_usd: &mut Option<f64>,
     turn: u32,
     next_result: BridgeResult,
 ) -> BridgeResult {
@@ -669,6 +727,11 @@ fn merge_turn_result(
     *duration_ms = duration_ms.saturating_add(next_result.duration_ms);
     *tokens_in = tokens_in.saturating_add(next_result.tokens_in.unwrap_or(0));
     *tokens_out = tokens_out.saturating_add(next_result.tokens_out.unwrap_or(0));
+    tool_names.extend(next_result.tool_names.iter().cloned());
+    *total_cost_usd = match (*total_cost_usd, next_result.total_cost_usd) {
+        (Some(a), Some(b)) => Some(a + b),
+        (a, b) => a.or(b),
+    };
 
     BridgeResult {
         raw: merged_raw.join("\n\n"),
@@ -679,6 +742,8 @@ fn merge_turn_result(
         tokens_in: Some(*tokens_in),
         tokens_out: Some(*tokens_out),
         attention: next_result.attention,
+        tool_names: tool_names.clone(),
+        total_cost_usd: *total_cost_usd,
     }
 }
 
@@ -819,7 +884,35 @@ mod tests {
             tokens_in,
             tokens_out,
             attention: AttentionState::Idle,
+            tool_names: Vec::new(),
+            total_cost_usd: None,
         }
+    }
+
+    #[test]
+    fn test_project_stream_extracts_tool_names_cost_and_real_tokens() {
+        let stdout = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{"path":"/a.rs"}},{"type":"text","text":"hi"}],"usage":{"input_tokens":10,"output_tokens":2}}}
+{"type":"result","subtype":"success","result":"Done.","total_cost_usd":0.01,"usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":50}}
+"#;
+        let p = project_stream(stdout);
+        assert_eq!(p.text, "Done.");
+        assert_eq!(p.tool_names, vec!["Read".to_string()]);
+        // Last usage record is the cumulative result envelope: input 100 +
+        // cache reads 50; per-turn records must not be summed on top.
+        assert_eq!(p.tokens, Some((150, 20)));
+        assert!((p.total_cost_usd.unwrap_or(0.0) - 0.01).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_project_stream_without_usage_leaves_tokens_none() {
+        let p = project_stream(
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"plain"}]}}"#,
+        );
+        assert_eq!(p.text, "plain");
+        assert!(p.tool_names.is_empty());
+        // No usage record → bridge falls back to byte/4 estimates.
+        assert_eq!(p.tokens, None);
+        assert!(p.total_cost_usd.is_none());
     }
 
     #[test]
@@ -828,21 +921,29 @@ mod tests {
         let mut duration_ms = 10;
         let mut tokens_in = 3;
         let mut tokens_out = 5;
+        let mut tool_names = vec!["Read".to_string()];
+        let mut total_cost_usd = Some(0.01);
+
+        let mut next = bridge_result(
+            "second",
+            ParsedOutput::PlainText("continue".to_string()),
+            true,
+            20,
+            Some(7),
+            Some(11),
+        );
+        next.tool_names = vec!["Bash".to_string()];
+        next.total_cost_usd = Some(0.02);
 
         let result = merge_turn_result(
             &mut merged_raw,
             &mut duration_ms,
             &mut tokens_in,
             &mut tokens_out,
+            &mut tool_names,
+            &mut total_cost_usd,
             2,
-            bridge_result(
-                "second",
-                ParsedOutput::PlainText("continue".to_string()),
-                true,
-                20,
-                Some(7),
-                Some(11),
-            ),
+            next,
         );
 
         assert_eq!(
@@ -853,6 +954,8 @@ mod tests {
         assert_eq!(result.tokens_in, Some(10));
         assert_eq!(result.tokens_out, Some(16));
         assert!(result.success);
+        assert_eq!(result.tool_names, vec!["Read", "Bash"]);
+        assert!((result.total_cost_usd.unwrap_or(0.0) - 0.03).abs() < 1e-9);
     }
 
     #[test]
@@ -861,12 +964,16 @@ mod tests {
         let mut duration_ms = 10;
         let mut tokens_in = 3;
         let mut tokens_out = 5;
+        let mut tool_names = Vec::new();
+        let mut total_cost_usd = None;
 
         let result = merge_turn_result(
             &mut merged_raw,
             &mut duration_ms,
             &mut tokens_in,
             &mut tokens_out,
+            &mut tool_names,
+            &mut total_cost_usd,
             2,
             bridge_result(
                 "failed",
