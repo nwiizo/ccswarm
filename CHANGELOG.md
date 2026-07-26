@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Consolidated crates.io publishing into the tag release workflow and removed
+  stale `ai-session` publishing steps.
+
 ## [0.9.2] - 2026-07-26
 
 ### Added

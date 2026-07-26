@@ -107,32 +107,7 @@ jobs:
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Configure git
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-
-    - name: Update Cargo.lock if needed
-      run: |
-        cargo update --workspace --quiet
-        if ! git diff --quiet Cargo.lock; then
-          git add Cargo.lock
-          git commit -m "chore: update Cargo.lock for release"
-        fi
-
-    - name: Publish ai-session crate
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      run: |
-        cd crates/ai-session
-        cargo publish --token ${CARGO_REGISTRY_TOKEN} --allow-dirty || echo "ai-session might already be published"
-
-    - name: Wait for ai-session to be available
-      run: sleep 30
-
     - name: Publish ccswarm crate
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      run: |
-        cd crates/ccswarm
-        cargo publish --token ${CARGO_REGISTRY_TOKEN} --allow-dirty
+      run: cargo publish -p ccswarm --locked --token "${CARGO_REGISTRY_TOKEN}"
