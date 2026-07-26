@@ -81,7 +81,13 @@ async-channel = "2.5"
 dashmap = "6.1"
 
 # HTTP client for API providers
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "charset",
+    "http2",
+    "json",
+    "rustls-tls",
+    "system-proxy",
+] }
 
 # Testing utilities
 tempfile = "3.27"
