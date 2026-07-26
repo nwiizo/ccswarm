@@ -185,7 +185,7 @@ impl ClaudeCodeAgent {
             .parent()
             .map(|p| p.join("worktrees").join(&agent_id))
             .unwrap_or_else(|| workspace_root.join(".worktrees").join(&agent_id));
-        let branch_name = format!("{}/{}", branch_prefix, &agent_id);
+        let branch_name = format!("{}/{}", branch_prefix, agent_id);
 
         let identity = AgentIdentity {
             agent_id: agent_id.clone(),

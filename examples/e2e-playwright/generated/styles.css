@@ -1,0 +1,275 @@
+:root {
+  color-scheme: light;
+  --ink: #172026;
+  --muted: #62717c;
+  --line: #d7e1e7;
+  --surface: #ffffff;
+  --bg: #f3f6f7;
+  --blue: #2f64c8;
+  --green: #1f8a5b;
+  --amber: #b97612;
+  --red: #b42318;
+  --shadow: 0 14px 34px rgba(23, 32, 38, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background:
+    linear-gradient(135deg, rgba(47, 100, 200, 0.12), transparent 28rem),
+    linear-gradient(315deg, rgba(31, 138, 91, 0.11), transparent 24rem),
+    var(--bg);
+  color: var(--ink);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(1040px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 36px 0;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--blue);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  line-height: 0.95;
+}
+
+.run-summary,
+.metrics > div,
+.composer,
+.board,
+.order-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
+}
+
+.run-summary {
+  min-width: 154px;
+  padding: 16px;
+  text-align: right;
+}
+
+.run-summary strong {
+  display: block;
+  color: var(--green);
+  font-size: 2rem;
+}
+
+.run-summary span,
+.metrics span,
+.composer label,
+.recovery-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.metrics > div {
+  padding: 16px;
+}
+
+.metrics strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.6rem;
+}
+
+.composer,
+.board {
+  padding: 18px;
+  margin-bottom: 12px;
+}
+
+.form-row,
+.board-head,
+.order-title-row,
+.order-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.form-row {
+  margin-top: 8px;
+}
+
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfe;
+}
+
+button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ink);
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 0 14px;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+#reset-demo,
+[data-action="partial"] {
+  background: var(--amber);
+}
+
+[data-action="retry"] {
+  background: var(--blue);
+}
+
+#form-error {
+  min-height: 1.2em;
+  margin-top: 8px;
+  color: var(--red);
+}
+
+.board-head {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.orders {
+  display: grid;
+  gap: 12px;
+}
+
+.order-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(23, 32, 38, 0.07);
+}
+
+.order-title-row {
+  justify-content: space-between;
+  align-items: start;
+}
+
+.status-pill {
+  display: inline-flex;
+  min-width: 96px;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: var(--blue);
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.status-pill.ready {
+  background: rgba(31, 138, 91, 0.14);
+  color: var(--green);
+}
+
+.status-pill.partial {
+  background: rgba(185, 118, 18, 0.14);
+  color: var(--amber);
+}
+
+.stage-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-list li {
+  min-height: 48px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafb;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+.stage-list li.done {
+  border-color: rgba(31, 138, 91, 0.35);
+  background: rgba(31, 138, 91, 0.12);
+  color: var(--green);
+}
+
+.order-actions {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 128px;
+}
+
+@media (max-width: 760px) {
+  .toolbar,
+  .order-card {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .run-summary {
+    text-align: left;
+  }
+
+  .metrics,
+  .stage-list {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row,
+  .board-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

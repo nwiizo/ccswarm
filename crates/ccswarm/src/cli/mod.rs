@@ -33,7 +33,8 @@ use crate::config::CcswarmConfig;
 #[command(
     long_about = "ccswarm — turn tasks into PR-ready diffs with quality gates.\n\n\
     One task in, one quality-gated change out: plan → implement → review → fix,\n\
-    reproducibly. Provider-agnostic (Claude Code, Codex, GitHub Copilot CLI).\n\n\
+    reproducibly. Supports Claude Code and Codex; Copilot configuration names\n\
+    are accepted only to fail fast with migration guidance.\n\n\
     Primary flow:\n  \
       ccswarm                                  # interactive task entry\n  \
       ccswarm pipeline --task \"...\"            # single-shot run\n  \
@@ -66,8 +67,11 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub fix: bool,
 
-    /// Default provider for stages that don't pin one in flow YAML
-    /// (claude | codex | copilot). Overrides CCSWARM_PROVIDER.
+    /// Default provider for stages that don't pin one in flow YAML.
+    ///
+    /// Executable providers are `claude` and `codex`. `copilot` remains
+    /// parseable for configuration compatibility but fails fast with guidance.
+    /// Overrides `CCSWARM_PROVIDER`.
     #[arg(long, global = true)]
     pub provider: Option<String>,
 

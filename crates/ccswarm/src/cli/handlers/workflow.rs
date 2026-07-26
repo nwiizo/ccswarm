@@ -102,7 +102,7 @@ impl CliRunner {
                         task_text.bright_white()
                     );
 
-                    // Execute via AISessionBridge if available, otherwise show the task
+                    // Execute through the live pipeline path when requested.
                     println!(
                         "{}",
                         "Task queued for execution. Use 'ccswarm pipeline' for full execution."
@@ -472,9 +472,9 @@ impl CliRunner {
             .map(str::to_string)
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-        // Configure bridge for real provider CLI execution through ai-session.
+        // Configure bridge for real provider CLI or A2A execution.
         let mut engine = crate::workflow::flow::FlowEngine::new();
-        let bridge = crate::session::bridge::AISessionBridge::new(
+        let bridge = crate::session::bridge::A2ABridge::new(
             self.repo_path.join(".ccswarm").join("sessions"),
         );
         engine.set_bridge(std::sync::Arc::new(bridge));
@@ -616,8 +616,8 @@ impl CliRunner {
                 fix_attempts, MAX_FIX_ATTEMPTS
             );
 
-            // Route auto-fix through AISessionBridge so post-pipeline repair
-            // gets the same ai-session parsing, persistence, retry handling,
+            // Route auto-fix through A2ABridge so post-pipeline repair
+            // gets the same parsing, persistence, retry handling,
             // and provider selection as normal flow stages.
             let provider_kind = self
                 .default_provider
@@ -628,9 +628,8 @@ impl CliRunner {
                         .and_then(crate::providers::ProviderKind::parse)
                 })
                 .unwrap_or(crate::providers::ProviderKind::Claude);
-            let bridge = crate::session::bridge::AISessionBridge::new(
-                repo.join(".ccswarm").join("sessions"),
-            );
+            let bridge =
+                crate::session::bridge::A2ABridge::new(repo.join(".ccswarm").join("sessions"));
             let identity = crate::identity::AgentIdentity {
                 agent_id: "auto-fix".to_string(),
                 specialization: crate::identity::AgentRole::Frontend {
@@ -660,6 +659,7 @@ impl CliRunner {
                 worktree_name: None,
                 session_id: None,
                 continuation: crate::session::bridge::ContinuationPolicy::SingleTurn,
+                a2a_endpoint: None,
                 rate_limit_fallbacks: Vec::new(),
             };
             let fix_output = bridge

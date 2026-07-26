@@ -1,34 +1,34 @@
-//! AISessionBridge: multi-provider CLI execution + ai-session result management
+//! A2ABridge: A2A/local multi-provider execution and result management.
 //!
-//! This module bridges the gap between ccswarm's orchestration layer and the ai-session
-//! crate. Provider-specific command construction is delegated to the providers module;
-//! everything else (context compression, output parsing, persistence, retry) is neutral
-//! to which CLI is spoken.
+//! Provider-specific command construction is delegated to the providers module.
+//! Everything else (context history, output parsing, persistence, retry, and
+//! optional A2A dispatch) is owned by ccswarm.
 
 use anyhow::Result;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use ai_session::context::{MessageRole, SessionContext};
-use ai_session::core::{AttentionState, SessionId};
-use ai_session::execution::{
-    DEFAULT_MAX_PROMPT_BYTES, prepare_provider_prompt, run_provider_command,
-};
-use ai_session::output::{OutputParser, ParsedOutput};
-use ai_session::persistence::PersistenceManager;
-
 use crate::identity::AgentIdentity;
 use crate::providers::{ProviderKind, ProviderOptions};
+use crate::session::context::{CompressionStats, MessageRole, SessionContext};
+use crate::session::execution::{
+    DEFAULT_MAX_PROMPT_BYTES, prepare_provider_prompt, run_provider_command,
+};
+use crate::session::output::{BuildStatus, LogLevel, OutputParser, ParsedOutput};
+use crate::session::persistence::{
+    ExecutionSessionStatus, PersistenceManager, SessionMetadata, SessionState,
+};
+use crate::session::types::{AttentionState, ExecutionSessionId};
 
 const DEFAULT_CONTINUATION_PROMPT: &str = "The previous turn completed but the task is still active. Continue with the next sub-step. Stop when the task is fully done or you cannot make progress.";
 
-/// Result of an AISessionBridge execution
+/// Result of an A2ABridge execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BridgeResult {
     /// Raw output from Claude Code CLI
     pub raw: String,
-    /// Parsed output from ai-session's semantic parser
+    /// Parsed output from ccswarm's semantic parser.
     pub parsed: ParsedOutput,
     /// Whether the execution was successful (based on parsed output)
     pub success: bool,
@@ -113,6 +113,34 @@ fn fallback_notice_prompt(original_prompt: &str) -> String {
          You are taking over fresh — no prior session context is available beyond this prompt.\n\n{}",
         original_prompt
     )
+}
+
+fn read_a2a_endpoint() -> Option<String> {
+    std::env::var("CCSWARM_A2A_ENDPOINT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn resolve_a2a_endpoint(options: &MovementExecOptions) -> Option<String> {
+    options
+        .a2a_endpoint
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(read_a2a_endpoint)
+}
+
+fn prepare_a2a_prompt(prompt: &str, system_prompt: Option<&str>) -> String {
+    match system_prompt.filter(|value| !value.trim().is_empty()) {
+        Some(system_prompt) => format!(
+            "# System instructions\n{}\n\n{}",
+            system_prompt.trim(),
+            prompt
+        ),
+        None => prompt.to_string(),
+    }
 }
 
 /// Projection of a Claude stream-json stdout buffer down to the pieces the
@@ -203,21 +231,24 @@ pub struct MovementExecOptions {
     pub session_id: Option<String>,
     /// Same-thread continuation policy.
     pub continuation: ContinuationPolicy,
+    /// Optional A2A server endpoint. If absent, `CCSWARM_A2A_ENDPOINT` is used
+    /// when set; otherwise the selected local provider CLI is executed.
+    pub a2a_endpoint: Option<String>,
     /// Providers to fall back to (in order) when this stage's provider hits a
     /// rate limit. Each entry is `(provider, optional model override)`. Comes
     /// from the flow-level `on_rate_limit` YAML field.
     pub(crate) rate_limit_fallbacks: Vec<(ProviderKind, Option<String>)>,
 }
 
-/// Claude Code CLI execution + ai-session result management layer.
+/// A2A/local provider execution and result management layer.
 ///
 /// This bridge provides:
-/// - Direct Claude Code CLI execution via subprocess
-/// - zstd context compression via ai-session's `TokenEfficientHistory` (93% token reduction)
-/// - Semantic output parsing via ai-session's `OutputParser`
-/// - Session persistence via ai-session's `PersistenceManager`
-pub struct AISessionBridge {
-    /// Per-agent context histories (zstd compressed)
+/// - Optional A2A REST `message:send` dispatch
+/// - Local provider CLI execution via subprocess
+/// - Semantic output parsing
+/// - Session persistence
+pub struct A2ABridge {
+    /// Per-agent context histories.
     context_histories: DashMap<String, SessionContext>,
     /// Semantic output parser
     output_parser: OutputParser,
@@ -238,8 +269,8 @@ struct BridgeExecution {
     metadata: BridgeExecutionMetadata,
 }
 
-impl AISessionBridge {
-    /// Create a new AISessionBridge
+impl A2ABridge {
+    /// Create a new A2ABridge.
     pub fn new(storage_path: PathBuf) -> Self {
         Self {
             context_histories: DashMap::new(),
@@ -250,22 +281,21 @@ impl AISessionBridge {
 
     /// Register an agent context for tracking conversation history.
     ///
-    /// This creates a `SessionContext` with zstd-compressed `TokenEfficientHistory`.
     pub fn register_agent(&self, agent_id: &str) -> Result<()> {
-        let session_id = SessionId::new();
+        let session_id = ExecutionSessionId::new();
         let context = SessionContext::new(session_id);
         self.context_histories.insert(agent_id.to_string(), context);
 
-        tracing::info!("Registered agent '{}' with AISessionBridge", agent_id);
+        tracing::info!("Registered agent '{}' with A2ABridge", agent_id);
         Ok(())
     }
 
-    /// Execute a task via Claude Code CLI and manage results with ai-session.
+    /// Execute a task via A2A or a local provider CLI.
     ///
     /// Flow:
     /// 1. Execute `claude -p <prompt>` via subprocess (with optional --agent/--team)
-    /// 2. Parse output with ai-session's `OutputParser`
-    /// 3. Store in context history (zstd compressed when threshold reached)
+    /// 2. Parse output with ccswarm's `OutputParser`
+    /// 3. Store in context history
     /// 4. Persist session state for crash recovery
     pub async fn execute_task(
         &self,
@@ -436,6 +466,12 @@ impl AISessionBridge {
             } => ((*max_turns).max(1), continuation_prompt),
         };
 
+        if resolve_a2a_endpoint(options).is_some() {
+            return Err(anyhow::anyhow!(
+                "A2A execution does not support same-thread multi-turn continuation"
+            ));
+        }
+
         let provider_kind = options.provider.unwrap_or(ProviderKind::Claude);
         let provider = crate::providers::resolve(provider_kind);
         let continuation_mode = provider.same_thread_continuation();
@@ -462,7 +498,7 @@ impl AISessionBridge {
                             .get(agent_id)
                             .map(|context| context.session_id.to_string())
                     })
-                    .unwrap_or_else(|| SessionId::new().to_string());
+                    .unwrap_or_else(|| ExecutionSessionId::new().to_string());
                 turn_options.session_id = Some(sid.clone());
                 Some(sid)
             }
@@ -599,12 +635,14 @@ impl AISessionBridge {
     ) -> Result<BridgeExecution> {
         let kind = options.provider.unwrap_or(ProviderKind::Claude);
         let provider = crate::providers::resolve(kind);
+        let a2a_endpoint = resolve_a2a_endpoint(options);
 
         // Opt-in stream-json for Claude. Defaults to off so v0.7.0 doesn't change
         // the production output path until users explicitly trial it. v0.8.0 is
         // the candidate to flip the default once we've validated parsing against
         // real Claude Code releases.
-        let claude_stream_json = kind == ProviderKind::Claude
+        let claude_stream_json = a2a_endpoint.is_none()
+            && kind == ProviderKind::Claude
             && std::env::var("CCSWARM_CLAUDE_STREAM_JSON")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false);
@@ -612,7 +650,8 @@ impl AISessionBridge {
         // JSONL output for Codex: opt-in via env for telemetry, but forced on
         // whenever session continuation is in play — the thread ID needed for
         // `codex exec resume` only arrives via the `thread.started` event.
-        let codex_json = kind == ProviderKind::Codex
+        let codex_json = a2a_endpoint.is_none()
+            && kind == ProviderKind::Codex
             && (std::env::var("CCSWARM_CODEX_JSON")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false)
@@ -635,17 +674,23 @@ impl AISessionBridge {
 
         let prompt_with_cwd =
             prepare_provider_prompt(prompt, working_dir, DEFAULT_MAX_PROMPT_BYTES)?;
-        let cmd = provider.build_command(&prompt_with_cwd, working_dir, &provider_options);
-        let output = run_provider_command(cmd, working_dir, provider.kind().as_str()).await?;
-
-        let raw_stdout = if output.status.success() {
-            output.stdout.clone()
+        let (raw_stdout, duration_ms) = if let Some(endpoint) = a2a_endpoint {
+            let a2a_prompt = prepare_a2a_prompt(&prompt_with_cwd, options.system_prompt.as_deref());
+            let execution = crate::session::a2a::A2AClient::new(endpoint)
+                .send_text(&a2a_prompt)
+                .await?;
+            (execution.output, execution.duration_ms)
         } else {
-            return Err(anyhow::anyhow!(
-                "{} provider CLI failed: {}",
-                provider.kind().as_str(),
-                output.stderr
-            ));
+            let cmd = provider.build_command(&prompt_with_cwd, working_dir, &provider_options);
+            let output = run_provider_command(cmd, working_dir, provider.kind().as_str()).await?;
+            if !output.status.success() {
+                return Err(anyhow::anyhow!(
+                    "{} provider CLI failed: {}",
+                    provider.kind().as_str(),
+                    output.stderr
+                ));
+            }
+            (output.stdout, output.duration_ms)
         };
 
         // When structured output is on (Claude stream-json / Codex JSONL),
@@ -678,7 +723,7 @@ impl AISessionBridge {
             None => raw_stdout,
         };
 
-        // 2. Parse output semantically with ai-session
+        // 2. Parse output semantically.
         let parsed = self
             .output_parser
             .parse(&raw_output)
@@ -695,7 +740,7 @@ impl AISessionBridge {
             AttentionState::Error
         });
 
-        // 3. Add to agent's context history (auto-compresses via zstd when threshold reached)
+        // 3. Add to agent's context history.
         if let Some(mut context) = self.context_histories.get_mut(agent_id) {
             context.add_message_raw(MessageRole::User, prompt.to_string());
             context.add_message_raw(MessageRole::Assistant, raw_output.clone());
@@ -707,13 +752,12 @@ impl AISessionBridge {
         // 4. Persist session state (best-effort)
         if let Some(context) = self.context_histories.get(agent_id) {
             let session_id = context.session_id.clone();
-            let state = ai_session::persistence::SessionState {
+            let state = SessionState {
                 session_id: session_id.clone(),
-                config: ai_session::SessionConfig::default(),
-                status: ai_session::SessionStatus::Running,
+                status: ExecutionSessionStatus::Running,
                 context: context.clone(),
                 command_history: Vec::new(),
-                metadata: ai_session::persistence::SessionMetadata::default(),
+                metadata: SessionMetadata::default(),
             };
             if let Err(e) = self.persistence.save_session(&session_id, &state).await {
                 tracing::warn!("Failed to persist session state for {}: {}", agent_id, e);
@@ -760,7 +804,7 @@ impl AISessionBridge {
                 raw: raw_output,
                 parsed,
                 success,
-                duration_ms: output.duration_ms,
+                duration_ms,
                 compression_ratio,
                 tokens_in,
                 tokens_out,
@@ -781,10 +825,7 @@ impl AISessionBridge {
     }
 
     /// Get compression statistics for an agent's context
-    pub fn get_compression_stats(
-        &self,
-        agent_id: &str,
-    ) -> Option<ai_session::context::CompressionStats> {
+    pub fn get_compression_stats(&self, agent_id: &str) -> Option<CompressionStats> {
         self.context_histories
             .get(agent_id)
             .map(|ctx| ctx.get_compression_stats())
@@ -815,19 +856,17 @@ fn is_parsed_success(parsed: &ParsedOutput) -> bool {
         ParsedOutput::PlainText(_) => true, // Assume success for plain text
         ParsedOutput::CodeExecution { .. } => true,
         ParsedOutput::BuildOutput { status, .. } => {
-            matches!(status, ai_session::output::BuildStatus::Success)
+            matches!(status, BuildStatus::Success)
         }
         ParsedOutput::TestResults { failed, .. } => *failed == 0,
-        ParsedOutput::StructuredLog { level, .. } => {
-            !matches!(level, ai_session::output::LogLevel::Error)
-        }
+        ParsedOutput::StructuredLog { level, .. } => !matches!(level, LogLevel::Error),
     }
 }
 
 fn is_task_terminal(parsed: &ParsedOutput) -> bool {
     match parsed {
         ParsedOutput::BuildOutput { status, .. } => {
-            matches!(status, ai_session::output::BuildStatus::Success)
+            matches!(status, BuildStatus::Success)
         }
         ParsedOutput::TestResults { failed, .. } => *failed == 0,
         _ => false,
@@ -906,19 +945,19 @@ fn ensure_same_thread_continuation(
 mod tests {
     use super::*;
     use crate::identity::AgentRole;
-    use ai_session::output::{BuildStatus, ExecutionMetrics, TestDetails};
+    use crate::session::output::{BuildStatus, ExecutionMetrics, TestDetails};
     use std::collections::HashMap;
     use std::path::PathBuf;
 
     #[test]
     fn test_bridge_creation() {
-        let bridge = AISessionBridge::new(PathBuf::from("/tmp/ccswarm-test"));
+        let bridge = A2ABridge::new(PathBuf::from("/tmp/ccswarm-test"));
         assert_eq!(bridge.agent_count(), 0);
     }
 
     #[test]
     fn test_agent_registration() {
-        let bridge = AISessionBridge::new(PathBuf::from("/tmp/ccswarm-test"));
+        let bridge = A2ABridge::new(PathBuf::from("/tmp/ccswarm-test"));
         bridge.register_agent("frontend-agent").unwrap();
         assert_eq!(bridge.agent_count(), 1);
     }
@@ -931,7 +970,7 @@ mod tests {
         assert!(!is_parsed_success(&ParsedOutput::TestResults {
             passed: 5,
             failed: 1,
-            details: ai_session::output::TestDetails {
+            details: TestDetails {
                 suite: Some("cargo".to_string()),
                 duration: Some(std::time::Duration::from_secs(0)),
                 failed_tests: vec!["test_one".to_string()],
@@ -1125,6 +1164,19 @@ mod tests {
     }
 
     #[test]
+    fn test_prepare_a2a_prompt_preserves_system_instructions() {
+        let prompt = prepare_a2a_prompt("# Task\nReview it", Some("Act as a reviewer."));
+        assert_eq!(
+            prompt,
+            "# System instructions\nAct as a reviewer.\n\n# Task\nReview it"
+        );
+        assert_eq!(
+            prepare_a2a_prompt("# Task\nReview it", Some("  ")),
+            "# Task\nReview it"
+        );
+    }
+
+    #[test]
     fn test_merge_turn_result_aggregates_successful_turn() {
         let mut merged_raw = vec!["--- TURN 1 ---\n\nfirst".to_string()];
         let mut duration_ms = 10;
@@ -1215,7 +1267,7 @@ mod tests {
     #[tokio::test]
     async fn test_multi_turn_rejects_provider_without_same_thread_continuation() -> Result<()> {
         let dir = tempfile::tempdir()?;
-        let bridge = AISessionBridge::new(dir.path().join("sessions"));
+        let bridge = A2ABridge::new(dir.path().join("sessions"));
         let identity = AgentIdentity {
             agent_id: "agent-1".to_string(),
             specialization: AgentRole::Search {
@@ -1251,6 +1303,51 @@ mod tests {
             )
             .await
             .expect_err("copilot multi-turn should fail before spawning a subprocess");
+
+        assert!(
+            err.to_string()
+                .contains("does not support same-thread multi-turn continuation")
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_multi_turn_rejects_a2a_without_remote_thread_support() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let bridge = A2ABridge::new(dir.path().join("sessions"));
+        let identity = AgentIdentity {
+            agent_id: "agent-1".to_string(),
+            specialization: AgentRole::Search {
+                technologies: Vec::new(),
+                responsibilities: Vec::new(),
+                boundaries: Vec::new(),
+            },
+            workspace_path: dir.path().to_path_buf(),
+            env_vars: HashMap::new(),
+            session_id: "session-1".to_string(),
+            parent_process_id: "parent-1".to_string(),
+            initialized_at: chrono::Utc::now(),
+        };
+        let options = MovementExecOptions {
+            continuation: ContinuationPolicy::multi_turn(2),
+            a2a_endpoint: Some("https://example.test/a2a".to_string()),
+            ..MovementExecOptions::default()
+        };
+
+        let err = bridge
+            .execute_multi_turn(
+                "agent-1",
+                "do work",
+                &identity,
+                dir.path(),
+                None,
+                0,
+                0,
+                &options,
+                &options.continuation,
+            )
+            .await
+            .expect_err("A2A multi-turn should fail before making a request");
 
         assert!(
             err.to_string()

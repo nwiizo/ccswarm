@@ -7,8 +7,8 @@
 
 `ccswarm` is a workflow engine for AI coding agents. You describe a task, pick a flow
 (declarative YAML workflow), and ccswarm drives the provider CLI through plan →
-Sangha consensus → implement → review → fix → commit → PR, with full NDJSON
-audit trails you can replay, diff, and roll back.
+Sangha consensus → implement → review → fix, optionally auto-committing and
+opening a PR, with full NDJSON audit trails you can replay, diff, and roll back.
 
 **OK/NG driven**: the only keys you press during a run are `y` and `n`.
 
@@ -95,7 +95,7 @@ stages:
 
 ```yaml
 # ccswarm.json or flow YAML (per-stage)
-provider: claude          # claude | codex | copilot
+provider: claude          # claude | codex; copilot compatibility names fail fast
 model: sonnet
 ```
 
@@ -106,7 +106,7 @@ falling back silently.
 
 | Provider | Status | Notes |
 |----------|--------|-------|
-| `claude` | Full support | All flags: --allowed-tools, --agent, --resume, --system-prompt, --max-budget-usd, --worktree |
+| `claude` | Full support | Uses `--allowed-tools`, `--agent`, `--session-id` / `--continue`, `--append-system-prompt`, `--max-budget-usd`, and `--worktree`. `CCSWARM_CLAUDE_STREAM_JSON=1` enables stream telemetry |
 | `codex` | Non-interactive `codex exec` | System prompt is prepended to the user prompt (Codex has no dedicated flag). `codex exec resume <thread-id>` is used for same-thread continuation when Codex JSON telemetry provides a thread ID |
 | `copilot` | **Unsupported for code generation** | `gh copilot suggest` is interactive and returns shell-command strings, not file edits. The provider fails fast with a friendly error — see `providers/copilot.rs` for rationale |
 
@@ -158,21 +158,23 @@ ccswarm approve plan --id <run>         # HITL gate for risky actions
 ## Architecture at a glance
 
 ```
-ccswarm (workflow + governance) ──depends on──> ai-session (terminal primitives)
+ccswarm (workflow + governance + A2A/local provider execution)
 ```
 
 - **ccswarm/cli** — command parsing and dispatch (35+ subcommands)
 - **ccswarm/workflow** — FlowEngine, faceted prompting, stage reports
 - **ccswarm/providers** — AgentProvider trait + Claude/Codex/Copilot implementations
-- **ccswarm/session/bridge** — retry, context, persistence (provider-agnostic)
+- **ccswarm/session/bridge** — A2A/local execution, retry, context, persistence
 - **ccswarm/events** — NDJSON recorder, run summaries
 - **ccswarm/governance** — proposals, extensions, approvals (renamed from coordination/)
-- **ai-session** — PTY, zstd context compression (~93% token reduction), output
-  parsing, persistence. Usable standalone.
+- **ccswarm/session/a2a** — A2A Agent Card metadata and REST `message:send`
+  client support. Set `CCSWARM_A2A_ENDPOINT` to route live turns to a remote
+  A2A server.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module responsibilities and API
-boundaries, and [docs/COUPLING_REPORT.md](docs/COUPLING_REPORT.md) for the most recent
-cargo-coupling modularity analysis.
+boundaries. See
+[docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md](docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md)
+for the deeper external-workflow-inspired product roadmap.
 
 ## Development
 
@@ -183,8 +185,9 @@ cargo test --workspace
 cargo run -p ccswarm -- --help
 ```
 
-End-to-end: `examples/e2e-playwright/run.sh` exercises pipeline → generated app →
-Playwright browser test (requires a logged-in `claude` CLI or `ANTHROPIC_API_KEY`).
+End-to-end: `examples/e2e-playwright/run.sh` exercises queue intake, JSON
+output, pipeline dry-run planning, and the tracked static app through a
+Playwright browser test.
 
 ## Safety
 

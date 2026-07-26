@@ -1,24 +1,16 @@
-//! Session management module for ccswarm
+//! Session management module for ccswarm.
 //!
-//! This module provides session management for AI agents, integrating with the ai-session
-//! crate for multi-agent coordination and parallel execution.
+//! This module owns ccswarm's native execution context, output parsing,
+//! persistence, and A2A client support.
 
+pub mod a2a;
 pub mod bridge;
+pub mod context;
 pub mod error;
-
-// Re-export ai-session types for multi-agent coordination
-pub use ai_session::PtyHandle;
-pub use ai_session::context::{SessionContext, TaskContext, WorkspaceState};
-pub use ai_session::coordination::{
-    AgentId as AIAgentId, AgentMessage, BroadcastMessage, Message as CoordinationMessage,
-    MessageBus, MessagePriority, MessageType, MultiAgentSession,
-    ResourceManager as AIResourceManager, Task as AITask, TaskDistributor, TaskId, TaskPriority,
-};
-pub use ai_session::core::{
-    AISession, ContextConfig, SessionConfig as AISessionConfig, SessionError as AISessionError,
-    SessionId as AISessionId, SessionManager as AISessionManager, SessionResult as AISessionResult,
-    SessionStatus as AISessionStatus,
-};
+pub mod execution;
+pub mod output;
+pub mod persistence;
+pub mod types;
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
@@ -201,21 +193,26 @@ impl SessionManager {
     pub async fn with_resource_monitoring(
         resource_limits: crate::resource::ResourceLimits,
     ) -> SessionResult<Self> {
+        Ok(Self::with_resource_monitoring_inner(resource_limits))
+    }
+
+    fn with_resource_monitoring_inner(resource_limits: crate::resource::ResourceLimits) -> Self {
         let resource_monitor = Arc::new(ResourceMonitor::new(resource_limits));
         let resource_integration =
             Arc::new(SessionResourceIntegration::new(resource_monitor.clone()));
 
-        // Start the monitoring loop
-        let monitor_clone = resource_monitor.clone();
-        tokio::spawn(async move {
-            monitor_clone.start_monitoring_loop().await;
-        });
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let monitor_clone = resource_monitor.clone();
+            runtime.spawn(async move {
+                monitor_clone.start_monitoring_loop().await;
+            });
+        }
 
-        Ok(Self {
+        Self {
             sessions: DashMap::new(),
             resource_monitor: Some(resource_monitor),
             resource_integration: Some(resource_integration),
-        })
+        }
     }
 
     /// Creates a new agent session
@@ -271,24 +268,10 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be paused
     pub async fn pause_session(&self, session_id: &str) -> SessionResult<()> {
-        let mut session =
-            self.sessions
-                .get_mut(session_id)
-                .ok_or_else(|| SessionError::NotFound {
-                    id: session_id.to_string(),
-                })?;
-
-        match session.status {
-            SessionStatus::Active | SessionStatus::Background => {
-                session.status = SessionStatus::Paused;
-                session.touch();
-                Ok(())
-            }
-            _ => Err(SessionError::InvalidState {
-                state: format!("{:?}", session.status),
-                operation: "pause".to_string(),
-            }),
-        }
+        self.transition_session(session_id, "pause", |session| {
+            (session.status == SessionStatus::Active || session.status == SessionStatus::Background)
+                .then_some(SessionStatus::Paused)
+        })
     }
 
     /// Resumes a paused session
@@ -299,28 +282,49 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be resumed
     pub async fn resume_session(&self, session_id: &str) -> SessionResult<()> {
+        self.transition_session(session_id, "resume", |session| {
+            (session.status == SessionStatus::Paused).then_some({
+                if session.background_mode {
+                    SessionStatus::Background
+                } else {
+                    SessionStatus::Active
+                }
+            })
+        })
+    }
+
+    fn with_session_mut<T>(
+        &self,
+        session_id: &str,
+        operation: impl FnOnce(&mut AgentSession) -> SessionResult<T>,
+    ) -> SessionResult<T> {
         let mut session =
             self.sessions
                 .get_mut(session_id)
                 .ok_or_else(|| SessionError::NotFound {
                     id: session_id.to_string(),
                 })?;
+        operation(&mut session)
+    }
 
-        match session.status {
-            SessionStatus::Paused => {
-                session.status = if session.background_mode {
-                    SessionStatus::Background
-                } else {
-                    SessionStatus::Active
-                };
-                session.touch();
-                Ok(())
-            }
-            _ => Err(SessionError::InvalidState {
-                state: format!("{:?}", session.status),
-                operation: "resume".to_string(),
-            }),
-        }
+    fn transition_session(
+        &self,
+        session_id: &str,
+        operation: &str,
+        next_status: impl FnOnce(&AgentSession) -> Option<SessionStatus>,
+    ) -> SessionResult<()> {
+        self.with_session_mut(session_id, |session| {
+            let Some(status) = next_status(session) else {
+                return Err(SessionError::InvalidState {
+                    state: format!("{:?}", session.status),
+                    operation: operation.to_string(),
+                });
+            };
+
+            session.status = status;
+            session.touch();
+            Ok(())
+        })
     }
 
     /// Detaches a session from the current terminal
@@ -331,24 +335,10 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be detached
     pub async fn detach_session(&self, session_id: &str) -> SessionResult<()> {
-        let mut session =
-            self.sessions
-                .get_mut(session_id)
-                .ok_or_else(|| SessionError::NotFound {
-                    id: session_id.to_string(),
-                })?;
-
-        match session.status {
-            SessionStatus::Active | SessionStatus::Background => {
-                session.status = SessionStatus::Detached;
-                session.touch();
-                Ok(())
-            }
-            _ => Err(SessionError::InvalidState {
-                state: format!("{:?}", session.status),
-                operation: "detach".to_string(),
-            }),
-        }
+        self.transition_session(session_id, "detach", |session| {
+            (session.status == SessionStatus::Active || session.status == SessionStatus::Background)
+                .then_some(SessionStatus::Detached)
+        })
     }
 
     /// Attaches to a detached session
@@ -359,28 +349,15 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found or cannot be attached
     pub async fn attach_session(&self, session_id: &str) -> SessionResult<()> {
-        let mut session =
-            self.sessions
-                .get_mut(session_id)
-                .ok_or_else(|| SessionError::NotFound {
-                    id: session_id.to_string(),
-                })?;
-
-        match session.status {
-            SessionStatus::Detached => {
-                session.status = if session.background_mode {
+        self.transition_session(session_id, "attach", |session| {
+            (session.status == SessionStatus::Detached).then_some({
+                if session.background_mode {
                     SessionStatus::Background
                 } else {
                     SessionStatus::Active
-                };
-                session.touch();
-                Ok(())
-            }
-            _ => Err(SessionError::InvalidState {
-                state: format!("{:?}", session.status),
-                operation: "attach".to_string(),
-            }),
-        }
+                }
+            })
+        })
     }
 
     /// Terminates a session
@@ -432,27 +409,21 @@ impl SessionManager {
         session_id: &str,
         auto_accept: bool,
     ) -> SessionResult<()> {
-        let mut session =
-            self.sessions
-                .get_mut(session_id)
-                .ok_or_else(|| SessionError::NotFound {
-                    id: session_id.to_string(),
-                })?;
+        self.with_session_mut(session_id, |session| {
+            session.background_mode = true;
+            if auto_accept && session.auto_accept_config.is_none() {
+                // Enable auto-accept with default configuration if not already configured
+                session.enable_auto_accept(AutoAcceptConfig::default());
+            } else {
+                session.auto_accept = auto_accept;
+            }
 
-        session.background_mode = true;
-        if auto_accept && session.auto_accept_config.is_none() {
-            // Enable auto-accept with default configuration if not already configured
-            session.enable_auto_accept(AutoAcceptConfig::default());
-        } else {
-            session.auto_accept = auto_accept;
-        }
-
-        if session.status == SessionStatus::Active {
-            session.status = SessionStatus::Background;
-        }
-        session.touch();
-
-        Ok(())
+            if session.status == SessionStatus::Active {
+                session.status = SessionStatus::Background;
+            }
+            session.touch();
+            Ok(())
+        })
     }
 
     /// Enables auto-accept mode for a session
@@ -468,16 +439,10 @@ impl SessionManager {
         session_id: &str,
         config: AutoAcceptConfig,
     ) -> SessionResult<()> {
-        let mut session =
-            self.sessions
-                .get_mut(session_id)
-                .ok_or_else(|| SessionError::NotFound {
-                    id: session_id.to_string(),
-                })?;
-
-        session.enable_auto_accept(config);
-
-        Ok(())
+        self.with_session_mut(session_id, |session| {
+            session.enable_auto_accept(config);
+            Ok(())
+        })
     }
 
     /// Disables auto-accept mode for a session
@@ -488,16 +453,10 @@ impl SessionManager {
     /// # Returns
     /// Ok(()) on success, error if session not found
     pub async fn disable_auto_accept(&self, session_id: &str) -> SessionResult<()> {
-        let mut session =
-            self.sessions
-                .get_mut(session_id)
-                .ok_or_else(|| SessionError::NotFound {
-                    id: session_id.to_string(),
-                })?;
-
-        session.disable_auto_accept();
-
-        Ok(())
+        self.with_session_mut(session_id, |session| {
+            session.disable_auto_accept();
+            Ok(())
+        })
     }
 
     /// Updates auto-accept configuration for a session
@@ -513,16 +472,10 @@ impl SessionManager {
         session_id: &str,
         config: AutoAcceptConfig,
     ) -> SessionResult<()> {
-        let mut session =
-            self.sessions
-                .get_mut(session_id)
-                .ok_or_else(|| SessionError::NotFound {
-                    id: session_id.to_string(),
-                })?;
-
-        session.update_auto_accept_config(config);
-
-        Ok(())
+        self.with_session_mut(session_id, |session| {
+            session.update_auto_accept_config(config);
+            Ok(())
+        })
     }
 
     /// Emergency stops auto-accept for all sessions
@@ -672,15 +625,91 @@ impl SessionManager {
 
 impl Default for SessionManager {
     fn default() -> Self {
-        // Note: This is a blocking call in an async context
-        // Consider using lazy_static or once_cell for production
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                // Create with default resource monitoring enabled
-                Self::with_resource_monitoring(crate::resource::ResourceLimits::default())
-                    .await
-                    .unwrap_or_else(|e| panic!("SessionManager creation failed: {e}"))
-            })
-        })
+        Self::with_resource_monitoring_inner(crate::resource::ResourceLimits::default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn backend_role() -> AgentRole {
+        AgentRole::Backend {
+            technologies: Vec::new(),
+            responsibilities: Vec::new(),
+            boundaries: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn session_transitions_preserve_background_mode() {
+        let manager = SessionManager::new().await.expect("manager");
+        let session = manager
+            .create_session(
+                "backend".to_string(),
+                backend_role(),
+                ".".to_string(),
+                None,
+                false,
+            )
+            .await
+            .expect("session");
+
+        manager
+            .set_background_mode(&session.id, false)
+            .await
+            .expect("background");
+        manager.pause_session(&session.id).await.expect("pause");
+        manager.resume_session(&session.id).await.expect("resume");
+        assert_eq!(
+            manager.get_session(&session.id).expect("stored").status,
+            SessionStatus::Background
+        );
+
+        manager.detach_session(&session.id).await.expect("detach");
+        manager.attach_session(&session.id).await.expect("attach");
+        assert_eq!(
+            manager.get_session(&session.id).expect("stored").status,
+            SessionStatus::Background
+        );
+    }
+
+    #[tokio::test]
+    async fn session_transition_errors_remain_specific() {
+        let manager = SessionManager::new().await.expect("manager");
+        let missing = manager.pause_session("missing").await;
+        assert!(matches!(missing, Err(SessionError::NotFound { .. })));
+
+        let session = manager
+            .create_session(
+                "backend".to_string(),
+                backend_role(),
+                ".".to_string(),
+                None,
+                false,
+            )
+            .await
+            .expect("session");
+        let invalid = manager.resume_session(&session.id).await;
+        assert!(matches!(
+            invalid,
+            Err(SessionError::InvalidState { operation, .. }) if operation == "resume"
+        ));
+    }
+
+    #[test]
+    fn default_without_runtime_enables_resource_monitoring() {
+        let manager = SessionManager::default();
+
+        assert!(manager.resource_monitor.is_some());
+        assert!(manager.resource_integration.is_some());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn default_supports_current_thread_runtime() {
+        let manager = SessionManager::default();
+
+        assert!(manager.resource_monitor.is_some());
+        assert!(manager.resource_integration.is_some());
     }
 }

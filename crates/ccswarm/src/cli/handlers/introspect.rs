@@ -245,7 +245,7 @@ impl CliRunner {
         } else {
             println!(
                 "  {}",
-                "(no token metadata recorded yet — track via ai-session context metrics)"
+                "(no token metadata recorded yet - track via native context metrics)"
                     .bright_black()
             );
         }

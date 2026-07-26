@@ -1,5 +1,6 @@
 # Rust
 target/
+target2/
 
 # OS
 .DS_Store
@@ -58,6 +59,10 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+examples/e2e-playwright/.work/
+examples/e2e-playwright/test-results/
+examples/e2e-playwright/generated/ccswarm-queue.json
+examples/e2e-playwright/generated/ccswarm-dry-run.txt
 
 # Temporary files
 *.tmp

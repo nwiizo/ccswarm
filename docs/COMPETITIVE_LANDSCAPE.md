@@ -21,7 +21,7 @@ YAML workflows with review loops, faceted prompting, and guardrails.
 | Sub-workflow dispatch (`call:`) | Implemented (no `returns` schema) |
 | Faceted prompting | Implemented — builtin < repertoire < user < project layers (v0.8.0). 6 personas / 4 policies vs external-workflow's 26 / richer set |
 | Providers | claude (deep) / codex (first-class since v0.8.0: `--provider` flag, JSONL telemetry, session resume) / copilot (intentional no-op); external-workflow adds cursor, kiro, opencode, claude-sdk |
-| Stream-json structured output | Implemented for both claude (`CCSWARM_CLAUDE_STREAM_JSON=1`) and codex (`CCSWARM_CODEX_JSON=1`) |
+| Stream/JSONL telemetry parsing | Implemented for Claude stream-json (`CCSWARM_CLAUDE_STREAM_JSON=1`) and Codex JSONL (`CCSWARM_CODEX_JSON=1`); schema-constrained final responses are deferred |
 | Repertoire packages | Implemented — install/list/remove + package facets participate in layer resolution (v0.8.0) |
 | Queue + GitHub issue ingestion + worktrees | Implemented (`tracker/` with github + linear adapters) |
 | Parallel stages + all()/any() aggregation | Implemented (v0.7.0 wired aggregation into the engine) |
@@ -93,9 +93,10 @@ facet layers, LLM judge). Remaining candidates:
    done?" after each wave; v1 is single-wave.
 2. **Worker isolation** — worktree (or container) per team_leader part;
    parts currently share the working directory.
-3. **`--output-schema` hardening** — codex supports JSON Schema-
-   constrained responses; the leader decomposition and LLM judge could
-   use it instead of prompt-based JSON.
+3. **Schema-constrained output hardening** — Codex `--output-schema` and
+   Claude `--json-schema` can produce JSON Schema-constrained final responses;
+   leader decomposition and LLM judge could use them instead of prompt-based
+   JSON.
 4. **More providers** — external-workflow supports cursor, kiro, opencode,
    claude-sdk; ccswarm's AgentProvider trait makes additions cheap.
 5. **Persona library depth** — 6 builtin personas vs external-workflow's 26; the

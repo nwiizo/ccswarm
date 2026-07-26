@@ -13,7 +13,7 @@ already run, reproducibly. OK/NG-driven: you only press y or n.
 
 ```bash
 ccswarm                              # interactive — ccswarm asks what to build
-ccswarm pipeline --task "..."        # single-shot: plan → implement → review → commit → PR
+ccswarm pipeline --task "..."        # single-shot: plan → implement → review
 ccswarm queue add "..."              # accumulate tasks during the day
 ccswarm queue add --from-issue 42    # ingest a GitHub issue as a task
 ccswarm queue drain                  # run all pending, y/n at commit+PR time
@@ -45,7 +45,7 @@ ccswarm flow eject <name>           # copy builtin to .ccswarm/flows/
 ccswarm facets [personas|policies|knowledge]  # list facet library
 ```
 
-## Post-Pipeline Flow (automatic)
+## Optional post-pipeline flow
 
 ```
 Pipeline完了 → テスト自動実行 → 失敗なら自動修復(最大3回)
@@ -62,7 +62,7 @@ cargo run -p ccswarm -- --help
 ## Workspace architecture
 
 ```
-ccswarm (workflow + governance) ──depends on──> ai-session (terminal primitives)
+ccswarm (workflow + governance + A2A/local provider execution)
 ```
 
 ### ccswarm crate
@@ -72,25 +72,15 @@ ccswarm (workflow + governance) ──depends on──> ai-session (terminal pri
 | `cli/` | Command parsing + dispatch (3 entry modes: interactive / direct task / subcommand) |
 | `workflow/` | FlowEngine, Pipeline, faceted prompting, stage reports |
 | `providers/` | AgentProvider trait + ClaudeProvider / CodexProvider / CopilotProvider |
-| `session/` | AISessionBridge — delegates command construction to providers, owns context/retry/persistence |
+| `session/` | A2ABridge, native context/retry/persistence, output parsing, A2A client types |
 | `events/` | NDJSON EventRecorder, duration tracking, run summaries |
 | `governance/` | Proposals, extensions, approvals, coordination bus (renamed from `coordination/`) |
 | `agent/` | AgentRole, type-state TaskBuilder |
 | `identity/` | AgentIdentity, role boundaries |
 | `hooks/` | HookRegistry |
 
-### ai-session crate
-
-| Module | Purpose |
-|--------|---------|
-| `core/` | AISession, SessionManager, PTY/headless |
-| `context/` | TokenEfficientHistory (zstd, ~93% token reduction) |
-| `output/` | OutputParser (cargo/Playwright/npm/Jest patterns) |
-| `persistence/` | Session snapshots |
-| `coordination/` | Inter-session message bus (distinct from ccswarm's `governance/`) |
-
-Role boundary: ai-session = terminal/session primitives. ccswarm = workflow + governance.
-Don't add workflow logic to ai-session.
+Role boundary: `workflow/` owns orchestration and policy; `session/` owns
+A2A/local execution primitives, context history, parsing, and persistence.
 
 ## Providers
 
@@ -101,9 +91,11 @@ model: sonnet
 ```
 
 - Selection precedence: stage YAML > `--provider` flag (global) > `CCSWARM_PROVIDER` env > claude
-- **claude**: full flag coverage (--allowed-tools, --agent, --resume, --system-prompt, --max-budget-usd, --worktree). `CCSWARM_CLAUDE_STREAM_JSON=1` for real token telemetry.
+- **claude**: `--allowed-tools`, `--agent`, `--session-id` / `--continue`, `--append-system-prompt`, `--max-budget-usd`, and `--worktree`. `CCSWARM_CLAUDE_STREAM_JSON=1` enables stream telemetry.
 - **codex**: `codex exec`, multi-turn via `codex exec resume <thread-id>`. `CCSWARM_CODEX_JSON=1` for real token telemetry (forced on for multi-turn). No worktree/budget/allowed-tools.
 - **copilot**: unsupported for code generation (gh copilot suggest is interactive); falls back to friendly error
+- **A2A**: set `CCSWARM_A2A_ENDPOINT=https://.../a2a` to send live turns via
+  REST `POST /message:send` instead of spawning a local provider CLI.
 
 `ccswarm doctor` probes all three CLIs.
 
@@ -149,6 +141,10 @@ Knowledge: (user-provided under `.ccswarm/facets/knowledge/*.yaml`).
 - `{task}`, `{plan_output}` テンプレート変数で stage 間コンテキスト受け渡し。
 - `pass_previous_response: false` で fix stage のコンテキストをリセット。
 - Empty `agents_used` in a summary means no provider CLI was invoked for that stage.
+- Playwright-targeted tasks should ask for stable `data-testid` attributes explicitly.
+- Complex implement stages often need `--timeout 900` or smaller task slices.
+- Provider resume is best-effort: Claude uses `--session-id` / `--continue`;
+  Codex uses `codex exec resume <thread-id>`.
 - review→fix ループは flow の `max_stage_visits`(default 3)で打ち切られる。超過は Aborted。
 
 ## Rules

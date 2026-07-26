@@ -1,6 +1,9 @@
-//! Agent provider abstraction — build subprocess commands for Claude / Codex / Copilot CLIs.
+//! Agent provider abstraction for Claude and Codex subprocesses.
 //!
-//! The `AISessionBridge` owns context/persistence/parsing logic; providers only know how to
+//! Copilot configuration names remain registered for compatibility, but the
+//! provider fails fast because its interactive CLI cannot perform code edits.
+//!
+//! The `A2ABridge` owns context/persistence/parsing logic; providers only know how to
 //! construct an executable command from a prompt and [`ProviderOptions`]. This keeps the
 //! bridge neutral to which underlying CLI is spoken.
 
@@ -31,13 +34,13 @@ pub(crate) struct ProviderOptions {
     /// ccswarm EventRecorder. No effect on Codex / Copilot.
     ///
     /// Defaults to false in v0.7.0 so existing callers keep getting the simple
-    /// text format. Toggled on by `AISessionBridge` when the environment sets
+    /// text format. Toggled on by `A2ABridge` when the environment sets
     /// `CCSWARM_CLAUDE_STREAM_JSON=1`.
     pub claude_stream_json: bool,
     /// Request Codex's JSONL event output (`codex exec --json`). The bridge
     /// parses each line to extract the final agent message, real token usage,
     /// and the thread ID needed for `codex exec resume`. No effect on Claude /
-    /// Copilot. Toggled on by `AISessionBridge` when the environment sets
+    /// Copilot. Toggled on by `A2ABridge` when the environment sets
     /// `CCSWARM_CODEX_JSON=1` — and forced on during codex multi-turn runs,
     /// which need the thread ID to continue.
     pub codex_json: bool,
@@ -89,7 +92,7 @@ impl ProviderKind {
     }
 }
 
-/// Contract every provider must implement to be callable from `AISessionBridge`.
+/// Contract every provider must implement to be callable from `A2ABridge`.
 pub(crate) trait AgentProvider {
     fn kind(&self) -> ProviderKind;
 

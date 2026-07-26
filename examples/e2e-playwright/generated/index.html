@@ -1,25 +1,77 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>ccswarm counter</title>
-</head>
-<body>
-<h1>Counter</h1>
-<button id="inc">+1</button>
-<span id="count">0</span>
-<script>
-(function () {
-  var button = document.getElementById('inc');
-  var countEl = document.getElementById('count');
-  button.addEventListener('click', function () {
-    var current = parseInt(countEl.textContent, 10);
-    if (isNaN(current)) {
-      current = 0;
-    }
-    countEl.textContent = String(current + 1);
-  });
-})();
-</script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ccswarm order desk</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="toolbar">
+        <div>
+          <p class="eyebrow">ccswarm E2E dogfood</p>
+          <h1>Order Desk</h1>
+        </div>
+        <div class="run-summary" aria-label="Run summary">
+          <strong id="summary-ready">0</strong>
+          <span>ready to merge</span>
+        </div>
+      </header>
+
+      <section class="metrics" aria-label="Desk metrics">
+        <div>
+          <span>Orders</span>
+          <strong id="metric-orders">0</strong>
+        </div>
+        <div>
+          <span>Partial</span>
+          <strong id="metric-partial">0</strong>
+        </div>
+        <div>
+          <span>Recovery Points</span>
+          <strong id="metric-recovery">0</strong>
+        </div>
+      </section>
+
+      <section class="composer" aria-label="Create order">
+        <form id="order-form">
+          <label for="order-title">New order</label>
+          <div class="form-row">
+            <input id="order-title" name="title" autocomplete="off" placeholder="Describe the work order" />
+            <button type="submit">Add order</button>
+          </div>
+          <p id="form-error" role="alert"></p>
+        </form>
+      </section>
+
+      <section class="board" aria-label="Order board">
+        <div class="board-head">
+          <h2>Active work</h2>
+          <button id="reset-demo" type="button">Reset demo</button>
+        </div>
+        <div id="orders" class="orders"></div>
+      </section>
+    </main>
+
+    <template id="order-template">
+      <article class="order-card">
+        <div class="order-main">
+          <div class="order-title-row">
+            <h3></h3>
+            <span class="status-pill"></span>
+          </div>
+          <ol class="stage-list"></ol>
+          <p class="recovery-note"></p>
+        </div>
+        <div class="order-actions">
+          <button type="button" data-action="advance">Advance</button>
+          <button type="button" data-action="partial">Mark partial</button>
+          <button type="button" data-action="retry">Retry</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
 </html>

@@ -2,9 +2,10 @@
 
 ## Goal
 
-`ccswarm` is the workflow and governance layer built on top of `ai-session`.
-Keep terminal/session primitives in `crates/ai-session` and workflow logic in
-`crates/ccswarm`.
+`ccswarm` is the workflow, governance, A2A, and provider execution layer.
+Keep terminal/session primitives, provider output parsing, and persistence in
+`crates/ccswarm/src/session`; keep workflow orchestration in
+`crates/ccswarm/src/workflow`.
 
 ## Read First
 
@@ -25,7 +26,7 @@ Keep terminal/session primitives in `crates/ai-session` and workflow logic in
 - Prefer `Result<T, E>` with `thiserror`; avoid `.unwrap()` in production code.
 - Prefer Rust-native patterns already used in this repo: type-state, channels,
   iterator pipelines, and actor-style isolation where they improve clarity.
-- Avoid adding workflow logic to `crates/ai-session`.
+- Keep workflow logic out of low-level `session` helpers.
 - Keep tests focused on core behavior instead of growing broad fragile suites.
 - Never hardcode secrets. Use environment variables and `SensitiveString` when
   handling API keys.

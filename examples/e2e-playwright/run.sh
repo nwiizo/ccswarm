@@ -1,34 +1,61 @@
 #!/usr/bin/env bash
-# End-to-end verification: ccswarm generates a web app, Playwright tests it.
+# End-to-end verification for the ccswarm Order Desk dogfood app.
 #
-# Requires: ANTHROPIC_API_KEY exported, `claude` CLI logged in, Node.js 20+.
+# This script intentionally exercises ccswarm features before the browser test:
+#   1. queue add --file
+#   2. queue list --json
+#   3. pipeline --dry-run
+#   4. Playwright against the static app
+#
 # Run from the repo root:
 #   ./examples/e2e-playwright/run.sh
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GEN="$HERE/generated"
+ROOT="$(cd "$HERE/../.." && pwd)"
+WORK="$HERE/.work"
 TASK="$(cat "$HERE/task.md")"
 
-# 1. Clean previous run artifacts.
-rm -rf "$GEN"
-mkdir -p "$GEN"
+run_ccswarm() {
+  if [ -n "${CCSWARM_BIN:-}" ]; then
+    "$CCSWARM_BIN" "$@"
+  else
+    cargo run --manifest-path "$ROOT/crates/ccswarm/Cargo.toml" -- "$@"
+  fi
+}
 
-# 2. Run the pipeline inside the generated/ dir so ccswarm writes index.html there.
-cd "$GEN"
-cargo run --manifest-path "$HERE/../../crates/ccswarm/Cargo.toml" --release -- \
-  pipeline --task "$TASK" --piece quick --timeout 600
+rm -rf "$WORK"
+mkdir -p "$WORK"
+git -C "$WORK" init -b main >/dev/null
+git -C "$WORK" config user.email "ccswarm-e2e@local"
+git -C "$WORK" config user.name "ccswarm e2e"
 
-# 3. Install Playwright locally (first run only).
+cat >"$WORK/README.md" <<'README'
+# ccswarm E2E work repo
+
+Temporary repository used by examples/e2e-playwright/run.sh.
+README
+git -C "$WORK" add README.md
+git -C "$WORK" commit -m "init e2e work repo" >/dev/null
+
+run_ccswarm --repo "$WORK" queue add --file "$HERE/task.md" --flow quick
+run_ccswarm --repo "$WORK" --json queue list >"$HERE/generated/ccswarm-queue.json"
+run_ccswarm --repo "$WORK" --provider codex pipeline --task "$TASK" --flow quick --dry-run \
+  >"$HERE/generated/ccswarm-dry-run.txt"
+
+grep -q '"total": 1' "$HERE/generated/ccswarm-queue.json"
+grep -q 'Build a static ccswarm Order Desk app' "$HERE/generated/ccswarm-dry-run.txt"
+grep -q 'Order Desk' "$HERE/task.md"
+
 cd "$HERE"
 if [ ! -d "node_modules/@playwright/test" ]; then
-  npm init -y >/dev/null
-  npm install --save-dev @playwright/test
-  npx playwright install chromium
+  npm install
+fi
+if ! npx playwright install --list | grep -q 'chromium_headless_shell'; then
+  npx playwright install chromium chromium-headless-shell
 fi
 
-# 4. Run the browser test against the generated file:// URL.
-npx playwright test playwright.spec.mjs
+npx playwright test
 
 echo
-echo "✓ E2E verification passed."
+echo "OK E2E verification passed."

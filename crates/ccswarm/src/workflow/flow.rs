@@ -738,8 +738,8 @@ pub struct FlowEngine {
     judge: super::judge::MovementJudge,
     /// Facet registry for prompt composition
     facet_registry: super::facets::FacetRegistry,
-    /// Bridge for real Claude Code CLI execution + ai-session result management
-    bridge: Option<std::sync::Arc<crate::session::bridge::AISessionBridge>>,
+    /// Bridge for A2A/local provider execution and result management.
+    bridge: Option<std::sync::Arc<crate::session::bridge::A2ABridge>>,
     /// Working directory for agent execution
     working_dir: std::path::PathBuf,
     /// Optional event recorder for NDJSON observability
@@ -768,7 +768,7 @@ pub struct FlowEngine {
     default_provider: Option<crate::providers::ProviderKind>,
     /// CLI model override applied to every live stage.
     model_override: Option<String>,
-    /// Optional isolated worktree name forwarded through AISessionBridge.
+    /// Optional isolated worktree name forwarded through A2ABridge.
     worktree_name: Option<String>,
 }
 
@@ -851,8 +851,8 @@ impl FlowEngine {
         &mut self.facet_registry
     }
 
-    /// Set the AISessionBridge for real Claude Code CLI execution
-    pub fn set_bridge(&mut self, bridge: std::sync::Arc<crate::session::bridge::AISessionBridge>) {
+    /// Set the A2ABridge for live stage execution.
+    pub fn set_bridge(&mut self, bridge: std::sync::Arc<crate::session::bridge::A2ABridge>) {
         self.bridge = Some(bridge);
     }
 
@@ -1435,7 +1435,7 @@ impl FlowEngine {
         Ok(state)
     }
 
-    /// Execute a single stage via Claude Code CLI (through AISessionBridge) or prompt-only fallback
+    /// Execute a single stage via A2A/local provider execution or prompt-only fallback.
     #[tracing::instrument(
         name = "flow.stage",
         skip_all,
@@ -1486,7 +1486,7 @@ impl FlowEngine {
         let prompt = self.build_movement_prompt(stage, state);
 
         let output = if let Some(ref bridge) = self.bridge {
-            // Real execution via Claude Code CLI + ai-session result management
+            // Live execution via A2A or a local provider CLI.
             let agent_id = stage.persona.as_deref().unwrap_or("default");
 
             // Create a minimal identity for the stage
@@ -1553,6 +1553,7 @@ impl FlowEngine {
                 worktree_name: self.worktree_name.clone(),
                 session_id: None,
                 continuation: crate::session::bridge::ContinuationPolicy::SingleTurn,
+                a2a_endpoint: None,
                 rate_limit_fallbacks,
             };
 
@@ -2178,7 +2179,7 @@ impl FlowEngine {
             }
         }
 
-        // Also inject ai-session context if bridge is available
+        // Also inject native execution context if bridge is available.
         if let Some(ref bridge) = self.bridge {
             let agent_id = stage.persona.as_deref().unwrap_or("default");
             let recent = bridge.get_recent_context(agent_id, 3);

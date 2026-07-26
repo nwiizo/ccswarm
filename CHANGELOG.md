@@ -8,6 +8,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Versions 0.5.0–0.6.2 were tracked in docs/APPLICATION_SPEC.md Version
 > History rather than here.
 
+## Unreleased
+
+## [0.9.2] - 2026-07-26
+
+### Added
+
+- Added native A2A Agent Card types and REST `message:send` execution support.
+- Added focused A2A, CLI, BDD, mock, and end-to-end coverage for run safety,
+  provider behavior, queue operations, and the packaged binary.
+- Expanded the Playwright dogfood example into an Order Desk workflow that
+  exercises queue intake, JSON output, dry-run planning, and browser behavior.
+- Added a job-theory product plan based on the complete external-workflow v0.52.0 operator
+  journey, with measurable outcomes and phased adoption decisions.
+
+### Changed
+
+- Removed the `ai-session` workspace crate and dependency completely.
+- Replaced the live execution bridge with native ccswarm session modules:
+  A2A/local execution, context history, output parsing, prompt preparation, and
+  persistence now live under `crates/ccswarm/src/session`.
+- Consolidated repeated `SessionManager` lookup and transition logic behind
+  explicit internal helpers.
+- Updated architecture, application, provider, and CLI documentation for the
+  single-crate execution model.
+
+### Removed
+
+- Removed 7,945 accidentally tracked `target2/` build artifacts (about 2 GiB
+  from the checked-out tree), stale refactor/coupling reports, a disabled test
+  for a removed extension API, and generated Playwright run state.
+
+### Fixed
+
+- Preserved persona instructions across A2A dispatch, avoided applying local
+  provider stream parsers to remote responses, normalized endpoints, and
+  rejected unsupported remote same-thread continuation.
+- Made `SessionManager::default()` safe outside Tokio and on current-thread
+  runtimes instead of re-entering the active runtime.
+- Fixed a strict-Clippy failure caused by a redundant formatting borrow and
+  corrected CLI help that advertised unsupported Copilot code generation.
+- Updated `crossbeam-epoch` to 0.9.20 to resolve RUSTSEC-2026-0204 in the
+  transitive test dependency graph.
+
 ## [0.9.1] - 2026-06-10
 
 Patch release from real published-package smoke testing.
