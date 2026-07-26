@@ -64,7 +64,7 @@ pub struct Flow {
     pub max_stage_visits: u32,
 
     /// Fallback providers to try, in order, when a provider call fails with a
-    /// rate-limit error (external-workflow's `rate_limit_fallback.switch_chain`). Empty by
+    /// rate-limit error. Empty by
     /// default: rate limits surface as ordinary provider errors.
     #[serde(default)]
     pub on_rate_limit: Vec<FallbackTarget>,
@@ -188,8 +188,7 @@ pub struct Stage {
     /// Invoke another flow as this stage's body. When set, the stage's
     /// `instruction` / `persona` / `policy` are ignored and the named child
     /// flow runs end-to-end; the child's final output becomes this stage's
-    /// output, which downstream rules then evaluate as usual. Adopted from
-    /// external-workflow's `kind: workflow_call`.
+    /// output, which downstream rules then evaluate as usual.
     ///
     /// Variables in `call.args` are injected into the child's initial state
     /// after template-expanding values against the parent's variables. The
@@ -200,13 +199,13 @@ pub struct Stage {
     pub call: Option<WorkflowCallSpec>,
 
     /// Provider/model escalation rules applied from the Nth visit of this
-    /// stage onward (external-workflow's `promotion`). The last matching entry wins.
+    /// stage onward. The last matching entry wins.
     /// Ignored on parallel sub-stages, where visit counts track the parent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub promotion: Vec<PromotionRule>,
 
     /// Machine-executed quality gates run after the agent completes this
-    /// stage (external-workflow's command quality gates). On failure, bounded command
+    /// stage. On failure, bounded command
     /// output is appended to the instruction and the stage re-runs, up to
     /// `max_retries` additional attempts. Gates run in the stage's working
     /// directory. Flow YAML already executes arbitrary edit-permission
@@ -214,7 +213,7 @@ pub struct Stage {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gates: Vec<CommandGate>,
 
-    /// Orchestrator-worker decomposition (external-workflow's `team_leader`): a leader
+    /// Orchestrator-worker decomposition: a leader
     /// call splits this stage's task into parts at runtime, the parts execute
     /// concurrently as synthesized worker stages, and their outputs aggregate
     /// into the parallel shape so `all()`/`any()` rules work unchanged.
@@ -308,14 +307,14 @@ pub struct MovementRule {
 
     /// Skip this rule entirely in non-interactive (pipeline / queue drain / CI)
     /// runs. Use for review-fix loops that only make sense when a human is in
-    /// the loop. Adopted from external-workflow's `interactive_only` rule field.
+    /// the loop.
     #[serde(default)]
     pub interactive_only: bool,
 
     /// Indicates the rule's `next` stage expects human input. Pipeline runs
     /// treat this rule as inert (same as `interactive_only`); interactive runs
     /// flag the upcoming stage as awaiting user reply so the UI can prompt.
-    /// Adopted from external-workflow's `requires_user_input` rule field.
+    /// This explicitly marks a transition that needs a human response.
     #[serde(default)]
     pub requires_user_input: bool,
 }
@@ -417,7 +416,7 @@ pub struct OutputContract {
     ///
     /// Each entry maps to a deterministically named file (e.g. `plan.md`) that
     /// downstream stages can reference via the `{report:<name>}` template
-    /// variable. Adopted from external-workflow's `output_contracts.report` to replace the
+    /// variable. This replaces the
     /// brittle `{plan_output}` state-variable wiring with a contract that's
     /// readable from disk after the run.
     ///
@@ -759,8 +758,7 @@ pub struct FlowEngine {
     /// drain / CI runs default to `false` and skip rules tagged
     /// `interactive_only` or `requires_user_input`. Interactive entry points
     /// (e.g. `ccswarm` with no subcommand) call `set_interactive(true)` so
-    /// human-in-the-loop rules are honored. Adopted from external-workflow's
-    /// interactive_only / requires_user_input rule fields.
+    /// human-in-the-loop rules are honored.
     interactive: bool,
     /// Default provider for stages that don't pin one in flow YAML
     /// (`--provider` flag). Sits between stage YAML and the CCSWARM_PROVIDER
@@ -878,7 +876,7 @@ impl FlowEngine {
     /// `CCSWARM_PROVIDER` env > Claude default (stage YAML wins because it
     /// expresses deliberate per-stage intent). On top of that, `promotion`
     /// rules escalate provider/model from the Nth visit of the stage onward
-    /// (external-workflow-style, last matching entry wins). Promotion is skipped when no
+    /// (last matching entry wins). Promotion is skipped when no
     /// visit count is available — notably for parallel sub-stages, whose
     /// count would otherwise reflect the parent stage.
     fn resolve_effective_provider(
@@ -905,7 +903,7 @@ impl FlowEngine {
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u32;
         if visit_count >= 1 {
-            // Reverse scan = last matching entry wins (external-workflow semantics).
+            // Reverse scan = last matching entry wins.
             if let Some(rule) = stage
                 .promotion
                 .iter()
@@ -1451,7 +1449,7 @@ impl FlowEngine {
             stage.id, stage.persona, stage.permission
         );
 
-        // Sub-workflow dispatch (external-workflow-style `kind: workflow_call`). Resolved
+        // Sub-workflow dispatch. Resolved
         // before the local/parallel/CLI branches: a workflow_call stage's
         // instruction is ignored, so the empty-instruction check below would
         // otherwise short-circuit it to a local summary.
@@ -1751,8 +1749,7 @@ impl FlowEngine {
         state: &FlowState,
     ) -> Result<serde_json::Value> {
         // Strip the parent's visit count so promotion rules don't fire on
-        // sub-stages (external-workflow excludes promotion on parallel sub-steps — the
-        // count tracks the parent, not them).
+        // sub-stages because the count tracks the parent, not them.
         let mut sub_state = state.clone();
         sub_state.variables.remove("__visit_count");
         let futures: Vec<_> = stages
@@ -2085,7 +2082,7 @@ impl FlowEngine {
 
     /// Build the prompt for a stage using faceted prompting.
     ///
-    /// Composition order (external-workflow-style):
+    /// Composition order:
     /// - System: persona (via FacetRegistry)
     /// - User: knowledge → instruction → policy → output contract → tools → tags
     fn build_movement_prompt(&self, stage: &Stage, state: &FlowState) -> String {
@@ -2191,7 +2188,7 @@ impl FlowEngine {
             }
         }
 
-        // Inject tag instructions for routing (external-workflow-style [STEP:N] tags)
+        // Inject [STEP:N] tag instructions for routing.
         if !stage.rules.is_empty() {
             let tag_instructions =
                 super::judge::MovementJudge::generate_tag_instructions(&stage.rules);
@@ -2203,7 +2200,7 @@ impl FlowEngine {
 
     /// Evaluate routing rules against stage output using the MovementJudge.
     ///
-    /// Evaluation priority (external-workflow-style):
+    /// Evaluation priority:
     /// 1. Aggregate conditions (all/any) for parallel outputs
     /// 2. [STEP:N] tag detection
     /// 3. Simple string conditions
@@ -3296,7 +3293,7 @@ fn is_safe_report_name(name: &str) -> bool {
 /// - `{report:<name>}`: reads `.ccswarm/runs/<run_id>/reports/<name>` from disk,
 ///   using the `__run_id` variable stashed by `execute_piece_state`. Missing /
 ///   unsafe names expand to an empty string so the prompt doesn't leak the
-///   literal token. Adopted from external-workflow's `output_contracts` — replaces brittle
+///   literal token. This replaces brittle
 ///   `{plan_output}` state-variable chaining with a named on-disk contract.
 fn expand_template(template: &str, variables: &HashMap<String, serde_json::Value>) -> String {
     let mut result = template.to_string();

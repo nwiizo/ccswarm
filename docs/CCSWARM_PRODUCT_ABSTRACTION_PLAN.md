@@ -1,16 +1,19 @@
 # ccswarm Product Abstraction Plan
 
-This document turns the external-workflow feature audit and the ccswarm dogfood run into a
-ccswarm-native product plan. It intentionally avoids importing external-workflow command
-names as-is. The goal is to preserve the useful mechanics while naming and
-shaping them around ccswarm's own model: flows, stages, Sangha governance,
-orders, runs, and A2A/local execution.
+This document turns an end-to-end operator workflow audit and the ccswarm
+dogfood run into a ccswarm-native product plan. It preserves useful mechanics
+while naming and shaping them around ccswarm's own model: flows, stages,
+Sangha governance, orders, runs, and A2A/local execution.
+
+The canonical v0.10.0 release scope and sequencing live in
+[ROADMAP.md](ROADMAP.md). The milestones here describe the longer product
+direction and do not add release requirements.
 
 ## Decision And Work Contract
 
 Recommendation: optimize the complete operator journey around one primary job,
-then adopt external-workflow mechanics only where they improve a measurable outcome for that
-job. Do not pursue command-by-command parity.
+then adopt workflow mechanics only where they improve a measurable outcome for
+that job. Do not pursue command-by-command parity.
 
 - Purpose: let a developer turn uncertain work into a trusted, reviewable
   change without continuously supervising AI agents.
@@ -24,7 +27,7 @@ job. Do not pursue command-by-command parity.
   autonomous action observable and reversible.
 
 The implementation milestones below are ordered by this work contract. A
-feature seen in external-workflow is not a priority merely because it exists there.
+candidate feature is not a priority merely because another tool implements it.
 
 ## Dogfood Finding
 
@@ -42,12 +45,9 @@ This makes observability and recovery the first abstraction layer. Advanced
 queue, review, and escalation features become brittle if a live stage can hang
 without a clear run state.
 
-## external-workflow Research Snapshot
+## Operator Journey Inputs
 
-This plan was refreshed against `nrslib/external-workflow` v0.52.0 at commit
-`a7961cb788245bfeeda1f19c3240181b59a98993` on 2026-07-26.
-
-The current external-workflow experience is broader than the earlier feature audit:
+The operator journey audit covered the complete coding-agent lifecycle:
 
 - conversational intake and instant `exec` turn an ambiguous request into a
   generated workflow;
@@ -62,15 +62,6 @@ The current external-workflow experience is broader than the earlier feature aud
   promotion;
 - ACP and MCP entrypoints let other clients enqueue or execute work without
   shell-command coupling.
-
-Primary sources:
-
-- <https://github.com/nrslib/external-workflow>
-- <https://github.com/nrslib/external-workflow/blob/main/docs/cli-reference.md>
-- <https://github.com/nrslib/external-workflow/blob/main/docs/task-management.md>
-- <https://github.com/nrslib/external-workflow/blob/main/docs/workflows.md>
-- <https://github.com/nrslib/external-workflow/blob/main/docs/observability.md>
-- <https://github.com/nrslib/external-workflow/blob/main/CHANGELOG.md>
 
 ## Job Theory
 
@@ -141,10 +132,10 @@ Use these measures to decide whether a borrowed interaction is actually useful:
 
 ### Adapt To ccswarm
 
-| external-workflow experience | ccswarm adaptation |
+| Operator experience | ccswarm adaptation |
 |---|---|
-| `external-workflow exec` generates a workflow from conversation | `ccswarm intake --assist` chooses or parameterizes a validated flow first; generated flows remain an advanced opt-in |
-| `external-workflow list` manages task branches | `ccswarm desk` joins order, run, reports, gates, diff, and integration actions |
+| Conversational execution generates a workflow | `ccswarm intake --assist` chooses or parameterizes a validated flow first; generated flows remain an advanced opt-in |
+| A unified task list manages task branches | `ccswarm desk` joins order, run, reports, gates, diff, and integration actions |
 | Shared-clone implementation behind a `worktree` field | A truthful `isolation.mode` abstraction with backend-specific diagnostics |
 | Provider auto-routing | Outcome-aware routing constrained by capability, budget, privacy, and reproducibility policies |
 | ACP and MCP entrypoints | Start with a minimal MCP-compatible enqueue/status/run-next server; keep A2A for agent execution and add ACP only when a real client job requires it |
@@ -154,7 +145,7 @@ Use these measures to decide whether a borrowed interaction is actually useful:
 
 ### Defer Or Reject
 
-- Do not copy external-workflow command names or rename `flow` and `stage`.
+- Do not copy external command names or rename `flow` and `stage`.
 - Do not generate arbitrary workflows by default before validation,
   supervision, and recovery are trustworthy.
 - Do not add provider breadth ahead of reliable execution and evidence.
@@ -183,9 +174,9 @@ ccswarm should keep its current language and deepen it:
 | Escalation | A controlled provider/model/permission upgrade when progress stalls. |
 | Recovery Point | The exact flow/stage/order state from which a run can resume or be retried. |
 
-These names map to external-workflow mechanics but give ccswarm a coherent surface:
+These names map proven operator mechanics to a coherent ccswarm surface:
 
-| external-workflow mechanic | ccswarm abstraction |
+| Operator mechanic | ccswarm abstraction |
 |---|---|
 | task directory + order.md | Order directory + `brief.md` |
 | task list/list actions | Desk |
@@ -425,7 +416,7 @@ by path and summary. Raw unbounded stdout should never be injected directly.
 
 ### Escalation
 
-Escalation should combine external-workflow-style promotion with ccswarm's provider
+Escalation should combine visit-count promotion with ccswarm's provider
 fallback:
 
 ```yaml
@@ -610,14 +601,23 @@ Deliverables:
 
 - Resident queue watcher and bounded worker pool.
 - Internal `StageKind` dispatch boundary.
+- Durable team-task graph with owners, dependencies, expected reports, claim
+  locking, and file-ownership hints.
+- Typed stop policies for success, time, turns, cost, failure, cancellation,
+  quorum, and human handoff.
 - Iterative team-leader waves and batch stage over JSON/CSV/file lists.
 - Sangha/fork/lead/batch/subflow results share the verdict contract.
+- Child-targeted instruct, interrupt, approve, retry, and checkpointed resume.
 - Per-order output prefixes and graceful shutdown.
 
 Acceptance:
 
 - Concurrent orders remain isolated, individually recoverable, and readable.
 - A failure in one order does not corrupt another order's state or output.
+- A process restart retains completed child reports and resumes only incomplete
+  tasks.
+- The operator can explain why each child exists, who owns it, what blocks it,
+  and what will stop it.
 
 ### M6: Learn From Outcomes
 
@@ -642,8 +642,7 @@ Acceptance:
 
 - Do not rename `flow` to `workflow` or `stage` to `step`; ccswarm already has
   a coherent vocabulary.
-- Do not add every provider external-workflow supports before the execution lifecycle is
-  reliable.
+- Do not broaden provider support before the execution lifecycle is reliable.
 - Do not let untrusted flow YAML run arbitrary commands unless explicitly
   allowed by config.
 - Do not introduce a GUI before `desk --json` and terminal workflows are solid.

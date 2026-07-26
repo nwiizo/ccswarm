@@ -91,7 +91,6 @@ cargo run -p ccswarm -- --help
 
 ## Forward Plan
 
-The detailed product abstraction roadmap is maintained in
+The canonical release roadmap is [v0.10.0 Roadmap](ROADMAP.md). The longer
+product vocabulary and implementation direction remain in
 [ccswarm Product Abstraction Plan](CCSWARM_PRODUCT_ABSTRACTION_PLAN.md).
-It defines the target vocabulary and implementation milestones for orders,
-desk operations, report contracts, verdicts, gates, escalation, and recovery.

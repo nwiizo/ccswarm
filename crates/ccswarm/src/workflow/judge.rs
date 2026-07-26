@@ -1,6 +1,6 @@
 //! AI Judge and tag-based condition evaluation for Flow/Stage workflows.
 //!
-//! Implements external-workflow-style three-phase evaluation:
+//! Implements three-phase evaluation:
 //! 1. **Tag-based routing**: `[STEP:N]` tags injected into prompts, detected in output
 //! 2. **AI judge**: `ai("condition text")` for LLM-powered condition evaluation
 //! 3. **Aggregate conditions**: `all("X")` / `any("X")` for parallel stage results
@@ -80,7 +80,7 @@ impl Default for JudgeConfig {
 
 /// The stage judge evaluates output and determines routing.
 ///
-/// Evaluation priority (from external-workflow):
+/// Evaluation priority:
 /// 1. Aggregate conditions: `all("X")` / `any("X")`
 /// 2. Phase 3 tags: `[STEP:N]`
 /// 3. Simple string conditions

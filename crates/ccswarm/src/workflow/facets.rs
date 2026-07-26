@@ -1,6 +1,6 @@
 //! Faceted Prompting system for Flow/Stage workflows.
 //!
-//! Decomposes prompts into five orthogonal concerns (external-workflow-style):
+//! Decomposes prompts into five orthogonal concerns:
 //! 1. **Persona** — Agent role, expertise, behavioral principles (system prompt)
 //! 2. **Policy** — Rules, prohibitions, quality standards
 //! 3. **Instruction** — Step-specific procedures and goals

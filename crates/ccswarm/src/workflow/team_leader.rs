@@ -1,4 +1,4 @@
-//! Orchestrator-worker decomposition (external-workflow's `team_leader`).
+//! Orchestrator-worker decomposition for dynamic stages.
 //!
 //! A stage marked `team_leader:` runs in two phases: a *leader* call asks the
 //! model to split the stage's task into up to `max_parts` independent parts

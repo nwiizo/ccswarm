@@ -5,7 +5,7 @@
 //! - **Edit** — Can modify existing files but not create/delete or run commands
 //! - **Full** — Can create, delete, execute commands, full access
 //!
-//! Inspired by external-workflow's per-step permission boundaries.
+//! Each stage receives an explicit permission boundary.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

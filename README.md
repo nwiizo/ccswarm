@@ -172,9 +172,12 @@ ccswarm (workflow + governance + A2A/local provider execution)
   A2A server.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module responsibilities and API
-boundaries. See
+boundaries. See [docs/ROADMAP.md](docs/ROADMAP.md) for the canonical v0.10.0
+release plan,
 [docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md](docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md)
-for the deeper external-workflow-inspired product roadmap.
+for the longer job-theory product plan, and
+[docs/MULTI_AGENT_REDESIGN.md](docs/MULTI_AGENT_REDESIGN.md) for the
+provider-neutral multi-agent design.
 
 ## Development
 

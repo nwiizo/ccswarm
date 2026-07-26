@@ -322,7 +322,7 @@ impl A2ABridge {
     /// When the provider fails with a rate-limit error and
     /// `options.rate_limit_fallbacks` is non-empty, the call switches to the
     /// next provider in the chain instead of burning retries on the limited
-    /// one (external-workflow's `rate_limit_fallback.switch_chain`). The switch resets the
+    /// one. The switch resets the
     /// retry budget, clears any session continuation (a new provider can't
     /// resume another provider's thread), and prepends a fallback notice so
     /// the model knows it's picking up mid-task.

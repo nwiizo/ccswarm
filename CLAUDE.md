@@ -5,7 +5,8 @@
 Hire ccswarm when you have a coding task and want a PR-ready diff with quality gates
 already run, reproducibly. OK/NG-driven: you only press y or n.
 
-- **Provider-agnostic**: Claude Code (default), Codex, GitHub Copilot CLI.
+- **Provider-neutral workflow**: Claude Code (default) and Codex execute code;
+  GitHub Copilot CLI is probed only for migration diagnostics.
 - **Reproducible**: declarative flow YAML → same quality every time.
 - **Traceable**: NDJSON events + summaries in `.ccswarm/runs/<id>/`.
 
@@ -120,7 +121,7 @@ stages:
 
 | Flow | Description | Agents |
 |-------|-------------|--------|
-| `default` | plan → implement → review → fix → complete | planner, coder, reviewer |
+| `default` | plan → Sangha quorum → implement → review → fix → complete | planner, reviewer, qa, coder |
 | `team` | plan → parallel(frontend + backend) → supervisor review | planner, frontend-specialist, backend-specialist, supervisor |
 | `team-dynamic` | plan → team_leader decomposes at runtime → parallel workers → review | planner, coder (leader + workers), reviewer |
 | `quick` | single-shot (1 stage) | coder |
@@ -156,5 +157,6 @@ Knowledge: (user-provided under `.ccswarm/facets/knowledge/*.yaml`).
 
 ## Documentation
 
+@docs/ROADMAP.md
 @docs/ARCHITECTURE.md
 @docs/APPLICATION_SPEC.md

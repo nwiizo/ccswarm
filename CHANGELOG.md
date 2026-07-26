@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Added a canonical, evidence-based v0.10.0 release roadmap with explicit
+  reliability, recovery, multi-agent, A2A, observability, compatibility, and
+  distribution gates.
+- Expanded the provider-neutral multi-agent roadmap from current official
+  ecosystem documentation, using job theory to prioritize durable task graphs,
+  control ownership, stop policies, checkpoints, direct intervention, and
+  outcome-aware team sizing.
+- Generalized product and architecture documentation around ccswarm's own
+  operator journey and domain vocabulary.
+
+### Removed
+
+- Removed a stale provider comparison document and remaining named comparison
+  language from the current source tree.
+
 ### Fixed
 
 - Consolidated crates.io publishing into the tag release workflow and removed
@@ -26,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider behavior, queue operations, and the packaged binary.
 - Expanded the Playwright dogfood example into an Order Desk workflow that
   exercises queue intake, JSON output, dry-run planning, and browser behavior.
-- Added a job-theory product plan based on the complete external-workflow v0.52.0 operator
+- Added a job-theory product plan based on the complete coding-agent operator
   journey, with measurable outcomes and phased adoption decisions.
 
 ### Changed
@@ -101,7 +118,7 @@ Sangha consensus workflow and governed auto-extension.
 
 ## [0.8.0] - 2026-06-10
 
-external-workflow feature adoption + codex first-class support.
+Workflow lifecycle expansion and Codex first-class support.
 
 ### Added
 - **Codex first-class**: global `--provider <claude|codex>` flag
@@ -172,8 +189,8 @@ external-workflow feature adoption + codex first-class support.
 
 ## [0.7.0] - 2026-06-10
 
-Follow-up to a feature audit against external-workflow: wire what was implemented but
-unreachable, delete what wasn't worth wiring, and close the HITL/OTel gap.
+Follow-up to a workflow feature audit: wire what was implemented but
+unreachable, delete what was not worth wiring, and close the HITL/OTel gap.
 
 ### Added
 - `max_stage_visits` flow field (default 3): per-stage visit bound that
@@ -194,8 +211,7 @@ unreachable, delete what wasn't worth wiring, and close the HITL/OTel gap.
 - Optional `otel` cargo feature: OTLP span export (activated at runtime
   by `OTEL_EXPORTER_OTLP_ENDPOINT`) plus `flow.run`/`flow.stage` tracing
   spans.
-- `docs/COMPETITIVE_LANDSCAPE.md`: external-workflow parity table, orchestrator
-  comparison, and roadmap candidates.
+- Expanded architecture comparison and roadmap documentation.
 
 ### Changed
 - Parallel stages' `all()`/`any()` aggregate conditions now actually
