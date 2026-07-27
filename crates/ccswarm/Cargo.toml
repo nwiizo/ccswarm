@@ -114,7 +114,7 @@ colored = "3.0"
 rand = "0.9"
 
 # System information for resource monitoring
-sysinfo = "0.38"
+sysinfo = "0.39"
 
 # Secure secret handling
 secrecy = { version = "0.10", features = ["serde"] }
