@@ -111,7 +111,7 @@ urlencoding = { version = "2.1", optional = true }
 
 # Additional utilities
 colored = "3.0"
-rand = "0.9"
+rand = "0.10"
 
 # System information for resource monitoring
 sysinfo = "0.38"
