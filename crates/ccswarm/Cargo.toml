@@ -130,7 +130,7 @@ pretty_assertions = "1.4"
 
 # Behavior-driven tests against ccswarm's business-level behaviors. Keeps scenarios
 # declarative (what-not-how) and readable to non-Rust readers.
-cucumber = "0.21"
+cucumber = "0.22"
 
 [[test]]
 name = "bdd"
