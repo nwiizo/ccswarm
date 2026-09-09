@@ -2,12 +2,16 @@
 
 ## What ccswarm does
 
-Hire ccswarm when you have a coding task and want a PR-ready diff with quality gates
-already run, reproducibly. OK/NG-driven: you only press y or n.
+ccswarm turns coding tasks into reviewable changes through a repeatable flow.
+Sangha is the product core: shared criteria, separate assessments, evidence,
+objection resolution, and a recorded decision. The current implementation
+provides quorum voting; the stricter target and its gaps are documented in
+[Sangha Product Core](docs/SANGHA_PRODUCT_CORE.md).
 
 - **Provider-neutral workflow**: Claude Code (default) and Codex execute code;
   GitHub Copilot CLI is probed only for migration diagnostics.
-- **Reproducible**: declarative flow YAML → same quality every time.
+- **Repeatable process**: declarative flow YAML defines stages and routing;
+  it does not guarantee identical output or quality.
 - **Traceable**: NDJSON events + summaries in `.ccswarm/runs/<id>/`.
 
 ## Daily usage

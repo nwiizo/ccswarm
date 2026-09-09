@@ -7,6 +7,11 @@ provider CLIs and A2A-compatible remote agents. It provides flow/stage
 orchestration, Sangha consensus, governance, NDJSON event recording, and a
 provider-agnostic `A2ABridge` for live execution.
 
+[Sangha Product Core](SANGHA_PRODUCT_CORE.md) defines the product direction:
+the workflow owns acceptance decisions based on evidence and resolved
+objections, while providers execute work. The existing quorum implementation
+is the starting point; the complete decision protocol is planned behavior.
+
 ## Workspace Structure
 
 The Cargo workspace now contains a single runtime crate:
@@ -44,6 +49,8 @@ CLI
 - Composes prompts from persona, policy, knowledge, and instruction facets.
 - Executes sequential, parallel, team-leader, and Sangha stages.
 - Emits NDJSON events through `EventRecorder`.
+- Will own Sangha report validation, objection resolution, decision policy,
+  and recovery routing; these rules do not belong in session helpers.
 
 ### A2ABridge (`crates/ccswarm/src/session/bridge.rs`)
 
@@ -73,6 +80,8 @@ CLI
 - Stores proposals, extensions, approvals, and in-process agent messages.
 - Sangha workflow consensus is implemented as a workflow primitive and uses the
   governance vocabulary for decisions.
+- Experimental `lab sangha` proposal files do not determine workflow verdicts.
+  Action authorization remains distinct from acceptance of a plan or change.
 
 ## A2A Integration
 

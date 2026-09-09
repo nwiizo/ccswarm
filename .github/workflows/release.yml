@@ -4,110 +4,181 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate release
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: rustfmt, clippy
+      - name: Validate version and release notes
+        id: version
+        shell: bash
+        run: |
+          version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "ccswarm") | .version')
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            test "$GITHUB_REF_NAME" = "v$version"
+          fi
+          test -s "docs/releases/v$version.md"
+          grep -F "## [$version]" CHANGELOG.md
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo doc --no-deps --workspace --locked
+      - name: Audit dependencies
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit
+      - run: cargo publish -p ccswarm --dry-run --locked
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-
-  build-release:
-    name: Build Release (${{ matrix.asset_name }})
-    needs: create-release
+  build:
+    name: Build and smoke-test (${{ matrix.asset }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            artifact_name: ccswarm
-            asset_name: ccswarm-linux-amd64
-          - os: ubuntu-latest
+            asset: ccswarm-linux-amd64
+          - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            artifact_name: ccswarm
-            asset_name: ccswarm-linux-arm64
-            use_cross: true
-          - os: macos-latest
+            asset: ccswarm-linux-arm64
+          - os: macos-15-intel
             target: x86_64-apple-darwin
-            artifact_name: ccswarm
-            asset_name: ccswarm-darwin-amd64
-          - os: macos-latest
+            asset: ccswarm-darwin-amd64
+          - os: macos-15
             target: aarch64-apple-darwin
-            artifact_name: ccswarm
-            asset_name: ccswarm-darwin-arm64
-
+            asset: ccswarm-darwin-arm64
     runs-on: ${{ matrix.os }}
-
+    env:
+      RELEASE_TARGET: ${{ matrix.target }}
+      RELEASE_ASSET: ${{ matrix.asset }}
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build -p ccswarm --release --locked --target "$RELEASE_TARGET"
+      - name: Package, verify, and smoke-test the archive
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -czf "dist/$RELEASE_ASSET.tar.gz" -C "target/$RELEASE_TARGET/release" ccswarm
+          (cd dist && shasum -a 256 "$RELEASE_ASSET.tar.gz" > "$RELEASE_ASSET.tar.gz.sha256")
+          (cd dist && shasum -a 256 -c "$RELEASE_ASSET.tar.gz.sha256")
+          smoke_dir=$(mktemp -d)
+          tar -xzf "dist/$RELEASE_ASSET.tar.gz" -C "$smoke_dir"
+          version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "ccswarm") | .version')
+          test "$("$smoke_dir/ccswarm" --version)" = "ccswarm $version"
+          "$smoke_dir/ccswarm" --help > /dev/null
+          "$smoke_dir/ccswarm" flow check default
+          "$smoke_dir/ccswarm" pipeline --provider codex --model-override gpt-6-astra --task "Release smoke test" --dry-run > /dev/null
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/*
+          if-no-files-found: error
 
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: ${{ matrix.target }}
-
-    - name: Install cross (for cross-compilation)
-      if: matrix.use_cross
-      run: cargo install cross --git https://github.com/cross-rs/cross
-
-    - name: Build with cargo
-      if: ${{ !matrix.use_cross }}
-      run: cargo build --release --target ${{ matrix.target }}
-
-    - name: Build with cross
-      if: matrix.use_cross
-      run: cross build --release --target ${{ matrix.target }}
-
-    - name: Package binary (Unix)
-      run: |
-        cd target/${{ matrix.target }}/release
-        chmod +x ${{ matrix.artifact_name }}
-        tar czf ../../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
-        cd ../../..
-
-    - name: Generate SHA256
-      run: |
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-          shasum -a 256 ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
-        else
-          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
-        fi
-
-    - name: Upload Release Assets
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ github.ref_name }}
-        files: |
-          ${{ matrix.asset_name }}.tar.gz
-          ${{ matrix.asset_name }}.tar.gz.sha256
-
-  publish-crate:
-    name: Publish to crates.io
-    runs-on: ubuntu-latest
-    needs: create-release
+  verify-artifacts:
+    name: Verify complete distribution
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ccswarm-*
+          path: dist
+          merge-multiple: true
+      - name: Require all four archives and checksums
+        working-directory: dist
+        run: |
+          for asset in ccswarm-linux-amd64 ccswarm-linux-arm64 ccswarm-darwin-amd64 ccswarm-darwin-arm64; do
+            test -s "$asset.tar.gz"
+            test -s "$asset.tar.gz.sha256"
+            shasum -a 256 -c "$asset.tar.gz.sha256"
+          done
 
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Publish ccswarm crate
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      run: cargo publish -p ccswarm --locked --token "${CARGO_REGISTRY_TOKEN}"
+  publish:
+    name: Publish verified release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [validate, verify-artifacts]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ccswarm-*
+          path: dist
+          merge-multiple: true
+      - name: Attest archives
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Prepare a complete draft
+        shell: bash
+        run: |
+          tag="v$RELEASE_VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            test "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$tag" --verify-tag --draft --title "ccswarm $tag" --notes-file "docs/releases/$tag.md"
+          fi
+          gh release upload "$tag" dist/* --clobber
+          download_dir=$(mktemp -d)
+          gh release download "$tag" --dir "$download_dir"
+          (cd "$download_dir" && shasum -a 256 -c ./*.sha256)
+          for asset in ccswarm-linux-amd64 ccswarm-linux-arm64 ccswarm-darwin-amd64 ccswarm-darwin-arm64; do
+            cmp "dist/$asset.tar.gz" "$download_dir/$asset.tar.gz"
+          done
+      - name: Publish stable crate
+        if: ${{ !contains(needs.validate.outputs.version, '-') }}
+        shell: bash
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          cargo package -p ccswarm --locked --no-verify
+          published_checksum=$(curl --fail --silent --show-error --location https://index.crates.io/cc/sw/ccswarm | jq -r --arg version "$RELEASE_VERSION" 'select(.vers == $version) | .cksum')
+          if [[ -n "$published_checksum" ]]; then
+            echo "$published_checksum  target/package/ccswarm-$RELEASE_VERSION.crate" | sha256sum -c -
+          else
+            cargo publish -p ccswarm --locked
+          fi
+      - name: Publish GitHub release
+        shell: bash
+        run: |
+          if [[ "$RELEASE_VERSION" == *-* ]]; then
+            gh release edit "v$RELEASE_VERSION" --draft=false --prerelease
+          else
+            gh release edit "v$RELEASE_VERSION" --draft=false --latest
+          fi

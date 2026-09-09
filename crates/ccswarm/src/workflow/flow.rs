@@ -684,6 +684,15 @@ impl Flow {
                         stage.id
                     ));
                 }
+                let member_count = super::sangha::members_or_default(spec).len();
+                if spec.quorum as usize > member_count {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}': sangha.quorum ({}) exceeds the number of members ({})",
+                        stage.id,
+                        spec.quorum,
+                        member_count
+                    ));
+                }
             }
         }
 
@@ -1921,45 +1930,7 @@ impl FlowEngine {
             .cloned()
             .unwrap_or_default();
 
-        let mut approvals = 0usize;
-        let mut revisions = 0usize;
-        let mut abstentions = 0usize;
-        let mut decisions = serde_json::Map::new();
-
-        for (member_id, output) in &member_outputs {
-            let text = output
-                .get("output")
-                .and_then(|value| value.as_str())
-                .unwrap_or_default();
-            let decision = sangha::extract_decision(text);
-            match decision {
-                sangha::SanghaDecision::Approve => approvals += 1,
-                sangha::SanghaDecision::Revise => revisions += 1,
-                sangha::SanghaDecision::Abstain => abstentions += 1,
-            }
-            decisions.insert(
-                member_id.clone(),
-                serde_json::json!({
-                    "decision": decision.as_str(),
-                    "status": output.get("status").cloned().unwrap_or_else(|| serde_json::json!("unknown")),
-                }),
-            );
-        }
-
-        let accepted = approvals >= quorum;
-        Ok(serde_json::json!({
-            "stage": stage.id,
-            "sangha": true,
-            "parallel": true,
-            "status": if accepted { "completed" } else { "failed" },
-            "decision": if accepted { "accepted" } else { "needs_revision" },
-            "quorum": quorum,
-            "approvals": approvals,
-            "revisions": revisions,
-            "abstentions": abstentions,
-            "decisions": decisions,
-            "members": member_outputs,
-        }))
+        Ok(summarize_sangha(&stage.id, quorum, member_outputs))
     }
 
     /// Execute a sub-workflow as a single stage. The child flow inherits the
@@ -3461,6 +3432,58 @@ fn stage_output_succeeded(output: &serde_json::Value) -> bool {
         .is_some_and(|status| status == "completed")
 }
 
+fn summarize_sangha(
+    stage_id: &str,
+    quorum: usize,
+    member_outputs: serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Value {
+    use super::sangha;
+
+    let mut approvals = 0usize;
+    let mut revisions = 0usize;
+    let mut abstentions = 0usize;
+    let mut decisions = serde_json::Map::new();
+
+    for (member_id, output) in &member_outputs {
+        let text = output
+            .get("output")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let decision = if stage_output_succeeded(output) {
+            sangha::extract_decision(text)
+        } else {
+            sangha::SanghaDecision::Abstain
+        };
+        match decision {
+            sangha::SanghaDecision::Approve => approvals += 1,
+            sangha::SanghaDecision::Revise => revisions += 1,
+            sangha::SanghaDecision::Abstain => abstentions += 1,
+        }
+        decisions.insert(
+            member_id.clone(),
+            serde_json::json!({
+                "decision": decision.as_str(),
+                "status": output.get("status").cloned().unwrap_or_else(|| serde_json::json!("unknown")),
+            }),
+        );
+    }
+
+    let accepted = approvals >= quorum;
+    serde_json::json!({
+        "stage": stage_id,
+        "sangha": true,
+        "parallel": true,
+        "status": if accepted { "completed" } else { "failed" },
+        "decision": if accepted { "accepted" } else { "needs_revision" },
+        "quorum": quorum,
+        "approvals": approvals,
+        "revisions": revisions,
+        "abstentions": abstentions,
+        "decisions": decisions,
+        "members": member_outputs,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4098,6 +4121,64 @@ stages:
                 .iter()
                 .any(|stage| stage.id == "sangha" && stage.sangha.is_some())
         );
+    }
+
+    #[test]
+    fn sangha_rejects_unreachable_quorum() {
+        for (quorum, members) in [(4, ""), (3, "members: [{ id: planner }, { id: reviewer }]")] {
+            let yaml = format!(
+                "name: unreachable\ninitial_movement: decide\nstages:\n\
+                 - id: decide\n  instruction: Review\n  sangha:\n    quorum: {quorum}\n    {members}\n"
+            );
+            let error = Flow::from_yaml(&yaml).expect_err("quorum must be reachable");
+            assert!(error.to_string().contains("quorum"));
+            assert!(error.to_string().contains("member"));
+        }
+    }
+
+    #[test]
+    fn sangha_counts_only_completed_member_approvals() {
+        for status in ["completed", "failed", "partial", "timed_out", "unknown"] {
+            let members = serde_json::json!({
+                "planner": {"status": "completed", "output": "SANGHA_DECISION=APPROVE"},
+                "reviewer": {"status": status, "output": "SANGHA_DECISION=APPROVE"},
+                "qa": {"status": "completed", "output": "SANGHA_DECISION=REVISE"},
+            });
+            let result = summarize_sangha(
+                "review",
+                2,
+                members.as_object().expect("member map").clone(),
+            );
+            let completed = status == "completed";
+            assert_eq!(
+                result["approvals"],
+                if completed { 2 } else { 1 },
+                "{status}"
+            );
+            assert_eq!(result["revisions"], 1);
+            assert_eq!(result["abstentions"], if completed { 0 } else { 1 });
+            assert_eq!(
+                result["decision"],
+                if completed {
+                    "accepted"
+                } else {
+                    "needs_revision"
+                }
+            );
+            assert_eq!(result["members"], members);
+        }
+
+        let members = serde_json::json!({
+            "reviewer": {"output": "SANGHA_DECISION=APPROVE"},
+        });
+        let result = summarize_sangha(
+            "review",
+            1,
+            members.as_object().expect("member map").clone(),
+        );
+        assert_eq!(result["approvals"], 0);
+        assert_eq!(result["decision"], "needs_revision");
+        assert_eq!(result["decisions"]["reviewer"]["status"], "unknown");
     }
 
     #[test]

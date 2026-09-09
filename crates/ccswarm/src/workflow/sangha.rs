@@ -101,9 +101,11 @@ fn normalize_members(mut members: Vec<SanghaMember>) -> Vec<SanghaMember> {
 
     let mut seen = std::collections::HashSet::new();
     for (i, member) in members.iter_mut().enumerate() {
-        if !seen.insert(member.id.clone()) {
-            member.id = format!("{}-{}", member.id, i + 1);
-            seen.insert(member.id.clone());
+        let original_id = member.id.clone();
+        let mut suffix = i + 1;
+        while !seen.insert(member.id.clone()) {
+            member.id = format!("{original_id}-{suffix}");
+            suffix += 1;
         }
     }
 
@@ -231,6 +233,24 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ids, vec!["a", "a-2", "member-3"]);
+    }
+
+    #[test]
+    fn normalizes_member_ids_that_collide_with_generated_suffixes() {
+        let members = ["a", "a-3", "a"]
+            .into_iter()
+            .map(|id| SanghaMember {
+                id: id.to_string(),
+                persona: None,
+                agent: None,
+            })
+            .collect();
+        let ids = normalize_members(members)
+            .into_iter()
+            .map(|member| member.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(ids, ["a", "a-3", "a-4"]);
     }
 
     #[test]

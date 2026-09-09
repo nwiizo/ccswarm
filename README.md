@@ -1,24 +1,33 @@
 # ccswarm
 
-> Turn tasks into PR-ready diffs with quality gates already run. Reproducibly.
+> Turn uncertain coding work into reviewable changes through Sangha.
 
 [![Rust](https://img.shields.io/badge/rust-edition_2024-blue.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-`ccswarm` is a workflow engine for AI coding agents. You describe a task, pick a flow
-(declarative YAML workflow), and ccswarm drives the provider CLI through plan →
-Sangha consensus → implement → review → fix, optionally auto-committing and
-opening a PR, with full NDJSON audit trails you can replay, diff, and roll back.
+`ccswarm` is a workflow engine for AI coding agents, with **Sangha as its product
+core**: shared acceptance criteria, separate assessments, evidence-backed
+objections, revision, and a recorded decision. Claude Code and Codex execute
+the work; ccswarm governs how the workflow advances.
 
-**OK/NG driven**: the only keys you press during a run are `y` and `n`.
+The current default flow runs plan → Sangha quorum → implement → review → fix.
+Sangha counts approval markers only from completed reviews and rejects an
+unreachable quorum. Evidence-bound acceptance, objection
+resolution, and checkpoint recovery are the next design, not shipped
+guarantees. See [Sangha Product Core](docs/SANGHA_PRODUCT_CORE.md) for the
+principles, implementation gaps, and feature priorities.
+[Astra Integration](docs/ASTRA_INTEGRATION.md) adds the design for live guidance,
+pending tool results, reasoning choices, and bounded delegation, distinguishing
+model selection from future backend integration.
 
 ## Hire ccswarm when
 
-- You want a quality-gated change (plan → Sangha consensus → implement → review → fix)
-  without rebuilding the workflow each task.
-- You need reproducibility: the same flow YAML yields the same quality process,
-  whether Alice or Bob runs it.
-- You want to replay, diff, or undo what the agent did yesterday.
+- You want a repeatable plan, assessment, implementation, and review process
+  without rebuilding the workflow for each task.
+- You want reviewer concerns and verification evidence to inform the decision
+  to accept a change; this is the direction of the Sangha core.
+- You need recorded runs and timeline comparisons. Replay re-executes the task;
+  undo currently reports commits rather than rolling them back.
 - You use multiple provider CLIs (Claude Code / Codex, with gh copilot probed for
   diagnostics) and don't want to pick one.
 
@@ -74,9 +83,11 @@ ccswarm facets                          # browse personas / policies / knowledge
 ccswarm repertoire add <git-url>        # install shared workflow packages
 ```
 
-Stages can opt into consensus with `sangha:`. Each member evaluates the same
-decision independently and must end with `SANGHA_DECISION=APPROVE` or
-`SANGHA_DECISION=REVISE`; the stage advances only when approvals meet quorum.
+Stages can request Sangha assessment with `sangha:`. Member prompts ask for a
+separate assessment ending with `SANGHA_DECISION=APPROVE` or
+`SANGHA_DECISION=REVISE`. The current acceptance predicate only compares the
+number of successful approvals with quorum; it does not resolve dissent or bind machine
+checks to the decision.
 
 ```yaml
 stages:
@@ -90,6 +101,12 @@ stages:
         - { id: reviewer, persona: reviewer }
         - { id: qa, persona: qa }
 ```
+
+`readonly` expresses the requested permission. The current Codex adapter uses
+`workspace-write`, so this setting does not enforce read-only review on Codex.
+Required checks also need separate execution: Sangha currently bypasses the
+ordinary stage-gate path. These are prerequisites for the stricter acceptance
+policy described in the product design.
 
 ## Multi-provider
 
@@ -137,8 +154,10 @@ a starting template.
 
 ## Lab (experimental)
 
-Group for features that sit beside the core JTBD but are not part of the primary flow.
-May change without notice.
+Experimental commands may change without notice. `lab sangha` stores proposals
+and votes separately from the workflow's `sangha:` stage; it does not enforce
+workflow acceptance. Sangha's core product role refers to the workflow
+decision process, not these proposal-storage commands.
 
 ```bash
 ccswarm lab sangha propose ...          # collective voting on proposals
@@ -174,6 +193,8 @@ ccswarm (workflow + governance + A2A/local provider execution)
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module responsibilities and API
 boundaries. See [docs/ROADMAP.md](docs/ROADMAP.md) for the canonical v0.10.0
 release plan,
+[docs/SANGHA_PRODUCT_CORE.md](docs/SANGHA_PRODUCT_CORE.md) for the core decision
+process and feature selection,
 [docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md](docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md)
 for the longer job-theory product plan, and
 [docs/MULTI_AGENT_REDESIGN.md](docs/MULTI_AGENT_REDESIGN.md) for the

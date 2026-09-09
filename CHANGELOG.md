@@ -10,17 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.10.0] - 2026-09-09
+
+Sangha vote validation and complete release distribution. The broader Sangha
+and Astra documents describe future work, not newly implemented capabilities.
+
 ### Changed
 
-- Added a canonical, evidence-based v0.10.0 release roadmap with explicit
-  reliability, recovery, multi-agent, A2A, observability, compatibility, and
-  distribution gates.
-- Expanded the provider-neutral multi-agent roadmap from current official
-  ecosystem documentation, using job theory to prioritize durable task graphs,
-  control ownership, stop policies, checkpoints, direct intervention, and
-  outcome-aware team sizing.
-- Generalized product and architecture documentation around ccswarm's own
-  operator journey and domain vocabulary.
+- Defined Sangha as the product core, with documented current behavior,
+  evidence-based review goals, feature priorities, and Astra integration plans.
+- Corrected documentation for model selection (`--model-override`), replay,
+  advisory undo, and current Sangha/Codex review limitations.
+- Build and smoke-test Linux and macOS AMD64/ARM64 archives on native runners.
+- Gate release publication on validation and the complete artifact matrix,
+  verify downloaded draft assets, and attest archive provenance. Manual
+  workflow runs validate the distribution without publishing.
 
 ### Removed
 
@@ -29,10 +33,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Sangha counts approval markers only from successfully completed member
+  stages; failed, partial, or unknown execution results abstain.
+- Reject Sangha quorum values that exceed the effective member count before
+  starting a flow, including when the default members are used.
+- Keep normalized Sangha member IDs unique when generated suffixes collide
+  with existing IDs, preventing one member's result from replacing another.
+- Update vulnerable HTTP/2 dependency `h2` to 0.4.16 and apply compatible
+  dependency fixes reported by the release audit.
 - Consolidated crates.io publishing into the tag release workflow and removed
   stale `ai-session` publishing steps.
 - Replaced Reqwest's native TLS default with Rustls to remove the Linux OpenSSL
   build dependency, including for ARM64 cross-compilation.
+
+### Known Limitations
+
+- Sangha still uses approval quorum rather than evidence-bound objection
+  resolution; its stages bypass ordinary command gates.
+- The Codex adapter does not yet enforce read-only review permissions.
+- Checkpoint resume and Astra-specific steering, async tools, and native
+  delegation are not implemented by this release.
+- The existing `serde_yml`/`libyml` dependency chain still carries RustSec
+  unsoundness/maintenance warnings (RUSTSEC-2025-0067 and RUSTSEC-2025-0068).
 
 ## [0.9.2] - 2026-07-26
 

@@ -2,27 +2,39 @@
 
 ## Overview
 
-ccswarm is an AI Agent Workflow DevOps CLI for reproducible coding workflows.
-It runs flow-based pipelines, records NDJSON events, supports Sangha consensus
-and human approvals, and executes live stages through either a remote A2A agent
-or local provider CLIs.
+ccswarm is a CLI for repeatable coding workflows centered on Sangha decisions.
+The product direction is to connect shared criteria, separate assessments,
+verification, objection resolution, and recovery. The current runtime supplies
+flow pipelines, quorum voting, NDJSON events, and human approval mechanisms,
+with execution through remote A2A agents or local provider CLIs.
+
+[Sangha Product Core](SANGHA_PRODUCT_CORE.md) defines the target decision
+process and explicitly separates it from current implementation behavior.
 
 ## Key Features
 
+- **Sangha Assessment**: parallel member stages use final-line recommendations;
+  only successfully completed members can approve, and unreachable quorum
+  settings fail validation. Required
+  evidence and blocking-objection handling are planned core work.
 - **Flow-Based Workflows**: YAML-driven multi-step pipelines with context
   passing, retries, gates, parallel stages, and workflow calls.
 - **A2ABridge**: A2A REST `message:send` execution when configured, otherwise
   Claude or Codex CLI subprocess execution. The registered Copilot provider
   fails fast because `gh copilot suggest` is interactive.
-- **Sangha Consensus**: independent member stages vote with quorum before a
-  workflow advances.
-- **Self-Extension Framework**: agents propose and vote on capability
-  extensions.
 - **NDJSON Event Recording**: `.ccswarm/runs/{run-id}/events.ndjson` and
   summaries for observability.
 - **Faceted Prompting**: composable persona, policy, knowledge, and instruction
   facets.
 - **Session Persistence**: native ccswarm context and result persistence.
+
+Ordinary stage gates are available, but Sangha dispatch currently bypasses
+them. Session persistence is not workflow checkpoint resume. The Codex adapter
+currently requests a writable workspace even for read-only stages. These
+limitations must be fixed before the target Sangha acceptance policy ships.
+
+`lab sangha` proposal storage and self-extension commands remain experimental
+and separate from workflow decisions.
 
 ## Requirements
 

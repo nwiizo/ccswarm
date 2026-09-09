@@ -13,6 +13,11 @@ The canonical v0.10.0 release scope and sequencing live in
 [ROADMAP.md](ROADMAP.md). The milestones here are supporting design direction,
 not additional release requirements.
 
+The 2026-09-09 [Sangha Product Core](SANGHA_PRODUCT_CORE.md) defines the current
+product priority. Native delegation and broader task coordination below are
+supporting options; neither is a prerequisite for Sangha decisions. Different
+providers, personas, or processes alone do not guarantee independent errors.
+
 The central change is architectural: keep ccswarm's deterministic workflow
 engine as the outer control plane, but add explicit capability checks for
 provider-native subagents, structured output, resumable sessions, and

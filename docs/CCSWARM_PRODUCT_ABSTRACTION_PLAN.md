@@ -9,6 +9,11 @@ The canonical v0.10.0 release scope and sequencing live in
 [ROADMAP.md](ROADMAP.md). The milestones here describe the longer product
 direction and do not add release requirements.
 
+[Sangha Product Core](SANGHA_PRODUCT_CORE.md) selects the core capabilities
+from this broader journey: evidence-based assessment, objection resolution,
+bounded revision, decision reports, and recovery. Broader order/desk surfaces
+remain supporting design, not prerequisites for that core.
+
 ## Decision And Work Contract
 
 Recommendation: optimize the complete operator journey around one primary job,
