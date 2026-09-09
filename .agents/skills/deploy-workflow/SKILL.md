@@ -24,6 +24,8 @@ cargo doc --no-deps --workspace --locked
 cargo build --release --workspace --locked
 cargo publish -p ccswarm --dry-run --locked
 actionlint .github/workflows/release.yml
+# Browser example (installs its locked dependencies and Chromium if needed)
+CCSWARM_BIN=target/release/ccswarm examples/e2e-playwright/run.sh
 ```
 
 ## Build & Release

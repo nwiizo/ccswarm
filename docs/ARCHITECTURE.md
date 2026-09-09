@@ -103,7 +103,7 @@ cargo run -p ccswarm -- --help
 
 ## Product Roadmap
 
-See [v0.10.0 Roadmap](ROADMAP.md) for the release scope and gates. The
+See the [roadmap](ROADMAP.md) for the release scope and gates. The
 [ccswarm Product Abstraction Plan](CCSWARM_PRODUCT_ABSTRACTION_PLAN.md) retains
 the longer job-theory plan for orders, desk, reports, verdicts, gates,
 escalation, recovery points, and phase-level observability.

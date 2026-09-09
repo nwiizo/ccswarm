@@ -49,6 +49,16 @@ jobs:
           cargo install cargo-audit --version 0.22.2 --locked
           cargo audit
       - run: cargo publish -p ccswarm --dry-run --locked
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Verify the included browser app
+        working-directory: examples/e2e-playwright
+        run: |
+          npm ci
+          npm run test:unit
+          npx playwright install --with-deps chromium
+          npm test
 
   build:
     name: Build and smoke-test (${{ matrix.asset }})

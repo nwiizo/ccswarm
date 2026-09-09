@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.10.1] - 2026-09-09
+
+Apply the lessons from generating and testing a real Order Desk app with
+ccswarm and Codex.
+
+### Changed
+
+- Add an explicit `--live` browser-example run that generates into a fresh
+  directory and tests that exact output instead of a pre-existing sample.
+- Preserve each run's app, provider events, pipeline result, and prompt preview.
+- Include a usable local Order Desk app with deletion and persistent empty state.
+- Cover task creation, recovery, persistence, deletion, safe text rendering,
+  blank validation, and mobile layout in browser tests.
+- Require the included app's browser tests in CI and release validation.
+- Clearly distinguish prompt previews, live provider runs, and local demo states.
+
 ## [0.10.0] - 2026-09-09
 
 Sangha vote validation and complete release distribution. The broader Sangha

@@ -191,8 +191,7 @@ ccswarm (workflow + governance + A2A/local provider execution)
   A2A server.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module responsibilities and API
-boundaries. See [docs/ROADMAP.md](docs/ROADMAP.md) for the canonical v0.10.0
-release plan,
+boundaries. See [docs/ROADMAP.md](docs/ROADMAP.md) for the current release scope,
 [docs/SANGHA_PRODUCT_CORE.md](docs/SANGHA_PRODUCT_CORE.md) for the core decision
 process and feature selection,
 [docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md](docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md)
@@ -209,9 +208,11 @@ cargo test --workspace
 cargo run -p ccswarm -- --help
 ```
 
-End-to-end: `examples/e2e-playwright/run.sh` exercises queue intake, JSON
-output, pipeline dry-run planning, and the tracked static app through a
-Playwright browser test.
+Try the working [Order Desk app](examples/e2e-playwright/generated/index.html)
+by opening that file locally. `examples/e2e-playwright/run.sh` tests the included
+app and preview without calling a provider. Add `--live` to generate a fresh
+app through ccswarm and test that exact output in Chromium. See the
+[example guide](examples/e2e-playwright/README.md) for setup and retained run evidence.
 
 ## Safety
 

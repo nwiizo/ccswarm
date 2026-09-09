@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "playwright test",
+    "test:unit": "node --test generated/tests/orders.test.cjs",
     "e2e": "./run.sh"
   },
   "keywords": [],

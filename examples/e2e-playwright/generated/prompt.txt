@@ -1,3 +1,0 @@
-Create a static "ccswarm order desk" app that demonstrates ccswarm's order,
-run, partial recovery, retry, and ready-to-merge concepts. The app must run
-directly from index.html and persist state in localStorage.

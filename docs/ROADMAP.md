@@ -2,6 +2,18 @@
 
 Scope updated: 2026-09-09.
 
+## v0.10.1 Release Scope
+
+v0.10.1 turns the browser example into a reproducible real-generation check.
+`examples/e2e-playwright/run.sh --live` generates a new Order Desk app through
+ccswarm and tests that output in Chromium. The default run tests the included
+app and clearly identifies its provider-free preview. Run directories and
+evidence are retained. Browser checks also gate CI and release publication.
+
+See the [example guide](../examples/e2e-playwright/README.md) and
+[release notes](releases/v0.10.1.md). Existing Sangha and Astra limitations
+remain; this patch does not change workflow execution semantics.
+
 ## v0.10.0 Release Scope
 
 v0.10.0 delivers **Sangha vote validation and complete release distribution**.
@@ -33,6 +45,7 @@ Required checks:
 - Matching package, lockfile, tag, changelog, and release-note versions.
 - Formatting, strict Clippy, workspace tests, dependency audit, and rustdoc.
 - Package and publish dry-run validation.
+- Browser verification of the included Order Desk app.
 - Four native release builds with checksum verification and archive extraction.
 - Packaged `--version`, `--help`, default-flow validation, and a Codex/Astra
   prompt preview on every target.

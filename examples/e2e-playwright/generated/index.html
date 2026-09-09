@@ -3,75 +3,317 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b1922" />
     <title>ccswarm order desk</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
   </head>
   <body>
-    <main class="app-shell">
-      <header class="toolbar">
-        <div>
-          <p class="eyebrow">ccswarm E2E dogfood</p>
-          <h1>Order Desk</h1>
-        </div>
-        <div class="run-summary" aria-label="Run summary">
-          <strong id="summary-ready">0</strong>
-          <span>ready to merge</span>
-        </div>
-      </header>
-
-      <section class="metrics" aria-label="Desk metrics">
-        <div>
-          <span>Orders</span>
-          <strong id="metric-orders">0</strong>
-        </div>
-        <div>
-          <span>Partial</span>
-          <strong id="metric-partial">0</strong>
-        </div>
-        <div>
-          <span>Recovery Points</span>
-          <strong id="metric-recovery">0</strong>
-        </div>
-      </section>
-
-      <section class="composer" aria-label="Create order">
-        <form id="order-form">
-          <label for="order-title">New order</label>
-          <div class="form-row">
-            <input id="order-title" name="title" autocomplete="off" placeholder="Describe the work order" />
-            <button type="submit">Add order</button>
+    <a class="skip-link" href="#main">Skip to desk</a>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Workspace">
+        <a class="brand" href="#main" aria-label="ccswarm home">
+          <span class="brand-mark" aria-hidden="true"
+            ><i></i><i></i><i></i><i></i
+          ></span>
+          <span>ccswarm<span class="brand-caption">WORKSPACE</span></span>
+        </a>
+        <div class="workspace-label">YOUR WORKSPACE</div>
+        <nav aria-label="Main navigation">
+          <a class="nav-link active" href="#main" aria-current="page">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </svg>
+            Order Desk <span id="sidebar-order-count" class="nav-count">0</span>
+          </a>
+          <a class="nav-link" href="#workflow">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              aria-hidden="true"
+            >
+              <circle cx="6" cy="5" r="2.5" />
+              <circle cx="18" cy="19" r="2.5" />
+              <path d="M6 8v7a4 4 0 0 0 4 4h5M9 5h6a3 3 0 0 1 3 3v8" />
+            </svg>
+            How it works
+          </a>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="local-badge">
+            <span class="signal-dot"></span> LOCAL WORKSPACE
           </div>
-          <p id="form-error" role="alert"></p>
-        </form>
-      </section>
-
-      <section class="board" aria-label="Order board">
-        <div class="board-head">
-          <h2>Active work</h2>
-          <button id="reset-demo" type="button">Reset demo</button>
+          <p>A little structure.<br />A lot of forward motion.</p>
+          <div class="workspace-user">
+            <span class="avatar" aria-hidden="true">Y</span
+            ><span>Your workspace<small>Personal · on this device</small></span>
+          </div>
         </div>
-        <div id="orders" class="orders"></div>
-      </section>
-    </main>
+      </aside>
 
+      <div class="desk-shell">
+        <header class="topbar">
+          <div class="breadcrumb">
+            Workspace <span aria-hidden="true">/</span>
+            <strong>Order Desk</strong>
+          </div>
+          <span class="demo-badge"
+            ><span class="signal-dot"></span> Local demo</span
+          >
+        </header>
+        <main id="main" tabindex="-1">
+          <section class="page-heading" aria-labelledby="page-title">
+            <div>
+              <p class="eyebrow">MAKE ROOM FOR GOOD WORK</p>
+              <h1 id="page-title">
+                Order Desk<span class="heading-dot" aria-hidden="true">.</span>
+              </h1>
+              <p class="page-description">
+                Turn a work order into a clear path forward.
+              </p>
+            </div>
+            <div class="desk-stamp">
+              <span class="signal-dot"></span> YOUR DESK, IN FOCUS
+            </div>
+          </section>
+
+          <div
+            id="storage-error"
+            class="error-banner"
+            role="alert"
+            hidden
+          ></div>
+          <noscript
+            ><p class="error-banner">
+              Enable JavaScript to add and manage orders. This desk runs
+              entirely in your browser.
+            </p></noscript
+          >
+
+          <section class="metrics" aria-label="Order summary">
+            <div class="metric">
+              <div class="metric-label">
+                Total orders
+                <span class="metric-symbol" aria-hidden="true">↗</span>
+              </div>
+              <div class="metric-value" id="metric-orders">0</div>
+              <p>Everything on your desk</p>
+            </div>
+            <div class="metric metric-ready">
+              <div class="metric-label">
+                <span class="signal-dot"></span> Ready
+                <span class="metric-symbol" aria-hidden="true">✓</span>
+              </div>
+              <div class="metric-value" id="summary-ready">0</div>
+              <p>Through the final review</p>
+            </div>
+            <div class="metric metric-partial">
+              <div class="metric-label">
+                <span class="signal-dot"></span> Needs attention
+                <span class="metric-symbol" aria-hidden="true">↻</span>
+              </div>
+              <div class="metric-value" id="metric-partial">0</div>
+              <p>Partial, with a place to resume</p>
+            </div>
+          </section>
+
+          <section class="composer" aria-labelledby="composer-title">
+            <div class="composer-heading">
+              <h2 id="composer-title">What needs to get done?</h2>
+              <span class="small-label">START SOMETHING</span>
+            </div>
+            <form id="order-form" novalidate>
+              <label class="sr-only" for="order-title">Work order title</label>
+              <div class="input-row">
+                <input
+                  id="order-title"
+                  name="title"
+                  type="text"
+                  placeholder="Describe the work order"
+                  autocomplete="off"
+                  aria-describedby="form-hint form-error"
+                /><button
+                  class="button button-primary add-button"
+                  type="submit"
+                >
+                  <span aria-hidden="true">＋</span> Add order
+                </button>
+              </div>
+              <p id="form-error" class="form-error" role="alert"></p>
+              <p id="form-hint" class="form-hint">
+                Start with a clear task. You control each step from here.
+                <span><kbd>Enter</kbd> to add</span>
+              </p>
+            </form>
+          </section>
+
+          <div class="work-area">
+            <section class="queue" aria-labelledby="queue-title">
+              <div class="section-heading">
+                <div>
+                  <h2 id="queue-title">
+                    Work queue
+                    <span id="queue-count" class="count-badge">0</span>
+                  </h2>
+                  <p id="queue-summary">Your orders, all in one place.</p>
+                </div>
+                <span class="sort-label"
+                  >NEWEST FIRST <span aria-hidden="true">↓</span></span
+                >
+              </div>
+              <div
+                id="order-filters"
+                class="filters"
+                role="group"
+                aria-label="Filter orders"
+              >
+                <button type="button" data-filter="all" aria-pressed="true">
+                  All orders</button
+                ><button
+                  type="button"
+                  data-filter="running"
+                  aria-pressed="false"
+                >
+                  Running</button
+                ><button
+                  type="button"
+                  data-filter="partial"
+                  aria-pressed="false"
+                >
+                  Partial</button
+                ><button type="button" data-filter="ready" aria-pressed="false">
+                  Ready
+                </button>
+              </div>
+              <p id="action-error" class="form-error" role="alert"></p>
+              <div id="order-list" class="order-list"></div>
+              <div id="empty-state" class="empty-state" hidden>
+                <span aria-hidden="true">✓</span>
+                <h3>Your desk is clear.</h3>
+                <p>Add a work order above to get things moving.</p>
+              </div>
+            </section>
+
+            <aside class="desk-guide" aria-label="Desk guide">
+              <section
+                id="workflow"
+                class="guide-card"
+                aria-labelledby="workflow-title"
+              >
+                <p class="eyebrow">A LITTLE MOMENTUM</p>
+                <h2 id="workflow-title">One step at a time.</h2>
+                <p class="guide-intro">
+                  Every order follows the same path. Use Advance to move it
+                  along.
+                </p>
+                <ol class="workflow-list">
+                  <li>
+                    <span class="step-number">01</span>
+                    <div>
+                      <h3>Plan</h3>
+                      <p>Give the work a direction.</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="step-number">02</span>
+                    <div>
+                      <h3>Sangha</h3>
+                      <p>Bring the perspectives together.</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="step-number">03</span>
+                    <div>
+                      <h3>Implement</h3>
+                      <p>Make the idea tangible.</p>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="step-number">04</span>
+                    <div>
+                      <h3>Review</h3>
+                      <p>Reach ready. Close the loop.</p>
+                    </div>
+                  </li>
+                </ol>
+                <p class="guide-footnote">
+                  Demo stages only. No AI jobs are run.
+                </p>
+              </section>
+              <section class="recovery-guide">
+                <span class="recovery-icon" aria-hidden="true">↻</span>
+                <h2>A pause is a place to restart.</h2>
+                <p>
+                  Mark a running order partial to keep its current stage. Retry
+                  picks up from that recovery point.
+                </p>
+              </section>
+            </aside>
+          </div>
+          <footer class="desk-footer">
+            <span id="storage-status" data-state="saved"
+              >Saved in this browser</span
+            ><span>Local only. No accounts. No network calls.</span
+            ><span class="version">ccswarm / v0.1</span>
+          </footer>
+        </main>
+      </div>
+    </div>
+    <div
+      id="announcement"
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
     <template id="order-template">
       <article class="order-card">
-        <div class="order-main">
-          <div class="order-title-row">
-            <h3></h3>
-            <span class="status-pill"></span>
-          </div>
-          <ol class="stage-list"></ol>
-          <p class="recovery-note"></p>
+        <div class="card-topline">
+          <span class="order-reference"></span><span class="status-pill"></span>
         </div>
-        <div class="order-actions">
-          <button type="button" data-action="advance">Advance</button>
-          <button type="button" data-action="partial">Mark partial</button>
-          <button type="button" data-action="retry">Retry</button>
+        <h3></h3>
+        <ol class="order-stages"></ol>
+        <p class="order-note"></p>
+        <div class="card-actions">
+          <button
+            class="button button-primary button-small"
+            type="button"
+            data-action="advance"
+          >
+            Advance<span aria-hidden="true"> →</span></button
+          ><button
+            class="button button-secondary button-small"
+            type="button"
+            data-action="partial"
+          >
+            Mark partial</button
+          ><button
+            class="button button-retry button-small"
+            type="button"
+            data-action="retry"
+          >
+            Retry<span aria-hidden="true"> ↻</span></button
+          ><button
+            class="button button-delete button-small"
+            type="button"
+            data-action="delete"
+          >
+            Delete
+          </button>
         </div>
       </article>
     </template>
-
-    <script src="./app.js"></script>
   </body>
 </html>
