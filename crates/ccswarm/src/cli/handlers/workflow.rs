@@ -868,16 +868,24 @@ impl CliRunner {
         } else if repo.join("pyproject.toml").exists() {
             ("uv", &["run", "--frozen", "pytest"])
         } else if let Some(spec) = find_loose_test_spec(repo) {
-            // #42 fix: even without a package.json, if the AI generated a *.spec.mjs /
-            // *.test.js alongside the app, run just that file through Playwright. This
-            // makes the Tetris-style "HTML + generated spec" flow self-verifying.
+            // Standalone specs may use Node's built-in runner or Playwright.
+            // A filename alone does not identify the test framework.
             eprintln!(
                 "  {} Auto-detected spec file: {}",
                 "\u{25b6}".bright_blue(),
                 spec.display()
             );
-            let output = tokio::process::Command::new("npx")
-                .args(["playwright", "test", &spec.to_string_lossy()])
+            let source = match std::fs::read_to_string(&spec) {
+                Ok(source) => source,
+                Err(error) => {
+                    eprintln!("  {} Could not read spec: {error}", "\u{2717}".bright_red());
+                    return false;
+                }
+            };
+            let (runner, args) = loose_test_runner(&source);
+            let output = tokio::process::Command::new(runner)
+                .args(args)
+                .arg(&spec)
                 .current_dir(repo)
                 .output()
                 .await;
@@ -886,13 +894,17 @@ impl CliRunner {
                     eprintln!("  {} Spec passed", "\u{2713}".bright_green());
                     true
                 }
-                Ok(_) => {
+                Ok(output) => {
                     eprintln!("  {} Spec failed", "\u{2717}".bright_red());
+                    eprintln!("{}", String::from_utf8_lossy(&output.stderr));
                     false
                 }
-                Err(_) => {
-                    eprintln!("  {} npx playwright unavailable", "-".bright_yellow());
-                    true
+                Err(error) => {
+                    eprintln!(
+                        "  {} Could not run {runner}: {error}",
+                        "\u{2717}".bright_red()
+                    );
+                    false
                 }
             };
         } else {
@@ -1702,9 +1714,9 @@ mod suggest_tests {
 }
 
 /// If the repo has no conventional test config but does have a loose `*.spec.mjs` /
-/// `*.spec.js` / `*.test.mjs` / `*.test.js` file at the top level, return it so the
-/// post-pipeline flow can try `npx playwright test <that file>` (issue #42). We only
-/// look one level deep to keep this predictable and fast.
+/// `*.spec.js` / `*.test.mjs` / `*.test.js` (or CommonJS equivalents) file at the
+/// top level, return it for the post-pipeline test runner. We only look one level
+/// deep to keep this predictable and fast.
 fn find_loose_test_spec(repo: &std::path::Path) -> Option<std::path::PathBuf> {
     let read = std::fs::read_dir(repo).ok()?;
     for entry in read.flatten() {
@@ -1715,13 +1727,46 @@ fn find_loose_test_spec(repo: &std::path::Path) -> Option<std::path::PathBuf> {
         if (name.ends_with(".spec.mjs")
             || name.ends_with(".spec.js")
             || name.ends_with(".test.mjs")
-            || name.ends_with(".test.js"))
+            || name.ends_with(".test.js")
+            || name.ends_with(".spec.cjs")
+            || name.ends_with(".test.cjs"))
             && path.is_file()
         {
             return Some(path);
         }
     }
     None
+}
+
+fn loose_test_runner(source: &str) -> (&'static str, &'static [&'static str]) {
+    if source.contains("'node:test'") || source.contains("\"node:test\"") {
+        ("node", &["--test"])
+    } else {
+        ("npx", &["playwright", "test"])
+    }
+}
+
+#[cfg(test)]
+mod loose_test_tests {
+    use super::loose_test_runner;
+
+    #[test]
+    fn node_test_specs_use_the_builtin_runner() {
+        for source in [
+            "const { test } = require('node:test');",
+            "import { test } from \"node:test\";",
+        ] {
+            assert_eq!(loose_test_runner(source), ("node", &["--test"][..]));
+        }
+    }
+
+    #[test]
+    fn playwright_specs_keep_their_runner() {
+        assert_eq!(
+            loose_test_runner("import { test } from '@playwright/test';"),
+            ("npx", &["playwright", "test"][..])
+        );
+    }
 }
 
 /// Extract commands from the first fenced `bash`/`sh`/`shell` block in a markdown

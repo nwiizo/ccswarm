@@ -12,8 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.1] - 2026-09-09
 
-Apply the lessons from generating and testing a real Order Desk app with
-ccswarm and Codex.
+Fix false provider failures and incorrect standalone test-runner selection
+found while generating and testing a real Order Desk app with ccswarm and Codex.
+
+### Fixed
+
+- Do not fail an otherwise successful provider run because its narrative
+  mentions error handling, visible errors, or storage failures. Error-log
+  detection now requires an explicit diagnostic prefix such as `Error:`;
+  provider exit failures and structured build/test failures still fail.
+- Run standalone specs that use `node:test` with `node --test` instead of
+  Playwright, avoiding false test failures and unnecessary auto-fix attempts.
+  Recognize CommonJS spec filenames and report unavailable loose-spec runners
+  as verification failures.
 
 ### Changed
 

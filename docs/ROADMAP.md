@@ -9,10 +9,15 @@ v0.10.1 turns the browser example into a reproducible real-generation check.
 ccswarm and tests that output in Chromium. The default run tests the included
 app and clearly identifies its provider-free preview. Run directories and
 evidence are retained. Browser checks also gate CI and release publication.
+Live generation also exposed and fixed false failure classification when
+provider prose mentions error handling or storage failures. Explicit diagnostic
+markers still identify error logs.
+Standalone Node specs now use the built-in runner instead of Playwright;
+unavailable loose-spec runners are reported as failed verification.
 
 See the [example guide](../examples/e2e-playwright/README.md) and
 [release notes](releases/v0.10.1.md). Existing Sangha and Astra limitations
-remain; this patch does not change workflow execution semantics.
+remain; runtime changes cover response parsing and standalone test execution.
 
 ## v0.10.0 Release Scope
 

@@ -12,7 +12,16 @@ impl OutputParser {
         let mut patterns = HashMap::new();
         patterns.insert(
             "error".to_string(),
-            regex::Regex::new(r"(?i)(error|exception|failure)").expect("valid regex"),
+            // Provider prose can describe error handling or an earlier failed test.
+            // Only explicit diagnostic prefixes classify a response as an error log.
+            regex::Regex::new(
+                r"(?imx)^[\t\x20]*(?:
+                    (?:error|exception|failure|[a-z_][a-z0-9_.]*(?:error|exception))
+                    (?:[\t\x20]*\[[^\]\r\n]+\]|[\t\x20]+[a-z]+\d+)?[\t\x20]*:
+                    |\[error\](?:[\t\x20]|$)
+                )",
+            )
+            .expect("valid regex"),
         );
         Self { patterns }
     }
@@ -159,4 +168,52 @@ pub struct LogContext {
     pub file: Option<String>,
     pub line: Option<usize>,
     pub fields: HashMap<String, serde_json::Value>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_handling_narration_is_not_an_error_log() {
+        let parser = OutputParser::new();
+        for output in [
+            "I will test transitions, validation, and storage failures.\n\nImplemented the desk with visible errors.\nAll 14 logic tests and JavaScript syntax checks pass.",
+            "Added error handling and exception recovery.",
+            "No errors were found.",
+        ] {
+            assert!(
+                matches!(parser.parse(output).unwrap(), ParsedOutput::PlainText(text) if text == output)
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_error_diagnostics_remain_errors() {
+        let parser = OutputParser::new();
+        for output in [
+            "Error: provider could not finish",
+            "Starting build\nerror[E0425]: missing function",
+            "  [ERROR] failed to save the result",
+            "Exception: connection lost",
+            "FAILURE: task aborted",
+            "TypeError: Cannot read properties of undefined",
+            "ReferenceError: missing is not defined",
+            "ValueError: invalid value",
+            "java.lang.NullPointerException: missing value",
+            "error TS2322: Type 'string' is not assignable to type 'number'",
+            "Error [ERR_MODULE_NOT_FOUND]: Cannot find module",
+        ] {
+            assert!(
+                matches!(
+                    parser.parse(output).unwrap(),
+                    ParsedOutput::StructuredLog {
+                        level: LogLevel::Error,
+                        ..
+                    }
+                ),
+                "expected an error diagnostic: {output}"
+            );
+        }
+    }
 }
