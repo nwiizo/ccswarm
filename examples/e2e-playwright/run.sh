@@ -65,7 +65,7 @@ cd "$HERE"
 if [ ! -d "node_modules/@playwright/test" ]; then
   npm ci
 fi
-if [ -z "${PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}" ] && ! npx playwright install --list | grep -q 'chromium_headless_shell'; then
+if [ -z "${PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}" ]; then
   npx playwright install chromium chromium-headless-shell
 fi
 

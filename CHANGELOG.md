@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update `async-trait` to 0.1.92 to resolve generated-code Clippy failures
   with Rust 1.99 while retaining strict warning checks.
 
+### Fixed
+
+- Let the locked Playwright CLI ensure the required browser revision is
+  installed; a different cached Chromium revision no longer skips setup.
+
 ### Security
 
 - Update `rustls` to 0.23.45 and `rustls-webpki` to 0.103.15 in the lockfile,
