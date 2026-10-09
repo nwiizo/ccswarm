@@ -10,6 +10,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.10.2] - 2026-10-09
+
+### Changed
+
+- Reuse task modifier parsing and type-state transitions for default task
+  construction, retaining the public builder API and optional task fields.
+- Share facet bullet rendering while preserving prompt ordering, whitespace,
+  empty-section omission, inline fallbacks, and raw-content overrides.
+- Add executable type-state documentation checks and strengthen regression
+  coverage for task construction and composed prompts.
+- Refresh development rules and bundle the coding-style skill with its
+  references under `.agents` for reproducible refactoring guidance.
+- Update `async-trait` to 0.1.92 to resolve generated-code Clippy failures
+  with Rust 1.99 while retaining strict warning checks.
+
+### Security
+
+- Update `rustls` to 0.23.45 and `rustls-webpki` to 0.103.15 in the lockfile,
+  addressing RUSTSEC-2026-0285 without changing the dependency feature set.
+
 ## [0.10.1] - 2026-09-09
 
 Fix false provider failures and incorrect standalone test-runner selection

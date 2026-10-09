@@ -1,0 +1,4 @@
+interface:
+  display_name: "nwiizo Coding Style"
+  short_description: "最小実装・過剰設計レビュー・全体監査とRustの重複・結合度診断"
+  default_prompt: "$nwiizo-coding-style を使い、既存の実装と要件を確認して、必要な変更と検証を完了してください。"

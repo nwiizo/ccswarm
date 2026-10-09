@@ -51,8 +51,10 @@ coordination/task-queue/*
 
 /.agents/*
 !/.agents/agents/
+!/.agents/rules/
 !/.agents/skills/
 !/.agents/agents/**
+!/.agents/rules/**
 !/.agents/skills/**
 
 # Node.js (for examples)

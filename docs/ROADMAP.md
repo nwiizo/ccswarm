@@ -1,6 +1,17 @@
 # ccswarm Release Scope And Roadmap
 
-Scope updated: 2026-09-09.
+Scope updated: 2026-10-09.
+
+## v0.10.2 Release Scope
+
+v0.10.2 consolidates task-builder parsing/default construction and facet list
+rendering without changing public APIs or composed prompt text. Regression
+checks cover optional fields, raw-content overrides, empty sections, and
+compile-time builder restrictions. The release also updates the locked Rustls
+dependency to fix RUSTSEC-2026-0285 and refreshes the shared refactoring rules.
+
+See the [release notes](releases/v0.10.2.md). The runtime limitations below
+remain unchanged.
 
 ## v0.10.1 Release Scope
 

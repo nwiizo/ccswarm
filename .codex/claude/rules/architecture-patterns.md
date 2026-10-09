@@ -1,33 +1,31 @@
 # Architecture Patterns
 
-## Rust-Native Patterns (REQUIRED)
+## Rust-Native Patterns
 
 ### What Works
-- **Type-State Pattern**: Compile-time state validation with zero runtime cost
-- **Channel-Based Orchestration**: Message-passing without Arc<Mutex> or shared state
-- **Iterator Pipelines**: Zero-cost abstractions for efficient task processing
-- **Actor Model**: Replace locks with message-passing actors
-- **Minimal Testing**: Only 8-10 essential tests - focus on core functionality
+- **Type-State Pattern**: Enforce required state transitions at compile time.
+- **Channel-Based Orchestration**: Use messages to isolate agent state and make ownership clear.
+- **Iterator Pipelines**: Use iterators when they make data flow easier to follow.
+- **Actor Model**: Use actors where independent lifecycles and message handling clarify concurrency.
+- **Focused Testing**: Cover core behavior and affected failure paths without a fixed suite-size limit.
 
 ### What Doesn't Work
 - **Layered Architecture**: Unnecessary abstraction in Rust
-- **Excessive Arc<Mutex>**: Causes contention, use channels instead
-- **Over-testing**: 300+ tests create maintenance burden without value
-- **Complex Abstractions**: Direct patterns are clearer and more efficient
+- **Unnecessary shared state**: Prefer ownership or messages when multiple owners are not required.
+- **Redundant tests**: Avoid checks that only repeat implementation details; preserve meaningful regression coverage.
+- **Complex Abstractions**: Prefer direct code when it expresses the required behavior clearly.
 
-## Implementation Patterns
+## Refactoring Decisions
 
-### Command Registry Pattern
-- **Purpose**: Eliminates massive match statements in CLI handling
-- **Implementation**: HashMap of command handlers with async closures
-- **Location**: `crates/ccswarm/src/cli/command_registry.rs`
-- **Usage**: Register commands once, dispatch dynamically
+- Use `similarity-rs` and `cargo-coupling` through `nwiizo-coding-style` for structural changes. Confirm candidate pairs in the code; counts and scores are diagnostic evidence, not refactoring targets.
+- Preserve intentional differences between role configuration, hook events, and public entrypoints. Reuse existing state transitions and builders before adding shared abstractions.
+- Keep prompt formatting and precedence stable when consolidating facet rendering; validate the composed text, including empty sections and raw-content overrides.
 
-### Error Template System
-- **Purpose**: Standardizes error diagrams and visualizations
-- **Implementation**: Template engine with reusable diagram patterns
-- **Templates**: Box diagrams, flow diagrams, network diagrams
-- **Location**: `crates/ccswarm/src/utils/error_template.rs`
+## Module Boundaries
+
+- `workflow/` owns orchestration, routing, Sangha decisions, and policy.
+- `session/` owns execution primitives, output parsing, context, and persistence.
+- `providers/` builds provider-specific commands without owning workflow policy.
 
 ## Concurrency Rules
 
@@ -36,10 +34,9 @@
 - Never hold locks across `.await` points
 - Use channel-based coordination, not shared state
 
-## Claude Code Integration
+## Provider Integration
 
-ccswarm uses **Claude Code via ACP** with efficient patterns:
-- **Auto-Connect**: WebSocket connection to ws://localhost:9100
-- **Channel-Based Communication**: No shared state between agents
-- **Type-Safe Messages**: Compile-time validation of message types
-- **Actor Pattern**: Each agent as an independent actor
+`A2ABridge` uses the configured A2A REST endpoint when present and otherwise
+executes local Claude or Codex CLI commands. Keep provider capabilities and
+current limitations aligned with `docs/APPLICATION_SPEC.md`; do not treat
+planned Sangha or Astra capabilities as implemented behavior.

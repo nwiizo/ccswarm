@@ -34,6 +34,11 @@ Keep terminal/session primitives, provider output parsing, and persistence in
 ## Codex Assets
 
 - Repo skills live in `.agents/skills/`.
+- The bundled `nwiizo-coding-style` skill is copied from `nwiizo/dotfiles`,
+  including its references, metadata, and license. Preserve those resources
+  together when refreshing the copy.
+- Development and architecture rules live in `.agents/rules/`, with matching
+  copies in `.claude/rules/` and `.codex/claude/rules/`. Update all three together.
 - Custom subagents are defined in `.agents/agents/*.toml` and registered from
   `.codex/config.toml`.
 - The original Claude configuration is mirrored under `.codex/claude/` for

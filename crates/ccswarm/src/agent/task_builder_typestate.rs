@@ -13,7 +13,7 @@
 //! * Can only build if has default values
 //! ```
 
-use super::{Priority, Task, TaskType};
+use super::{Priority, Task, TaskBuilder, TaskType};
 use std::marker::PhantomData;
 use uuid::Uuid;
 
@@ -40,17 +40,28 @@ pub struct Complete;
 /// Type-safe task builder that enforces required fields at compile time
 ///
 /// ## Example
-/// ```rust,ignore
-/// // This won't compile - can't build without description
-/// // let task = TypedTaskBuilder::new().build(); // ERROR!
+/// ```rust
+/// use ccswarm::agent::{Priority, TaskType, TypedTaskBuilder};
+/// use ccswarm::agent::task_builder_typestate::OptionalTaskConfig;
 ///
-/// // Correct usage - must follow state transitions
 /// let task = TypedTaskBuilder::new()
 ///     .description("Implement user authentication")  // Required
 ///     .priority(Priority::High)                      // Required
 ///     .task_type(TaskType::Development)              // Required
 ///     .details("Add JWT-based auth")                 // Optional
 ///     .build();                                      // Now we can build!
+/// ```
+///
+/// Building without a description is rejected:
+/// ```compile_fail
+/// use ccswarm::agent::TypedTaskBuilder;
+/// let task = TypedTaskBuilder::new().build();
+/// ```
+///
+/// An incomplete builder must explicitly opt into defaults:
+/// ```compile_fail
+/// use ccswarm::agent::TypedTaskBuilder;
+/// let task = TypedTaskBuilder::new().description("Task").build();
 /// ```
 pub struct TypedTaskBuilder<State> {
     description: Option<String>,
@@ -95,78 +106,14 @@ impl TypedTaskBuilder<NoDescription> {
         }
     }
 
-    /// Parse task description with modifiers and transition to HasDescription
+    /// Parse task description with modifiers and transition to Complete
     /// Format: `Task description [priority] [type]`
     pub fn parse(input: &str) -> TypedTaskBuilder<Complete> {
-        let (desc, priority, task_type) = Self::parse_modifiers(input);
-
-        TypedTaskBuilder {
-            description: Some(desc),
-            priority: Some(priority),
-            task_type: Some(task_type),
-            details: None,
-            depends_on: Vec::new(),
-            estimated_duration: None,
-            _state: PhantomData,
-        }
-    }
-
-    fn parse_modifiers(desc: &str) -> (String, Priority, TaskType) {
-        let mut description = desc.to_string();
-        let mut priority = Priority::Medium;
-        let mut task_type = TaskType::Development;
-
-        // Parse priority modifier [high], [medium], [low]
-        if let Some(start) = description.find('[')
-            && let Some(end) = description[start..].find(']')
-        {
-            let modifier = &description[start + 1..start + end].to_lowercase();
-
-            // Try to parse as priority
-            if let Ok(p) = modifier.parse::<Priority>() {
-                priority = p;
-                description = format!(
-                    "{}{}",
-                    &description[..start],
-                    &description[start + end + 1..]
-                )
-                .trim()
-                .to_string();
-            }
-
-            // Try to parse as task type
-            if let Ok(t) = modifier.parse::<TaskType>() {
-                task_type = t;
-                description = format!(
-                    "{}{}",
-                    &description[..start],
-                    &description[start + end + 1..]
-                )
-                .trim()
-                .to_string();
-            }
-        }
-
-        // Check for second modifier
-        if let Some(start) = description.find('[')
-            && let Some(end) = description[start..].find(']')
-        {
-            let modifier = &description[start + 1..start + end].to_lowercase();
-
-            // Try to parse as task type if we haven't found one yet
-            if let Ok(t) = modifier.parse::<TaskType>() {
-                task_type = t;
-                description = format!(
-                    "{}{}",
-                    &description[..start],
-                    &description[start + end + 1..]
-                )
-                .trim()
-                .to_string();
-            }
-        }
-
-        (description.trim().to_string(), priority, task_type)
+        let (description, priority, task_type) = TaskBuilder::parse_modifiers(input);
+        Self::new()
+            .description(description)
+            .priority(priority)
+            .task_type(task_type)
     }
 }
 
@@ -198,20 +145,7 @@ impl TypedTaskBuilder<HasDescription> {
 
     /// Build with default priority and task type
     pub fn build_with_defaults(self) -> Task {
-        Task {
-            id: Uuid::new_v4().to_string(),
-            description: self
-                .description
-                .expect("Description must be set in HasDescription state"),
-            priority: Priority::Medium,
-            task_type: TaskType::Development,
-            details: self.details,
-            estimated_duration: self.estimated_duration.map(|d| d as u32),
-            assigned_to: None,
-            parent_task_id: None,
-            quality_issues: None,
-            metadata: None,
-        }
+        self.priority(Priority::Medium).build_with_default_type()
     }
 }
 
@@ -237,18 +171,7 @@ impl TypedTaskBuilder<HasPriority> {
 
     /// Build with default task type
     pub fn build_with_default_type(self) -> Task {
-        Task {
-            id: Uuid::new_v4().to_string(),
-            description: self.description.expect("Description must be set"),
-            priority: self.priority.expect("Priority must be set"),
-            task_type: TaskType::Development,
-            details: self.details,
-            estimated_duration: self.estimated_duration.map(|d| d as u32),
-            assigned_to: None,
-            parent_task_id: None,
-            quality_issues: None,
-            metadata: None,
-        }
+        self.task_type(TaskType::Development).build()
     }
 }
 
@@ -384,25 +307,47 @@ mod tests {
 
     #[test]
     fn test_build_with_defaults() {
-        let task = TypedTaskBuilder::new()
-            .description("Quick task")
-            .build_with_defaults();
+        let make_builder = || {
+            TypedTaskBuilder::new()
+                .description("Quick task")
+                .details("Keep this context")
+                .estimated_duration(25)
+        };
+        let tasks = [
+            (make_builder().build_with_defaults(), Priority::Medium),
+            (
+                make_builder()
+                    .priority(Priority::High)
+                    .build_with_default_type(),
+                Priority::High,
+            ),
+        ];
 
-        assert_eq!(task.description, "Quick task");
-        assert_eq!(task.priority, Priority::Medium);
-        assert_eq!(task.task_type, TaskType::Development);
+        for (task, priority) in tasks {
+            assert_eq!(task.description, "Quick task");
+            assert_eq!(task.priority, priority);
+            assert_eq!(task.task_type, TaskType::Development);
+            assert_eq!(task.details.as_deref(), Some("Keep this context"));
+            assert_eq!(task.estimated_duration, Some(25));
+            assert!(Uuid::parse_str(&task.id).is_ok());
+        }
     }
 
-    // The following would not compile - demonstrating type safety:
-    // #[test]
-    // fn test_cannot_build_without_description() {
-    //     let task = TypedTaskBuilder::new().build(); // Compilation error!
-    // }
-
-    // #[test]
-    // fn test_cannot_build_without_priority() {
-    //     let task = TypedTaskBuilder::new()
-    //         .description("Task")
-    //         .build(); // Compilation error!
-    // }
+    #[test]
+    fn test_parsing_matches_task_builder() {
+        for input in [
+            "Fix bug [high] [bugfix]",
+            "  Write docs [low] [documentation]  ",
+            "Investigate [unknown] [high]",
+            "Keep [unfinished",
+            "Unicode 🦀 [HIGH] [bugfix]",
+            "",
+        ] {
+            let typed = TypedTaskBuilder::parse(input).build();
+            let untyped = super::super::TaskBuilder::parse(input).build();
+            assert_eq!(typed.description, untyped.description, "{input}");
+            assert_eq!(typed.priority, untyped.priority, "{input}");
+            assert_eq!(typed.task_type, untyped.task_type, "{input}");
+        }
+    }
 }

@@ -12,17 +12,18 @@ Ensure all content is in English per international open-source conventions:
 ## Code Quality Requirements
 
 - Run before commits: `cargo fmt && cargo clippy -- -D warnings && cargo test`
-- **Minimal tests only**: ~10 tests maximum covering core functionality
+- Keep tests focused on core behavior and failure paths; do not impose a total test-count limit.
 - Document public APIs with rustdoc
 - Keep cyclomatic complexity <10
+- For lint failures in macro-generated code, inspect the generating dependency and compatible upstream fixes before adding a local lint allowance.
 
 ## Rust Coding Rules
 
 - **Error Handling**: `Result<T, E>` with `thiserror`, no `.unwrap()` in production
 - **Type-State Pattern**: Agent state transitions validated at compile time
-- **Channel-Based Concurrency**: No `Arc<Mutex>`, use tokio channels or DashMap
+- **Concurrency**: Prefer ownership and channels for agent coordination. Choose locks only for shared state that needs them, with explicit lock lifetimes.
 - **Iterator Chains**: Use iterator methods for collection processing
-- **Zero-Cost Abstractions**: Compile-time optimizations, no runtime overhead
+- **Abstractions**: Reuse existing operations before adding traits or wrappers; substantiate performance claims with measurements.
 - **Sensitive Data**: Use `SensitiveString` for API keys (masks in Debug/Display)
 
 ## Error Handling Patterns
@@ -54,6 +55,7 @@ entry.value_mut()                     // Get mutable value
 
 ## Testing Strategy
 
+- For behavior-preserving refactors, strengthen missing output or failure-path checks before editing the implementation; these characterization tests should already pass.
 - Unit tests colocated with implementation in `#[cfg(test)]` modules
 - Integration tests in `crates/ccswarm/tests/` directory
 - Use `#[tokio::test]` for async tests

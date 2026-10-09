@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.10.1"
+version = "0.10.2"
 edition.workspace = true
 authors.workspace = true
 description = "AI Agent Workflow DevOps toolchain complementing Claude Code Agent Teams"
@@ -93,7 +93,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 tempfile = "3.27"
 
 # Async traits
-async-trait = "0.1.89"
+async-trait = "0.1.92"
 
 # Async utilities
 futures = "0.3"

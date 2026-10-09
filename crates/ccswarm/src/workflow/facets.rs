@@ -319,110 +319,64 @@ impl FacetRegistry {
 
     /// Render persona into system prompt text
     fn render_persona(&self, name: &str) -> String {
-        match self.personas.get(name) {
-            Some(persona) => {
-                let mut parts = Vec::new();
-
-                if !persona.system_prompt.is_empty() {
-                    return persona.system_prompt.clone();
-                }
-
-                parts.push(format!("You are {}", persona.name));
-
-                if !persona.role.is_empty() {
-                    parts.push(format!("Role: {}", persona.role));
-                }
-
-                if !persona.expertise.is_empty() {
-                    parts.push(format!("Expertise: {}", persona.expertise.join(", ")));
-                }
-
-                if !persona.principles.is_empty() {
-                    parts.push("Principles:".to_string());
-                    for principle in &persona.principles {
-                        parts.push(format!("- {}", principle));
-                    }
-                }
-
-                parts.join("\n")
-            }
-            None => {
-                // Treat name as inline persona description
-                format!("You are acting as: {}", name)
-            }
+        let Some(persona) = self.personas.get(name) else {
+            return format!("You are acting as: {}", name);
+        };
+        if !persona.system_prompt.is_empty() {
+            return persona.system_prompt.clone();
         }
+
+        let mut parts = vec![format!("You are {}", persona.name)];
+        if !persona.role.is_empty() {
+            parts.push(format!("Role: {}", persona.role));
+        }
+        if !persona.expertise.is_empty() {
+            parts.push(format!("Expertise: {}", persona.expertise.join(", ")));
+        }
+        append_bullets(&mut parts, "Principles:", "- ", &persona.principles);
+        parts.join("\n")
     }
 
     /// Render policy into constraint text
     fn render_policy(&self, name: &str) -> String {
-        match self.policies.get(name) {
-            Some(policy) => {
-                if !policy.content.is_empty() {
-                    return policy.content.clone();
-                }
-
-                let mut parts = Vec::new();
-
-                if !policy.rules.is_empty() {
-                    parts.push("Rules:".to_string());
-                    for rule in &policy.rules {
-                        parts.push(format!("- {}", rule));
-                    }
-                }
-
-                if !policy.prohibitions.is_empty() {
-                    parts.push("Prohibitions:".to_string());
-                    for prohibition in &policy.prohibitions {
-                        parts.push(format!("- NEVER: {}", prohibition));
-                    }
-                }
-
-                if !policy.standards.is_empty() {
-                    parts.push("Quality Standards:".to_string());
-                    for standard in &policy.standards {
-                        parts.push(format!("- {}", standard));
-                    }
-                }
-
-                parts.join("\n")
-            }
-            None => {
-                // Treat name as inline policy text
-                name.to_string()
-            }
+        let Some(policy) = self.policies.get(name) else {
+            return name.to_string();
+        };
+        if !policy.content.is_empty() {
+            return policy.content.clone();
         }
+
+        let mut parts = Vec::new();
+        append_bullets(&mut parts, "Rules:", "- ", &policy.rules);
+        append_bullets(
+            &mut parts,
+            "Prohibitions:",
+            "- NEVER: ",
+            &policy.prohibitions,
+        );
+        append_bullets(&mut parts, "Quality Standards:", "- ", &policy.standards);
+        parts.join("\n")
     }
 
     /// Render knowledge into context text
     fn render_knowledge(&self, name: &str) -> String {
-        match self.knowledge.get(name) {
-            Some(knowledge) => {
-                if !knowledge.content.is_empty() {
-                    return knowledge.content.clone();
-                }
-
-                let mut parts = Vec::new();
-
-                if !knowledge.context.is_empty() {
-                    for item in &knowledge.context {
-                        parts.push(item.clone());
-                    }
-                }
-
-                if !knowledge.references.is_empty() {
-                    parts.push("References:".to_string());
-                    for reference in &knowledge.references {
-                        parts.push(format!("- {}", reference));
-                    }
-                }
-
-                parts.join("\n")
-            }
-            None => {
-                // Treat name as inline knowledge
-                name.to_string()
-            }
+        let Some(knowledge) = self.knowledge.get(name) else {
+            return name.to_string();
+        };
+        if !knowledge.content.is_empty() {
+            return knowledge.content.clone();
         }
+
+        let mut parts = knowledge.context.clone();
+        append_bullets(&mut parts, "References:", "- ", &knowledge.references);
+        parts.join("\n")
+    }
+}
+
+fn append_bullets(parts: &mut Vec<String>, heading: &str, prefix: &str, items: &[String]) {
+    if !items.is_empty() {
+        parts.push(heading.to_string());
+        parts.extend(items.iter().map(|item| format!("{prefix}{item}")));
     }
 }
 
@@ -771,14 +725,14 @@ mod tests {
             description: String::new(),
             rules: vec!["Test everything".to_string()],
             prohibitions: vec!["Use unwrap".to_string()],
-            standards: vec![],
+            standards: vec!["Keep checks passing".to_string()],
             content: String::new(),
         });
 
         registry.register_knowledge(KnowledgeFacet {
             name: "architecture".to_string(),
             context: vec!["This is a Rust project using tokio".to_string()],
-            references: vec![],
+            references: vec!["docs/ARCHITECTURE.md".to_string()],
             content: String::new(),
         });
 
@@ -790,26 +744,76 @@ mod tests {
             Some("Return JSON response"),
         );
 
-        // System should contain persona
-        assert!(prompt.system.contains("coder"));
-        assert!(prompt.system.contains("Engineer"));
+        assert_eq!(
+            prompt.system,
+            "You are coder\nRole: Engineer\nExpertise: Rust\nPrinciples:\n- Write clean code"
+        );
+        assert_eq!(
+            prompt.user,
+            "## Context\n\nThis is a Rust project using tokio\nReferences:\n- docs/ARCHITECTURE.md\n\n\
+             ## Task\n\nImplement the login endpoint\n\n\
+             ## Constraints\n\nRules:\n- Test everything\nProhibitions:\n- NEVER: Use unwrap\nQuality Standards:\n- Keep checks passing\n\n\
+             ## Output Format\n\nReturn JSON response"
+        );
+    }
 
-        // User should contain knowledge, instruction, policy, output contract in order
-        assert!(prompt.user.contains("Context"));
-        assert!(prompt.user.contains("Rust project"));
-        assert!(prompt.user.contains("Task"));
-        assert!(prompt.user.contains("login endpoint"));
-        assert!(prompt.user.contains("Constraints"));
-        assert!(prompt.user.contains("Test everything"));
-        assert!(prompt.user.contains("Output Format"));
-        assert!(prompt.user.contains("JSON response"));
+    #[test]
+    fn test_render_empty_sections_and_raw_overrides() {
+        let mut registry = FacetRegistry::new();
+        registry.register_persona(PersonaFacet {
+            name: "custom".into(),
+            role: String::new(),
+            expertise: vec![],
+            principles: vec![],
+            system_prompt: String::new(),
+        });
+        registry.register_policy(PolicyFacet {
+            name: "custom".into(),
+            description: String::new(),
+            rules: vec![],
+            prohibitions: vec![],
+            standards: vec![],
+            content: String::new(),
+        });
+        registry.register_knowledge(KnowledgeFacet {
+            name: "custom".into(),
+            context: vec![],
+            references: vec![],
+            content: String::new(),
+        });
 
-        // Verify ordering: knowledge before instruction before policy
-        let knowledge_pos = prompt.user.find("Context").unwrap();
-        let instruction_pos = prompt.user.find("Task").unwrap();
-        let policy_pos = prompt.user.find("Constraints").unwrap();
-        assert!(knowledge_pos < instruction_pos);
-        assert!(instruction_pos < policy_pos);
+        let prompt = registry.compose(
+            Some("custom"),
+            Some("custom"),
+            Some("custom"),
+            "Do it",
+            None,
+        );
+        assert_eq!(prompt.system, "You are custom");
+        assert_eq!(prompt.user, "## Task\n\nDo it");
+
+        let persona = registry.personas.get_mut("custom").unwrap();
+        persona.role = "Ignored role".into();
+        persona.system_prompt = "Raw persona".into();
+        let policy = registry.policies.get_mut("custom").unwrap();
+        policy.rules.push("Ignored rule".into());
+        policy.content = "Raw policy".into();
+        let knowledge = registry.knowledge.get_mut("custom").unwrap();
+        knowledge.context.push("Ignored context".into());
+        knowledge.content = "Raw knowledge".into();
+
+        let prompt = registry.compose(
+            Some("custom"),
+            Some("custom"),
+            Some("custom"),
+            "Do it",
+            None,
+        );
+        assert_eq!(prompt.system, "Raw persona");
+        assert_eq!(
+            prompt.user,
+            "## Context\n\nRaw knowledge\n\n## Task\n\nDo it\n\n## Constraints\n\nRaw policy"
+        );
     }
 
     #[test]

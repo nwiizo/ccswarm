@@ -103,6 +103,6 @@ cargo run -p ccswarm -- --help
 
 ## Forward Plan
 
-The canonical release roadmap is [v0.10.0 Roadmap](ROADMAP.md). The longer
+The release scope and future milestones are tracked in the [roadmap](ROADMAP.md). The longer
 product vocabulary and implementation direction remain in
 [ccswarm Product Abstraction Plan](CCSWARM_PRODUCT_ABSTRACTION_PLAN.md).
