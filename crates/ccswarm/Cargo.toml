@@ -67,10 +67,6 @@ opentelemetry-otlp = { version = "0.32.0", features = [
 tracing-opentelemetry = { version = "0.33.0", optional = true }
 
 
-# Process management
-[target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", features = ["fs", "process"] }
-
 # Configuration
 config = "0.15"
 
@@ -121,6 +117,10 @@ secrecy = { version = "0.10", features = ["serde"] }
 
 # Directory paths
 dirs = "6.0"
+
+# Process management (Unix-only: nix has no Windows support)
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["fs", "process"] }
 
 [dev-dependencies]
 # Testing
