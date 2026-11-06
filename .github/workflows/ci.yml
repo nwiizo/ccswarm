@@ -12,7 +12,8 @@ env:
 jobs:
   browser-test:
     name: Browser example
-    runs-on: ubuntu-latest
+    # Playwright does not support Chromium on Ubuntu 26.04 (ubuntu-latest).
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: examples/e2e-playwright

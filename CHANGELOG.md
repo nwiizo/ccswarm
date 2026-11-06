@@ -69,6 +69,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them.
 - Correct the malformed `Bash(rm -rf /)*` deny rule in the project Claude Code
   settings so it is no longer skipped.
+- Ctrl-C (SIGINT) stops a run cleanly: ccswarm closes the stage's Herdr tab,
+  which stops its provider, removes the temporary run directory, records an
+  interrupted `task_end` event, and exits with status 130. Previously the tab,
+  the provider process, and the directory were left behind.
+- The bundled harness scenario test no longer pins the scenario count of the
+  gitignored `.ccswarm/harness/` directory.
+- CI runs the browser example on `ubuntu-24.04`; Playwright does not support
+  Chromium on Ubuntu 26.04.
 
 ## [0.10.2] - 2026-10-09
 

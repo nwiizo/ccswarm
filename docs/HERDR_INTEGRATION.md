@@ -185,6 +185,13 @@ description = "ccswarm run board"
   the session that hosts the calling pane.
 - Codex live stages (see above).
 
+## Known Limits
+
+- Cancellation cleanup covers Ctrl-C (SIGINT), which exits with status 130.
+  SIGTERM and SIGHUP (for example closing the terminal) still terminate
+  ccswarm without closing the stage tab or removing its temporary directory.
+- After Ctrl-C, ccswarm waits at most 10 seconds for cleanup before exiting.
+
 ## Verification
 
 - Unit tests cover script quoting, environment handling, Herdr JSON parsing,

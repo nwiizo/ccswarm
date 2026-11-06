@@ -999,7 +999,17 @@ impl FlowEngine {
             .variables
             .insert("task".to_string(), serde_json::json!(task_text));
         state.status = FlowStatus::Running;
-        self.execute_piece_state(name, flow, state).await
+        // Armed only while the run is awaited: Ok and Err both disarm it, so it
+        // fires only when this future is dropped mid-run (Ctrl-C cancellation).
+        // Child flows re-enter `execute_piece_state`, so one guard covers them.
+        let mut interrupted = InterruptedRunGuard {
+            recorder: self.event_recorder.as_ref(),
+            flow: name,
+            armed: true,
+        };
+        let result = self.execute_piece_state(name, flow, state).await;
+        interrupted.armed = false;
+        result
     }
 
     /// Internal flow execution with pre-configured state
@@ -3295,6 +3305,35 @@ fn truncate_for_context(s: &str, max_len: usize) -> String {
     }
 }
 
+/// Records an interrupted `task_end` event if a flow run is dropped before it
+/// returns. Drop cannot await, so the event is appended synchronously.
+struct InterruptedRunGuard<'a> {
+    recorder: Option<&'a crate::events::EventRecorder>,
+    flow: &'a str,
+    armed: bool,
+}
+
+impl Drop for InterruptedRunGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let Some(recorder) = self.recorder else {
+            return;
+        };
+        let event = crate::events::Event::new(
+            recorder.run_id(),
+            crate::events::EventLevel::Warn,
+            crate::events::EventType::TaskEnd,
+            format!("Flow '{}' interrupted", self.flow),
+        )
+        .with_metadata(serde_json::json!({ "reason": "interrupted" }));
+        if let Err(e) = recorder.record_blocking(&event) {
+            warn!("Failed to record interruption: {}", e);
+        }
+    }
+}
+
 /// Run a stage's command gates sequentially in `work_dir`. Returns `None`
 /// when every gate passes, or `Some((gate_name, feedback))` for the first
 /// failure — a bounded, prompt-ready block (stdout/stderr each ≤1000 chars)
@@ -4535,5 +4574,34 @@ stages:
             "status": "timeout"
         })));
         assert!(!super::stage_output_succeeded(&serde_json::json!({})));
+    }
+
+    #[tokio::test]
+    async fn interrupted_run_guard_records_only_when_dropped_armed() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let recorder = crate::events::EventRecorder::new_in_runs_dir(tmp.path(), "run-guard")
+            .await
+            .expect("recorder");
+
+        drop(InterruptedRunGuard {
+            recorder: Some(&recorder),
+            flow: "quick",
+            armed: false,
+        });
+        assert!(!recorder.events_path().exists());
+
+        drop(InterruptedRunGuard {
+            recorder: Some(&recorder),
+            flow: "quick",
+            armed: true,
+        });
+        let content = std::fs::read_to_string(recorder.events_path()).expect("events");
+        let event: serde_json::Value =
+            serde_json::from_str(content.trim_end()).expect("one NDJSON event");
+        assert_eq!(event["event_type"], "task_end");
+        assert_eq!(event["run_id"], "run-guard");
+        assert_eq!(event["message"], "Flow 'quick' interrupted");
+        assert_eq!(event["metadata"]["reason"], "interrupted");
+        assert_eq!(recorder.event_count(), 1);
     }
 }

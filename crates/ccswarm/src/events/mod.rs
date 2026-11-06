@@ -180,10 +180,7 @@ impl EventRecorder {
     /// Each call opens → writes → flushes → closes the file so that the log is
     /// always readable even if the process is killed mid-run.
     pub async fn record(&self, event: Event) -> Result<()> {
-        let mut line =
-            serde_json::to_string(&event).context("failed to serialize event to JSON")?;
-        line.push('\n');
-
+        let line = ndjson_line(&event)?;
         let path = self.events_path();
         let mut file = OpenOptions::new()
             .create(true)
@@ -199,6 +196,25 @@ impl EventRecorder {
         file.flush()
             .await
             .with_context(|| format!("failed to flush events file {:?}", path))?;
+
+        self.event_count.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Append one event synchronously, for drop paths that cannot await
+    /// (for example recording an interrupted run during cancellation).
+    pub fn record_blocking(&self, event: &Event) -> Result<()> {
+        use std::io::Write as _;
+
+        let line = ndjson_line(event)?;
+        let path = self.events_path();
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .with_context(|| format!("failed to open events file {:?}", path))?;
+        file.write_all(line.as_bytes())
+            .with_context(|| format!("failed to write event to {:?}", path))?;
 
         self.event_count.fetch_add(1, Ordering::Relaxed);
         Ok(())
@@ -229,6 +245,13 @@ impl EventRecorder {
     pub fn events_path(&self) -> PathBuf {
         self.run_dir.join("events.ndjson")
     }
+}
+
+/// Serialize one event as a newline-terminated NDJSON line.
+fn ndjson_line(event: &Event) -> Result<String> {
+    let mut line = serde_json::to_string(event).context("failed to serialize event to JSON")?;
+    line.push('\n');
+    Ok(line)
 }
 
 // ─── SessionInfo ────────────────────────────────────────────────────────────

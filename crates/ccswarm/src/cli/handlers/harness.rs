@@ -778,9 +778,24 @@ mod tests {
 
     #[test]
     fn bundled_scenarios_load() {
+        // `.ccswarm/` is gitignored, so the directory holds the tracked
+        // scenarios plus any local ones; do not pin a count. Load each YAML
+        // file directly: `load_scenarios_from_dir` would skip invalid files.
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.ccswarm/harness");
-        let scenarios = load_scenarios_from_dir(&dir).expect("bundled scenarios parse");
-        assert_eq!(scenarios.len(), 3);
-        assert!(scenarios.iter().all(|(_, sc)| !sc.flow.is_empty()));
+        let paths: Vec<PathBuf> = fs::read_dir(&dir)
+            .expect("bundled scenario directory")
+            .map(|entry| entry.expect("directory entry").path())
+            .filter(|path| path.extension().is_some_and(|e| e == "yaml" || e == "yml"))
+            .collect();
+        assert!(!paths.is_empty(), "no scenarios in {}", dir.display());
+        for path in paths {
+            let (_, scenario) = load_scenario(&path)
+                .unwrap_or_else(|e| panic!("{} should load: {e:#}", path.display()));
+            assert!(
+                !scenario.flow.is_empty(),
+                "{} has an empty flow",
+                path.display()
+            );
+        }
     }
 }

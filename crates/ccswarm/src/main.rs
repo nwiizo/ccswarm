@@ -3,18 +3,71 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use ccswarm::cli::{Cli, CliRunner};
 
-#[tokio::main]
-async fn main() {
-    let exit_code = run_main().await;
+/// Exit code for a run stopped by SIGINT (128 + signal number 2).
+const INTERRUPTED_EXIT_CODE: u8 = 130;
+
+/// How long an interrupted run may take to drop its state. Dropping closes
+/// Herdr tabs (stopping their providers) and removes temporary run
+/// directories; the bound covers a task blocked in a synchronous stdin read,
+/// which cannot observe cancellation.
+const INTERRUPT_CLEANUP_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn main() -> std::process::ExitCode {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(e) => {
+            eprintln!("Failed to start the async runtime: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let exit_code = runtime.block_on(run_until_interrupted());
+    // Cancel tasks that are still spawned so their Drop guards run too.
+    runtime.shutdown_timeout(INTERRUPT_CLEANUP_GRACE);
     // Flush buffered OTel spans before the process exits — the batch exporter
     // would otherwise silently drop them for short-lived invocations.
     shutdown_otel();
-    if exit_code != 0 {
-        std::process::exit(exit_code);
+    std::process::ExitCode::from(exit_code)
+}
+
+/// Run the CLI until it finishes or SIGINT arrives.
+///
+/// The CLI runs as its own task so Ctrl-C is observed even while it blocks a
+/// worker thread (for example on a `[y/N]` prompt). On SIGINT the task is
+/// aborted, which drops its future: `OpenTab` closes the stage's Herdr tab and
+/// `RunDir` removes its temporary directory, as the Herdr integration
+/// contract requires for cancellation.
+async fn run_until_interrupted() -> u8 {
+    let mut cli = tokio::spawn(run_main());
+    let interrupted = async {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            // Without a handler SIGINT keeps its default action, so never
+            // treat a registration failure as an interruption.
+            eprintln!("Failed to listen for Ctrl-C: {e}");
+            std::future::pending::<()>().await;
+        }
+    };
+
+    tokio::select! {
+        joined = &mut cli => match joined {
+            Ok(code) => code,
+            Err(e) if e.is_panic() => 101,
+            Err(_) => 1,
+        },
+        () = interrupted => {
+            eprintln!("\nInterrupted; stopping the current run...");
+            cli.abort();
+            if tokio::time::timeout(INTERRUPT_CLEANUP_GRACE, cli).await.is_err() {
+                eprintln!("Cleanup did not finish within {INTERRUPT_CLEANUP_GRACE:?}");
+            }
+            INTERRUPTED_EXIT_CODE
+        }
     }
 }
 
-async fn run_main() -> i32 {
+async fn run_main() -> u8 {
     // Check if first arg looks like a task (not a subcommand or flag)
     let args: Vec<String> = std::env::args().collect();
     let is_direct_task = args.len() >= 2
