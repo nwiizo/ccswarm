@@ -17,16 +17,10 @@
       "Agent(Explore)",
       "Agent(frontend-specialist)",
       "Agent(backend-specialist)",
-      "Agent(devops-specialist)",
-      "Agent(qa-specialist)",
-      "Agent(rust-fix-agent)",
-      "Agent(code-refactor-agent)",
-      "Agent(architecture-reviewer)",
-      "Agent(all-reviewer)",
       "Agent(review-fix-agent)"
     ],
     "deny": [
-      "Bash(rm -rf /)*",
+      "Bash(rm -rf /*)",
       "Bash(cargo publish*)",
       "Edit(.git/***)",
       "Edit(.env*)"

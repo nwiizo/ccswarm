@@ -1,8 +1,6 @@
 ---
 name: deploy-workflow
 description: Release deployment process for ccswarm. Version update, quality gates, build, tag, publish.
-user-invocable: true
-argument-hint: "[version]"
 ---
 
 Deploy a new ccswarm release using `.github/workflows/release.yml`.

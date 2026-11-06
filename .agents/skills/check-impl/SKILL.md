@@ -1,25 +1,20 @@
 ---
 name: check-impl
-description: Implementation verification - runs format, lint, test, and build checks on the workspace.
-user-invocable: true
+description: Run ccswarm workspace format, lint, test, build, and CLI checks.
 ---
 
 Run implementation checks on the ccswarm workspace:
 
 ```bash
-# 1. Format check
 cargo fmt --all --check
-
-# 2. Lint check
 cargo clippy --workspace -- -D warnings
-
-# 3. Tests
 cargo test --workspace
-
-# 4. Build verification
 cargo build --workspace
+cargo run -p ccswarm -- --help
 ```
 
-Note: ccswarm uses Rust 2024 Edition. `std::env::set_var` requires `unsafe`, pattern matching has implicit borrowing.
+The pipeline executes this first shell block line by line. Keep it limited to
+verification commands; put explanations outside it.
 
-Report results as JSON: `{ format, clippy: { warnings, errors }, test: { passed, failed, ignored }, build, overall }`.
+Report which checks passed or failed and include actionable failure details.
+Do not claim checks passed when they were skipped or could not run.
