@@ -83,6 +83,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exec `tools:` do not widen it. A rate-limit fallback from such a stage to a
   provider that cannot enforce read-only access fails with an error.
 
+### Security
+
+- Update `quinn-proto` to 0.11.19, `rustls` to 0.23.46, `rustls-webpki` to
+  0.103.16, and `webpki-roots` to 1.0.11 in the lockfile, addressing
+  RUSTSEC-2026-0338 through RUSTSEC-2026-0342, RUSTSEC-2026-0346 through
+  RUSTSEC-2026-0349, RUSTSEC-2026-0381, and RUSTSEC-2026-0382 without changing
+  the dependency feature set.
+
 ## [0.10.2] - 2026-10-09
 
 ### Changed
