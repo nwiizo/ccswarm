@@ -1,9 +1,11 @@
-//! Tool lists for a stage's permission level.
+//! Tool lists and workspace access for a stage's permission level.
 //!
-//! The result becomes the provider's allowed-tools list. Claude still runs
-//! with `--dangerously-skip-permissions`, so this list is not a sandbox.
+//! The tool list becomes the provider's allowed-tools list. Claude still runs
+//! with `--dangerously-skip-permissions`, so this list is not a sandbox. The
+//! workspace access selects the Codex sandbox.
 
 use super::flow::MovementPermission;
+use crate::providers::WorkspaceAccess;
 
 const READONLY_TOOLS: &[&str] = &["read", "grep", "glob", "search", "list", "cat", "find"];
 const EDIT_TOOLS: &[&str] = &[
@@ -35,6 +37,15 @@ pub fn stage_tools(permission: &MovementPermission, explicit: &[String]) -> Vec<
     level_tools.iter().map(|tool| tool.to_string()).collect()
 }
 
+/// Workspace access for a stage's permission level. Explicit `tools:` do not
+/// widen it: a `readonly` stage stays read-only even if it lists `bash`.
+pub(crate) fn workspace_access(permission: &MovementPermission) -> WorkspaceAccess {
+    match permission {
+        MovementPermission::Readonly => WorkspaceAccess::ReadOnly,
+        MovementPermission::Edit | MovementPermission::Full => WorkspaceAccess::Write,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -50,6 +61,22 @@ mod tests {
         assert!(edit.contains(&"edit".to_string()));
         assert!(!edit.contains(&"bash".to_string()));
         assert!(full.contains(&"bash".to_string()));
+    }
+
+    #[test]
+    fn only_readonly_requests_a_read_only_workspace() {
+        assert_eq!(
+            workspace_access(&MovementPermission::Readonly),
+            WorkspaceAccess::ReadOnly
+        );
+        assert_eq!(
+            workspace_access(&MovementPermission::Edit),
+            WorkspaceAccess::Write
+        );
+        assert_eq!(
+            workspace_access(&MovementPermission::Full),
+            WorkspaceAccess::Write
+        );
     }
 
     #[test]

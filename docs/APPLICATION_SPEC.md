@@ -33,8 +33,9 @@ process and explicitly separates it from current implementation behavior.
   facets.
 
 Ordinary stage gates are available, but Sangha dispatch currently bypasses
-them. Run events do not provide workflow checkpoint resume. The Codex adapter
-currently requests a writable workspace even for read-only stages. These
+them. Run events do not provide workflow checkpoint resume. Codex runs
+`permission: readonly` stages with `--sandbox read-only` and refuses a rate-limit fallback to a provider that
+cannot enforce it; Claude stages do not yet enforce read-only review. These
 limitations must be fixed before the target Sangha acceptance policy ships.
 
 `lab sangha` proposal storage and self-extension commands remain experimental

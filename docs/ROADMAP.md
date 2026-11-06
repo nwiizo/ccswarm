@@ -97,8 +97,6 @@ atomic shared transaction.
 
 - Enough valid approvals can still accept a decision despite a revision vote.
 - Sangha dispatch bypasses ordinary command gates.
-- The Codex adapter currently uses a writable workspace even when a review
-  requests read-only permissions.
 - Run events do not provide workflow checkpoint resume.
 - `lab sangha` proposal storage is separate from workflow acceptance.
 - Selecting Astra through Codex does not expose Responses steering, async
@@ -107,8 +105,11 @@ atomic shared transaction.
   wait for Herdr to report Codex thread IDs. Live sessions report no cost.
 - A live stage in a repository Claude has not opened before waits for the
   user to answer Claude's folder-trust question.
-- Headless and live stages do not yet enforce read-only review: Claude runs
-  with `--dangerously-skip-permissions` and an allowed-tools list.
+- Claude stages do not yet enforce read-only review: headless and live Claude
+  runs use `--dangerously-skip-permissions` and an allowed-tools list. Codex
+  stages with `permission: readonly` run with `--sandbox read-only`, and
+  their rate-limit fallback to Claude is refused. A2A endpoints receive no
+  workspace-access requirement.
 
 ## Future Sangha Milestones
 

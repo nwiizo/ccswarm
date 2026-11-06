@@ -108,10 +108,13 @@ stages:
         - { id: qa, persona: qa }
 ```
 
-`readonly` expresses the requested permission. The current Codex adapter uses
-`workspace-write`, so this setting does not enforce read-only review on Codex.
-Required checks also need separate execution: Sangha currently bypasses the
-ordinary stage-gate path. These are prerequisites for the stricter acceptance
+`readonly` expresses the requested permission. Codex enforces it with
+`codex exec --sandbox read-only`, even when `tools:` lists write or exec
+tools, and a rate-limit fallback from a read-only Codex stage to Claude fails
+instead of running writable. Claude does not yet enforce it: Claude runs with
+`--dangerously-skip-permissions` and an allowed-tools list. Required checks
+also need separate execution: Sangha currently bypasses the ordinary
+stage-gate path. These are prerequisites for the stricter acceptance
 policy described in the product design.
 
 ## Multi-provider
@@ -130,7 +133,7 @@ falling back silently.
 | Provider | Status | Notes |
 |----------|--------|-------|
 | `claude` | Full support | Uses `--allowed-tools`, `--agent`, `--append-system-prompt`, `--max-budget-usd`, and `--worktree`. `CCSWARM_CLAUDE_STREAM_JSON=1` enables stream telemetry |
-| `codex` | Non-interactive `codex exec` | System prompt is prepended to the user prompt (Codex has no dedicated flag). `CCSWARM_CODEX_JSON=1` enables token telemetry |
+| `codex` | Non-interactive `codex exec` | System prompt is prepended to the user prompt (Codex has no dedicated flag). Read-only stages use `--sandbox read-only`; others use `workspace-write`. `CCSWARM_CODEX_JSON=1` enables token telemetry |
 | `copilot` | **Unsupported for code generation** | `gh copilot suggest` is interactive and returns shell-command strings, not file edits. The provider fails fast with a friendly error — see `providers/copilot.rs` for rationale |
 
 ## Herdr

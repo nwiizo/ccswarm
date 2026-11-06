@@ -5,9 +5,17 @@
 
 use std::path::Path;
 
-use super::{AgentProvider, ProviderKind, ProviderOptions};
+use super::{AgentProvider, ProviderKind, ProviderOptions, WorkspaceAccess};
 
 pub(crate) struct CodexProvider;
+
+/// `codex exec --sandbox` value for the requested workspace access.
+fn sandbox_mode(access: WorkspaceAccess) -> &'static str {
+    match access {
+        WorkspaceAccess::ReadOnly => "read-only",
+        WorkspaceAccess::Write => "workspace-write",
+    }
+}
 
 impl AgentProvider for CodexProvider {
     fn kind(&self) -> ProviderKind {
@@ -24,13 +32,18 @@ impl AgentProvider for CodexProvider {
         cmd.arg("exec");
 
         // Non-interactive pipeline execution:
-        //   1. `--sandbox workspace-write` lets Codex write inside the cwd the way
-        //      `claude --dangerously-skip-permissions` does. The blunter
-        //      `--dangerously-bypass-approvals-and-sandbox` still observes some
-        //      read-only policies in practice (observed 2026-04), so prefer the
-        //      explicit policy flag.
+        //   1. `--sandbox` follows the stage's requested access. `read-only`
+        //      blocks writes for review stages; `workspace-write` lets Codex
+        //      write inside the cwd the way `claude --dangerously-skip-permissions`
+        //      does. The blunter `--dangerously-bypass-approvals-and-sandbox`
+        //      still observes some read-only policies in practice (observed
+        //      2026-04), so prefer the explicit policy flag.
         //   2. `--skip-git-repo-check` lets the pipeline run in scratch dirs.
-        cmd.args(["--sandbox", "workspace-write", "--skip-git-repo-check"]);
+        cmd.args([
+            "--sandbox",
+            sandbox_mode(options.workspace_access),
+            "--skip-git-repo-check",
+        ]);
 
         if let Some(model) = &options.model {
             cmd.args(["--model", model]);

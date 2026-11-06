@@ -77,6 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gitignored `.ccswarm/harness/` directory.
 - CI runs the browser example on `ubuntu-24.04`; Playwright does not support
   Chromium on Ubuntu 26.04.
+- Codex stages with `permission: readonly`, including Sangha members, run
+  with `codex exec --sandbox read-only` instead of `workspace-write`. The
+  stage permission is passed to the provider explicitly, so explicit write or
+  exec `tools:` do not widen it. A rate-limit fallback from such a stage to a
+  provider that cannot enforce read-only access fails with an error.
 
 ## [0.10.2] - 2026-10-09
 

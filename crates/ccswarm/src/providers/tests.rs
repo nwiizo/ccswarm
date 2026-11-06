@@ -8,8 +8,16 @@
 //! 3. Verify `ProviderKind::Copilot` produces a command that exits non-zero with the
 //!    friendly error, because `gh copilot suggest` cannot generate code.
 
-use super::{ProviderKind, ProviderOptions, resolve};
+use super::{ProviderKind, ProviderOptions, WorkspaceAccess, resolve};
 use std::path::Path;
+
+/// Value following `--sandbox`, if present.
+fn sandbox_of(argv: &[String]) -> Option<&str> {
+    argv.iter()
+        .position(|a| a == "--sandbox")
+        .and_then(|i| argv.get(i + 1))
+        .map(String::as_str)
+}
 
 fn argv_of(cmd: &tokio::process::Command) -> Vec<String> {
     let std_cmd = cmd.as_std();
@@ -47,6 +55,7 @@ fn claude_command_includes_expected_flags() {
         worktree_name: Some("wt-1".to_string()),
         claude_stream_json: false,
         codex_json: false,
+        workspace_access: WorkspaceAccess::Write,
     };
     let cmd = provider.build_command("do the thing", Path::new("/tmp"), &opts);
     let argv = argv_of(&cmd);
@@ -100,8 +109,7 @@ fn codex_command_merges_system_prompt() {
 
     assert_eq!(argv[0], "codex");
     assert_eq!(argv[1], "exec");
-    assert!(argv.iter().any(|a| a == "--sandbox"));
-    assert!(argv.iter().any(|a| a == "workspace-write"));
+    assert_eq!(sandbox_of(&argv), Some("workspace-write"));
     assert!(argv.iter().any(|a| a == "--skip-git-repo-check"));
     // Merged prompt is the last arg.
     let last = argv.last().expect("argv has last");
@@ -110,6 +118,33 @@ fn codex_command_merges_system_prompt() {
     assert!(argv.iter().any(|a| a == "--model"));
     assert!(argv.iter().any(|a| a == "gpt-5"));
     assert!(!argv.iter().any(|a| a == "--json"));
+}
+
+#[test]
+fn codex_read_only_access_uses_read_only_sandbox_whatever_the_tools() {
+    let provider = resolve(ProviderKind::Codex);
+    // Write and exec tools in the list must not widen a read-only request.
+    let opts = ProviderOptions {
+        allowed_tools: ["read", "bash", "edit"].map(String::from).to_vec(),
+        workspace_access: WorkspaceAccess::ReadOnly,
+        ..Default::default()
+    };
+    let argv = argv_of(&provider.build_command("review", Path::new("/tmp"), &opts));
+
+    assert_eq!(sandbox_of(&argv), Some("read-only"));
+    assert!(!argv.iter().any(|a| a == "workspace-write"));
+    assert!(
+        !argv
+            .iter()
+            .any(|a| a == "--dangerously-bypass-approvals-and-sandbox")
+    );
+}
+
+#[test]
+fn only_codex_enforces_read_only() {
+    assert!(ProviderKind::Codex.enforces_read_only());
+    assert!(!ProviderKind::Claude.enforces_read_only());
+    assert!(!ProviderKind::Copilot.enforces_read_only());
 }
 
 #[test]

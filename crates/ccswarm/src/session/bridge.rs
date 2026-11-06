@@ -9,7 +9,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-use crate::providers::{ProviderKind, ProviderOptions};
+use crate::providers::{ProviderKind, ProviderOptions, WorkspaceAccess};
 use crate::session::execution::{
     DEFAULT_MAX_PROMPT_BYTES, prepare_provider_prompt, run_provider_command,
 };
@@ -90,6 +90,55 @@ fn apply_rate_limit_fallback(
         options.model = next_model;
     }
     from
+}
+
+/// Refuse a rate-limit fallback that would drop an enforced read-only
+/// sandbox: a read-only stage on Codex must not silently continue on a
+/// provider that can write to the workspace.
+fn check_fallback_access(options: &MovementExecOptions, next: ProviderKind) -> Result<(), String> {
+    let current = options.provider.unwrap_or(ProviderKind::Claude);
+    let read_only = options.workspace_access == WorkspaceAccess::ReadOnly;
+    if read_only && current.enforces_read_only() && !next.enforces_read_only() {
+        return Err(format!(
+            "refusing rate-limit fallback from '{}' to '{}': the stage requires a \
+             read-only workspace and '{}' cannot enforce it",
+            current.as_str(),
+            next.as_str(),
+            next.as_str()
+        ));
+    }
+    Ok(())
+}
+
+/// What the retry loop does after a provider's attempts are exhausted.
+#[derive(Debug, PartialEq)]
+enum FallbackStep {
+    /// Return the last error.
+    Stop,
+    /// Return the rate-limit error with this refusal as context.
+    Refuse(String),
+    /// Continue on the next `on_rate_limit` target.
+    Switch((ProviderKind, Option<String>)),
+}
+
+/// Decide the next step after a failed provider: switch only on a rate
+/// limit with a remaining fallback target, and refuse a target that would
+/// drop an enforced read-only sandbox.
+fn next_fallback(
+    options: &MovementExecOptions,
+    fallback_index: usize,
+    last_err: Option<&anyhow::Error>,
+) -> FallbackStep {
+    let Some(target) = options.rate_limit_fallbacks.get(fallback_index) else {
+        return FallbackStep::Stop;
+    };
+    if !last_err.is_some_and(is_rate_limit_error) {
+        return FallbackStep::Stop;
+    }
+    match check_fallback_access(options, target.0) {
+        Ok(()) => FallbackStep::Switch(target.clone()),
+        Err(refusal) => FallbackStep::Refuse(refusal),
+    }
 }
 
 /// Prompt prefix telling the fallback provider it's picking up mid-task.
@@ -189,6 +238,10 @@ pub struct MovementExecOptions {
     /// How the local provider runs in its Herdr tab. `Live` applies to Claude;
     /// other providers run headless.
     pub execution: ExecutionMode,
+    /// Workspace access the stage requires, from its `permission` level.
+    /// Codex enforces `ReadOnly` with its sandbox, and a rate-limit fallback
+    /// to a provider that cannot enforce it is refused.
+    pub(crate) workspace_access: WorkspaceAccess,
 }
 
 /// A2A/local provider execution layer.
@@ -279,22 +332,27 @@ impl A2ABridge {
 
             // Out of attempts (or rate-limited): advance the fallback chain if
             // the failure was a rate limit and targets remain.
-            let rate_limited = last_err.as_ref().is_some_and(is_rate_limit_error);
-            if rate_limited && fallback_index < current_options.rate_limit_fallbacks.len() {
-                let target = current_options.rate_limit_fallbacks[fallback_index].clone();
-                fallback_index += 1;
-                let from = apply_rate_limit_fallback(&mut current_options, target);
-                tracing::warn!(
-                    "Rate limit on '{}' — falling back to '{}'",
-                    from,
-                    current_options
-                        .provider
-                        .unwrap_or(ProviderKind::Claude)
-                        .as_str()
-                );
-                fallbacks_used.push(from);
-                current_prompt = fallback_notice_prompt(prompt);
-                continue;
+            match next_fallback(&current_options, fallback_index, last_err.as_ref()) {
+                FallbackStep::Stop => {}
+                FallbackStep::Refuse(refusal) => {
+                    let rate_limit = last_err.unwrap_or_else(|| anyhow::anyhow!("rate limited"));
+                    return Err(rate_limit.context(refusal));
+                }
+                FallbackStep::Switch(target) => {
+                    fallback_index += 1;
+                    let from = apply_rate_limit_fallback(&mut current_options, target);
+                    tracing::warn!(
+                        "Rate limit on '{}' — falling back to '{}'",
+                        from,
+                        current_options
+                            .provider
+                            .unwrap_or(ProviderKind::Claude)
+                            .as_str()
+                    );
+                    fallbacks_used.push(from);
+                    current_prompt = fallback_notice_prompt(prompt);
+                    continue;
+                }
             }
 
             return Err(last_err.unwrap_or_else(|| anyhow::anyhow!("All retry attempts failed")));
@@ -346,6 +404,7 @@ impl A2ABridge {
             worktree_name: options.worktree_name.clone(),
             claude_stream_json,
             codex_json,
+            workspace_access: options.workspace_access,
         };
 
         let prompt_with_cwd =
@@ -547,6 +606,92 @@ mod tests {
         apply_rate_limit_fallback(&mut options, (ProviderKind::Codex, None));
         assert_eq!(options.provider, Some(ProviderKind::Codex));
         assert_eq!(options.model.as_deref(), Some("sonnet"));
+    }
+
+    #[test]
+    fn read_only_codex_stage_refuses_fallback_to_claude() {
+        // Explicit write tools do not lift the read-only requirement.
+        let options = MovementExecOptions {
+            provider: Some(ProviderKind::Codex),
+            tools: ["read", "bash"].map(String::from).to_vec(),
+            workspace_access: WorkspaceAccess::ReadOnly,
+            ..Default::default()
+        };
+
+        let refusal = check_fallback_access(&options, ProviderKind::Claude)
+            .expect_err("weaker fallback must be refused");
+        assert!(refusal.contains("read-only"), "{refusal}");
+        // Another sandboxed provider keeps the boundary.
+        assert!(check_fallback_access(&options, ProviderKind::Codex).is_ok());
+    }
+
+    #[test]
+    fn fallback_is_allowed_when_no_read_only_sandbox_is_lost() {
+        let writable = MovementExecOptions {
+            provider: Some(ProviderKind::Codex),
+            workspace_access: WorkspaceAccess::Write,
+            ..Default::default()
+        };
+        assert!(check_fallback_access(&writable, ProviderKind::Claude).is_ok());
+
+        // Claude does not enforce read-only, so switching away loses nothing.
+        let claude_read_only = MovementExecOptions {
+            provider: Some(ProviderKind::Claude),
+            workspace_access: WorkspaceAccess::ReadOnly,
+            ..Default::default()
+        };
+        assert!(check_fallback_access(&claude_read_only, ProviderKind::Codex).is_ok());
+    }
+
+    #[test]
+    fn rate_limited_read_only_codex_stage_refuses_claude_fallback() {
+        let options = MovementExecOptions {
+            provider: Some(ProviderKind::Codex),
+            workspace_access: WorkspaceAccess::ReadOnly,
+            rate_limit_fallbacks: vec![(ProviderKind::Claude, None)],
+            ..Default::default()
+        };
+        let rate_limit = anyhow::anyhow!("codex provider CLI failed: HTTP 429");
+
+        match next_fallback(&options, 0, Some(&rate_limit)) {
+            FallbackStep::Refuse(refusal) => assert!(refusal.contains("read-only"), "{refusal}"),
+            step => panic!("expected a refusal, got {step:?}"),
+        }
+    }
+
+    #[test]
+    fn rate_limited_writable_stage_switches_to_the_next_target() {
+        let options = MovementExecOptions {
+            provider: Some(ProviderKind::Codex),
+            workspace_access: WorkspaceAccess::Write,
+            rate_limit_fallbacks: vec![(ProviderKind::Claude, Some("opus".into()))],
+            ..Default::default()
+        };
+        let rate_limit = anyhow::anyhow!("codex provider CLI failed: HTTP 429");
+
+        assert_eq!(
+            next_fallback(&options, 0, Some(&rate_limit)),
+            FallbackStep::Switch((ProviderKind::Claude, Some("opus".into())))
+        );
+    }
+
+    #[test]
+    fn fallback_stops_without_a_rate_limit_or_remaining_target() {
+        let options = MovementExecOptions {
+            provider: Some(ProviderKind::Codex),
+            workspace_access: WorkspaceAccess::ReadOnly,
+            rate_limit_fallbacks: vec![(ProviderKind::Claude, None)],
+            ..Default::default()
+        };
+        let other = anyhow::anyhow!("codex provider CLI failed: connection refused");
+        let rate_limit = anyhow::anyhow!("Too Many Requests");
+
+        assert_eq!(next_fallback(&options, 0, Some(&other)), FallbackStep::Stop);
+        assert_eq!(next_fallback(&options, 0, None), FallbackStep::Stop);
+        assert_eq!(
+            next_fallback(&options, 1, Some(&rate_limit)),
+            FallbackStep::Stop
+        );
     }
 
     #[test]
