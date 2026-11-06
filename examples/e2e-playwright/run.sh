@@ -21,6 +21,11 @@ if [ "$#" -gt 1 ]; then
   echo "Usage: $0 [--live]" >&2
   exit 2
 fi
+# ccswarm runs local providers in Herdr tabs; fail before creating a run.
+if [ "$LIVE" = true ] && [ "${HERDR_ENV:-}" != 1 ]; then
+  echo "--live runs providers through ccswarm, which requires a Herdr pane; start herdr and rerun there." >&2
+  exit 2
+fi
 mkdir -p "$HERE/.work"
 WORK="$(mktemp -d "$HERE/.work/run.XXXXXX")"
 # Give provider CLIs a project boundary separate from the ccswarm repository.

@@ -1,7 +1,6 @@
 name: "piece-validation-test"
-tags: ["smoke", "piece"]
 
-piece: "review-fix"
+flow: "review-fix"
 task: "Review the current CLAUDE.md file and suggest improvements"
 
 timeout_secs: 30

@@ -1,17 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::Path;
-use std::time::Instant;
 use tokio::process::Command;
 
-pub const DEFAULT_MAX_PROMPT_BYTES: usize = 200_000;
+pub use crate::session::herdr::CommandExecution;
+use crate::session::herdr::{HerdrCall, HerdrContext};
 
-#[derive(Debug, Clone)]
-pub struct CommandExecution {
-    pub stdout: String,
-    pub stderr: String,
-    pub status: std::process::ExitStatus,
-    pub duration_ms: u64,
-}
+pub const DEFAULT_MAX_PROMPT_BYTES: usize = 200_000;
 
 pub fn prepare_provider_prompt(
     prompt: &str,
@@ -33,22 +27,17 @@ pub fn prepare_provider_prompt(
     ))
 }
 
+/// Run a non-interactive provider command in a background tab of the current
+/// Herdr session.
+///
+/// Local provider execution requires a Herdr-managed pane; see
+/// [`HerdrContext::from_env`].
 pub async fn run_provider_command(
-    mut command: Command,
+    command: Command,
     working_dir: &Path,
-    provider_name: &str,
+    call: &HerdrCall,
 ) -> Result<CommandExecution> {
-    command.current_dir(working_dir);
-    let start = Instant::now();
-    let output = command
-        .output()
+    HerdrContext::from_env()?
+        .run_headless(&command, working_dir, call)
         .await
-        .with_context(|| format!("Failed to execute provider CLI: {provider_name}"))?;
-
-    Ok(CommandExecution {
-        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-        status: output.status,
-        duration_ms: start.elapsed().as_millis() as u64,
-    })
 }

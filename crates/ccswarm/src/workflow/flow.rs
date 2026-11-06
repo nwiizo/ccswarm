@@ -194,7 +194,7 @@ pub struct Stage {
     /// after template-expanding values against the parent's variables. The
     /// child writes reports into the same `.ccswarm/runs/<id>/reports/`
     /// directory as the parent; declared report names must be globally
-    /// unique within a run (v0.7.0 first-cut; namespacing is deferred).
+    /// unique within a run.
     #[serde(default)]
     pub call: Option<WorkflowCallSpec>,
 
@@ -226,6 +226,15 @@ pub struct Stage {
     /// exclusive with `parallel`, `call`, and `team_leader`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sangha: Option<super::sangha::SanghaSpec>,
+
+    /// How the provider runs in its Herdr tab: `headless` (default) or
+    /// `live`, an interactive Claude Code session the user can watch and
+    /// steer. Inherited by Sangha members and team-leader workers.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::session::herdr::ExecutionMode::is_headless"
+    )]
+    pub execution: crate::session::herdr::ExecutionMode,
 }
 
 /// One machine-executed gate command on a stage.
@@ -305,16 +314,11 @@ pub struct MovementRule {
     #[serde(default)]
     pub priority: u8,
 
-    /// Skip this rule entirely in non-interactive (pipeline / queue drain / CI)
-    /// runs. Use for review-fix loops that only make sense when a human is in
-    /// the loop.
+    /// Rule that needs a human in the loop. FlowEngine skips it.
     #[serde(default)]
     pub interactive_only: bool,
 
-    /// Indicates the rule's `next` stage expects human input. Pipeline runs
-    /// treat this rule as inert (same as `interactive_only`); interactive runs
-    /// flag the upcoming stage as awaiting user reply so the UI can prompt.
-    /// This explicitly marks a transition that needs a human response.
+    /// Rule whose `next` stage expects human input. FlowEngine skips it.
     #[serde(default)]
     pub requires_user_input: bool,
 }
@@ -420,9 +424,8 @@ pub struct OutputContract {
     /// brittle `{plan_output}` state-variable wiring with a contract that's
     /// readable from disk after the run.
     ///
-    /// v0.7.0 semantics: if exactly one report is declared, the stage's full
-    /// response is written verbatim to it. Multi-report support (with AI-emitted
-    /// `<<<REPORT:name>>>` delimiters) is intentionally deferred.
+    /// If exactly one report is declared, the stage's full response is written
+    /// verbatim to it.
     #[serde(default)]
     pub reports: Vec<ReportContract>,
 }
@@ -599,6 +602,22 @@ impl Flow {
                 ));
             }
 
+            // Live execution is an interactive Claude Code session; a stage
+            // that pins another provider cannot run live.
+            if stage.execution == crate::session::herdr::ExecutionMode::Live
+                && let Some(provider) = stage
+                    .provider
+                    .as_deref()
+                    .and_then(crate::providers::ProviderKind::parse)
+                && provider != crate::providers::ProviderKind::Claude
+            {
+                return Err(anyhow::anyhow!(
+                    "Stage '{}' uses execution: live with provider '{}'; live execution supports claude only",
+                    stage.id,
+                    provider.as_str()
+                ));
+            }
+
             for rule in &stage.promotion {
                 if let Some(provider) = &rule.provider
                     && crate::providers::ProviderKind::parse(provider).is_none()
@@ -716,13 +735,6 @@ impl Flow {
         self.stages.iter().find(|m| m.id == id)
     }
 
-    /// Check if a stage is terminal (has no rules / no transitions)
-    pub fn is_terminal(&self, movement_id: &str) -> bool {
-        self.get_movement(movement_id)
-            .map(|m| m.rules.is_empty())
-            .unwrap_or(true)
-    }
-
     /// Create initial execution state
     pub fn create_state(&self) -> FlowState {
         FlowState {
@@ -763,12 +775,6 @@ pub struct FlowEngine {
     /// flow aborts before the next stage starts. Complements `budget_usd`, which
     /// only caps a single stage and only works for Claude.
     run_token_cap: Option<u64>,
-    /// Whether this engine instance runs in interactive mode. Pipeline / queue
-    /// drain / CI runs default to `false` and skip rules tagged
-    /// `interactive_only` or `requires_user_input`. Interactive entry points
-    /// (e.g. `ccswarm` with no subcommand) call `set_interactive(true)` so
-    /// human-in-the-loop rules are honored.
-    interactive: bool,
     /// Default provider for stages that don't pin one in flow YAML
     /// (`--provider` flag). Sits between stage YAML and the CCSWARM_PROVIDER
     /// env var in the resolution order.
@@ -788,8 +794,6 @@ pub struct MovementProgress {
     pub duration_ms: u64,
     /// Whether it succeeded
     pub success: bool,
-    /// Stage count so far
-    pub movements_completed: usize,
 }
 
 impl FlowEngine {
@@ -818,18 +822,10 @@ impl FlowEngine {
             progress_tx: None,
             budget_usd: None,
             run_token_cap: None,
-            interactive: false,
             default_provider: None,
             model_override: None,
             worktree_name: None,
         }
-    }
-
-    /// Mark this engine as running in interactive mode. Pipeline / queue drain
-    /// runs leave the default (`false`), which filters out rules tagged
-    /// `interactive_only` or `requires_user_input`.
-    pub fn set_interactive(&mut self, interactive: bool) {
-        self.interactive = interactive;
     }
 
     /// Set a per-stage budget cap in USD. Forwarded to Claude via `--max-budget-usd`;
@@ -844,13 +840,6 @@ impl FlowEngine {
     /// produced by the bridge regardless of backend.
     pub fn set_run_token_cap(&mut self, cap: u64) {
         self.run_token_cap = Some(cap);
-    }
-
-    /// Create with custom judge config
-    pub fn with_judge_config(config: super::judge::JudgeConfig) -> Self {
-        let mut engine = Self::new();
-        engine.judge = super::judge::MovementJudge::new(config);
-        engine
     }
 
     /// Get a mutable reference to the facet registry for loading custom facets
@@ -975,30 +964,6 @@ impl FlowEngine {
         Ok(name)
     }
 
-    /// Load all flows from a directory
-    pub async fn load_pieces_from_dir(&mut self, dir: &Path) -> Result<Vec<String>> {
-        let mut loaded = Vec::new();
-
-        if !dir.exists() {
-            return Ok(loaded);
-        }
-
-        let mut entries = tokio::fs::read_dir(dir).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("yaml")
-                || path.extension().and_then(|e| e.to_str()) == Some("yml")
-            {
-                match self.load_flow(&path).await {
-                    Ok(name) => loaded.push(name),
-                    Err(e) => warn!("Failed to load flow from {}: {}", path.display(), e),
-                }
-            }
-        }
-
-        Ok(loaded)
-    }
-
     /// Load all builtin flows into the engine
     pub fn load_builtin_flows(&mut self) {
         for flow in builtin_flows() {
@@ -1009,16 +974,6 @@ impl FlowEngine {
     /// Get a loaded flow
     pub fn get_flow(&self, name: &str) -> Option<&Flow> {
         self.flows.get(name)
-    }
-
-    /// List all loaded flows
-    pub fn list_flows(&self) -> Vec<&Flow> {
-        self.flows.values().collect()
-    }
-
-    /// Register a flow directly (for programmatic / test usage)
-    pub fn register_flow(&mut self, flow: Flow) {
-        self.flows.insert(flow.name.clone(), flow);
     }
 
     /// Record an event if recorder is configured (best-effort, logs on failure)
@@ -1043,18 +998,6 @@ impl FlowEngine {
         state
             .variables
             .insert("task".to_string(), serde_json::json!(task_text));
-        state.status = FlowStatus::Running;
-        self.execute_piece_state(name, flow, state).await
-    }
-
-    /// Execute a flow workflow
-    pub async fn execute_piece(&self, name: &str) -> Result<FlowState> {
-        let flow = self
-            .flows
-            .get(name)
-            .ok_or_else(|| anyhow::anyhow!("Flow '{}' not found", name))?;
-
-        let mut state = flow.create_state();
         state.status = FlowStatus::Running;
         self.execute_piece_state(name, flow, state).await
     }
@@ -1177,10 +1120,8 @@ impl FlowEngine {
                 stage.id, state.movement_count, name
             );
 
-            // Issue #23 fix: derive the agent label used by this stage so that
-            // RunSummary::agents_used is populated. Preference order mirrors what the
-            // bridge actually uses to route the call: an explicit `.claude/agents/<name>`
-            // file (stage.agent) wins; otherwise we fall back to the persona facet.
+            // Agent label for RunSummary::agents_used: an explicit
+            // `.claude/agents/<name>` route (stage.agent) wins over the persona.
             let movement_agent = stage.agent.clone().or_else(|| stage.persona.clone());
 
             // Record stage start
@@ -1227,13 +1168,11 @@ impl FlowEngine {
                     movement_id: stage.id.clone(),
                     duration_ms: movement_duration_ms,
                     success: movement_succeeded,
-                    movements_completed: state.movement_count as usize,
                 });
             }
 
             // Record stage end with duration metadata
-            // Issue #28 fix: forward token estimates from the bridge into the event so
-            // `ccswarm cost` has something to aggregate.
+            // Token counts from the bridge feed `ccswarm cost`.
             let tokens_in = output
                 .as_object()
                 .and_then(|o| o.get("tokens_in"))
@@ -1414,9 +1353,7 @@ impl FlowEngine {
         .await;
 
         if let Some(ref recorder) = self.event_recorder {
-            // Issue #23 fix: agents_used was previously `state.history[].from` which is
-            // a *stage* ID, not an agent. Derive the real agent label from each
-            // stage definition (explicit `agent:` file route wins over persona).
+            // Agent labels per stage: an explicit `agent:` route wins over persona.
             let mut agents_used: std::collections::HashSet<String> =
                 std::collections::HashSet::new();
             for m in flow.stages.iter() {
@@ -1496,21 +1433,6 @@ impl FlowEngine {
             // Live execution via A2A or a local provider CLI.
             let agent_id = stage.persona.as_deref().unwrap_or("default");
 
-            // Create a minimal identity for the stage
-            let identity = crate::identity::AgentIdentity {
-                agent_id: agent_id.to_string(),
-                specialization: crate::identity::AgentRole::Frontend {
-                    technologies: Vec::new(),
-                    responsibilities: Vec::new(),
-                    boundaries: Vec::new(),
-                },
-                workspace_path: self.working_dir.clone(),
-                env_vars: std::collections::HashMap::new(),
-                session_id: uuid::Uuid::new_v4().to_string(),
-                parent_process_id: std::process::id().to_string(),
-                initialized_at: chrono::Utc::now(),
-            };
-
             // Determine working directory (stage override or engine default)
             let work_dir = stage
                 .working_dir
@@ -1522,11 +1444,7 @@ impl FlowEngine {
             // Resolve effective tool list from the stage's permission level + explicit `tools:`.
             // Without this, `permission: readonly` would still send no `--allowed-tools`,
             // so the provider CLI would fall back to its own (permissive) default.
-            let effective_tools = super::permissions::PermissionEnforcer::from_movement(
-                stage.permission.clone(),
-                &stage.tools,
-            )
-            .available_tools();
+            let effective_tools = super::permissions::stage_tools(&stage.permission, &stage.tools);
 
             // Flow-level rate-limit fallback chain, parsed into provider kinds.
             let rate_limit_fallbacks: Vec<(crate::providers::ProviderKind, Option<String>)> = self
@@ -1558,10 +1476,9 @@ impl FlowEngine {
                 }),
                 max_budget: self.budget_usd,
                 worktree_name: self.worktree_name.clone(),
-                session_id: None,
-                continuation: crate::session::bridge::ContinuationPolicy::SingleTurn,
                 a2a_endpoint: None,
                 rate_limit_fallbacks,
+                execution: stage.execution,
             };
 
             // Command-gate loop: when the agent call succeeds but a declared
@@ -1578,7 +1495,6 @@ impl FlowEngine {
                     .execute_with_retry(
                         agent_id,
                         &effective_prompt,
-                        &identity,
                         &work_dir,
                         stage.agent.as_deref(),
                         stage.max_retries,
@@ -2147,18 +2063,6 @@ impl FlowEngine {
             }
         }
 
-        // Also inject native execution context if bridge is available.
-        if let Some(ref bridge) = self.bridge {
-            let agent_id = stage.persona.as_deref().unwrap_or("default");
-            let recent = bridge.get_recent_context(agent_id, 3);
-            if !recent.is_empty() {
-                parts.push(format!(
-                    "## Recent conversation context\n\n{}",
-                    recent.join("\n")
-                ));
-            }
-        }
-
         // Inject [STEP:N] tag instructions for routing.
         if !stage.rules.is_empty() {
             let tag_instructions =
@@ -2183,14 +2087,11 @@ impl FlowEngine {
         output: &serde_json::Value,
         _state: &FlowState,
     ) -> Result<Option<String>> {
-        // Filter rules tagged interactive_only / requires_user_input when this
-        // engine is in pipeline mode. Both flags imply "skip without a human in
-        // the loop"; requires_user_input additionally signals to interactive UIs
-        // that the next stage expects user input (consumed by the front-end, not
-        // here).
+        // FlowEngine runs without a human in the loop, so rules that need one
+        // are inert.
         let filtered: Vec<&MovementRule> = rules
             .iter()
-            .filter(|r| self.interactive || !(r.interactive_only || r.requires_user_input))
+            .filter(|r| !(r.interactive_only || r.requires_user_input))
             .collect();
 
         if filtered.is_empty() {
@@ -2282,19 +2183,6 @@ impl FlowEngine {
             return None;
         }
 
-        let identity = crate::identity::AgentIdentity {
-            agent_id: "llm-judge".to_string(),
-            specialization: crate::identity::AgentRole::Frontend {
-                technologies: Vec::new(),
-                responsibilities: Vec::new(),
-                boundaries: Vec::new(),
-            },
-            workspace_path: self.working_dir.clone(),
-            env_vars: std::collections::HashMap::new(),
-            session_id: uuid::Uuid::new_v4().to_string(),
-            parent_process_id: std::process::id().to_string(),
-            initialized_at: chrono::Utc::now(),
-        };
         let options = crate::session::bridge::MovementExecOptions {
             provider: self.default_provider.or_else(|| {
                 std::env::var("CCSWARM_PROVIDER")
@@ -2322,7 +2210,6 @@ impl FlowEngine {
                 .execute_with_retry(
                     "llm-judge",
                     &prompt,
-                    &identity,
                     &self.working_dir,
                     None,
                     0,
@@ -2641,7 +2528,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 Stage {
                     id: "sangha".to_string(),
                     persona: Some("planner".to_string()),
@@ -2679,6 +2568,7 @@ pub fn builtin_flows() -> Vec<Flow> {
                         member_tools: None,
                         member_timeout_secs: None,
                     }),
+                    execution: Default::default(),
                 },
                 Stage {
                     id: "implement".to_string(),
@@ -2721,7 +2611,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 Stage {
                     id: "review".to_string(),
                     persona: Some("reviewer".to_string()),
@@ -2759,7 +2651,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2793,7 +2687,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 Stage {
                     id: "complete".to_string(),
                     persona: None,
@@ -2817,7 +2713,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2865,7 +2763,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 Stage {
                     id: "summarize".to_string(),
                     persona: Some("writer".to_string()),
@@ -2901,7 +2801,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -2952,7 +2854,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 Stage {
                     id: "fix".to_string(),
                     persona: Some("coder".to_string()),
@@ -2986,7 +2890,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 Stage {
                     id: "done".to_string(),
                     persona: None,
@@ -3010,7 +2916,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -3055,7 +2963,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                 call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,            }],
+                    sangha: None,
+                    execution: Default::default(),
+                }],
             variables: HashMap::new(),
             metadata: HashMap::new(),
             interactive_mode: None,
@@ -3097,7 +3007,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 // Parallel hub: dispatches to frontend-impl and backend-impl simultaneously
                 Stage {
                     id: "parallel-implement".to_string(),
@@ -3127,7 +3039,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 // Frontend agent (runs in parallel)
                 Stage {
                     id: "frontend-impl".to_string(),
@@ -3152,7 +3066,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 // Backend agent (runs in parallel)
                 Stage {
                     id: "backend-impl".to_string(),
@@ -3177,7 +3093,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 // Supervisor reviews the combined output
                 Stage {
                     id: "review".to_string(),
@@ -3207,7 +3125,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
                 // Local completion
                 Stage {
                     id: "complete".to_string(),
@@ -3232,7 +3152,9 @@ pub fn builtin_flows() -> Vec<Flow> {
                     call: None, promotion: Vec::new(),
             gates: Vec::new(),
             team_leader: None,
-                    sangha: None,                },
+                    sangha: None,
+                    execution: Default::default(),
+                },
             ],
             variables: HashMap::new(),
             metadata: HashMap::new(),
@@ -3564,6 +3486,46 @@ stages:
     }
 
     #[test]
+    fn execution_mode_parses_validates_and_reaches_sangha_members() {
+        use crate::session::herdr::ExecutionMode;
+
+        let yaml = r#"
+name: live-review
+initial_movement: review
+stages:
+  - id: review
+    instruction: "Review"
+    execution: live
+    sangha:
+      quorum: 1
+  - id: implement
+    instruction: "Implement"
+"#;
+        let flow = Flow::from_yaml(yaml).expect("live flow parses");
+        let review = flow.get_movement("review").unwrap();
+        assert_eq!(review.execution, ExecutionMode::Live);
+        assert_eq!(
+            flow.get_movement("implement").unwrap().execution,
+            ExecutionMode::Headless
+        );
+        let spec = review.sangha.as_ref().unwrap();
+        for member in super::super::sangha::members_or_default(spec) {
+            let stage = super::super::sangha::member_stage(review, spec, &member);
+            assert_eq!(stage.execution, ExecutionMode::Live);
+        }
+
+        let codex_live = yaml.replace("execution: live", "execution: live\n    provider: codex");
+        let error = Flow::from_yaml(&codex_live).unwrap_err().to_string();
+        assert!(
+            error.contains("live execution supports claude only"),
+            "{error}"
+        );
+
+        let unknown = yaml.replace("execution: live", "execution: interactive");
+        assert!(Flow::from_yaml(&unknown).is_err());
+    }
+
+    #[test]
     fn test_builtin_pieces() {
         let flows = builtin_flows();
         assert!(!flows.is_empty());
@@ -3591,25 +3553,6 @@ stages:
         assert_eq!(state.status, FlowStatus::Pending);
     }
 
-    #[test]
-    fn test_terminal_movement() {
-        let yaml = r#"
-name: terminal-test
-initial_movement: start
-stages:
-  - id: start
-    instruction: "Begin"
-    rules:
-      - condition: success
-        next: end
-  - id: end
-    instruction: "Done"
-"#;
-        let flow = Flow::from_yaml(yaml).expect("parse failed");
-        assert!(!flow.is_terminal("start"));
-        assert!(flow.is_terminal("end"));
-    }
-
     #[tokio::test]
     async fn test_piece_engine_execute() {
         let yaml = r#"
@@ -3629,7 +3572,7 @@ stages:
         engine.flows.insert("exec-test".to_string(), flow);
 
         let state = engine
-            .execute_piece("exec-test")
+            .execute_piece_with_task("exec-test", "")
             .await
             .expect("execution failed");
         assert_eq!(state.status, FlowStatus::Completed);
@@ -3661,7 +3604,7 @@ stages:
         engine.flows.insert("loop-test".to_string(), flow);
 
         let state = engine
-            .execute_piece("loop-test")
+            .execute_piece_with_task("loop-test", "")
             .await
             .expect("execution failed");
         assert_eq!(state.status, FlowStatus::Aborted);
@@ -3704,7 +3647,7 @@ stages:
         engine.flows.insert("par-all".to_string(), flow);
 
         let state = engine
-            .execute_piece("par-all")
+            .execute_piece_with_task("par-all", "")
             .await
             .expect("execution failed");
         assert_eq!(state.status, FlowStatus::Completed);
@@ -3749,7 +3692,7 @@ stages:
         engine.flows.insert("par-any".to_string(), flow);
 
         let state = engine
-            .execute_piece("par-any")
+            .execute_piece_with_task("par-any", "")
             .await
             .expect("execution failed");
         assert_eq!(state.status, FlowStatus::Completed);
@@ -4240,7 +4183,7 @@ stages:
         engine.flows.insert("tl-offline".to_string(), flow);
 
         let state = engine
-            .execute_piece("tl-offline")
+            .execute_piece_with_task("tl-offline", "")
             .await
             .expect("execution failed");
         assert_eq!(state.status, FlowStatus::Completed);
@@ -4295,8 +4238,6 @@ stages:
     /// its permissive default and can write/exec despite `permission: readonly`.
     #[test]
     fn test_readonly_stage_resolves_to_readonly_tools() {
-        use super::super::permissions::PermissionEnforcer;
-
         let yaml = r#"
 name: perm-test
 initial_movement: review
@@ -4309,8 +4250,7 @@ stages:
         let stage = &flow.stages[0];
         assert!(stage.tools.is_empty(), "precondition: no explicit tools");
 
-        let resolved = PermissionEnforcer::from_movement(stage.permission.clone(), &stage.tools)
-            .available_tools();
+        let resolved = super::super::permissions::stage_tools(&stage.permission, &stage.tools);
 
         assert!(resolved.contains(&"read".to_string()));
         assert!(resolved.contains(&"grep".to_string()));
@@ -4386,8 +4326,6 @@ stages:
     /// permission level would allow a broader set.
     #[test]
     fn test_explicit_tools_override_permission_defaults() {
-        use super::super::permissions::PermissionEnforcer;
-
         let yaml = r#"
 name: perm-test
 initial_movement: narrow
@@ -4400,8 +4338,7 @@ stages:
         let flow = Flow::from_yaml(yaml).expect("parse failed");
         let stage = &flow.stages[0];
 
-        let resolved = PermissionEnforcer::from_movement(stage.permission.clone(), &stage.tools)
-            .available_tools();
+        let resolved = super::super::permissions::stage_tools(&stage.permission, &stage.tools);
 
         let mut sorted = resolved.clone();
         sorted.sort();
@@ -4508,6 +4445,7 @@ stages:
             gates: Vec::new(),
             team_leader: None,
             sangha: None,
+            execution: Default::default(),
         };
         let call = stage.call.clone().expect("call");
 
@@ -4560,36 +4498,6 @@ stages:
         // In pipeline mode the interactive_only rule is filtered out, so the
         // fallback "complete" rule wins.
         assert_eq!(next.as_deref(), Some("complete"));
-    }
-
-    #[tokio::test]
-    async fn evaluate_rules_keeps_interactive_only_in_interactive_mode() {
-        let mut engine = FlowEngine::new();
-        engine.set_interactive(true);
-        let rules = vec![MovementRule {
-            condition: RuleCondition::Simple("review".to_string()),
-            next: "ask-human".to_string(),
-            priority: 0,
-            interactive_only: true,
-            requires_user_input: false,
-        }];
-        let state = FlowState {
-            flow_name: "t".to_string(),
-            current_movement: "start".to_string(),
-            movement_count: 0,
-            status: FlowStatus::Running,
-            started_at: Utc::now(),
-            completed_at: None,
-            history: vec![],
-            variables: std::collections::HashMap::new(),
-        };
-        let output = serde_json::json!({"output": "review"});
-
-        let next = engine
-            .evaluate_rules(&rules, &output, &state)
-            .await
-            .expect("evaluate");
-        assert_eq!(next.as_deref(), Some("ask-human"));
     }
 
     #[test]

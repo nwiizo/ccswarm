@@ -4,17 +4,13 @@
 #![allow(clippy::get_first)]
 
 mod command_registry;
-mod commands;
 
-mod error_help;
 mod output;
-mod progress;
 mod quickstart_simple;
 
 pub(crate) mod handlers;
 
 use output::{OutputFormatter, create_formatter};
-pub use progress::{ProcessTracker, ProgressStyle, ProgressTracker, StatusLine};
 
 use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand};
@@ -23,7 +19,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-use crate::agent::{Priority, Task, TaskType};
 use crate::config::CcswarmConfig;
 
 /// ccswarm - Claude Code integrated multi-agent system
@@ -105,21 +100,6 @@ pub enum Commands {
         /// Agent configurations to create
         #[arg(long, value_delimiter = ',')]
         agents: Vec<String>,
-    },
-
-    /// Task management commands
-    #[command(
-        long_about = "Create, list, execute, merge, retry, and delete tasks.\n\n\
-        Tasks are the primary unit of work in ccswarm. Each task is analyzed by the\n\
-        Master Claude orchestrator and delegated to the appropriate specialist agent.\n\n\
-        Examples:\n  \
-          ccswarm task execute \"Fix login bug\"\n  \
-          ccswarm task list --branches\n  \
-          ccswarm task merge <id>"
-    )]
-    Task {
-        #[command(subcommand)]
-        action: TaskAction,
     },
 
     /// List agents and their configurations
@@ -247,7 +227,7 @@ pub enum Commands {
 
     /// Check system health and diagnose issues
     #[command(long_about = "Diagnose and fix common ccswarm issues.\n\n\
-        Checks Git setup, Claude Code CLI availability, API key configuration,\n\
+        Checks Git setup, Herdr, provider CLIs, API key configuration,\n\
         worktree health, and configuration file validity.\n\n\
         Examples:\n  \
           ccswarm doctor\n  \
@@ -257,10 +237,6 @@ pub enum Commands {
         /// Run fixes for common issues
         #[arg(short, long)]
         fix: bool,
-
-        /// Diagnose specific error code
-        #[arg(long)]
-        error: Option<String>,
 
         /// Check API connectivity
         #[arg(long)]
@@ -536,6 +512,18 @@ pub enum Commands {
         /// Do not follow new events; print existing log and exit
         #[arg(long)]
         no_follow: bool,
+    },
+
+    /// Herdr plugin entry points (see docs/HERDR_INTEGRATION.md)
+    #[command(
+        long_about = "Entry points used by the ccswarm Herdr plugin in herdr-plugin/.\n\n\
+        Examples:\n  \
+          ccswarm herdr action run-board   # plugin action: open the run board\n  \
+          ccswarm herdr show runs          # plugin pane: recent runs"
+    )]
+    Herdr {
+        #[command(subcommand)]
+        action: HerdrAction,
     },
 
     /// Create a new project and run pipeline in one command
@@ -850,6 +838,49 @@ pub enum QueueAction {
 }
 
 #[derive(Subcommand)]
+pub enum HerdrAction {
+    /// Open a ccswarm plugin pane in the focused pane's directory. Herdr
+    /// plugin actions call this with HERDR_PLUGIN_CONTEXT_JSON set.
+    Action {
+        #[arg(value_enum)]
+        view: HerdrView,
+    },
+    /// Show a view in the current pane; popups wait for Enter before closing.
+    Show {
+        #[arg(value_enum)]
+        view: HerdrView,
+    },
+}
+
+/// Views provided by the ccswarm Herdr plugin.
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HerdrView {
+    /// Follow the current run's events (`ccswarm tail`)
+    RunBoard,
+    /// Recent runs (`ccswarm run list`)
+    Runs,
+    /// Environment checks (`ccswarm doctor`)
+    Doctor,
+}
+
+impl HerdrView {
+    /// Plugin pane entrypoint ID in herdr-plugin/herdr-plugin.toml.
+    pub fn entrypoint(self) -> &'static str {
+        match self {
+            Self::RunBoard => "run-board",
+            Self::Runs => "runs",
+            Self::Doctor => "doctor",
+        }
+    }
+
+    /// Whether the manifest places this view in a popup, which Herdr opens
+    /// over the active pane; split panes need an explicit target pane.
+    pub fn is_popup(self) -> bool {
+        !matches!(self, Self::RunBoard)
+    }
+}
+
+#[derive(Subcommand)]
 pub enum RunAction {
     /// List past pipeline runs (sorted by date, newest first)
     List,
@@ -1068,172 +1099,6 @@ pub enum WorktreeAction {
 }
 
 #[derive(Subcommand)]
-pub enum TaskAction {
-    /// Add a new task to the queue
-    Add {
-        /// Task description (or template ID if using template)
-        description: String,
-
-        /// Task priority
-        #[arg(short, long, default_value = "medium")]
-        priority: String,
-
-        /// Task type
-        #[arg(short, long, default_value = "development")]
-        task_type: String,
-
-        /// Additional details
-        #[arg(long)]
-        details: Option<String>,
-
-        /// Estimated duration in seconds
-        #[arg(long)]
-        duration: Option<u32>,
-
-        /// Auto-assign to best agent
-        #[arg(long)]
-        auto_assign: bool,
-
-        /// Use a template for task creation
-        #[arg(long)]
-        template: Option<String>,
-
-        /// Template variable values (key=value)
-        #[arg(long, value_delimiter = ',')]
-        template_vars: Vec<String>,
-
-        /// Interactive template variable input
-        #[arg(long)]
-        interactive: bool,
-    },
-
-    /// List all tasks
-    List {
-        /// Show all tasks including completed
-        #[arg(short, long)]
-        all: bool,
-
-        /// Filter by status (pending, in_progress, completed, failed)
-        #[arg(short, long)]
-        status: Option<String>,
-
-        /// Filter by agent
-        #[arg(long)]
-        agent: Option<String>,
-
-        /// Show detailed information
-        #[arg(short, long)]
-        detailed: bool,
-
-        /// Show worktree branch information for each task
-        #[arg(long)]
-        branches: bool,
-    },
-
-    /// Show task status
-    Status {
-        /// Task ID
-        task_id: String,
-
-        /// Show execution history
-        #[arg(long)]
-        history: bool,
-
-        /// Show orchestration details
-        #[arg(long)]
-        orchestration: bool,
-    },
-
-    /// Cancel a task
-    Cancel {
-        /// Task ID
-        task_id: String,
-
-        /// Force cancellation even if in progress
-        #[arg(short, long)]
-        force: bool,
-
-        /// Reason for cancellation
-        #[arg(short, long)]
-        reason: Option<String>,
-    },
-
-    /// Show task execution history
-    History {
-        /// Number of recent tasks to show
-        #[arg(short, long, default_value = "20")]
-        limit: usize,
-
-        /// Filter by agent
-        #[arg(short, long)]
-        agent: Option<String>,
-
-        /// Show only failed tasks
-        #[arg(long)]
-        failed_only: bool,
-    },
-
-    /// Execute a task immediately (bypass queue)
-    Execute {
-        /// Task ID or new task description
-        task: String,
-
-        /// Force execution on specific agent
-        #[arg(short, long)]
-        agent: Option<String>,
-
-        /// Use orchestrator for complex execution
-        #[arg(long)]
-        orchestrate: bool,
-    },
-
-    /// Show task queue statistics
-    Stats {
-        /// Show detailed breakdown
-        #[arg(short, long)]
-        detailed: bool,
-
-        /// Show performance metrics
-        #[arg(long)]
-        performance: bool,
-    },
-
-    /// Merge a completed task's worktree branch into main
-    Merge {
-        /// Task ID to merge
-        task_id: String,
-
-        /// Delete the worktree branch after merge
-        #[arg(long, default_value = "true")]
-        cleanup: bool,
-
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        yes: bool,
-    },
-
-    /// Retry a failed task
-    Retry {
-        /// Task ID to retry
-        task_id: String,
-
-        /// Force retry even if task is not in failed state
-        #[arg(short, long)]
-        force: bool,
-    },
-
-    /// Delete a task and its associated worktree
-    Delete {
-        /// Task ID to delete
-        task_id: String,
-
-        /// Force deletion even if task is in progress
-        #[arg(short, long)]
-        force: bool,
-    },
-}
-
-#[derive(Subcommand)]
 pub enum ConfigAction {
     /// Generate default configuration
     Generate {
@@ -1329,360 +1194,6 @@ pub enum SessionAction {
         /// Force kill
         #[arg(short, long)]
         force: bool,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum DelegateAction {
-    /// Delegate a task to specific agent
-    Task {
-        /// Task description
-        description: String,
-
-        /// Target agent type (frontend, backend, devops, qa)
-        #[arg(short, long)]
-        agent: String,
-
-        /// Task priority
-        #[arg(short, long, default_value = "medium")]
-        priority: String,
-
-        /// Task type
-        #[arg(short, long, default_value = "development")]
-        task_type: String,
-
-        /// Additional details
-        #[arg(long)]
-        details: Option<String>,
-
-        /// Force delegation even if agent doesn't match
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Analyze task and suggest optimal agent
-    Analyze {
-        /// Task description
-        description: String,
-
-        /// Show delegation reasoning
-        #[arg(short, long)]
-        verbose: bool,
-
-        /// Delegation strategy to use
-        #[arg(short, long, default_value = "hybrid")]
-        strategy: String,
-    },
-
-    /// Show delegation statistics
-    Stats {
-        /// Show detailed breakdown
-        #[arg(short, long)]
-        detailed: bool,
-
-        /// Time period to analyze (hours)
-        #[arg(long, default_value = "24")]
-        period: u32,
-    },
-
-    /// Interactive delegation mode
-    Interactive,
-
-    /// Show configuration
-    Show {
-        /// Configuration file
-        #[arg(short, long, default_value = "ccswarm.json")]
-        file: PathBuf,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum QualityAction {
-    /// Run all quality checks through agents
-    Check {
-        /// Skip specific check types
-        #[arg(long, value_delimiter = ',')]
-        skip: Vec<String>,
-
-        /// Run only specific check types
-        #[arg(long, value_delimiter = ',')]
-        only: Vec<String>,
-
-        /// Fail fast on first error
-        #[arg(long)]
-        fail_fast: bool,
-    },
-
-    /// Run format checks (DevOps agent)
-    Format {
-        /// Automatically fix formatting issues
-        #[arg(long)]
-        fix: bool,
-    },
-
-    /// Run linting checks (DevOps agent)  
-    Lint {
-        /// Automatically fix linting issues where possible
-        #[arg(long)]
-        fix: bool,
-    },
-
-    /// Run test suite (QA agent)
-    Test {
-        /// Test filter pattern
-        #[arg(short, long)]
-        pattern: Option<String>,
-
-        /// Run only unit tests
-        #[arg(long)]
-        unit: bool,
-
-        /// Run only integration tests
-        #[arg(long)]
-        integration: bool,
-
-        /// Run only security tests
-        #[arg(long)]
-        security: bool,
-    },
-
-    /// Run build verification (DevOps agent)
-    Build {
-        /// Build in release mode
-        #[arg(long)]
-        release: bool,
-
-        /// Build all targets
-        #[arg(long)]
-        all_targets: bool,
-    },
-
-    /// Run security analysis (Backend agent)
-    Security {
-        /// Run vulnerability scan
-        #[arg(long)]
-        audit: bool,
-
-        /// Check dependencies
-        #[arg(long)]
-        deps: bool,
-    },
-
-    /// Show quality gate status
-    Status {
-        /// Show detailed status for each check
-        #[arg(short, long)]
-        detailed: bool,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum TemplateAction {
-    /// List available templates
-    List {
-        /// Show all templates including disabled ones
-        #[arg(short, long)]
-        all: bool,
-
-        /// Filter by category
-        #[arg(short, long)]
-        category: Option<String>,
-
-        /// Filter by tags
-        #[arg(short, long, value_delimiter = ',')]
-        tags: Vec<String>,
-
-        /// Search term for name or description
-        #[arg(short, long)]
-        search: Option<String>,
-
-        /// Sort by popularity
-        #[arg(long)]
-        popular: bool,
-
-        /// Sort by success rate
-        #[arg(long)]
-        quality: bool,
-
-        /// Show detailed information
-        #[arg(short, long)]
-        detailed: bool,
-    },
-
-    /// Show template details
-    Show {
-        /// Template ID or name
-        template: String,
-
-        /// Show template source code
-        #[arg(long)]
-        source: bool,
-
-        /// Show usage statistics
-        #[arg(long)]
-        stats: bool,
-    },
-
-    /// Create a new template
-    Create {
-        /// Template ID
-        #[arg(short, long)]
-        id: String,
-
-        /// Template name
-        #[arg(short, long)]
-        name: String,
-
-        /// Template description
-        #[arg(short, long)]
-        description: String,
-
-        /// Template category
-        #[arg(short, long)]
-        category: String,
-
-        /// Open editor to define template details
-        #[arg(long)]
-        editor: bool,
-
-        /// Use existing template as base
-        #[arg(long)]
-        from: Option<String>,
-    },
-
-    /// Edit an existing template
-    Edit {
-        /// Template ID or name
-        template: String,
-
-        /// Open in external editor
-        #[arg(long)]
-        editor: bool,
-    },
-
-    /// Delete a template
-    Delete {
-        /// Template ID or name
-        template: String,
-
-        /// Force deletion without confirmation
-        #[arg(short, long)]
-        force: bool,
-    },
-
-    /// Apply a template to create a task
-    Apply {
-        /// Template ID or name
-        template: String,
-
-        /// Variable values (key=value)
-        #[arg(short, long, value_delimiter = ',')]
-        vars: Vec<String>,
-
-        /// Interactive mode to prompt for variables
-        #[arg(short, long)]
-        interactive: bool,
-
-        /// Preview the generated task without creating it
-        #[arg(long)]
-        preview: bool,
-
-        /// Auto-assign to best agent
-        #[arg(long)]
-        auto_assign: bool,
-    },
-
-    /// Validate a template
-    Validate {
-        /// Template ID or name
-        template: String,
-
-        /// Show detailed validation report
-        #[arg(short, long)]
-        detailed: bool,
-
-        /// Treat warnings as errors
-        #[arg(long)]
-        strict: bool,
-    },
-
-    /// Clone a template
-    Clone {
-        /// Source template ID or name
-        source: String,
-
-        /// New template ID
-        #[arg(short, long)]
-        id: String,
-
-        /// New template name (optional)
-        #[arg(short, long)]
-        name: Option<String>,
-    },
-
-    /// Import templates from file
-    Import {
-        /// JSON file containing templates
-        file: String,
-
-        /// Overwrite existing templates
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Export templates to file
-    Export {
-        /// Output file path
-        #[arg(short, long)]
-        output: String,
-
-        /// Export specific templates only
-        #[arg(short, long, value_delimiter = ',')]
-        templates: Vec<String>,
-
-        /// Include usage statistics
-        #[arg(long)]
-        stats: bool,
-    },
-
-    /// Install predefined templates
-    Install {
-        /// Install all predefined templates
-        #[arg(long)]
-        all: bool,
-
-        /// Install specific template categories
-        #[arg(short, long, value_delimiter = ',')]
-        categories: Vec<String>,
-
-        /// Force reinstall existing templates
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Show template usage statistics
-    Stats {
-        /// Show global statistics
-        #[arg(short, long)]
-        global: bool,
-
-        /// Show statistics for specific template
-        #[arg(short, long)]
-        template: Option<String>,
-    },
-
-    /// Search templates
-    Search {
-        /// Search query
-        query: String,
-
-        /// Limit number of results
-        #[arg(short, long, default_value = "10")]
-        limit: usize,
-
-        /// Minimum quality score (0.0-1.0)
-        #[arg(long)]
-        min_quality: Option<f64>,
     },
 }
 

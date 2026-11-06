@@ -6,9 +6,7 @@
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
-
-use super::flow::Flow;
+use tracing::info;
 
 /// Metadata about an installed repertoire package
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,11 +36,6 @@ impl RepertoireManager {
             .join("repertoire");
 
         Ok(Self { base_dir })
-    }
-
-    /// Create with a custom base directory
-    pub fn with_base_dir(base_dir: PathBuf) -> Self {
-        Self { base_dir }
     }
 
     /// Add a repertoire package from a Git URL
@@ -156,50 +149,12 @@ impl RepertoireManager {
         Ok(())
     }
 
-    /// Load all flows from installed repertoire packages
-    pub async fn load_all_pieces(&self) -> Result<Vec<Flow>> {
-        let mut all_pieces = Vec::new();
-        let packages = self.list().await?;
-
-        for package in &packages {
-            match self.load_pieces_from_package(package).await {
-                Ok(flows) => all_pieces.extend(flows),
-                Err(e) => {
-                    warn!(
-                        "Failed to load flows from package '{}': {}",
-                        package.name, e
-                    );
-                }
-            }
-        }
-
-        Ok(all_pieces)
-    }
-
     /// Discover flow YAML files in a directory (returns the file stems).
     async fn discover_pieces(&self, dir: &Path) -> Result<Vec<String>> {
         let mut flows = Vec::new();
         for_each_flow_yaml(dir, |path| {
             if let Some(name) = path.file_stem() {
                 flows.push(name.to_string_lossy().to_string());
-            }
-            Ok(())
-        })
-        .await?;
-        Ok(flows)
-    }
-
-    /// Load flows from a specific package.
-    async fn load_pieces_from_package(&self, package: &RepertoirePackage) -> Result<Vec<Flow>> {
-        let mut flows = Vec::new();
-        for_each_flow_yaml(&package.install_path, |path| {
-            // Best-effort: unparseable files are logged and skipped, not fatal.
-            match std::fs::read_to_string(path) {
-                Ok(content) => match serde_yml::from_str::<Flow>(&content) {
-                    Ok(flow) => flows.push(flow),
-                    Err(e) => warn!("Failed to parse flow at {}: {}", path.display(), e),
-                },
-                Err(e) => warn!("Failed to read flow at {}: {}", path.display(), e),
             }
             Ok(())
         })

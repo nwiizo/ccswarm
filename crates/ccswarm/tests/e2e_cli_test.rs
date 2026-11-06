@@ -66,7 +66,6 @@ fn test_cli_help() {
     assert!(output.status.success(), "Help command should succeed");
     assert!(stdout.contains("ccswarm"), "Help should mention ccswarm");
     assert!(stdout.contains("init"), "Help should list init command");
-    assert!(stdout.contains("task"), "Help should list task command");
     assert!(stdout.contains("agent"), "Help should list agent command");
 }
 
@@ -180,43 +179,6 @@ fn test_init_with_agents() {
 // ============================================================================
 // Task Management Tests
 // ============================================================================
-
-#[test]
-fn test_task_list_empty() {
-    let temp_dir = TempDir::new().unwrap();
-    let project_path = temp_dir.path();
-
-    // Initialize git and project
-    Command::new("git")
-        .args(["init"])
-        .current_dir(project_path)
-        .output()
-        .unwrap();
-
-    let _ = run_ccswarm(&["init", "--name", "TaskTest"], Some(project_path));
-
-    // List tasks (should be empty or show no tasks)
-    let output = run_ccswarm(&["task", "list"], Some(project_path));
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Should either succeed with empty list or show "no tasks"
-    assert!(
-        output.status.success() || stdout.to_lowercase().contains("no task"),
-        "Task list should handle empty state"
-    );
-}
-
-#[test]
-fn test_task_help() {
-    let output = run_ccswarm(&["task", "--help"], None);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    assert!(output.status.success(), "Task help should succeed");
-    assert!(
-        stdout.contains("list") || stdout.contains("add") || stdout.contains("COMMAND"),
-        "Task help should show subcommands"
-    );
-}
 
 // ============================================================================
 // Agent Management Tests
@@ -385,7 +347,7 @@ fn test_json_output_flag() {
 
     let _ = run_ccswarm(&["init", "--name", "JsonTest"], Some(project_path));
 
-    let output = run_ccswarm(&["--json", "task", "list"], Some(project_path));
+    let output = run_ccswarm(&["--json", "queue", "list"], Some(project_path));
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // With --json flag, output should be JSON or indicate JSON mode
@@ -511,10 +473,6 @@ fn test_full_workflow_init_to_task() {
     // Step 3: List agents (verify initialization)
     let _agent_output = run_ccswarm(&["agents"], Some(project_path));
     // Should work regardless of agents present
-
-    // Step 4: List tasks
-    let _task_output = run_ccswarm(&["task", "list"], Some(project_path));
-    // Should work with empty task list
 
     // Step 5: Check doctor
     let doctor_output = run_ccswarm(&["doctor"], Some(project_path));
@@ -775,8 +733,8 @@ fn test_verbose_flag() {
 #[test]
 fn test_all_subcommands_have_help() {
     let subcommands = [
-        "init", "task", "agents", "config", "doctor", "flow", "harness", "approve", "queue",
-        "tail", "cost", "facets", "replay", "undo", "run", "auto", "lab",
+        "init", "agents", "config", "doctor", "flow", "harness", "approve", "queue", "tail",
+        "cost", "facets", "replay", "undo", "run", "auto", "lab",
     ];
 
     for subcmd in subcommands {

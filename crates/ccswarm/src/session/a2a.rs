@@ -1,46 +1,7 @@
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use std::time::Instant;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentCard {
-    pub name: String,
-    pub description: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub supported_interfaces: Vec<AgentInterface>,
-    #[serde(default)]
-    pub capabilities: AgentCapabilities,
-    pub version: String,
-    #[serde(default)]
-    pub skills: Vec<AgentSkill>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentInterface {
-    pub url: String,
-    pub protocol_binding: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub protocol_version: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentCapabilities {
-    #[serde(default)]
-    pub streaming: bool,
-    #[serde(default)]
-    pub push_notifications: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentSkill {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-}
 
 #[derive(Debug, Clone)]
 pub struct A2AClient {

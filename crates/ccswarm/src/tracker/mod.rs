@@ -1,5 +1,4 @@
 pub mod github;
-pub mod linear;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -31,17 +30,14 @@ pub struct BlockedBy {
 
 #[async_trait::async_trait]
 pub trait TrackerAdapter: Send + Sync {
-    fn name(&self) -> &'static str;
     async fn fetch_issue(&self, identifier: &str) -> Result<NormalizedIssue>;
-    async fn list_active(&self, limit: usize) -> Result<Vec<NormalizedIssue>>;
 }
 
 pub fn resolve_tracker(name: &str) -> Result<Box<dyn TrackerAdapter>> {
     match name {
         "github" => Ok(Box::new(github::GitHubAdapter)),
-        "linear" => Ok(Box::new(linear::LinearAdapter)),
         other => Err(anyhow::anyhow!(
-            "unknown tracker: {} (supported: github, linear)",
+            "unknown tracker: {} (supported: github)",
             other
         )),
     }
@@ -81,37 +77,19 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_tracker_default_is_github() -> Result<()> {
-        let tracker = resolve_tracker("github")?;
-
-        assert_eq!(tracker.name(), "github");
-        Ok(())
+    fn test_resolve_tracker_default_is_github() {
+        assert!(resolve_tracker("github").is_ok());
     }
 
     #[test]
     fn test_resolve_tracker_unknown_returns_error() {
-        let err = match resolve_tracker("unknown") {
-            Ok(tracker) => panic!("unknown tracker should fail, got {}", tracker.name()),
-            Err(err) => err,
+        let Err(err) = resolve_tracker("unknown") else {
+            panic!("unknown tracker should fail");
         };
 
         assert_eq!(
             err.to_string(),
-            "unknown tracker: unknown (supported: github, linear)"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_linear_adapter_returns_not_implemented() {
-        let tracker = linear::LinearAdapter;
-        let err = tracker
-            .fetch_issue("ENG-123")
-            .await
-            .expect_err("linear fetch should not be implemented yet");
-
-        assert_eq!(
-            err.to_string(),
-            "LinearAdapter not yet implemented; set CCSWARM_TRACKER=github"
+            "unknown tracker: unknown (supported: github)"
         );
     }
 }

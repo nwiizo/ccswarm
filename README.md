@@ -20,6 +20,11 @@ principles, implementation gaps, and feature priorities.
 pending tool results, reasoning choices, and bounded delegation, distinguishing
 model selection from future backend integration.
 
+Local provider runs require [Herdr](https://herdr.dev) 0.9.5 or later. Each
+stage runs in its own background Herdr tab, reports its state to Herdr, and
+closes when it finishes; [Herdr Integration](docs/HERDR_INTEGRATION.md)
+describes the contract.
+
 ## Hire ccswarm when
 
 - You want a repeatable plan, assessment, implementation, and review process
@@ -35,7 +40,8 @@ model selection from future backend integration.
 
 ```bash
 cargo install --path crates/ccswarm
-ccswarm doctor                        # probe Claude / Codex / gh copilot CLIs
+herdr                                 # open Herdr, then run ccswarm in one of its panes
+ccswarm doctor                        # probe Herdr and Claude / Codex / gh copilot CLIs
 ccswarm pipeline --task "Add login"   # one-shot
 ccswarm pipeline --task "..." --dry-run --provider codex  # preview prompts
 ccswarm scaffold --dir ./myapp --task "Create a todo app" --provider codex
@@ -123,9 +129,37 @@ falling back silently.
 
 | Provider | Status | Notes |
 |----------|--------|-------|
-| `claude` | Full support | Uses `--allowed-tools`, `--agent`, `--session-id` / `--continue`, `--append-system-prompt`, `--max-budget-usd`, and `--worktree`. `CCSWARM_CLAUDE_STREAM_JSON=1` enables stream telemetry |
-| `codex` | Non-interactive `codex exec` | System prompt is prepended to the user prompt (Codex has no dedicated flag). `codex exec resume <thread-id>` is used for same-thread continuation when Codex JSON telemetry provides a thread ID |
+| `claude` | Full support | Uses `--allowed-tools`, `--agent`, `--append-system-prompt`, `--max-budget-usd`, and `--worktree`. `CCSWARM_CLAUDE_STREAM_JSON=1` enables stream telemetry |
+| `codex` | Non-interactive `codex exec` | System prompt is prepended to the user prompt (Codex has no dedicated flag). `CCSWARM_CODEX_JSON=1` enables token telemetry |
 | `copilot` | **Unsupported for code generation** | `gh copilot suggest` is interactive and returns shell-command strings, not file edits. The provider fails fast with a friendly error — see `providers/copilot.rs` for rationale |
+
+## Herdr
+
+ccswarm runs local providers in background tabs of the Herdr workspace that
+started it, so stages, Sangha members, and parallel workers stay visible.
+Outside a Herdr pane, local provider runs stop with setup guidance; remote A2A
+runs (`CCSWARM_A2A_ENDPOINT`) and commands that do not run providers still work.
+
+```yaml
+stages:
+  - id: review
+    provider: claude
+    execution: live   # headless (default) | live
+```
+
+- `headless` runs `claude -p` / `codex exec` as before, with the same output,
+  exit-code, and token telemetry.
+- `live` runs an interactive Claude Code session that you can watch, answer,
+  or steer in its tab. ccswarm reads the result from the session transcript and
+  waits (with a Herdr notification) when Claude asks a question, including
+  folder trust the first time a repository is opened. Live stages run one turn;
+  Codex stages and provider fallbacks run headless.
+
+The [Herdr plugin](herdr-plugin/) adds a run board, recent runs, and doctor:
+
+```bash
+herdr plugin install nwiizo/ccswarm/herdr-plugin --ref v0.11.0
+```
 
 ## Machine-readable output
 
@@ -167,7 +201,7 @@ ccswarm lab evolution report            # per-agent performance analytics
 ccswarm lab search docs "..."           # ripgrep over docs/ and source
 ```
 
-## Governance
+## Harness and approvals
 
 ```bash
 ccswarm harness run                     # scenario-driven regression tests of flows
@@ -177,27 +211,23 @@ ccswarm approve plan --id <run>         # HITL gate for risky actions
 ## Architecture at a glance
 
 ```
-ccswarm (workflow + governance + A2A/local provider execution)
+ccswarm (workflow + Sangha + A2A/Herdr provider execution)
 ```
 
 - **ccswarm/cli** — command parsing and dispatch (35+ subcommands)
 - **ccswarm/workflow** — FlowEngine, faceted prompting, stage reports
 - **ccswarm/providers** — AgentProvider trait + Claude/Codex/Copilot implementations
-- **ccswarm/session/bridge** — A2A/local execution, retry, context, persistence
+- **ccswarm/session/bridge** — A2A/local execution routing, retry, rate-limit fallback
+- **ccswarm/session/herdr** — Herdr tab execution (headless and live Claude)
 - **ccswarm/events** — NDJSON recorder, run summaries
-- **ccswarm/governance** — proposals, extensions, approvals (renamed from coordination/)
-- **ccswarm/session/a2a** — A2A Agent Card metadata and REST `message:send`
-  client support. Set `CCSWARM_A2A_ENDPOINT` to route live turns to a remote
+- **ccswarm/session/a2a** — A2A REST `message:send` client. Set `CCSWARM_A2A_ENDPOINT` to route live turns to a remote
   A2A server.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module responsibilities and API
 boundaries. See [docs/ROADMAP.md](docs/ROADMAP.md) for the current release scope,
 [docs/SANGHA_PRODUCT_CORE.md](docs/SANGHA_PRODUCT_CORE.md) for the core decision
-process and feature selection,
-[docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md](docs/CCSWARM_PRODUCT_ABSTRACTION_PLAN.md)
-for the longer job-theory product plan, and
-[docs/MULTI_AGENT_REDESIGN.md](docs/MULTI_AGENT_REDESIGN.md) for the
-provider-neutral multi-agent design.
+process and feature selection, and
+[docs/HERDR_INTEGRATION.md](docs/HERDR_INTEGRATION.md) for Herdr execution.
 
 ## Development
 

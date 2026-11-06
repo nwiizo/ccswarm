@@ -65,10 +65,6 @@ fn parse_updated_at_ms(value: &str) -> Result<u64> {
 
 #[async_trait::async_trait]
 impl TrackerAdapter for GitHubAdapter {
-    fn name(&self) -> &'static str {
-        "github"
-    }
-
     async fn fetch_issue(&self, identifier: &str) -> Result<NormalizedIssue> {
         let output = tokio::process::Command::new("gh")
             .args([
@@ -90,10 +86,6 @@ impl TrackerAdapter for GitHubAdapter {
         let issue: GitHubIssue = serde_json::from_slice(&output.stdout)
             .context("Failed to parse `gh issue view` JSON")?;
         issue.into_normalized()
-    }
-
-    async fn list_active(&self, _limit: usize) -> Result<Vec<NormalizedIssue>> {
-        Err(anyhow!("GitHubAdapter list_active not yet implemented"))
     }
 }
 

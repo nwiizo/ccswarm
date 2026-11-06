@@ -13,6 +13,8 @@ provides quorum voting; the stricter target and its gaps are documented in
 - **Repeatable process**: declarative flow YAML defines stages and routing;
   it does not guarantee identical output or quality.
 - **Traceable**: NDJSON events + summaries in `.ccswarm/runs/<id>/`.
+- **Herdr-native**: local provider runs require a Herdr pane; each stage runs
+  in a background Herdr tab ([Herdr Integration](docs/HERDR_INTEGRATION.md)).
 
 ## Daily usage
 
@@ -67,7 +69,7 @@ cargo run -p ccswarm -- --help
 ## Workspace architecture
 
 ```
-ccswarm (workflow + governance + A2A/local provider execution)
+ccswarm (workflow + Sangha + A2A/Herdr provider execution)
 ```
 
 ### ccswarm crate
@@ -77,15 +79,11 @@ ccswarm (workflow + governance + A2A/local provider execution)
 | `cli/` | Command parsing + dispatch (3 entry modes: interactive / direct task / subcommand) |
 | `workflow/` | FlowEngine, Pipeline, faceted prompting, stage reports |
 | `providers/` | AgentProvider trait + ClaudeProvider / CodexProvider / CopilotProvider |
-| `session/` | A2ABridge, native context/retry/persistence, output parsing, A2A client types |
+| `session/` | A2ABridge routing/retry, Herdr tab execution (headless/live), output parsing, A2A client |
 | `events/` | NDJSON EventRecorder, duration tracking, run summaries |
-| `governance/` | Proposals, extensions, approvals, coordination bus (renamed from `coordination/`) |
-| `agent/` | AgentRole, type-state TaskBuilder |
-| `identity/` | AgentIdentity, role boundaries |
-| `hooks/` | HookRegistry |
 
 Role boundary: `workflow/` owns orchestration and policy; `session/` owns
-A2A/local execution primitives, context history, parsing, and persistence.
+A2A/Herdr execution primitives and output parsing.
 
 ## Providers
 
@@ -96,11 +94,15 @@ model: sonnet
 ```
 
 - Selection precedence: stage YAML > `--provider` flag (global) > `CCSWARM_PROVIDER` env > claude
-- **claude**: `--allowed-tools`, `--agent`, `--session-id` / `--continue`, `--append-system-prompt`, `--max-budget-usd`, and `--worktree`. `CCSWARM_CLAUDE_STREAM_JSON=1` enables stream telemetry.
-- **codex**: `codex exec`, multi-turn via `codex exec resume <thread-id>`. `CCSWARM_CODEX_JSON=1` for real token telemetry (forced on for multi-turn). No worktree/budget/allowed-tools.
+- **claude**: `--allowed-tools`, `--agent`, `--append-system-prompt`, `--max-budget-usd`, and `--worktree`. `CCSWARM_CLAUDE_STREAM_JSON=1` enables stream telemetry.
+- **codex**: `codex exec`. `CCSWARM_CODEX_JSON=1` for real token telemetry. No worktree/budget/allowed-tools.
 - **copilot**: unsupported for code generation (gh copilot suggest is interactive); falls back to friendly error
 - **A2A**: set `CCSWARM_A2A_ENDPOINT=https://.../a2a` to send live turns via
   REST `POST /message:send` instead of spawning a local provider CLI.
+- **Herdr**: local provider CLIs run in background Herdr tabs and fail outside
+  a Herdr pane. Stage `execution: live` runs an interactive Claude session read
+  back from its transcript; `headless` (default) keeps `claude -p` / `codex exec`.
+  `herdr-plugin/` provides run board, runs, and doctor actions.
 
 `ccswarm doctor` probes all three CLIs.
 
@@ -148,16 +150,11 @@ Knowledge: (user-provided under `.ccswarm/facets/knowledge/*.yaml`).
 - Empty `agents_used` in a summary means no provider CLI was invoked for that stage.
 - Playwright-targeted tasks should ask for stable `data-testid` attributes explicitly.
 - Complex implement stages often need `--timeout 900` or smaller task slices.
-- Provider resume is best-effort: Claude uses `--session-id` / `--continue`;
-  Codex uses `codex exec resume <thread-id>`.
 - review→fix ループは flow の `max_stage_visits`(default 3)で打ち切られる。超過は Aborted。
 
 ## Rules
 
-- [development-standards](.claude/rules/development-standards.md)
-- [architecture-patterns](.claude/rules/architecture-patterns.md)
-- [security-guidelines](.claude/rules/security-guidelines.md)
-- [performance](.claude/rules/performance.md)
+@AGENTS.md
 
 ## Documentation
 

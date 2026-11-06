@@ -150,6 +150,7 @@ pub fn worker_stage(parent: &Stage, spec: &TeamLeaderSpec, part: &TaskPart) -> S
         gates: Vec::new(),
         team_leader: None,
         sangha: None,
+        execution: parent.execution,
     }
 }
 
@@ -225,6 +226,7 @@ mod tests {
             gates: Vec::new(),
             team_leader: None,
             sangha: None,
+            execution: Default::default(),
         };
         let spec = TeamLeaderSpec {
             max_parts: 3,

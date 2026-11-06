@@ -644,10 +644,6 @@ mod tests {
 
     #[async_trait::async_trait]
     impl TrackerAdapter for FakeTracker {
-        fn name(&self) -> &'static str {
-            "fake"
-        }
-
         async fn fetch_issue(&self, identifier: &str) -> Result<NormalizedIssue> {
             if identifier != "TEAM-42" {
                 return Err(anyhow!("unexpected fake tracker identifier: {identifier}"));
@@ -665,10 +661,6 @@ mod tests {
                 priority: None,
                 updated_at_ms: Some(1_700_000_000_000),
             })
-        }
-
-        async fn list_active(&self, _limit: usize) -> Result<Vec<NormalizedIssue>> {
-            Ok(Vec::new())
         }
     }
 
@@ -728,7 +720,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_queue_add_from_issue_linear_returns_not_implemented() -> Result<()> {
+    async fn test_queue_add_from_issue_unknown_tracker_leaves_queue_empty() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let queue_path = dir.path().join(QUEUE_FILE);
         let runner = runner_for_repo(dir.path()).await?;
@@ -741,16 +733,16 @@ mod tests {
                 None,
                 None,
                 QueueAddTracker {
-                    name: "linear",
+                    name: "unknown",
                     resolver: resolve_tracker,
                 },
             )
             .await
-            .expect_err("linear tracker should fail until it is implemented");
+            .expect_err("unknown tracker should fail");
 
         assert_eq!(
             err.to_string(),
-            "LinearAdapter not yet implemented; set CCSWARM_TRACKER=github"
+            "unknown tracker: unknown (supported: github)"
         );
         assert!(load_queue(&queue_path).await?.tasks.is_empty());
         Ok(())

@@ -124,11 +124,6 @@ impl ShellWorktreeManager {
         Ok(())
     }
 
-    /// Instance version of init_if_needed
-    pub async fn init_repo_if_needed(&self) -> Result<()> {
-        Self::init_if_needed(&self.repo_path).await
-    }
-
     /// Simple version of create_worktree (with default parameters)
     pub async fn create_worktree(
         &self,
@@ -229,66 +224,6 @@ impl ShellWorktreeManager {
         }
 
         info!("Removed worktree: {}", worktree_path.display());
-        Ok(())
-    }
-
-    /// Commit changes in worktree
-    pub async fn commit_worktree_changes(&self, worktree_path: &Path, message: &str) -> Result<()> {
-        // First check if there are any changes
-        let status_output = Command::new("git")
-            .args(["status", "--porcelain"])
-            .current_dir(worktree_path)
-            .output()
-            .await
-            .context("Failed to check git status")?;
-
-        if !status_output.status.success() {
-            return Err(anyhow::anyhow!(
-                "Failed to check git status: {}",
-                String::from_utf8_lossy(&status_output.stderr)
-            ));
-        }
-
-        // Do nothing if there are no changes
-        if status_output.stdout.is_empty() {
-            info!(
-                "No changes to commit in worktree: {}",
-                worktree_path.display()
-            );
-            return Ok(());
-        }
-
-        // Stage changes
-        let add_output = Command::new("git")
-            .args(["add", "."])
-            .current_dir(worktree_path)
-            .output()
-            .await
-            .context("Failed to stage changes")?;
-
-        if !add_output.status.success() {
-            return Err(anyhow::anyhow!(
-                "Failed to stage changes: {}",
-                String::from_utf8_lossy(&add_output.stderr)
-            ));
-        }
-
-        // Commit
-        let commit_output = Command::new("git")
-            .args(["commit", "-m", message])
-            .current_dir(worktree_path)
-            .output()
-            .await
-            .context("Failed to commit changes")?;
-
-        if !commit_output.status.success() {
-            return Err(anyhow::anyhow!(
-                "Failed to commit changes: {}",
-                String::from_utf8_lossy(&commit_output.stderr)
-            ));
-        }
-
-        info!("Committed changes in worktree: {}", worktree_path.display());
         Ok(())
     }
 

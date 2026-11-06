@@ -80,9 +80,6 @@ pub struct Event {
     /// Stage label associated with this event, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stage: Option<String>,
-    /// Task identifier, if the event is scoped to a task.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub task_id: Option<String>,
     /// Human-readable description of the event.
     pub message: String,
     /// Arbitrary structured payload (cost, token counts, latency, etc.).
@@ -105,7 +102,6 @@ impl Event {
             event_type,
             agent: None,
             stage: None,
-            task_id: None,
             message: message.into(),
             metadata: None,
         }
@@ -120,12 +116,6 @@ impl Event {
     /// Builder: attach a stage label.
     pub fn with_movement(mut self, stage: impl Into<String>) -> Self {
         self.stage = Some(stage.into());
-        self
-    }
-
-    /// Builder: attach a task ID.
-    pub fn with_task_id(mut self, task_id: impl Into<String>) -> Self {
-        self.task_id = Some(task_id.into());
         self
     }
 
@@ -171,13 +161,6 @@ pub struct EventRecorder {
 }
 
 impl EventRecorder {
-    /// Create a new recorder for `run_id`.
-    ///
-    /// Creates `.ccswarm/runs/{run_id}/` if it does not yet exist.
-    pub async fn new(run_id: &str) -> Result<Self> {
-        Self::new_in_runs_dir(PathBuf::from(".ccswarm").join("runs"), run_id).await
-    }
-
     /// Create a new recorder under an explicit runs directory.
     pub async fn new_in_runs_dir(runs_dir: impl Into<PathBuf>, run_id: &str) -> Result<Self> {
         crate::run_id::validate_run_id(run_id).context("invalid run ID for event recorder")?;
@@ -245,11 +228,6 @@ impl EventRecorder {
     /// Absolute path to the NDJSON event log.
     pub fn events_path(&self) -> PathBuf {
         self.run_dir.join("events.ndjson")
-    }
-
-    /// Absolute path to the run summary file.
-    pub fn summary_path(&self) -> PathBuf {
-        self.run_dir.join("summary.json")
     }
 }
 
@@ -562,8 +540,7 @@ mod tests {
             EventType::TaskStart,
             "task started",
         )
-        .with_agent("backend")
-        .with_task_id("t-001");
+        .with_agent("backend");
 
         let json = serde_json::to_string(&event).expect("serialization failed");
 
@@ -581,7 +558,6 @@ mod tests {
 
         // Optional fields present only when set.
         assert!(json.contains("\"agent\":\"backend\""));
-        assert!(json.contains("\"task_id\":\"t-001\""));
 
         // Absent optional fields must be omitted.
         assert!(
@@ -647,8 +623,7 @@ mod tests {
                 EventLevel::Info,
                 EventType::TaskEnd,
                 "completed",
-            )
-            .with_task_id("t-42"),
+            ),
         ];
 
         for ev in &events {
@@ -707,7 +682,7 @@ mod tests {
             .await
             .expect("write_summary failed");
 
-        let path = recorder.summary_path();
+        let path = recorder.run_dir.join("summary.json");
         assert!(path.exists(), "summary.json should exist");
 
         let raw = fs::read_to_string(&path)

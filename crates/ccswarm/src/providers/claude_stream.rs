@@ -33,13 +33,11 @@ pub(crate) struct StreamSummary {
     pub result_subtype: Option<String>,
 }
 
-/// Parsed tool invocation.
+/// Parsed tool invocation. Tool inputs are not kept: they can embed whole
+/// file contents, and only names reach events.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // `input` is deliberately not propagated past the bridge — it can embed whole file contents. Only `name` reaches events.
 pub(crate) struct ToolUse {
     pub name: String,
-    /// Raw input JSON; opaque to us but useful when logged.
-    pub input: serde_json::Value,
 }
 
 /// Token usage record. The bridge propagates the last record (the result
@@ -128,11 +126,7 @@ fn extract_assistant(value: &serde_json::Value, summary: &mut StreamSummary) {
                     if name.is_empty() {
                         continue;
                     }
-                    let input = block
-                        .get("input")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null);
-                    summary.tool_uses.push(ToolUse { name, input });
+                    summary.tool_uses.push(ToolUse { name });
                 }
                 _ => {}
             }
@@ -217,10 +211,6 @@ mod tests {
         assert_eq!(s.tool_uses.len(), 2);
         assert_eq!(s.tool_uses[0].name, "Read");
         assert_eq!(s.tool_uses[1].name, "Bash");
-        assert_eq!(
-            s.tool_uses[1].input.get("command").and_then(|v| v.as_str()),
-            Some("ls")
-        );
     }
 
     #[test]

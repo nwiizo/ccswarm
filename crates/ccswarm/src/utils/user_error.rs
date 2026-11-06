@@ -67,43 +67,6 @@ impl CommonErrors {
         .with_suggestion("Run 'git init' in your project directory first")
     }
 
-    pub fn config_not_found() -> UserError {
-        UserError::new(
-            "Configuration file not found",
-            "ccswarm.json is required to run this command",
-        )
-        .with_suggestion("Run 'ccswarm init' to create a configuration file")
-    }
-
-    pub fn invalid_agent_type(agent_type: &str) -> UserError {
-        UserError::new(
-            format!("Invalid agent type: {}", agent_type),
-            "Supported agent types are: frontend, backend, devops, qa",
-        )
-        .with_suggestion("Try 'ccswarm agents spawn --type frontend'".to_string())
-    }
-
-    pub fn session_not_found(session_id: &str) -> UserError {
-        UserError::new(
-            format!("Session not found: {}", session_id),
-            "The specified session does not exist or has been terminated",
-        )
-        .with_suggestion("Run 'ccswarm session list' to see active sessions")
-    }
-
-    pub fn port_in_use(port: u16) -> UserError {
-        UserError::new(
-            format!("Port {} is already in use", port),
-            "Another process is using this port",
-        )
-        .with_suggestion("Try a different port with --port option".to_string())
-    }
-
-    pub fn invalid_task_format() -> UserError {
-        UserError::new("Invalid task format", "The task format is not valid")
-            .with_suggestion("Use format: 'task description [priority] [type]'")
-    }
-
     pub fn api_key_missing(provider: &str) -> UserError {
         UserError::new(
             format!("API key missing for {}", provider),
@@ -121,15 +84,4 @@ pub fn show_progress(message: &str) {
     print!("⏳ {}... ", message.cyan());
     use std::io::{self, Write};
     let _ = io::stdout().flush();
-}
-
-/// Extension trait for user errors
-pub trait UserErrorExt {
-    fn to_user_error(self) -> UserError;
-}
-
-impl<E: std::error::Error> UserErrorExt for E {
-    fn to_user_error(self) -> UserError {
-        UserError::new("Error", self.to_string())
-    }
 }

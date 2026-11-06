@@ -305,37 +305,19 @@ async fn run_cli(cli: &Cli) -> anyhow::Result<()> {
     runner.run(&cli.command).await
 }
 
-/// Display errors in a user-friendly format with actionable suggestions
+/// Display errors with their cause chain in verbose mode.
 fn display_error(error: &anyhow::Error, verbose: bool) {
-    // Try to downcast to CCSwarmError for rich error display
-    if let Some(ccswarm_err) = error.downcast_ref::<ccswarm::error::CCSwarmError>() {
-        ccswarm_err.to_user_error().display();
-        if verbose {
-            // Show full error chain in verbose mode
-            let mut source = std::error::Error::source(ccswarm_err);
-            if source.is_some() {
-                eprintln!("  {}:", "Caused by".dimmed());
-            }
-            while let Some(cause) = source {
-                eprintln!("    - {}", cause);
-                source = std::error::Error::source(cause);
-            }
+    eprintln!("\n{} {}", "Error:".red().bold(), error);
+    if verbose {
+        for cause in error.chain().skip(1) {
+            eprintln!("  {} {}", "Caused by:".yellow(), cause);
         }
-    } else {
-        // Fallback for non-CCSwarmError anyhow errors
-        use colored::Colorize;
-        eprintln!("\n{} {}", "Error:".red().bold(), error);
-        if verbose {
-            for cause in error.chain().skip(1) {
-                eprintln!("  {} {}", "Caused by:".yellow(), cause);
-            }
-        }
-        eprintln!(
-            "\n  {} {}",
-            "Tip:".cyan().bold(),
-            "Run with '--verbose' for more details, or 'ccswarm doctor' for diagnostics.".dimmed()
-        );
     }
+    eprintln!(
+        "\n  {} {}",
+        "Tip:".cyan().bold(),
+        "Run with '--verbose' for more details, or 'ccswarm doctor' for diagnostics.".dimmed()
+    );
 }
 
 use colored::Colorize;

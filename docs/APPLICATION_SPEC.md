@@ -20,16 +20,20 @@ process and explicitly separates it from current implementation behavior.
 - **Flow-Based Workflows**: YAML-driven multi-step pipelines with context
   passing, retries, gates, parallel stages, and workflow calls.
 - **A2ABridge**: A2A REST `message:send` execution when configured, otherwise
-  Claude or Codex CLI subprocess execution. The registered Copilot provider
-  fails fast because `gh copilot suggest` is interactive.
+  Claude or Codex CLI execution in a background Herdr tab. The registered
+  Copilot provider fails fast because `gh copilot suggest` is interactive.
+- **Herdr Execution**: headless stages run `claude -p` / `codex exec` with
+  file-based results; `execution: live` stages run an interactive Claude Code
+  session read back from its transcript. Stages report their state to Herdr,
+  and runs notify on completion and approval waits. See
+  [Herdr Integration](HERDR_INTEGRATION.md).
 - **NDJSON Event Recording**: `.ccswarm/runs/{run-id}/events.ndjson` and
   summaries for observability.
 - **Faceted Prompting**: composable persona, policy, knowledge, and instruction
   facets.
-- **Session Persistence**: native ccswarm context and result persistence.
 
 Ordinary stage gates are available, but Sangha dispatch currently bypasses
-them. Session persistence is not workflow checkpoint resume. The Codex adapter
+them. Run events do not provide workflow checkpoint resume. The Codex adapter
 currently requests a writable workspace even for read-only stages. These
 limitations must be fixed before the target Sangha acceptance policy ships.
 
@@ -42,7 +46,8 @@ and separate from workflow decisions.
 - Git 2.20+.
 - At least one live backend:
   - `CCSWARM_A2A_ENDPOINT=https://.../a2a` for a remote A2A server, or
-  - Claude Code CLI or Codex CLI installed locally.
+  - Claude Code CLI or Codex CLI installed locally, with ccswarm running in a
+    Herdr 0.9.5+ pane (`HERDR_ENV=1`).
 
 ## Project Structure
 
@@ -57,7 +62,6 @@ ccswarm/
 │       │   ├── workflow/
 │       │   ├── session/
 │       │   ├── providers/
-│       │   ├── governance/
 │       │   └── events/
 │       └── tests/
 ├── docs/
@@ -71,24 +75,16 @@ chooses execution in this order:
 
 1. `MovementExecOptions::a2a_endpoint`, if supplied.
 2. `CCSWARM_A2A_ENDPOINT`, if set.
-3. Local provider CLI selected by stage YAML, CLI flag, environment, or default.
+3. Local provider CLI selected by stage YAML, CLI flag, environment, or default,
+   run in a background tab of the calling Herdr workspace. Outside Herdr this
+   step fails before any retry.
 
-The bridge then parses output into structured build/test/log/plain-text results,
-updates per-agent context, persists session state, and returns token/cost
-metadata when the selected provider exposes it.
+The bridge then parses output into structured build/test/log/plain-text results
+and returns token/cost metadata when the selected provider exposes it.
 
-## A2A Objects
+## A2A Requests
 
-ccswarm models the A2A Agent Card fields needed for discovery:
-
-- `name`
-- `description`
-- `supportedInterfaces`
-- `capabilities`
-- `version`
-- `skills`
-
-For execution, ccswarm posts a user `Message` containing a text `Part` to
+ccswarm posts a user `Message` containing a text `Part` to
 `POST /message:send` and extracts text parts from the returned message, task,
 or artifacts.
 
@@ -103,6 +99,4 @@ cargo run -p ccswarm -- --help
 
 ## Forward Plan
 
-The release scope and future milestones are tracked in the [roadmap](ROADMAP.md). The longer
-product vocabulary and implementation direction remain in
-[ccswarm Product Abstraction Plan](CCSWARM_PRODUCT_ABSTRACTION_PLAN.md).
+The release scope and future milestones are tracked in the [roadmap](ROADMAP.md).

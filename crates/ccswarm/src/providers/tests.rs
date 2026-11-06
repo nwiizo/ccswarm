@@ -6,10 +6,9 @@
 //!    program + argv pattern.
 //! 2. Verify the kind round-trips through `ProviderKind::parse`.
 //! 3. Verify `ProviderKind::Copilot` produces a command that exits non-zero with the
-//!    friendly error (codex #4 finding — `gh copilot suggest` is not usable as a code
-//!    generation backend).
+//!    friendly error, because `gh copilot suggest` cannot generate code.
 
-use super::{ProviderKind, ProviderOptions, SameThreadContinuation, resolve};
+use super::{ProviderKind, ProviderOptions, resolve};
 use std::path::Path;
 
 fn argv_of(cmd: &tokio::process::Command) -> Vec<String> {
@@ -44,8 +43,6 @@ fn claude_command_includes_expected_flags() {
         model: Some("sonnet".to_string()),
         system_prompt: Some("be careful".to_string()),
         agent_name: Some("frontend-specialist".to_string()),
-        session_id: Some("abc123".to_string()),
-        continue_session: false,
         max_budget: Some(0.25),
         worktree_name: Some("wt-1".to_string()),
         claude_stream_json: false,
@@ -60,8 +57,6 @@ fn claude_command_includes_expected_flags() {
     assert!(argv.iter().any(|a| a == "--dangerously-skip-permissions"));
     assert!(argv.iter().any(|a| a == "--agent"));
     assert!(argv.iter().any(|a| a == "frontend-specialist"));
-    assert!(argv.iter().any(|a| a == "--session-id"));
-    assert!(argv.iter().any(|a| a == "abc123"));
     assert!(argv.iter().any(|a| a == "--allowed-tools"));
     assert!(argv.iter().any(|a| a == "Read,Bash"));
     assert!(argv.iter().any(|a| a == "--model"));
@@ -93,25 +88,7 @@ fn claude_command_switches_to_stream_json_when_requested() {
 }
 
 #[test]
-fn provider_continuation_capabilities_are_explicit() {
-    assert_eq!(
-        resolve(ProviderKind::Claude).same_thread_continuation(),
-        SameThreadContinuation::ExplicitSessionId
-    );
-    assert_eq!(
-        resolve(ProviderKind::Codex).same_thread_continuation(),
-        SameThreadContinuation::ProviderAssignedId
-    );
-    assert_eq!(
-        resolve(ProviderKind::Copilot).same_thread_continuation(),
-        SameThreadContinuation::Unsupported
-    );
-}
-
-#[test]
-fn codex_command_merges_system_prompt_and_has_no_session_flag() {
-    // codex #3 regression guard: Codex CLI has no `--session` flag — resume
-    // goes through the `exec resume` subcommand instead.
+fn codex_command_merges_system_prompt() {
     let provider = resolve(ProviderKind::Codex);
     let opts = ProviderOptions {
         model: Some("gpt-5".to_string()),
@@ -132,38 +109,12 @@ fn codex_command_merges_system_prompt_and_has_no_session_flag() {
     assert!(last.contains("USER"));
     assert!(argv.iter().any(|a| a == "--model"));
     assert!(argv.iter().any(|a| a == "gpt-5"));
-    // The Codex `--session` flag does not exist; make sure we don't emit it.
-    assert!(!argv.iter().any(|a| a == "--session"));
-    // No resume subcommand without a session id.
-    assert!(!argv.iter().any(|a| a == "resume"));
     assert!(!argv.iter().any(|a| a == "--json"));
 }
 
 #[test]
-fn codex_command_with_session_id_uses_resume_subcommand() {
-    let provider = resolve(ProviderKind::Codex);
-    let opts = ProviderOptions {
-        session_id: Some("thread-42".to_string()),
-        codex_json: true,
-        ..Default::default()
-    };
-    let cmd = provider.build_command("CONTINUE", Path::new("/tmp"), &opts);
-    let argv = argv_of(&cmd);
-
-    // `codex exec resume <thread-id> [flags] <prompt>`
-    assert_eq!(argv[0], "codex");
-    assert_eq!(argv[1], "exec");
-    assert_eq!(argv[2], "resume");
-    assert_eq!(argv[3], "thread-42");
-    assert!(argv.iter().any(|a| a == "--json"));
-    assert_eq!(argv.last().map(String::as_str), Some("CONTINUE"));
-}
-
-#[test]
 fn copilot_provider_emits_error_command() {
-    // codex #4 guard: `gh copilot suggest` is interactive and unsuitable for code gen.
-    // Until GitHub ships a non-interactive CLI, the provider intentionally returns a
-    // `sh -c '... exit 2'` command that fails fast with a clear message.
+    // `gh copilot suggest` is interactive, so the provider fails fast instead.
     let provider = resolve(ProviderKind::Copilot);
     let cmd = provider.build_command("anything", Path::new("/tmp"), &ProviderOptions::default());
     let argv = argv_of(&cmd);

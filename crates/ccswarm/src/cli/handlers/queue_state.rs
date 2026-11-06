@@ -153,25 +153,6 @@ impl QueueState {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) async fn mark_retry_queued(
-        &self,
-        id: &str,
-        attempt: u32,
-        due_at_ms: u64,
-    ) -> Result<()> {
-        self.update_claim(id, |claim| match claim {
-            ClaimState::Running { .. } => {
-                *claim = ClaimState::RetryQueued { attempt, due_at_ms };
-                Ok(())
-            }
-            _ => Err(anyhow::anyhow!(
-                "Cannot mark task {id} retry queued unless it is running"
-            )),
-        })
-        .await
-    }
-
     pub(crate) async fn release(&self, id: &str, reason: &str) -> Result<()> {
         self.update_task(id, |task| {
             task.claim = ClaimState::Released {
@@ -274,13 +255,6 @@ impl QueueState {
         let mut queue = load_queue(&self.path).await?;
         mutate(&mut queue)?;
         save_queue(&self.path, &queue).await
-    }
-
-    async fn update_claim<F>(&self, id: &str, mutate: F) -> Result<()>
-    where
-        F: FnOnce(&mut ClaimState) -> Result<()>,
-    {
-        self.update_task(id, |task| mutate(&mut task.claim)).await
     }
 
     fn task_lock(&self, id: &str) -> Arc<Mutex<()>> {
@@ -491,37 +465,6 @@ mod tests {
         let state = QueueState::new(path);
 
         assert!(!state.try_claim("q-1", "run-2").await?);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_mark_retry_queued_only_from_running() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-        let path = dir.path().join("queue.yaml");
-        write_queue(&path, vec![queue_task("q-1"), queue_task("q-2")]).await?;
-        let state = QueueState::new(path.clone());
-
-        let unclaimed_result = state.mark_retry_queued("q-1", 1, 42).await;
-        assert!(unclaimed_result.is_err());
-
-        assert!(state.try_claim("q-2", "run-1").await?);
-        state.mark_retry_queued("q-2", 2, 84).await?;
-
-        let queue = load_queue(&path).await?;
-        let retry_task = queue
-            .tasks
-            .iter()
-            .find(|task| task.id == "q-2")
-            .context("missing retry task")?;
-        assert_eq!(
-            retry_task.claim,
-            ClaimState::RetryQueued {
-                attempt: 2,
-                due_at_ms: 84
-            }
-        );
-        assert!(!state.try_claim("q-2", "run-2").await?);
 
         Ok(())
     }

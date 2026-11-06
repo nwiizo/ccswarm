@@ -20,9 +20,6 @@ pub(crate) struct CodexStreamSummary {
     /// Agent message text, concatenated across `item.completed` events.
     pub result_text: String,
 
-    /// Thread ID assigned by Codex — the handle for `codex exec resume <id>`.
-    pub thread_id: Option<String>,
-
     /// Non-message item types completed during the turn (e.g.
     /// `command_execution`), the closest analogue to Claude's tool names.
     pub tool_names: Vec<String>,
@@ -60,11 +57,6 @@ pub(crate) fn parse_stream(stdout: &str) -> CodexStreamSummary {
         };
 
         match value.get("type").and_then(|v| v.as_str()) {
-            Some("thread.started") => {
-                if let Some(id) = value.get("thread_id").and_then(|v| v.as_str()) {
-                    summary.thread_id = Some(id.to_string());
-                }
-            }
             Some("item.completed") => {
                 let Some(item) = value.get("item") else {
                     continue;
@@ -106,7 +98,7 @@ pub(crate) fn parse_stream(stdout: &str) -> CodexStreamSummary {
                     .to_string();
                 summary.failed = Some(message);
             }
-            _ => {} // turn.started, item.started, unknown — ignored
+            _ => {} // thread.started, turn.started, item.started, unknown — ignored
         }
     }
 
@@ -118,7 +110,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extracts_text_thread_id_and_usage() {
+    fn extracts_text_and_usage() {
         let stdout = r#"{"type":"thread.started","thread_id":"abc-123"}
 {"type":"turn.started"}
 {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}
@@ -126,7 +118,6 @@ mod tests {
 "#;
         let s = parse_stream(stdout);
         assert_eq!(s.result_text, "ok");
-        assert_eq!(s.thread_id.as_deref(), Some("abc-123"));
         assert_eq!(s.tokens, Some((13648, 17)));
         assert!(s.failed.is_none());
     }
@@ -149,14 +140,12 @@ mod tests {
 "#;
         let s = parse_stream(stdout);
         assert_eq!(s.failed.as_deref(), Some("model not supported"));
-        assert_eq!(s.thread_id.as_deref(), Some("t1"));
     }
 
     #[test]
     fn skips_malformed_lines_without_aborting() {
         let stdout = "{\"type\":\"thread.started\",\"thread_id\":\"t2\"}\nnot json at all\n{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"fine\"}}\n";
         let s = parse_stream(stdout);
-        assert_eq!(s.thread_id.as_deref(), Some("t2"));
         assert_eq!(s.result_text, "fine");
     }
 
@@ -164,7 +153,6 @@ mod tests {
     fn handles_empty_stdout() {
         let s = parse_stream("");
         assert_eq!(s.result_text, "");
-        assert!(s.thread_id.is_none());
         assert!(s.tokens.is_none());
     }
 }

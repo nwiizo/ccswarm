@@ -36,14 +36,12 @@ Place scenarios under `.ccswarm/harness/` or pass paths explicitly.
 
 ```yaml
 name: "add-login-form"
-tags: ["feature", "frontend"]
 
 flow: "default"              # workflow flow
 task: "Create login form"
 
 timeout_secs: 600              # default 600
 output_format: text            # text|json|markdown (default text)
-seed: 42                       # optional random seed for providers/samplers
 
 matrix:                        # optional Cartesian expansion
   provider: ["claude_code"]
@@ -61,7 +59,6 @@ assert:
   command_ok: ["cargo check", "cargo test -q"]   # exit code == 0
   metrics:
     max_duration_secs: 300
-    max_tokens: 200000
 
 teardown:                      # optional cleanup steps
   - "git reset --hard && git clean -fdx"

@@ -28,7 +28,9 @@ CCSWARM_BIN=target/debug/ccswarm ./examples/e2e-playwright/run.sh
 
 ## Generate and test a fresh app
 
-Install and authenticate Codex CLI first, then run:
+Install and authenticate Codex CLI first, then run from a
+[Herdr](https://herdr.dev) pane, where ccswarm opens a background tab for the
+provider:
 
 ```sh
 CCSWARM_BIN=target/release/ccswarm ./examples/e2e-playwright/run.sh --live

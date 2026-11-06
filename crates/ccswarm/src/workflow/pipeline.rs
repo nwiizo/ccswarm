@@ -1,7 +1,4 @@
-//! Pipeline Mode for CI/CD Automation
-//!
-//! Enables running flow workflows non-interactively in CI/CD environments.
-//! Provides structured output, exit code mapping, and environment variable injection.
+//! Non-interactive flow execution with structured output and exit codes.
 //!
 //! # Example
 //! ```no_run
@@ -14,7 +11,6 @@
 //!     .task_text("Implement feature X")
 //!     .output_format("json")
 //!     .timeout(Duration::from_secs(300))
-//!     .env_var("ENVIRONMENT", "production")
 //!     .build()?;
 //!
 //! let runner = PipelineRunner::new();
@@ -30,7 +26,6 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
@@ -53,25 +48,9 @@ pub struct PipelineConfig {
     #[serde(default = "default_timeout")]
     pub timeout: Duration,
 
-    /// Environment variables to inject into flow variables
-    #[serde(default)]
-    pub env_vars: HashMap<String, String>,
-
-    /// Optional output file path
-    #[serde(default)]
-    pub output_file: Option<PathBuf>,
-
     /// Whether to include verbose execution details in output
     #[serde(default)]
     pub verbose: bool,
-
-    /// Whether to fail on warnings
-    #[serde(default)]
-    pub fail_on_warnings: bool,
-
-    /// Additional flow variables
-    #[serde(default)]
-    pub variables: HashMap<String, serde_json::Value>,
 }
 
 fn default_output_format() -> String {
@@ -89,11 +68,7 @@ pub struct PipelineConfigBuilder {
     task_text: Option<String>,
     output_format: String,
     timeout: Duration,
-    env_vars: HashMap<String, String>,
-    output_file: Option<PathBuf>,
     verbose: bool,
-    fail_on_warnings: bool,
-    variables: HashMap<String, serde_json::Value>,
 }
 
 impl PipelineConfigBuilder {
@@ -130,39 +105,9 @@ impl PipelineConfigBuilder {
         self
     }
 
-    /// Add an environment variable
-    pub fn env_var(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.env_vars.insert(key.into(), value.into());
-        self
-    }
-
-    /// Set environment variables
-    pub fn env_vars(mut self, vars: HashMap<String, String>) -> Self {
-        self.env_vars = vars;
-        self
-    }
-
-    /// Set output file path
-    pub fn output_file(mut self, path: impl Into<PathBuf>) -> Self {
-        self.output_file = Some(path.into());
-        self
-    }
-
     /// Enable verbose output
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
-        self
-    }
-
-    /// Enable fail on warnings
-    pub fn fail_on_warnings(mut self, fail: bool) -> Self {
-        self.fail_on_warnings = fail;
-        self
-    }
-
-    /// Add a variable
-    pub fn variable(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
-        self.variables.insert(key.into(), value);
         self
     }
 
@@ -180,11 +125,7 @@ impl PipelineConfigBuilder {
             task_text,
             output_format: self.output_format,
             timeout: self.timeout,
-            env_vars: self.env_vars,
-            output_file: self.output_file,
             verbose: self.verbose,
-            fail_on_warnings: self.fail_on_warnings,
-            variables: self.variables,
         })
     }
 }
@@ -217,15 +158,6 @@ impl PipelineExitCode {
             Self::Failure => 1,
             Self::Timeout => 2,
             Self::ConfigError => 3,
-        }
-    }
-
-    /// Create from FlowStatus
-    pub fn from_status(status: FlowStatus) -> Self {
-        match status {
-            FlowStatus::Completed => Self::Success,
-            FlowStatus::Failed | FlowStatus::Aborted => Self::Failure,
-            FlowStatus::Pending | FlowStatus::Running => Self::Failure,
         }
     }
 }
@@ -456,15 +388,6 @@ impl PipelineRunner {
                 }
             };
 
-        // Write output file if requested
-        if let Some(output_file) = &config.output_file
-            && let Err(e) = self
-                .write_output_file(&result, output_file, &config.output_format)
-                .await
-        {
-            warn!("Failed to write output file: {}", e);
-        }
-
         Ok(result)
     }
 
@@ -546,14 +469,8 @@ impl PipelineRunner {
             None
         };
 
-        let final_exit_code = if config.fail_on_warnings && !warnings.is_empty() {
-            PipelineExitCode::Failure
-        } else {
-            exit_code
-        };
-
         Ok(PipelineOutput {
-            exit_code: final_exit_code,
+            exit_code,
             status,
             output,
             duration,
@@ -674,37 +591,6 @@ impl PipelineRunner {
             details: None,
         }
     }
-
-    /// Write output to file
-    async fn write_output_file(
-        &self,
-        output: &PipelineOutput,
-        path: &PathBuf,
-        format: &str,
-    ) -> Result<()> {
-        let content = match format {
-            "json" => output.format_json()?,
-            "markdown" => output.format_markdown(),
-            _ => output.format_text(),
-        };
-
-        tokio::fs::write(path, content)
-            .await
-            .with_context(|| format!("Failed to write output file: {}", path.display()))?;
-
-        info!("Output written to: {}", path.display());
-        Ok(())
-    }
-
-    /// Get a reference to the flow engine
-    pub fn engine(&self) -> &FlowEngine {
-        &self.engine
-    }
-
-    /// Get a mutable reference to the flow engine
-    pub fn engine_mut(&mut self) -> &mut FlowEngine {
-        &mut self.engine
-    }
 }
 
 impl Default for PipelineRunner {
@@ -724,7 +610,6 @@ mod tests {
             .task_text("Do something")
             .output_format("json")
             .timeout(Duration::from_secs(300))
-            .env_var("FOO", "bar")
             .verbose(true)
             .build();
 
@@ -734,7 +619,6 @@ mod tests {
         assert_eq!(config.task_text, "Do something");
         assert_eq!(config.output_format, "json");
         assert_eq!(config.timeout, Duration::from_secs(300));
-        assert_eq!(config.env_vars.get("FOO"), Some(&"bar".to_string()));
         assert!(config.verbose);
     }
 
@@ -753,26 +637,6 @@ mod tests {
         assert_eq!(PipelineExitCode::Failure.as_code(), 1);
         assert_eq!(PipelineExitCode::Timeout.as_code(), 2);
         assert_eq!(PipelineExitCode::ConfigError.as_code(), 3);
-    }
-
-    #[test]
-    fn test_exit_code_from_status() {
-        assert_eq!(
-            PipelineExitCode::from_status(FlowStatus::Completed),
-            PipelineExitCode::Success
-        );
-        assert_eq!(
-            PipelineExitCode::from_status(FlowStatus::Failed),
-            PipelineExitCode::Failure
-        );
-        assert_eq!(
-            PipelineExitCode::from_status(FlowStatus::Aborted),
-            PipelineExitCode::Failure
-        );
-        assert_eq!(
-            PipelineExitCode::from_status(FlowStatus::Running),
-            PipelineExitCode::Failure
-        );
     }
 
     #[test]
@@ -873,13 +737,6 @@ mod tests {
     }
 
     #[test]
-    fn test_pipeline_runner_creation() {
-        let runner = PipelineRunner::new();
-        // FlowEngine::new() now loads builtin flows by default
-        assert!(!runner.engine().list_flows().is_empty());
-    }
-
-    #[test]
     fn test_pipeline_config_default_values() {
         let config = PipelineConfig::builder()
             .flow_name("test")
@@ -890,7 +747,6 @@ mod tests {
         assert_eq!(config.output_format, "text");
         assert_eq!(config.timeout, Duration::from_secs(600));
         assert!(!config.verbose);
-        assert!(!config.fail_on_warnings);
     }
 
     #[test]

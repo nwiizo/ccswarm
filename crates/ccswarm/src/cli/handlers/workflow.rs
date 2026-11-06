@@ -162,8 +162,8 @@ impl CliRunner {
         .map(|_run_id| ())
     }
 
-    /// Dispatcher shim: routes to the dry-run preview or the real pipeline.
-    /// Issue #48: `--dry-run` prints the composed prompt per stage and exits.
+    /// Routes to the dry-run preview (composed prompt per stage) or the real
+    /// pipeline.
     #[allow(clippy::too_many_arguments)]
     pub async fn handle_pipeline_with_dry_run(
         &self,
@@ -303,7 +303,7 @@ impl CliRunner {
 
     /// Same as `handle_pipeline` but surfaces the `run_id` so autonomous callers
     /// (`ccswarm auto`) can cross-reference their own `auto.ndjson` with the run's
-    /// `events.ndjson`. Addresses codex #6.
+    /// `events.ndjson`.
     #[allow(clippy::too_many_arguments)]
     pub async fn handle_pipeline_returning_id(
         &self,
@@ -474,9 +474,7 @@ impl CliRunner {
 
         // Configure bridge for real provider CLI or A2A execution.
         let mut engine = crate::workflow::flow::FlowEngine::new();
-        let bridge = crate::session::bridge::A2ABridge::new(
-            self.repo_path.join(".ccswarm").join("sessions"),
-        );
+        let bridge = crate::session::bridge::A2ABridge::new();
         engine.set_bridge(std::sync::Arc::new(bridge));
         engine.set_working_dir(self.repo_path.clone());
         if let Some(b) = budget {
@@ -497,8 +495,6 @@ impl CliRunner {
         }
 
         // Load layered facets (repertoire < user < project) into the engine.
-        // Before v0.8.0 live runs only saw builtins — project facets applied
-        // to `--dry-run` previews but not to the actual execution.
         engine
             .facet_registry_mut()
             .load_standard_layers(&self.repo_path)
@@ -560,7 +556,18 @@ impl CliRunner {
         });
 
         let runner = PipelineRunner::with_engine(engine);
-        let result = runner.execute(config).await?;
+        let result = runner.execute(config).await;
+        let outcome = match &result {
+            Ok(output) => format!("{:?}", output.status).to_lowercase(),
+            Err(_) => "error".to_string(),
+        };
+        let title = if outcome == "success" {
+            "ccswarm run finished"
+        } else {
+            "ccswarm run needs attention"
+        };
+        crate::session::herdr::notify(title, &format!("{flow}: {outcome} ({run_id})")).await;
+        let result = result?;
 
         // Clean up progress display
         drop(progress_handle);
@@ -616,9 +623,9 @@ impl CliRunner {
                 fix_attempts, MAX_FIX_ATTEMPTS
             );
 
-            // Route auto-fix through A2ABridge so post-pipeline repair
-            // gets the same parsing, persistence, retry handling,
-            // and provider selection as normal flow stages.
+            // Route auto-fix through A2ABridge so post-pipeline repair gets
+            // the same Herdr execution, parsing, and provider selection as
+            // flow stages.
             let provider_kind = self
                 .default_provider
                 .or_else(|| {
@@ -628,21 +635,7 @@ impl CliRunner {
                         .and_then(crate::providers::ProviderKind::parse)
                 })
                 .unwrap_or(crate::providers::ProviderKind::Claude);
-            let bridge =
-                crate::session::bridge::A2ABridge::new(repo.join(".ccswarm").join("sessions"));
-            let identity = crate::identity::AgentIdentity {
-                agent_id: "auto-fix".to_string(),
-                specialization: crate::identity::AgentRole::Frontend {
-                    technologies: Vec::new(),
-                    responsibilities: Vec::new(),
-                    boundaries: Vec::new(),
-                },
-                workspace_path: repo.clone(),
-                env_vars: std::collections::HashMap::new(),
-                session_id: uuid::Uuid::new_v4().to_string(),
-                parent_process_id: std::process::id().to_string(),
-                initialized_at: chrono::Utc::now(),
-            };
+            let bridge = crate::session::bridge::A2ABridge::new();
             let options = crate::session::bridge::MovementExecOptions {
                 provider: Some(provider_kind),
                 tools: vec![
@@ -653,20 +646,12 @@ impl CliRunner {
                     "grep".to_string(),
                     "glob".to_string(),
                 ],
-                model: None,
-                system_prompt: None,
-                max_budget: None,
-                worktree_name: None,
-                session_id: None,
-                continuation: crate::session::bridge::ContinuationPolicy::SingleTurn,
-                a2a_endpoint: None,
-                rate_limit_fallbacks: Vec::new(),
+                ..Default::default()
             };
             let fix_output = bridge
                 .execute_with_retry(
                     "auto-fix",
                 "Fix the failing tests. Read the test output, identify the issue, and fix the code.",
-                    &identity,
                     repo,
                     None,
                     0,
@@ -803,6 +788,11 @@ impl CliRunner {
             "    reject:  ccswarm approve commit --id {} --reject --reason \"...\"",
             run_id
         );
+        crate::session::herdr::notify(
+            "ccswarm commit approval",
+            &format!("ccswarm approve commit --id {run_id}"),
+        )
+        .await;
 
         let outcome = store
             .wait_for_decision(

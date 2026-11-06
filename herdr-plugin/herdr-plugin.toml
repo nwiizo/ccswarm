@@ -1,0 +1,54 @@
+# ccswarm Herdr plugin: run board, recent runs, and environment checks.
+#
+# Actions call `ccswarm herdr action <view>`, which reads
+# HERDR_PLUGIN_CONTEXT_JSON and opens the matching pane for the focused
+# pane's repository. Pane commands start in this plugin directory, so the
+# repository arrives as CCSWARM_HERDR_REPO. Requires `ccswarm` on the Herdr
+# server's PATH. See docs/HERDR_INTEGRATION.md.
+
+id = "ccswarm"
+name = "ccswarm"
+version = "0.11.0"
+min_herdr_version = "0.9.5"
+description = "Follow ccswarm runs and check its environment from Herdr."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "run-board"
+title = "ccswarm: run board"
+description = "Follow the current ccswarm run's events in a split pane."
+command = ["ccswarm", "herdr", "action", "run-board"]
+
+[[actions]]
+id = "runs"
+title = "ccswarm: recent runs"
+description = "List recent ccswarm runs for the focused pane's repository."
+command = ["ccswarm", "herdr", "action", "runs"]
+
+[[actions]]
+id = "doctor"
+title = "ccswarm: doctor"
+description = "Check the Herdr, provider, and repository setup."
+command = ["ccswarm", "herdr", "action", "doctor"]
+
+[[panes]]
+id = "run-board"
+title = "ccswarm run board"
+placement = "split"
+command = ["/bin/sh", "-c", "cd \"${CCSWARM_HERDR_REPO:-$PWD}\" && exec ccswarm herdr show run-board"]
+
+[[panes]]
+id = "runs"
+title = "ccswarm runs"
+placement = "popup"
+width = "80%"
+height = "70%"
+command = ["/bin/sh", "-c", "cd \"${CCSWARM_HERDR_REPO:-$PWD}\" && exec ccswarm herdr show runs"]
+
+[[panes]]
+id = "doctor"
+title = "ccswarm doctor"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["/bin/sh", "-c", "cd \"${CCSWARM_HERDR_REPO:-$PWD}\" && exec ccswarm herdr show doctor"]

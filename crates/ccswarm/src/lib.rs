@@ -6,18 +6,12 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::option_if_let_else)]
 
-pub mod agent;
 pub mod cli;
 pub mod config;
-pub mod error;
 pub mod events;
 pub mod git;
-pub mod governance;
 pub mod hitl;
-pub mod hooks;
-pub mod identity;
 pub(crate) mod providers;
-pub mod resource;
 pub mod run_id;
 pub mod session;
 pub mod tracker;

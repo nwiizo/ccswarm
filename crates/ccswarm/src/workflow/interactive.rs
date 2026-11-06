@@ -8,7 +8,6 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::{debug, info};
 
 use super::flow::Flow;
@@ -39,65 +38,6 @@ impl std::fmt::Display for InteractiveMode {
     }
 }
 
-impl InteractiveMode {
-    /// Description for display
-    pub fn description(&self) -> &'static str {
-        match self {
-            Self::Assistant => "AI asks clarifying questions before generating task instructions",
-            Self::Persona => {
-                "Conversation with the first stage's persona (uses its system prompt and tools)"
-            }
-            Self::Quiet => "Generates task instructions without asking questions (best-effort)",
-            Self::Passthrough => "Passes user input directly as task text without AI processing",
-        }
-    }
-
-    /// All available modes
-    pub fn all() -> Vec<Self> {
-        vec![
-            Self::Assistant,
-            Self::Persona,
-            Self::Quiet,
-            Self::Passthrough,
-        ]
-    }
-}
-
-/// Configuration for an interactive session
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InteractiveConfig {
-    /// The interactive mode to use
-    pub mode: InteractiveMode,
-    /// Maximum number of clarification rounds (for Assistant mode)
-    #[serde(default = "default_max_rounds")]
-    pub max_clarification_rounds: u32,
-    /// Whether to show flow selection menu
-    #[serde(default = "default_true")]
-    pub show_piece_selection: bool,
-    /// Default flow to use (if set, skips flow selection)
-    #[serde(default)]
-    pub default_piece: Option<String>,
-}
-
-fn default_max_rounds() -> u32 {
-    5
-}
-
-fn default_true() -> bool {
-    true
-}
-
-impl Default for InteractiveConfig {
-    fn default() -> Self {
-        Self {
-            mode: InteractiveMode::default(),
-            max_clarification_rounds: default_max_rounds(),
-            show_piece_selection: true,
-            default_piece: None,
-        }
-    }
-}
-
 /// State of an interactive session
 #[derive(Debug, Clone)]
 pub struct InteractiveSession {
@@ -111,8 +51,6 @@ pub struct InteractiveSession {
     pub clarifications: Vec<Clarification>,
     /// Final task text to execute
     pub task_text: Option<String>,
-    /// Session variables
-    pub variables: HashMap<String, String>,
     /// Whether the session is ready for execution
     pub ready: bool,
 }
@@ -150,7 +88,6 @@ impl InteractiveSession {
             user_inputs: Vec::new(),
             clarifications: Vec::new(),
             task_text: None,
-            variables: HashMap::new(),
             ready: false,
         }
     }
@@ -392,8 +329,6 @@ mod tests {
 
     #[test]
     fn test_interactive_modes() {
-        let modes = InteractiveMode::all();
-        assert_eq!(modes.len(), 4);
         assert_eq!(InteractiveMode::default(), InteractiveMode::Assistant);
     }
 
@@ -518,14 +453,5 @@ mod tests {
             _ => panic!("Expected ShowMessage action"),
         }
         assert!(session.task_text.is_some());
-    }
-
-    #[test]
-    fn test_interactive_config_default() {
-        let config = InteractiveConfig::default();
-        assert_eq!(config.mode, InteractiveMode::Assistant);
-        assert_eq!(config.max_clarification_rounds, 5);
-        assert!(config.show_piece_selection);
-        assert!(config.default_piece.is_none());
     }
 }

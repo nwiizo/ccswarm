@@ -1,98 +1,8 @@
 use super::super::*;
 
 impl CliRunner {
-    pub(crate) async fn handle_doctor(
-        &self,
-        fix: bool,
-        error_code: Option<&str>,
-        check_api: bool,
-    ) -> Result<()> {
-        use crate::utils::error_recovery::ErrorRecoveryDB;
+    pub(crate) async fn handle_doctor(&self, fix: bool, check_api: bool) -> Result<()> {
         use crate::utils::user_error::CommonErrors;
-
-        // Handle specific error code diagnosis
-        if let Some(code) = error_code {
-            println!("{}", "🔍 Error Code Diagnosis".bright_cyan().bold());
-            println!("{}", "=======================".bright_cyan());
-            println!();
-            println!("Analyzing error code: {}", code.bright_yellow());
-            println!();
-
-            let recovery_db = ErrorRecoveryDB::new();
-            if let Some(recovery) = recovery_db.get_recovery(code) {
-                match &recovery {
-                    crate::utils::error_recovery::RecoveryStep::UserAction { description } => {
-                        println!("📋 {}", description.bright_white());
-                    }
-                    crate::utils::error_recovery::RecoveryStep::Command { description, .. } => {
-                        println!("📋 {}", description.bright_white());
-                    }
-                    crate::utils::error_recovery::RecoveryStep::FileCreate { path, .. } => {
-                        println!("📋 Create file: {}", path.bright_white());
-                    }
-                    crate::utils::error_recovery::RecoveryStep::EnvVar { name, .. } => {
-                        println!("📋 Set environment variable: {}", name.bright_white());
-                    }
-                }
-                println!();
-                println!("Recovery steps:");
-                let steps = [recovery.clone()]; // Treat the single recovery step as the step list
-                for (i, step) in steps.iter().enumerate() {
-                    match step {
-                        crate::utils::error_recovery::RecoveryStep::Command {
-                            cmd,
-                            description,
-                        } => {
-                            println!("  {}. {} {}", i + 1, "Run:".bright_yellow(), description);
-                            println!("     {}", cmd.bright_white().on_black());
-                        }
-                        crate::utils::error_recovery::RecoveryStep::FileCreate { path, .. } => {
-                            println!(
-                                "  {}. {} {}",
-                                i + 1,
-                                "Create file:".bright_yellow(),
-                                path.bright_white()
-                            );
-                        }
-                        crate::utils::error_recovery::RecoveryStep::EnvVar { name, example } => {
-                            println!(
-                                "  {}. {} {}",
-                                i + 1,
-                                "Set environment variable:".bright_yellow(),
-                                name.bright_white()
-                            );
-                            println!("     Example: {}={}", name, example.bright_black());
-                        }
-                        crate::utils::error_recovery::RecoveryStep::UserAction { description } => {
-                            println!(
-                                "  {}. {} {}",
-                                i + 1,
-                                "Action required:".bright_yellow(),
-                                description
-                            );
-                        }
-                    }
-                    println!();
-                }
-
-                let can_auto_fix = matches!(
-                    recovery,
-                    crate::utils::error_recovery::RecoveryStep::Command { .. }
-                );
-                if can_auto_fix && fix {
-                    recovery_db.auto_fix(code).await?;
-                } else if can_auto_fix {
-                    println!(
-                        "💡 This error can be auto-fixed! Run: ccswarm doctor --error {} --fix",
-                        code
-                    );
-                }
-            } else {
-                println!("❌ Unknown error code: {}", code);
-                println!("   See all error codes: ccswarm help errors");
-            }
-            return Ok(());
-        }
 
         // Handle API connectivity check
         if check_api {
@@ -176,6 +86,9 @@ impl CliRunner {
             println!("{}", "⚠️  Not initialized".bright_yellow());
             issues.push("git_repo");
         }
+
+        // Local provider execution runs in Herdr tabs (docs/HERDR_INTEGRATION.md).
+        issues.extend(check_herdr());
 
         // Check agent provider CLIs (Claude/Codex/Copilot)
         println!("Checking agent provider CLIs...");
@@ -319,6 +232,16 @@ impl CliRunner {
                                 "• Claude CLI: Install from https://docs.anthropic.com/en/docs/claude-code"
                             );
                         }
+                        "herdr_cli" => {
+                            println!(
+                                "• Herdr: Install Herdr 0.9.5 or later from https://herdr.dev"
+                            );
+                        }
+                        "herdr_session" => {
+                            println!(
+                                "• Herdr session: Run `herdr`, then rerun ccswarm from one of its panes"
+                            );
+                        }
                         "stale_worktrees" => {
                             if fix {
                                 println!("• Pruning stale worktrees...");
@@ -351,4 +274,64 @@ impl CliRunner {
 
         Ok(())
     }
+}
+
+/// Print Herdr checks and return the issue keys that need fixing.
+fn check_herdr() -> Vec<&'static str> {
+    let program = crate::session::herdr::herdr_program();
+    let run = |args: &[&str]| {
+        std::process::Command::new(&program)
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+    };
+    let mut issues = Vec::new();
+
+    print!("Checking Herdr CLI... ");
+    match run(&["--version"]) {
+        Some(version) => println!(
+            "{} ({})",
+            "✅ Available".bright_green(),
+            version.trim().bright_black()
+        ),
+        None => {
+            println!("{}", "❌ Not found".bright_red());
+            return vec!["herdr_cli"];
+        }
+    }
+
+    print!("Checking Herdr session... ");
+    match crate::session::herdr::HerdrContext::from_env() {
+        Ok(_) => println!("{}", "✅ Running inside a Herdr pane".bright_green()),
+        Err(_) => {
+            println!(
+                "{}",
+                "❌ Not inside a Herdr pane (local provider runs will fail)".bright_red()
+            );
+            issues.push("herdr_session");
+        }
+    }
+
+    print!("Checking Herdr server... ");
+    match run(&["status", "server"]) {
+        Some(status) if status.contains("status: running") => {
+            println!("{}", "✅ Running".bright_green())
+        }
+        _ => println!("{}", "⚠️  Not reachable from this process".bright_yellow()),
+    }
+
+    // Integrations improve agent detection and session restore; ccswarm does
+    // not require them, so they are reported without creating an issue.
+    if let Some(status) = run(&["integration", "status"]) {
+        for line in status
+            .lines()
+            .filter(|line| line.starts_with("claude:") || line.starts_with("codex:"))
+        {
+            println!("  Herdr integration {}", line.bright_black());
+        }
+    }
+    issues
 }

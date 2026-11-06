@@ -1,32 +1,26 @@
-//! A2ABridge: A2A/local multi-provider execution and result management.
+//! A2ABridge: A2A or local provider execution with retry and rate-limit
+//! fallback.
 //!
-//! Provider-specific command construction is delegated to the providers module.
-//! Everything else (context history, output parsing, persistence, retry, and
-//! optional A2A dispatch) is owned by ccswarm.
+//! Provider-specific command construction lives in the providers module and
+//! local execution in Herdr (`session::herdr`). The bridge selects the route,
+//! retries, parses output, and reports token usage.
 
 use anyhow::Result;
-use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use crate::identity::AgentIdentity;
 use crate::providers::{ProviderKind, ProviderOptions};
-use crate::session::context::{CompressionStats, MessageRole, SessionContext};
 use crate::session::execution::{
     DEFAULT_MAX_PROMPT_BYTES, prepare_provider_prompt, run_provider_command,
 };
+use crate::session::herdr::{ExecutionMode, HerdrCall, HerdrContext, LiveClaudeRequest};
 use crate::session::output::{BuildStatus, LogLevel, OutputParser, ParsedOutput};
-use crate::session::persistence::{
-    ExecutionSessionStatus, PersistenceManager, SessionMetadata, SessionState,
-};
-use crate::session::types::{AttentionState, ExecutionSessionId};
-
-const DEFAULT_CONTINUATION_PROMPT: &str = "The previous turn completed but the task is still active. Continue with the next sub-step. Stop when the task is fully done or you cannot make progress.";
+use crate::session::types::AttentionState;
 
 /// Result of an A2ABridge execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BridgeResult {
-    /// Raw output from Claude Code CLI
+    /// Provider output text.
     pub raw: String,
     /// Parsed output from ccswarm's semantic parser.
     pub parsed: ParsedOutput,
@@ -35,16 +29,12 @@ pub struct BridgeResult {
     /// Execution duration in milliseconds
     #[serde(default)]
     pub duration_ms: u64,
-    /// Context compression ratio (if available)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compression_ratio: Option<f64>,
-    /// Input tokens for the call. Real counts (incl. cache reads/writes) from
-    /// the stream-json result envelope when `CCSWARM_CLAUDE_STREAM_JSON=1`;
-    /// otherwise a rough bytes/4 estimate so `ccswarm cost` still has relative
-    /// stage weights.
+    /// Input tokens for the call: real counts (including cache reads/writes)
+    /// from Claude stream-json, Codex JSONL, or a live transcript; otherwise a
+    /// bytes/4 estimate so `ccswarm cost` still has relative stage weights.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens_in: Option<u64>,
-    /// Output tokens for the call (real when stream-json is on, else bytes/4).
+    /// Output tokens for the call (real or bytes/4, as for `tokens_in`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens_out: Option<u64>,
     /// Attention triage state derived from the parsed output. Falls back to
@@ -84,10 +74,8 @@ fn is_rate_limit_error(err: &anyhow::Error) -> bool {
     .any(|marker| text.contains(marker))
 }
 
-/// Switch `options` to a fallback provider after a rate limit. Clears any
-/// session continuation — a new provider cannot resume another provider's
-/// thread (including codex's provider-assigned thread IDs). Returns the name
-/// of the provider being abandoned.
+/// Switch `options` to a fallback provider after a rate limit. Returns the
+/// name of the provider being abandoned.
 fn apply_rate_limit_fallback(
     options: &mut MovementExecOptions,
     (next_provider, next_model): (ProviderKind, Option<String>),
@@ -101,8 +89,6 @@ fn apply_rate_limit_fallback(
     if next_model.is_some() {
         options.model = next_model;
     }
-    options.session_id = None;
-    options.continuation = ContinuationPolicy::SingleTurn;
     from
 }
 
@@ -115,21 +101,20 @@ fn fallback_notice_prompt(original_prompt: &str) -> String {
     )
 }
 
-fn read_a2a_endpoint() -> Option<String> {
-    std::env::var("CCSWARM_A2A_ENDPOINT")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
+/// The stage's A2A endpoint, else `CCSWARM_A2A_ENDPOINT`; blank values count
+/// as unset.
 fn resolve_a2a_endpoint(options: &MovementExecOptions) -> Option<String> {
+    let non_blank = |value: &str| Some(value.trim().to_string()).filter(|v| !v.is_empty());
     options
         .a2a_endpoint
         .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .or_else(read_a2a_endpoint)
+        .and_then(non_blank)
+        .or_else(|| {
+            std::env::var("CCSWARM_A2A_ENDPOINT")
+                .ok()
+                .as_deref()
+                .and_then(non_blank)
+        })
 }
 
 fn prepare_a2a_prompt(prompt: &str, system_prompt: Option<&str>) -> String {
@@ -143,7 +128,11 @@ fn prepare_a2a_prompt(prompt: &str, system_prompt: Option<&str>) -> String {
     }
 }
 
-/// Projection of a Claude stream-json stdout buffer down to the pieces the
+fn env_flag(key: &str) -> bool {
+    std::env::var(key).is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
+/// Projection of a structured provider stdout buffer down to the pieces the
 /// bridge propagates.
 struct StreamProjection {
     /// Final answer text (`result.result`, or concatenated assistant text).
@@ -159,17 +148,6 @@ struct StreamProjection {
 
 fn project_stream(raw_stdout: &str) -> StreamProjection {
     let summary = crate::providers::claude_stream::parse_stream(raw_stdout);
-    if !summary.tool_uses.is_empty() {
-        tracing::debug!(
-            "stream-json: {} tool_use blocks ({:?})",
-            summary.tool_uses.len(),
-            summary
-                .tool_uses
-                .iter()
-                .map(|t| t.name.as_str())
-                .collect::<Vec<_>>()
-        );
-    }
     let tokens = summary.usage.last().map(|u| {
         (
             u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens,
@@ -181,32 +159,6 @@ fn project_stream(raw_stdout: &str) -> StreamProjection {
         tool_names: summary.tool_uses.into_iter().map(|t| t.name).collect(),
         tokens,
         total_cost_usd: summary.total_cost_usd,
-    }
-}
-
-/// Controls whether a stage is allowed to continue in the same provider thread.
-#[derive(Debug, Clone)]
-pub enum ContinuationPolicy {
-    SingleTurn,
-    MultiTurn {
-        max_turns: u32,
-        continuation_prompt: String,
-    },
-}
-
-impl ContinuationPolicy {
-    pub fn multi_turn(max_turns: u32) -> Self {
-        Self::MultiTurn {
-            max_turns,
-            continuation_prompt: DEFAULT_CONTINUATION_PROMPT.to_string(),
-        }
-    }
-}
-
-#[allow(clippy::derivable_impls)]
-impl Default for ContinuationPolicy {
-    fn default() -> Self {
-        Self::SingleTurn
     }
 }
 
@@ -227,10 +179,6 @@ pub struct MovementExecOptions {
     pub max_budget: Option<f64>,
     /// Execute in isolated worktree (Claude only).
     pub worktree_name: Option<String>,
-    /// Session ID for continuation.
-    pub session_id: Option<String>,
-    /// Same-thread continuation policy.
-    pub continuation: ContinuationPolicy,
     /// Optional A2A server endpoint. If absent, `CCSWARM_A2A_ENDPOINT` is used
     /// when set; otherwise the selected local provider CLI is executed.
     pub a2a_endpoint: Option<String>,
@@ -238,83 +186,20 @@ pub struct MovementExecOptions {
     /// rate limit. Each entry is `(provider, optional model override)`. Comes
     /// from the flow-level `on_rate_limit` YAML field.
     pub(crate) rate_limit_fallbacks: Vec<(ProviderKind, Option<String>)>,
+    /// How the local provider runs in its Herdr tab. `Live` applies to Claude;
+    /// other providers run headless.
+    pub execution: ExecutionMode,
 }
 
-/// A2A/local provider execution and result management layer.
-///
-/// This bridge provides:
-/// - Optional A2A REST `message:send` dispatch
-/// - Local provider CLI execution via subprocess
-/// - Semantic output parsing
-/// - Session persistence
+/// A2A/local provider execution layer.
+#[derive(Default)]
 pub struct A2ABridge {
-    /// Per-agent context histories.
-    context_histories: DashMap<String, SessionContext>,
-    /// Semantic output parser
     output_parser: OutputParser,
-    /// Session persistence manager
-    persistence: PersistenceManager,
-}
-
-#[derive(Debug, Clone)]
-struct BridgeExecutionMetadata {
-    provider: ProviderKind,
-    session_id: Option<String>,
-    same_thread_continuation: bool,
-}
-
-#[derive(Debug, Clone)]
-struct BridgeExecution {
-    result: BridgeResult,
-    metadata: BridgeExecutionMetadata,
 }
 
 impl A2ABridge {
-    /// Create a new A2ABridge.
-    pub fn new(storage_path: PathBuf) -> Self {
-        Self {
-            context_histories: DashMap::new(),
-            output_parser: OutputParser::new(),
-            persistence: PersistenceManager::new(storage_path),
-        }
-    }
-
-    /// Register an agent context for tracking conversation history.
-    ///
-    pub fn register_agent(&self, agent_id: &str) -> Result<()> {
-        let session_id = ExecutionSessionId::new();
-        let context = SessionContext::new(session_id);
-        self.context_histories.insert(agent_id.to_string(), context);
-
-        tracing::info!("Registered agent '{}' with A2ABridge", agent_id);
-        Ok(())
-    }
-
-    /// Execute a task via A2A or a local provider CLI.
-    ///
-    /// Flow:
-    /// 1. Execute `claude -p <prompt>` via subprocess (with optional --agent/--team)
-    /// 2. Parse output with ccswarm's `OutputParser`
-    /// 3. Store in context history
-    /// 4. Persist session state for crash recovery
-    pub async fn execute_task(
-        &self,
-        agent_id: &str,
-        prompt: &str,
-        _identity: &AgentIdentity,
-        working_dir: &Path,
-    ) -> Result<BridgeResult> {
-        self.execute_with_retry(
-            agent_id,
-            prompt,
-            _identity,
-            working_dir,
-            None,
-            0,
-            1000,
-            &MovementExecOptions::default(),
-        )
-        .await
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Execute with retry logic and exponential backoff.
@@ -322,22 +207,24 @@ impl A2ABridge {
     /// When the provider fails with a rate-limit error and
     /// `options.rate_limit_fallbacks` is non-empty, the call switches to the
     /// next provider in the chain instead of burning retries on the limited
-    /// one. The switch resets the
-    /// retry budget, clears any session continuation (a new provider can't
-    /// resume another provider's thread), and prepends a fallback notice so
-    /// the model knows it's picking up mid-task.
+    /// one. The switch resets the retry budget and prepends a fallback notice
+    /// so the model knows it's picking up mid-task.
     #[allow(clippy::too_many_arguments)]
     pub async fn execute_with_retry(
         &self,
         agent_id: &str,
         prompt: &str,
-        _identity: &AgentIdentity,
         working_dir: &Path,
         agent_name: Option<&str>,
         max_retries: u32,
         retry_delay_ms: u64,
         options: &MovementExecOptions,
     ) -> Result<BridgeResult> {
+        // Running outside Herdr cannot be fixed by retrying or switching
+        // providers, so report it before the retry loop.
+        if resolve_a2a_endpoint(options).is_none() {
+            HerdrContext::from_env()?;
+        }
         let mut current_options = options.clone();
         let mut current_prompt = prompt.to_string();
         let mut fallback_index = 0usize;
@@ -347,7 +234,7 @@ impl A2ABridge {
             let mut last_err = None;
             let attempts = max_retries + 1;
 
-            'attempts: for attempt in 0..attempts {
+            for attempt in 0..attempts {
                 if attempt > 0 {
                     let delay = retry_delay_ms * 2u64.pow(attempt - 1);
                     tracing::info!(
@@ -359,36 +246,16 @@ impl A2ABridge {
                     tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
                 }
 
-                let attempt_result = match &current_options.continuation {
-                    ContinuationPolicy::SingleTurn => {
-                        self.execute_once(
-                            agent_id,
-                            &current_prompt,
-                            _identity,
-                            working_dir,
-                            agent_name,
-                            &current_options,
-                        )
-                        .await
-                    }
-                    ContinuationPolicy::MultiTurn { .. } => {
-                        // TODO: per-turn retry.
-                        self.execute_multi_turn(
-                            agent_id,
-                            &current_prompt,
-                            _identity,
-                            working_dir,
-                            agent_name,
-                            max_retries,
-                            retry_delay_ms,
-                            &current_options,
-                            &current_options.continuation.clone(),
-                        )
-                        .await
-                    }
-                };
-
-                match attempt_result {
+                match self
+                    .execute_once(
+                        agent_id,
+                        &current_prompt,
+                        working_dir,
+                        agent_name,
+                        &current_options,
+                    )
+                    .await
+                {
                     Ok(mut result) => {
                         result.fallbacks_used = fallbacks_used;
                         return Ok(result);
@@ -397,14 +264,15 @@ impl A2ABridge {
                         // A rate-limited provider won't recover within our
                         // backoff window; jump to the fallback chain instead
                         // of spending the remaining attempts.
-                        if is_rate_limit_error(&e)
-                            && fallback_index < current_options.rate_limit_fallbacks.len()
-                        {
-                            last_err = Some(e);
-                            break 'attempts;
+                        let rate_limited = is_rate_limit_error(&e)
+                            && fallback_index < current_options.rate_limit_fallbacks.len();
+                        if !rate_limited {
+                            tracing::warn!("Provider CLI attempt {} failed: {}", attempt + 1, e);
                         }
-                        tracing::warn!("Provider CLI attempt {} failed: {}", attempt + 1, e);
                         last_err = Some(e);
+                        if rate_limited {
+                            break;
+                        }
                     }
                 }
             }
@@ -433,239 +301,47 @@ impl A2ABridge {
         }
     }
 
-    /// Execute a stage across multiple turns in the same provider thread.
-    #[allow(clippy::too_many_arguments)]
-    pub async fn execute_multi_turn(
-        &self,
-        agent_id: &str,
-        prompt: &str,
-        _identity: &AgentIdentity,
-        working_dir: &Path,
-        agent_name: Option<&str>,
-        _max_retries: u32,
-        _retry_delay_ms: u64,
-        options: &MovementExecOptions,
-        continuation: &ContinuationPolicy,
-    ) -> Result<BridgeResult> {
-        let (max_turns, continuation_prompt) = match continuation {
-            ContinuationPolicy::SingleTurn => {
-                return self
-                    .execute_once(
-                        agent_id,
-                        prompt,
-                        _identity,
-                        working_dir,
-                        agent_name,
-                        options,
-                    )
-                    .await;
-            }
-            ContinuationPolicy::MultiTurn {
-                max_turns,
-                continuation_prompt,
-            } => ((*max_turns).max(1), continuation_prompt),
-        };
-
-        if resolve_a2a_endpoint(options).is_some() {
-            return Err(anyhow::anyhow!(
-                "A2A execution does not support same-thread multi-turn continuation"
-            ));
-        }
-
-        let provider_kind = options.provider.unwrap_or(ProviderKind::Claude);
-        let provider = crate::providers::resolve(provider_kind);
-        let continuation_mode = provider.same_thread_continuation();
-        if !continuation_mode.supports_multi_turn() {
-            return Err(anyhow::anyhow!(
-                "{} provider does not support same-thread multi-turn continuation",
-                provider_kind.as_str()
-            ));
-        }
-
-        let mut turn_options = options.clone();
-
-        // ExplicitSessionId (claude): pick the ID up front and pass it every
-        // turn. ProviderAssignedId (codex): the first turn runs without an ID;
-        // the provider assigns one and the bridge learns it from the turn's
-        // metadata (codex --json thread.started event).
-        let mut session_id = match continuation_mode {
-            crate::providers::SameThreadContinuation::ExplicitSessionId => {
-                let sid = options
-                    .session_id
-                    .clone()
-                    .or_else(|| {
-                        self.context_histories
-                            .get(agent_id)
-                            .map(|context| context.session_id.to_string())
-                    })
-                    .unwrap_or_else(|| ExecutionSessionId::new().to_string());
-                turn_options.session_id = Some(sid.clone());
-                Some(sid)
-            }
-            _ => options.session_id.clone(),
-        };
-
-        let first_execution = self
-            .execute_once_with_metadata(
-                agent_id,
-                prompt,
-                _identity,
-                working_dir,
-                agent_name,
-                &turn_options,
-            )
-            .await?;
-        match (&session_id, &first_execution.metadata.session_id) {
-            // Caller-chosen ID (claude): the turn must confirm it ran under it.
-            (Some(expected), _) => {
-                ensure_same_thread_continuation(&first_execution.metadata, expected)?;
-            }
-            // Provider-assigned ID (codex): adopt it for the remaining turns.
-            (None, Some(assigned)) => {
-                session_id = Some(assigned.clone());
-                turn_options.session_id = Some(assigned.clone());
-            }
-            (None, None) => {
-                return Err(anyhow::anyhow!(
-                    "{} did not report a session/thread ID on the first turn; cannot continue multi-turn",
-                    provider_kind.as_str()
-                ));
-            }
-        }
-        let session_id = session_id.unwrap_or_default();
-
-        let mut result = first_execution.result;
-
-        if !result.success {
-            return Ok(result);
-        }
-
-        let mut merged_raw = vec![format!("--- TURN 1 ---\n\n{}", result.raw)];
-        let mut duration_ms = result.duration_ms;
-        let mut tokens_in = result.tokens_in.unwrap_or(0);
-        let mut tokens_out = result.tokens_out.unwrap_or(0);
-        let mut tool_names = result.tool_names.clone();
-        let mut total_cost_usd = result.total_cost_usd;
-        let mut previous_turn_raw = result.raw.clone();
-
-        result.raw = merged_raw.join("\n\n");
-        result.duration_ms = duration_ms;
-        result.tokens_in = Some(tokens_in);
-        result.tokens_out = Some(tokens_out);
-
-        if result.success && is_task_terminal(&result.parsed) {
-            return Ok(result);
-        }
-
-        for turn in 2..=max_turns {
-            let continuation_prompt = format!(
-                "{}\n\n# Previous turn output (truncated)\n{}",
-                continuation_prompt,
-                truncate(&previous_turn_raw, 2048)
-            );
-
-            let next_execution = self
-                .execute_once_with_metadata(
-                    agent_id,
-                    &continuation_prompt,
-                    _identity,
-                    working_dir,
-                    agent_name,
-                    &turn_options,
-                )
-                .await?;
-            ensure_same_thread_continuation(&next_execution.metadata, &session_id)?;
-            let next_result = next_execution.result;
-
-            previous_turn_raw = next_result.raw.clone();
-            result = merge_turn_result(
-                &mut merged_raw,
-                &mut duration_ms,
-                &mut tokens_in,
-                &mut tokens_out,
-                &mut tool_names,
-                &mut total_cost_usd,
-                turn,
-                next_result,
-            );
-
-            if !result.success {
-                return Ok(result);
-            }
-
-            if result.success && is_task_terminal(&result.parsed) {
-                return Ok(result);
-            }
-        }
-
-        Ok(result)
-    }
-
-    /// Single execution attempt — delegates command construction to the selected provider.
+    /// Single execution attempt through A2A, a live Claude session, or a
+    /// headless provider command.
     async fn execute_once(
         &self,
         agent_id: &str,
         prompt: &str,
-        _identity: &AgentIdentity,
         working_dir: &Path,
         agent_name: Option<&str>,
         options: &MovementExecOptions,
     ) -> Result<BridgeResult> {
-        self.execute_once_with_metadata(
-            agent_id,
-            prompt,
-            _identity,
-            working_dir,
-            agent_name,
-            options,
-        )
-        .await
-        .map(|execution| execution.result)
-    }
-
-    /// Single execution attempt with provider metadata for continuation safety checks.
-    async fn execute_once_with_metadata(
-        &self,
-        agent_id: &str,
-        prompt: &str,
-        _identity: &AgentIdentity,
-        working_dir: &Path,
-        agent_name: Option<&str>,
-        options: &MovementExecOptions,
-    ) -> Result<BridgeExecution> {
+        // Herdr resolves relative tab directories against its server, not
+        // this process, so the provider and its prompt get an absolute path.
+        let working_dir = &crate::session::herdr::absolute_dir(working_dir)?;
         let kind = options.provider.unwrap_or(ProviderKind::Claude);
         let provider = crate::providers::resolve(kind);
         let a2a_endpoint = resolve_a2a_endpoint(options);
+        let live = a2a_endpoint.is_none()
+            && options.execution == ExecutionMode::Live
+            && kind == ProviderKind::Claude;
+        if a2a_endpoint.is_none() && options.execution == ExecutionMode::Live && !live {
+            tracing::warn!(
+                "live execution supports Claude only; running {} headless for '{}'",
+                kind.as_str(),
+                agent_id
+            );
+        }
 
-        // Opt-in stream-json for Claude. Defaults to off so v0.7.0 doesn't change
-        // the production output path until users explicitly trial it. v0.8.0 is
-        // the candidate to flip the default once we've validated parsing against
-        // real Claude Code releases.
+        // Structured output is opt-in; live sessions report through the
+        // transcript instead.
         let claude_stream_json = a2a_endpoint.is_none()
+            && !live
             && kind == ProviderKind::Claude
-            && std::env::var("CCSWARM_CLAUDE_STREAM_JSON")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-
-        // JSONL output for Codex: opt-in via env for telemetry, but forced on
-        // whenever session continuation is in play — the thread ID needed for
-        // `codex exec resume` only arrives via the `thread.started` event.
-        let codex_json = a2a_endpoint.is_none()
-            && kind == ProviderKind::Codex
-            && (std::env::var("CCSWARM_CODEX_JSON")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false)
-                || options.session_id.is_some()
-                || matches!(options.continuation, ContinuationPolicy::MultiTurn { .. }));
+            && env_flag("CCSWARM_CLAUDE_STREAM_JSON");
+        let codex_json =
+            a2a_endpoint.is_none() && kind == ProviderKind::Codex && env_flag("CCSWARM_CODEX_JSON");
 
         let provider_options = ProviderOptions {
             allowed_tools: options.tools.clone(),
             model: options.model.clone(),
             system_prompt: options.system_prompt.clone(),
             agent_name: agent_name.map(String::from),
-            session_id: options.session_id.clone(),
-            continue_session: options.session_id.is_none()
-                && self.context_histories.contains_key(agent_id),
             max_budget: options.max_budget,
             worktree_name: options.worktree_name.clone(),
             claude_stream_json,
@@ -674,16 +350,46 @@ impl A2ABridge {
 
         let prompt_with_cwd =
             prepare_provider_prompt(prompt, working_dir, DEFAULT_MAX_PROMPT_BYTES)?;
+        let herdr_call = HerdrCall {
+            stage: agent_id.to_string(),
+            provider: kind.as_str().to_string(),
+        };
+        let mut live_tokens = None;
         let (raw_stdout, duration_ms) = if let Some(endpoint) = a2a_endpoint {
             let a2a_prompt = prepare_a2a_prompt(&prompt_with_cwd, options.system_prompt.as_deref());
             let execution = crate::session::a2a::A2AClient::new(endpoint)
                 .send_text(&a2a_prompt)
                 .await?;
             (execution.output, execution.duration_ms)
+        } else if live {
+            let request = LiveClaudeRequest {
+                call: herdr_call,
+                prompt: prompt_with_cwd,
+                system_prompt: options.system_prompt.clone(),
+                model: options.model.clone(),
+                allowed_tools: crate::providers::claude::allowed_tools_arg(&options.tools),
+                agent_name: agent_name.map(String::from),
+                worktree_name: options.worktree_name.clone(),
+            };
+            let turn = HerdrContext::from_env()?
+                .run_live_claude(
+                    &request,
+                    working_dir,
+                    &crate::session::herdr::claude_config_dir()?,
+                )
+                .await?;
+            tracing::info!(
+                "Live Claude session {} finished for '{}' (claude --resume {})",
+                turn.session_id,
+                agent_id,
+                turn.session_id
+            );
+            live_tokens = turn.tokens;
+            (turn.text, turn.duration_ms)
         } else {
             let cmd = provider.build_command(&prompt_with_cwd, working_dir, &provider_options);
-            let output = run_provider_command(cmd, working_dir, provider.kind().as_str()).await?;
-            if !output.status.success() {
+            let output = run_provider_command(cmd, working_dir, &herdr_call).await?;
+            if !output.success() {
                 return Err(anyhow::anyhow!(
                     "{} provider CLI failed: {}",
                     provider.kind().as_str(),
@@ -693,13 +399,10 @@ impl A2ABridge {
             (output.stdout, output.duration_ms)
         };
 
-        // When structured output is on (Claude stream-json / Codex JSONL),
-        // project the event stream down to the result text so the rest of the
-        // bridge (parsed output, context history, downstream prompt builders)
-        // keeps working unchanged. Tool names, real token totals, and cost ride
-        // along on BridgeResult so the engine (which owns the EventRecorder)
-        // can emit ProviderCall events.
-        let mut learned_session_id: Option<String> = None;
+        // Project structured output (Claude stream-json / Codex JSONL) down to
+        // the result text so parsing and downstream prompts see plain text.
+        // Tool names, real token totals, and cost ride along on BridgeResult
+        // for the engine's ProviderCall events.
         let stream_meta = if claude_stream_json {
             Some(project_stream(&raw_stdout))
         } else if codex_json {
@@ -707,8 +410,6 @@ impl A2ABridge {
             if let Some(message) = summary.failed {
                 return Err(anyhow::anyhow!("codex turn failed: {}", message));
             }
-            // Codex assigns the thread ID; capture it so multi-turn can resume.
-            learned_session_id = summary.thread_id;
             Some(StreamProjection {
                 text: summary.result_text,
                 tool_names: summary.tool_names,
@@ -723,244 +424,61 @@ impl A2ABridge {
             None => raw_stdout,
         };
 
-        // 2. Parse output semantically.
         let parsed = self
             .output_parser
             .parse(&raw_output)
             .unwrap_or(ParsedOutput::PlainText(raw_output.clone()));
-
         let success = is_parsed_success(&parsed);
         // Decisive parsed signals (BuildOutput / TestResults / Error log) drive
-        // attention directly; for ambiguous output (PlainText / CodeExecution)
-        // fall back to the success bit so the column still says something
-        // useful per stage.
+        // attention directly; ambiguous output falls back to the success bit.
         let attention = AttentionState::from_parsed(&parsed).unwrap_or(if success {
             AttentionState::Done
         } else {
             AttentionState::Error
         });
 
-        // 3. Add to agent's context history.
-        if let Some(mut context) = self.context_histories.get_mut(agent_id) {
-            context.add_message_raw(MessageRole::User, prompt.to_string());
-            context.add_message_raw(MessageRole::Assistant, raw_output.clone());
-
-            // Trigger compression check
-            context.compress_context().await;
-        }
-
-        // 4. Persist session state (best-effort)
-        if let Some(context) = self.context_histories.get(agent_id) {
-            let session_id = context.session_id.clone();
-            let state = SessionState {
-                session_id: session_id.clone(),
-                status: ExecutionSessionStatus::Running,
-                context: context.clone(),
-                command_history: Vec::new(),
-                metadata: SessionMetadata::default(),
-            };
-            if let Err(e) = self.persistence.save_session(&session_id, &state).await {
-                tracing::warn!("Failed to persist session state for {}: {}", agent_id, e);
-            }
-        }
-
-        // Get compression ratio if context exists
-        let compression_ratio = self
-            .get_compression_stats(agent_id)
-            .map(|stats| stats.compression_ratio);
-
-        // Token accounting: prefer the real counts from the stream-json result
-        // envelope when available; otherwise fall back to the Issue #28 rough
-        // byte→token estimates (divide by 4, GPT-family rule of thumb) so
-        // `ccswarm cost` always has data to aggregate.
-        let (tokens_in, tokens_out) = match stream_meta.as_ref().and_then(|p| p.tokens) {
-            Some((real_in, real_out)) => (Some(real_in), Some(real_out)),
+        let real_tokens = stream_meta.as_ref().and_then(|p| p.tokens).or(live_tokens);
+        let (tokens_in, tokens_out) = match real_tokens {
+            Some((real_in, real_out)) => (real_in, real_out),
             None => {
                 let input_bytes =
-                    prompt.len() + options.system_prompt.as_ref().map(|s| s.len()).unwrap_or(0);
-                (
-                    Some((input_bytes / 4) as u64),
-                    Some((raw_output.len() / 4) as u64),
-                )
+                    prompt.len() + options.system_prompt.as_ref().map_or(0, |s| s.len());
+                ((input_bytes / 4) as u64, (raw_output.len() / 4) as u64)
             }
         };
 
-        // The session ID this turn actually ran under: provider-assigned IDs
-        // (codex thread.started) win over the caller-supplied one, so the
-        // multi-turn loop can learn the ID after the first turn.
-        let session_id_for_metadata = learned_session_id.or_else(|| options.session_id.clone());
-        let same_thread_continuation = match provider.same_thread_continuation() {
-            crate::providers::SameThreadContinuation::ExplicitSessionId => {
-                options.session_id.is_some()
-            }
-            crate::providers::SameThreadContinuation::ProviderAssignedId => {
-                session_id_for_metadata.is_some()
-            }
-            crate::providers::SameThreadContinuation::Unsupported => false,
-        };
-
-        Ok(BridgeExecution {
-            result: BridgeResult {
-                raw: raw_output,
-                parsed,
-                success,
-                duration_ms,
-                compression_ratio,
-                tokens_in,
-                tokens_out,
-                attention,
-                tool_names: stream_meta
-                    .as_ref()
-                    .map(|p| p.tool_names.clone())
-                    .unwrap_or_default(),
-                total_cost_usd: stream_meta.as_ref().and_then(|p| p.total_cost_usd),
-                fallbacks_used: Vec::new(),
-            },
-            metadata: BridgeExecutionMetadata {
-                provider: kind,
-                session_id: session_id_for_metadata,
-                same_thread_continuation,
-            },
+        Ok(BridgeResult {
+            raw: raw_output,
+            parsed,
+            success,
+            duration_ms,
+            tokens_in: Some(tokens_in),
+            tokens_out: Some(tokens_out),
+            attention,
+            tool_names: stream_meta
+                .as_ref()
+                .map(|p| p.tool_names.clone())
+                .unwrap_or_default(),
+            total_cost_usd: stream_meta.as_ref().and_then(|p| p.total_cost_usd),
+            fallbacks_used: Vec::new(),
         })
-    }
-
-    /// Get compression statistics for an agent's context
-    pub fn get_compression_stats(&self, agent_id: &str) -> Option<CompressionStats> {
-        self.context_histories
-            .get(agent_id)
-            .map(|ctx| ctx.get_compression_stats())
-    }
-
-    /// Get the number of registered agents
-    pub fn agent_count(&self) -> usize {
-        self.context_histories.len()
-    }
-
-    /// Get recent context messages for an agent (for prompt augmentation)
-    pub fn get_recent_context(&self, agent_id: &str, n: usize) -> Vec<String> {
-        self.context_histories
-            .get(agent_id)
-            .map(|ctx| {
-                ctx.get_recent_messages(n)
-                    .into_iter()
-                    .map(|m| format!("[{:?}] {}", m.role, m.content))
-                    .collect()
-            })
-            .unwrap_or_default()
     }
 }
 
 /// Check if parsed output indicates success
 fn is_parsed_success(parsed: &ParsedOutput) -> bool {
     match parsed {
-        ParsedOutput::PlainText(_) => true, // Assume success for plain text
-        ParsedOutput::CodeExecution { .. } => true,
-        ParsedOutput::BuildOutput { status, .. } => {
-            matches!(status, BuildStatus::Success)
-        }
+        ParsedOutput::PlainText(_) | ParsedOutput::CodeExecution { .. } => true,
+        ParsedOutput::BuildOutput { status, .. } => matches!(status, BuildStatus::Success),
         ParsedOutput::TestResults { failed, .. } => *failed == 0,
         ParsedOutput::StructuredLog { level, .. } => !matches!(level, LogLevel::Error),
     }
 }
 
-fn is_task_terminal(parsed: &ParsedOutput) -> bool {
-    match parsed {
-        ParsedOutput::BuildOutput { status, .. } => {
-            matches!(status, BuildStatus::Success)
-        }
-        ParsedOutput::TestResults { failed, .. } => *failed == 0,
-        _ => false,
-    }
-}
-
-fn truncate(s: &str, max_bytes: usize) -> String {
-    if s.len() <= max_bytes {
-        return s.to_string();
-    }
-
-    let boundary = s
-        .char_indices()
-        .map(|(index, _)| index)
-        .take_while(|index| *index <= max_bytes)
-        .last()
-        .unwrap_or(0);
-
-    s[..boundary].to_string()
-}
-
-#[allow(clippy::too_many_arguments)]
-fn merge_turn_result(
-    merged_raw: &mut Vec<String>,
-    duration_ms: &mut u64,
-    tokens_in: &mut u64,
-    tokens_out: &mut u64,
-    tool_names: &mut Vec<String>,
-    total_cost_usd: &mut Option<f64>,
-    turn: u32,
-    next_result: BridgeResult,
-) -> BridgeResult {
-    merged_raw.push(format!("--- TURN {} ---\n\n{}", turn, next_result.raw));
-    *duration_ms = duration_ms.saturating_add(next_result.duration_ms);
-    *tokens_in = tokens_in.saturating_add(next_result.tokens_in.unwrap_or(0));
-    *tokens_out = tokens_out.saturating_add(next_result.tokens_out.unwrap_or(0));
-    tool_names.extend(next_result.tool_names.iter().cloned());
-    *total_cost_usd = match (*total_cost_usd, next_result.total_cost_usd) {
-        (Some(a), Some(b)) => Some(a + b),
-        (a, b) => a.or(b),
-    };
-
-    BridgeResult {
-        raw: merged_raw.join("\n\n"),
-        parsed: next_result.parsed,
-        success: next_result.success,
-        duration_ms: *duration_ms,
-        compression_ratio: next_result.compression_ratio,
-        tokens_in: Some(*tokens_in),
-        tokens_out: Some(*tokens_out),
-        attention: next_result.attention,
-        tool_names: tool_names.clone(),
-        total_cost_usd: *total_cost_usd,
-        fallbacks_used: next_result.fallbacks_used,
-    }
-}
-
-fn ensure_same_thread_continuation(
-    metadata: &BridgeExecutionMetadata,
-    expected_session_id: &str,
-) -> Result<()> {
-    if metadata.same_thread_continuation
-        && metadata.session_id.as_deref() == Some(expected_session_id)
-    {
-        return Ok(());
-    }
-
-    Err(anyhow::anyhow!(
-        "{} provider did not confirm same-thread continuation for session {}",
-        metadata.provider.as_str(),
-        expected_session_id
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::AgentRole;
-    use crate::session::output::{BuildStatus, ExecutionMetrics, TestDetails};
-    use std::collections::HashMap;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_bridge_creation() {
-        let bridge = A2ABridge::new(PathBuf::from("/tmp/ccswarm-test"));
-        assert_eq!(bridge.agent_count(), 0);
-    }
-
-    #[test]
-    fn test_agent_registration() {
-        let bridge = A2ABridge::new(PathBuf::from("/tmp/ccswarm-test"));
-        bridge.register_agent("frontend-agent").unwrap();
-        assert_eq!(bridge.agent_count(), 1);
-    }
+    use crate::session::output::TestDetails;
 
     #[test]
     fn test_is_parsed_success() {
@@ -976,95 +494,6 @@ mod tests {
                 failed_tests: vec!["test_one".to_string()],
             },
         }));
-    }
-
-    #[test]
-    fn test_continuation_policy_default_is_single_turn() {
-        assert!(matches!(
-            ContinuationPolicy::default(),
-            ContinuationPolicy::SingleTurn
-        ));
-    }
-
-    #[test]
-    fn test_is_task_terminal_strict() {
-        assert!(is_task_terminal(&ParsedOutput::BuildOutput {
-            status: BuildStatus::Success,
-            artifacts: Vec::new(),
-        }));
-        assert!(!is_task_terminal(&ParsedOutput::BuildOutput {
-            status: BuildStatus::Failed("failed".to_string()),
-            artifacts: Vec::new(),
-        }));
-        assert!(is_task_terminal(&ParsedOutput::TestResults {
-            passed: 3,
-            failed: 0,
-            details: TestDetails::default(),
-        }));
-        assert!(!is_task_terminal(&ParsedOutput::TestResults {
-            passed: 3,
-            failed: 1,
-            details: TestDetails::default(),
-        }));
-        assert!(!is_task_terminal(&ParsedOutput::PlainText(
-            "done".to_string()
-        )));
-        assert!(!is_task_terminal(&ParsedOutput::CodeExecution {
-            result: "done".to_string(),
-            metrics: ExecutionMetrics {
-                execution_time: std::time::Duration::from_millis(1),
-                memory_usage: None,
-                cpu_usage: None,
-            },
-        }));
-    }
-
-    #[test]
-    fn test_truncate_is_utf8_safe() {
-        let input = "abあcd";
-
-        assert_eq!(truncate(input, 4), "ab");
-        assert_eq!(truncate(input, 5), "abあ");
-        assert_eq!(truncate(input, 99), input);
-    }
-
-    #[test]
-    fn test_multi_turn_constructor_sets_default_prompt() {
-        match ContinuationPolicy::multi_turn(3) {
-            ContinuationPolicy::MultiTurn {
-                max_turns,
-                continuation_prompt,
-            } => {
-                assert_eq!(max_turns, 3);
-                assert_eq!(continuation_prompt, DEFAULT_CONTINUATION_PROMPT);
-            }
-            ContinuationPolicy::SingleTurn => {
-                panic!("multi_turn constructor returned SingleTurn");
-            }
-        }
-    }
-
-    fn bridge_result(
-        raw: &str,
-        parsed: ParsedOutput,
-        success: bool,
-        duration_ms: u64,
-        tokens_in: Option<u64>,
-        tokens_out: Option<u64>,
-    ) -> BridgeResult {
-        BridgeResult {
-            raw: raw.to_string(),
-            parsed,
-            success,
-            duration_ms,
-            compression_ratio: Some(1.0),
-            tokens_in,
-            tokens_out,
-            attention: AttentionState::Idle,
-            tool_names: Vec::new(),
-            total_cost_usd: None,
-            fallbacks_used: Vec::new(),
-        }
     }
 
     #[test]
@@ -1093,14 +522,9 @@ mod tests {
     }
 
     #[test]
-    fn provider_switch_drops_provider_assigned_id() {
-        // Shared guard between the fallback chain and codex's
-        // ProviderAssignedId continuation: switching providers must clear
-        // session state, since the new provider can't resume the old thread.
+    fn fallback_switches_provider_and_model() {
         let mut options = MovementExecOptions {
             provider: Some(ProviderKind::Codex),
-            session_id: Some("thread-from-codex".to_string()),
-            continuation: ContinuationPolicy::multi_turn(3),
             model: Some("gpt-5".to_string()),
             ..Default::default()
         };
@@ -1111,11 +535,6 @@ mod tests {
         assert_eq!(from, "codex");
         assert_eq!(options.provider, Some(ProviderKind::Claude));
         assert_eq!(options.model.as_deref(), Some("opus"));
-        assert!(options.session_id.is_none());
-        assert!(matches!(
-            options.continuation,
-            ContinuationPolicy::SingleTurn
-        ));
     }
 
     #[test]
@@ -1158,7 +577,6 @@ mod tests {
         );
         assert_eq!(p.text, "plain");
         assert!(p.tool_names.is_empty());
-        // No usage record → bridge falls back to byte/4 estimates.
         assert_eq!(p.tokens, None);
         assert!(p.total_cost_usd.is_none());
     }
@@ -1177,182 +595,14 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_turn_result_aggregates_successful_turn() {
-        let mut merged_raw = vec!["--- TURN 1 ---\n\nfirst".to_string()];
-        let mut duration_ms = 10;
-        let mut tokens_in = 3;
-        let mut tokens_out = 5;
-        let mut tool_names = vec!["Read".to_string()];
-        let mut total_cost_usd = Some(0.01);
-
-        let mut next = bridge_result(
-            "second",
-            ParsedOutput::PlainText("continue".to_string()),
-            true,
-            20,
-            Some(7),
-            Some(11),
-        );
-        next.tool_names = vec!["Bash".to_string()];
-        next.total_cost_usd = Some(0.02);
-
-        let result = merge_turn_result(
-            &mut merged_raw,
-            &mut duration_ms,
-            &mut tokens_in,
-            &mut tokens_out,
-            &mut tool_names,
-            &mut total_cost_usd,
-            2,
-            next,
-        );
-
-        assert_eq!(
-            result.raw,
-            "--- TURN 1 ---\n\nfirst\n\n--- TURN 2 ---\n\nsecond"
-        );
-        assert_eq!(result.duration_ms, 30);
-        assert_eq!(result.tokens_in, Some(10));
-        assert_eq!(result.tokens_out, Some(16));
-        assert!(result.success);
-        assert_eq!(result.tool_names, vec!["Read", "Bash"]);
-        assert!((result.total_cost_usd.unwrap_or(0.0) - 0.03).abs() < 1e-9);
-    }
-
-    #[test]
-    fn test_merge_turn_result_includes_failed_later_turn() {
-        let mut merged_raw = vec!["--- TURN 1 ---\n\nfirst".to_string()];
-        let mut duration_ms = 10;
-        let mut tokens_in = 3;
-        let mut tokens_out = 5;
-        let mut tool_names = Vec::new();
-        let mut total_cost_usd = None;
-
-        let result = merge_turn_result(
-            &mut merged_raw,
-            &mut duration_ms,
-            &mut tokens_in,
-            &mut tokens_out,
-            &mut tool_names,
-            &mut total_cost_usd,
-            2,
-            bridge_result(
-                "failed",
-                ParsedOutput::TestResults {
-                    passed: 1,
-                    failed: 1,
-                    details: TestDetails::default(),
-                },
-                false,
-                20,
-                None,
-                Some(11),
-            ),
-        );
-
-        assert_eq!(
-            result.raw,
-            "--- TURN 1 ---\n\nfirst\n\n--- TURN 2 ---\n\nfailed"
-        );
-        assert_eq!(result.duration_ms, 30);
-        assert_eq!(result.tokens_in, Some(3));
-        assert_eq!(result.tokens_out, Some(16));
-        assert!(!result.success);
-        assert!(matches!(
-            result.parsed,
-            ParsedOutput::TestResults { failed: 1, .. }
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_multi_turn_rejects_provider_without_same_thread_continuation() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-        let bridge = A2ABridge::new(dir.path().join("sessions"));
-        let identity = AgentIdentity {
-            agent_id: "agent-1".to_string(),
-            specialization: AgentRole::Search {
-                technologies: Vec::new(),
-                responsibilities: Vec::new(),
-                boundaries: Vec::new(),
-            },
-            workspace_path: dir.path().to_path_buf(),
-            env_vars: HashMap::new(),
-            session_id: "session-1".to_string(),
-            parent_process_id: "parent-1".to_string(),
-            initialized_at: chrono::Utc::now(),
-        };
-        // Copilot is the remaining provider with no continuation support
-        // (codex gained ProviderAssignedId continuation in v0.8.0).
+    fn a2a_endpoint_option_wins_and_blank_values_are_ignored() {
         let options = MovementExecOptions {
-            provider: Some(ProviderKind::Copilot),
-            continuation: ContinuationPolicy::multi_turn(2),
-            ..MovementExecOptions::default()
+            a2a_endpoint: Some(" https://example.test/a2a ".to_string()),
+            ..Default::default()
         };
-
-        let err = bridge
-            .execute_multi_turn(
-                "agent-1",
-                "do work",
-                &identity,
-                dir.path(),
-                None,
-                0,
-                0,
-                &options,
-                &options.continuation,
-            )
-            .await
-            .expect_err("copilot multi-turn should fail before spawning a subprocess");
-
-        assert!(
-            err.to_string()
-                .contains("does not support same-thread multi-turn continuation")
+        assert_eq!(
+            resolve_a2a_endpoint(&options).as_deref(),
+            Some("https://example.test/a2a")
         );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_multi_turn_rejects_a2a_without_remote_thread_support() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-        let bridge = A2ABridge::new(dir.path().join("sessions"));
-        let identity = AgentIdentity {
-            agent_id: "agent-1".to_string(),
-            specialization: AgentRole::Search {
-                technologies: Vec::new(),
-                responsibilities: Vec::new(),
-                boundaries: Vec::new(),
-            },
-            workspace_path: dir.path().to_path_buf(),
-            env_vars: HashMap::new(),
-            session_id: "session-1".to_string(),
-            parent_process_id: "parent-1".to_string(),
-            initialized_at: chrono::Utc::now(),
-        };
-        let options = MovementExecOptions {
-            continuation: ContinuationPolicy::multi_turn(2),
-            a2a_endpoint: Some("https://example.test/a2a".to_string()),
-            ..MovementExecOptions::default()
-        };
-
-        let err = bridge
-            .execute_multi_turn(
-                "agent-1",
-                "do work",
-                &identity,
-                dir.path(),
-                None,
-                0,
-                0,
-                &options,
-                &options.continuation,
-            )
-            .await
-            .expect_err("A2A multi-turn should fail before making a request");
-
-        assert!(
-            err.to_string()
-                .contains("does not support same-thread multi-turn continuation")
-        );
-        Ok(())
     }
 }

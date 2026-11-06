@@ -14,8 +14,7 @@ the workflow engine decides whether the evidence permits the next stage.
 The product outcome is a change the user can assess without reconstructing
 every agent conversation.
 
-The primary job, derived from the existing
-[Product Abstraction Plan](CCSWARM_PRODUCT_ABSTRACTION_PLAN.md#primary-job), is:
+The primary job is:
 
 > When I delegate important development work whose solution is uncertain,
 > help me reach a verified, reviewable change, understand unresolved concerns,
@@ -212,7 +211,7 @@ they are not claims that the target behavior above already works.
 | Machine checks | Sangha dispatch returns before ordinary stage gates; member stages clear gates | Explicitly execute and bind required checks to the decision subject |
 | Review permissions | Members request `readonly` by default, but the Codex adapter builds `--sandbox workspace-write` | Enforce the requested boundary or reject the unsupported configuration |
 | Standard flow | Sangha assesses the plan; final review is a normal stage | Assess the final change through Sangha after checks pass |
-| Recovery | Session persistence and event logs exist; replay re-executes the task | Durable decision checkpoints and validated targeted resume |
+| Recovery | Event logs exist; replay re-executes the task | Durable decision checkpoints and validated targeted resume |
 | Proposal commands | `lab sangha` stores proposal JSON and appended votes, without voter identity or quorum-driven transitions | Keep experimental proposal storage distinct from workflow decisions |
 
 Implementation references:
@@ -235,9 +234,9 @@ Implementation references:
 
 Deferring expansion does not remove existing commands or relax their current
 security requirements. `lab sangha` is not promoted into a second decision
-engine. Workflow orchestration stays in `workflow/`; subprocesses, parsing,
-and persistence primitives stay in `session/`; explicit action authorization
-stays in the governance boundary.
+engine. Workflow orchestration stays in `workflow/`; provider execution and
+parsing stay in `session/`; explicit action authorization stays with
+`ccswarm approve`.
 
 Claude Code and Codex already offer native delegation; TAKT supplies a useful
 example of an external workflow and task-management layer. ccswarm should

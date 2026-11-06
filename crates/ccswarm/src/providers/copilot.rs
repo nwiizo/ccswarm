@@ -1,6 +1,6 @@
 //! GitHub Copilot CLI provider — **currently unsupported for code generation**.
 //!
-//! codex #4 finding: `gh copilot suggest` is an interactive command that proposes a
+//! `gh copilot suggest` is an interactive command that proposes a
 //! single shell command (or git command, etc.) and then prompts the user whether to run
 //! it. It does not non-interactively produce file edits comparable to `claude -p` or
 //! `codex exec`. Wiring it up as a coding provider would either hang the pipeline waiting

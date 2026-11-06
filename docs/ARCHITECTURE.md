@@ -1,49 +1,33 @@
-# ccswarm Architecture Documentation
+# ccswarm Architecture
 
-## System Architecture Overview
+## Overview
 
-ccswarm is an AI Agent Workflow DevOps toolchain that complements AI coding
-provider CLIs and A2A-compatible remote agents. It provides flow/stage
-orchestration, Sangha consensus, governance, NDJSON event recording, and a
-provider-agnostic `A2ABridge` for live execution.
+ccswarm is a single Rust crate (`crates/ccswarm`) that runs YAML flows over AI
+coding provider CLIs and A2A-compatible remote agents. It provides flow/stage
+orchestration, Sangha consensus, NDJSON event recording, and the `A2ABridge`
+that executes each stage.
 
 [Sangha Product Core](SANGHA_PRODUCT_CORE.md) defines the product direction:
 the workflow owns acceptance decisions based on evidence and resolved
 objections, while providers execute work. The existing quorum implementation
 is the starting point; the complete decision protocol is planned behavior.
 
-## Workspace Structure
-
-The Cargo workspace now contains a single runtime crate:
-
-```text
-ccswarm/
-├── Cargo.toml
-└── crates/
-    └── ccswarm/
-        ├── Cargo.toml
-        └── src/
-```
-
-`crates/ccswarm/src/session` owns the execution primitives that used to live in
-a separate session crate: context history, output parsing, prompt preparation,
-provider subprocess execution, persistence, and A2A client types.
-
 ## Execution Flow
 
 ```text
 CLI
   -> Workflow Engine (flows, stages, facets, Sangha)
-  -> A2ABridge
+  -> A2ABridge (retry, rate-limit fallback)
        -> A2A REST /message:send when CCSWARM_A2A_ENDPOINT is set
-       -> otherwise a supported local provider CLI (Claude/Codex)
-  -> Output parser + context persistence
+       -> otherwise a local provider CLI (Claude/Codex) in a background Herdr
+          tab: headless, or a live Claude session
+  -> Output parser
   -> Event recorder + summaries
 ```
 
-## Core Components
+## Components
 
-### Workflow Engine (`crates/ccswarm/src/workflow/`)
+### Workflow Engine (`src/workflow/`)
 
 - Loads YAML flow definitions with stages.
 - Composes prompts from persona, policy, knowledge, and instruction facets.
@@ -52,45 +36,45 @@ CLI
 - Will own Sangha report validation, objection resolution, decision policy,
   and recovery routing; these rules do not belong in session helpers.
 
-### A2ABridge (`crates/ccswarm/src/session/bridge.rs`)
+### A2ABridge (`src/session/bridge.rs`)
 
-- Sends tasks to an A2A server when `CCSWARM_A2A_ENDPOINT` or
-  `MovementExecOptions::a2a_endpoint` is set.
-- Falls back to local provider CLI execution using the provider abstraction.
-- Supports provider-specific continuation for Claude and Codex.
-- Handles retry, rate-limit fallback, stream telemetry projection, context
-  history, output parsing, token estimates, and session persistence.
+- Sends a stage to an A2A server when `CCSWARM_A2A_ENDPOINT` or
+  `MovementExecOptions::a2a_endpoint` is set; otherwise runs the selected
+  provider through Herdr.
+- Retries with backoff and switches providers on rate limits
+  (`on_rate_limit`).
+- Projects Claude stream-json and Codex JSONL output to text, parses it, and
+  reports token counts (real when available, otherwise estimated).
 
-### A2A Types (`crates/ccswarm/src/session/a2a.rs`)
+### Herdr Execution (`src/session/herdr.rs`)
 
-- Models Agent Card discovery metadata.
-- Provides a small REST client for `POST /message:send`.
+- Requires a Herdr-managed pane (`HERDR_ENV=1`, `HERDR_WORKSPACE_ID`) and
+  uses `HERDR_BIN_PATH` when Herdr provides it.
+- Headless calls submit `/bin/sh <script>` to a new tab and read stdout,
+  stderr, and the exit code from a private run directory.
+- Live Claude calls use `herdr agent start` / `agent prompt` and read the
+  result and token usage from the Claude session transcript.
+- Reports stage state and sidebar tokens, sends notifications, and closes the
+  tab on completion, failure, or cancellation. See
+  [Herdr Integration](HERDR_INTEGRATION.md).
+
+### A2A Client (`src/session/a2a.rs`)
+
+- Posts a user `Message` with a text `Part` to `POST /message:send`.
 - Extracts text parts from direct message or task/artifact responses.
 
-### Providers (`crates/ccswarm/src/providers/`)
+### Providers (`src/providers/`)
 
-- Builds provider-specific subprocess commands for Claude, Codex, and GitHub
-  Copilot.
+- Build provider-specific commands for Claude and Codex.
 - Copilot remains registered for configuration compatibility but fails fast
-  because its CLI is interactive and cannot produce non-interactive code edits.
-- Does not own workflow policy, persistence, parsing, or retry behavior.
+  because its CLI is interactive and cannot produce code edits.
+- Do not own workflow policy, parsing, or retry behavior.
 
-### Governance (`crates/ccswarm/src/governance/`)
+### Experimental Commands
 
-- Stores proposals, extensions, approvals, and in-process agent messages.
-- Sangha workflow consensus is implemented as a workflow primitive and uses the
-  governance vocabulary for decisions.
-- Experimental `lab sangha` proposal files do not determine workflow verdicts.
-  Action authorization remains distinct from acceptance of a plan or change.
-
-## A2A Integration
-
-A2A support follows the official Agent2Agent data model: ccswarm models Agent
-Card metadata, exchanges `Message` objects containing `Part`s, and submits work
-through task/message operations. Live remote execution currently requires an
-explicit endpoint (`CCSWARM_A2A_ENDPOINT` or `MovementExecOptions::a2a_endpoint`)
-and uses the HTTP+JSON `POST /message:send` path; local provider CLIs remain the
-default.
+`lab sangha` stores proposal files that do not determine workflow verdicts.
+Action authorization (`ccswarm approve`) remains distinct from acceptance of
+a plan or change.
 
 ## Verification
 
@@ -101,9 +85,4 @@ cargo test --workspace
 cargo run -p ccswarm -- --help
 ```
 
-## Product Roadmap
-
-See the [roadmap](ROADMAP.md) for the release scope and gates. The
-[ccswarm Product Abstraction Plan](CCSWARM_PRODUCT_ABSTRACTION_PLAN.md) retains
-the longer job-theory plan for orders, desk, reports, verdicts, gates,
-escalation, recovery points, and phase-level observability.
+See the [roadmap](ROADMAP.md) for the release scope and gates.

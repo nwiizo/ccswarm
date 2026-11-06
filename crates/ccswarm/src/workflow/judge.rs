@@ -44,19 +44,6 @@ pub enum MatchMethod {
     NoMatch,
 }
 
-/// Parsed condition from rule condition strings
-#[derive(Debug, Clone)]
-pub enum ParsedCondition {
-    /// Simple string match
-    Simple(String),
-    /// AI judge: ai("condition text")
-    Ai(String),
-    /// All sub-conditions must match: all("tag")
-    All(String),
-    /// Any sub-condition must match: any("tag")
-    Any(String),
-}
-
 /// Configuration for the AI judge
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JudgeConfig {
@@ -436,28 +423,6 @@ impl MovementJudge {
             ),
         })
     }
-
-    /// Parse a condition string to determine its type
-    pub fn parse_condition(condition_str: &str) -> ParsedCondition {
-        let trimmed = condition_str.trim();
-
-        // Check for ai("...") syntax
-        if let Some(inner) = extract_function_arg(trimmed, "ai") {
-            return ParsedCondition::Ai(inner);
-        }
-
-        // Check for all("...") syntax
-        if let Some(inner) = extract_function_arg(trimmed, "all") {
-            return ParsedCondition::All(inner);
-        }
-
-        // Check for any("...") syntax
-        if let Some(inner) = extract_function_arg(trimmed, "any") {
-            return ParsedCondition::Any(inner);
-        }
-
-        ParsedCondition::Simple(trimmed.to_string())
-    }
 }
 
 impl Default for MovementJudge {
@@ -485,23 +450,6 @@ pub fn parse_judge_reply(reply: &str) -> Option<bool> {
         Some(true)
     } else if lead.starts_with("NO") {
         Some(false)
-    } else {
-        None
-    }
-}
-
-/// Extract the argument from a function-style syntax: `fn_name("arg")`
-fn extract_function_arg(input: &str, fn_name: &str) -> Option<String> {
-    let prefix = format!("{}(", fn_name);
-    if input.starts_with(&prefix) && input.ends_with(')') {
-        let inner = &input[prefix.len()..input.len() - 1];
-        // Strip surrounding quotes if present
-        let stripped = inner
-            .trim()
-            .strip_prefix('"')
-            .and_then(|s| s.strip_suffix('"'))
-            .unwrap_or(inner.trim());
-        Some(stripped.to_string())
     } else {
         None
     }
@@ -663,29 +611,6 @@ mod tests {
         assert!(instructions.contains("approved"));
         assert!(instructions.contains("needs_fix"));
         assert!(instructions.contains("blocked"));
-    }
-
-    #[test]
-    fn test_parse_condition() {
-        match MovementJudge::parse_condition("success") {
-            ParsedCondition::Simple(s) => assert_eq!(s, "success"),
-            _ => panic!("Expected Simple"),
-        }
-
-        match MovementJudge::parse_condition("ai(\"code quality is good\")") {
-            ParsedCondition::Ai(s) => assert_eq!(s, "code quality is good"),
-            _ => panic!("Expected Ai"),
-        }
-
-        match MovementJudge::parse_condition("all(\"approved\")") {
-            ParsedCondition::All(s) => assert_eq!(s, "approved"),
-            _ => panic!("Expected All"),
-        }
-
-        match MovementJudge::parse_condition("any(\"rejected\")") {
-            ParsedCondition::Any(s) => assert_eq!(s, "rejected"),
-            _ => panic!("Expected Any"),
-        }
     }
 
     #[test]

@@ -43,17 +43,6 @@ pub enum OutputFormat {
     StreamJson,
 }
 
-impl OutputFormat {
-    /// Convert to CLI argument value
-    pub fn as_cli_arg(&self) -> &'static str {
-        match self {
-            OutputFormat::Text => "text",
-            OutputFormat::Json => "json",
-            OutputFormat::StreamJson => "stream-json",
-        }
-    }
-}
-
 /// Claude Code configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeConfig {

@@ -10,6 +10,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.11.0] - 2026-11-06
+
+### Added
+
+- Run local provider calls in background tabs of the calling Herdr workspace,
+  report each stage to Herdr (`working` state, `$stage`/`$provider` tokens),
+  and close the tab on completion, failure, or cancellation.
+- Add stage `execution: live` for interactive Claude Code sessions in Herdr.
+  ccswarm waits for user answers and reads output and token usage from the
+  session transcript. Sangha members and team-leader workers inherit it.
+- Send Herdr notifications when a run finishes, waits for commit approval, or
+  has a live stage waiting for input.
+- Add the `herdr-plugin/` Herdr plugin and `ccswarm herdr action|show` entry
+  points for the run board, recent runs, and doctor.
+- Check the Herdr CLI, session, server, and integrations in `ccswarm doctor`.
+- Document the researched contract in `docs/HERDR_INTEGRATION.md`.
+
+### Changed
+
+- **Breaking:** local provider execution requires a Herdr 0.9.5+ pane and
+  fails before retrying outside Herdr. Remote A2A execution is unchanged.
+- **Breaking:** `session::execution::CommandExecution` reports `exit_code`
+  with `success()` instead of `std::process::ExitStatus`, and
+  `run_provider_command` takes a `HerdrCall`.
+- Provider commands receive an absolute working directory, and providers run
+  with the Herdr pane's environment plus explicit command changes.
+- Flow validation rejects `execution: live` on stages that pin a non-Claude
+  provider.
+- Explicit stage `tools:` keep their order in `--allowed-tools`.
+
+### Removed
+
+- **Breaking:** library modules and APIs that the CLI never reached:
+  `governance`, `hooks`, `identity`, `resource`, the agent orchestration and
+  type-state builders, session management, `utils` helpers, `cli::commands`,
+  A2A Agent Card types, and the `workflow` re-exports.
+- Bridge context history, session persistence, multi-turn continuation, and
+  provider resume flags (`--session-id` / `--continue`, `codex exec resume`),
+  none of which flows could enable.
+- `ccswarm doctor --error`, whose recovery database was always empty.
+- **Breaking:** the `ccswarm task` command. `add` never stored the task, and
+  the other subcommands only printed that task management was removed or
+  acted on worktrees nothing creates anymore. Use `ccswarm queue`.
+- The `error` module, whose error type nothing produced, and the unused
+  `thiserror` and `mockall` dependencies.
+- The unimplemented Linear tracker, pipeline config fields without setters
+  (environment variables, output file, warnings-as-failure), the ignored
+  harness `tags` and `metrics.max_tokens` fields, and the never-set
+  interactive mode of the flow engine.
+- The mockall demo test, the resource-monitoring example, the obsolete
+  `sample/` scripts, `.ccswarm/pieces/`, and the superseded product
+  abstraction and multi-agent redesign documents.
+
+### Fixed
+
+- Bundled harness scenarios use `flow:`, so `ccswarm harness run` can load
+  them.
+- Correct the malformed `Bash(rm -rf /)*` deny rule in the project Claude Code
+  settings so it is no longer skipped.
+
 ## [0.10.2] - 2026-10-09
 
 ### Changed

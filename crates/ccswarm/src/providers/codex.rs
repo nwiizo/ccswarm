@@ -2,25 +2,16 @@
 //!
 //! Codex CLI is non-interactive via `codex exec "<prompt>"`. System prompt is prepended to
 //! the user prompt because Codex has no dedicated `--system-prompt` flag.
-//!
-//! Session continuation uses `codex exec resume <thread-id> "<prompt>"` — a
-//! subcommand with its own argv shape, selected when `options.session_id` is
-//! set. The thread ID is provider-assigned: ccswarm learns it from the
-//! `thread.started` event in `--json` output (see `codex_stream`).
 
 use std::path::Path;
 
-use super::{AgentProvider, ProviderKind, ProviderOptions, SameThreadContinuation};
+use super::{AgentProvider, ProviderKind, ProviderOptions};
 
 pub(crate) struct CodexProvider;
 
 impl AgentProvider for CodexProvider {
     fn kind(&self) -> ProviderKind {
         ProviderKind::Codex
-    }
-
-    fn same_thread_continuation(&self) -> SameThreadContinuation {
-        SameThreadContinuation::ProviderAssignedId
     }
 
     fn build_command(
@@ -31,12 +22,6 @@ impl AgentProvider for CodexProvider {
     ) -> tokio::process::Command {
         let mut cmd = tokio::process::Command::new("codex");
         cmd.arg("exec");
-
-        // Resume is a subcommand: `codex exec resume <thread-id> <prompt>`.
-        // It must come before the option flags that follow.
-        if let Some(session_id) = &options.session_id {
-            cmd.args(["resume", session_id]);
-        }
 
         // Non-interactive pipeline execution:
         //   1. `--sandbox workspace-write` lets Codex write inside the cwd the way
@@ -51,9 +36,7 @@ impl AgentProvider for CodexProvider {
             cmd.args(["--model", model]);
         }
 
-        // JSONL event output: needed for telemetry (real token counts) and
-        // mandatory for multi-turn, where the thread ID arrives via the
-        // `thread.started` event.
+        // JSONL event output for real token counts.
         if options.codex_json {
             cmd.arg("--json");
         }

@@ -279,6 +279,7 @@ mod tests {
             gates: Vec::new(),
             team_leader: None,
             sangha: None,
+            execution: Default::default(),
         }
     }
 

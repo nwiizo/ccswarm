@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::super::*;
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -37,8 +35,6 @@ struct HarnessScenario {
     output_format: String,
     #[serde(default)]
     assert: HarnessAssert,
-    #[serde(default)]
-    tags: Vec<String>,
     #[serde(default)]
     matrix: Option<serde_json::Map<String, serde_json::Value>>, // simple string arrays
     #[serde(default)]
@@ -715,8 +711,6 @@ fn render_diff_markdown(summary: &serde_json::Value, current: &serde_json::Value
 struct AssertMetrics {
     #[serde(default)]
     max_duration_secs: Option<u64>,
-    #[serde(default)]
-    max_tokens: Option<u64>,
 }
 
 fn expand_matrix(
@@ -759,19 +753,6 @@ fn substitute_vars(input: &str, vars: &std::collections::HashMap<String, String>
     s
 }
 
-fn run_shell(cmd_line: &str) -> Result<()> {
-    use std::process::Command;
-    let status = if cfg!(target_os = "windows") {
-        Command::new("cmd").args(["/C", cmd_line]).status()
-    } else {
-        Command::new("sh").args(["-c", cmd_line]).status()
-    }?;
-    if !status.success() {
-        anyhow::bail!("Command failed with status: {:?}", status);
-    }
-    Ok(())
-}
-
 fn run_shell_in_cwd(cmd_line: &str, cwd: &Path) -> Result<()> {
     use std::process::Command;
     let status = if cfg!(target_os = "windows") {
@@ -789,4 +770,17 @@ fn run_shell_in_cwd(cmd_line: &str, cwd: &Path) -> Result<()> {
         anyhow::bail!("Command failed with status: {:?}", status);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_scenarios_load() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.ccswarm/harness");
+        let scenarios = load_scenarios_from_dir(&dir).expect("bundled scenarios parse");
+        assert_eq!(scenarios.len(), 3);
+        assert!(scenarios.iter().all(|(_, sc)| !sc.flow.is_empty()));
+    }
 }

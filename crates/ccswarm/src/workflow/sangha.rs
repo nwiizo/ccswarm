@@ -161,6 +161,7 @@ pub fn member_stage(parent: &Stage, spec: &SanghaSpec, member: &SanghaMember) ->
         gates: Vec::new(),
         team_leader: None,
         sangha: None,
+        execution: parent.execution,
     }
 }
 

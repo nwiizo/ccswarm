@@ -1,6 +1,25 @@
 # ccswarm Release Scope And Roadmap
 
-Scope updated: 2026-10-09.
+Scope updated: 2026-11-06.
+
+## v0.11.0 Release Scope
+
+v0.11.0 makes [Herdr](https://herdr.dev) the terminal surface for local
+provider execution. The [Herdr Integration](HERDR_INTEGRATION.md) contract
+records the researched Herdr 0.9.5 behavior and the takt `claude-terminal`
+design it follows.
+
+| Slice | Behavior |
+| --- | --- |
+| Herdr-required execution | Local provider calls run in background tabs of the calling Herdr workspace and fail outside Herdr before retrying |
+| Headless stages | `claude -p` / `codex exec` keep their output, exit-code, and telemetry handling through file-based results |
+| Live Claude stages | `execution: live` runs an interactive Claude Code session, waits for user answers, and reads output and token usage from its transcript |
+| Herdr state | Stages report `working` with `$stage`/`$provider` tokens; runs notify on completion, approval waits, and blocked live stages |
+| Plugin | `herdr-plugin/` adds run board, recent runs, and doctor actions |
+| Diagnostics | `ccswarm doctor` checks the Herdr CLI, session, server, and integrations |
+
+See the [release notes](releases/v0.11.0.md). Sangha decision behavior is
+unchanged.
 
 ## v0.10.2 Release Scope
 
@@ -80,10 +99,16 @@ atomic shared transaction.
 - Sangha dispatch bypasses ordinary command gates.
 - The Codex adapter currently uses a writable workspace even when a review
   requests read-only permissions.
-- Events and session persistence do not provide workflow checkpoint resume.
+- Run events do not provide workflow checkpoint resume.
 - `lab sangha` proposal storage is separate from workflow acceptance.
 - Selecting Astra through Codex does not expose Responses steering, async
   tools, or ccswarm-controlled native delegation.
+- Live stages support Claude only and run a single turn; Codex live sessions
+  wait for Herdr to report Codex thread IDs. Live sessions report no cost.
+- A live stage in a repository Claude has not opened before waits for the
+  user to answer Claude's folder-trust question.
+- Headless and live stages do not yet enforce read-only review: Claude runs
+  with `--dangerously-skip-permissions` and an allowed-tools list.
 
 ## Future Sangha Milestones
 
@@ -150,9 +175,5 @@ agreement, and model branding do not establish quality.
 Full A2A lifecycle expansion, new providers, general task graphs, mailboxes,
 Desk/UI surfaces, OTLP export, self-extension, evolution, and long-term memory
 remain supporting options. They are not prerequisites for the Sangha core.
-Keep orchestration in `workflow/`, execution and persistence primitives in
-`session/`, and action authorization distinct from review acceptance.
-
-The [Product Abstraction Plan](CCSWARM_PRODUCT_ABSTRACTION_PLAN.md) and
-[Multi-Agent Redesign](MULTI_AGENT_REDESIGN.md) retain broader research. Their
-earlier milestone lists do not add requirements to v0.10.0.
+Keep orchestration in `workflow/`, execution primitives in `session/`, and
+action authorization distinct from review acceptance.

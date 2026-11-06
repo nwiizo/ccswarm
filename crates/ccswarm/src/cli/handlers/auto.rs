@@ -13,12 +13,10 @@ use tracing::info;
 
 const AUTO_LOG: &str = ".ccswarm/auto.ndjson";
 
-/// Outcome signal carried between loop iterations. The `Stop` variant carries a reason
-/// string that is currently unused at the call site but is kept to avoid silently losing
-/// diagnostic context when the loop exits.
+/// Outcome signal carried between loop iterations.
 enum LoopSignal {
     Continue,
-    Stop(#[allow(dead_code)] String),
+    Stop,
 }
 
 impl CliRunner {
@@ -115,7 +113,7 @@ impl CliRunner {
                 )
                 .await?;
 
-            if matches!(signal, LoopSignal::Stop(_)) {
+            if matches!(signal, LoopSignal::Stop) {
                 break;
             }
 
@@ -165,7 +163,7 @@ impl CliRunner {
 
         for queued_task in pending {
             if max_iterations > 0 && *processed >= max_iterations {
-                return Ok(LoopSignal::Stop("max iterations reached".to_string()));
+                return Ok(LoopSignal::Stop);
             }
 
             let task_id = queued_task.id.clone();
@@ -257,7 +255,7 @@ impl CliRunner {
                         error_message
                     );
                     if stop_on_error {
-                        return Ok(LoopSignal::Stop(format!("task {} failed", task_id)));
+                        return Ok(LoopSignal::Stop);
                     }
                 }
             }
@@ -267,8 +265,8 @@ impl CliRunner {
     }
 
     /// Execute a single task through the pipeline. Returns `(result, Option<run_id>)`
-    /// so the caller can record the run_id back into `QueueTask.run_id` — this closes
-    /// codex #6 (auto.ndjson had no cross-reference to run events.ndjson).
+    /// so the caller can record the run_id back into `QueueTask.run_id`, linking
+    /// `auto.ndjson` to the run's `events.ndjson`.
     #[allow(clippy::too_many_arguments)]
     async fn auto_run_one(
         &self,

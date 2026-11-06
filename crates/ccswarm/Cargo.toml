@@ -1,6 +1,6 @@
 [package]
 name = "ccswarm"
-version = "0.10.2"
+version = "0.11.0"
 edition.workspace = true
 authors.workspace = true
 description = "AI Agent Workflow DevOps toolchain complementing Claude Code Agent Teams"
@@ -29,7 +29,6 @@ tokio = { version = "1.52", features = [
 
 # Error handling
 anyhow = "1.0.102"
-thiserror = "2.0.18"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -124,7 +123,6 @@ dirs = "6.0"
 
 [dev-dependencies]
 # Testing
-mockall = "0.13"
 tempfile = "3.27"
 pretty_assertions = "1.4"
 

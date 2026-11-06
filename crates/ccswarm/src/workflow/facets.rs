@@ -26,16 +26,6 @@ pub fn ccswarm_home() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".ccswarm"))
 }
 
-/// A facet definition that can be inline text or a file reference
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum FacetSource {
-    /// Inline text content
-    Inline(String),
-    /// Reference to a YAML file containing the facet
-    FileRef { file: String },
-}
-
 /// A persona facet defining agent identity and role
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonaFacet {
@@ -140,12 +130,6 @@ impl FacetRegistry {
     /// Get a policy by name
     pub fn get_policy(&self, name: &str) -> Option<&PolicyFacet> {
         self.policies.get(name)
-    }
-
-    /// Set base directory for file references
-    pub fn with_base_dir(mut self, dir: PathBuf) -> Self {
-        self.base_dir = Some(dir);
-        self
     }
 
     /// Load all facets from a directory structure.
@@ -256,11 +240,6 @@ impl FacetRegistry {
     /// Register a policy directly
     pub fn register_policy(&mut self, policy: PolicyFacet) {
         self.policies.insert(policy.name.clone(), policy);
-    }
-
-    /// Register a knowledge facet directly
-    pub fn register_knowledge(&mut self, knowledge: KnowledgeFacet) {
-        self.knowledge.insert(knowledge.name.clone(), knowledge);
     }
 
     /// Compose a prompt from facet references and an instruction.
@@ -729,12 +708,15 @@ mod tests {
             content: String::new(),
         });
 
-        registry.register_knowledge(KnowledgeFacet {
-            name: "architecture".to_string(),
-            context: vec!["This is a Rust project using tokio".to_string()],
-            references: vec!["docs/ARCHITECTURE.md".to_string()],
-            content: String::new(),
-        });
+        registry.knowledge.insert(
+            "architecture".to_string(),
+            KnowledgeFacet {
+                name: "architecture".to_string(),
+                context: vec!["This is a Rust project using tokio".to_string()],
+                references: vec!["docs/ARCHITECTURE.md".to_string()],
+                content: String::new(),
+            },
+        );
 
         let prompt = registry.compose(
             Some("coder"),
@@ -775,12 +757,15 @@ mod tests {
             standards: vec![],
             content: String::new(),
         });
-        registry.register_knowledge(KnowledgeFacet {
-            name: "custom".into(),
-            context: vec![],
-            references: vec![],
-            content: String::new(),
-        });
+        registry.knowledge.insert(
+            "custom".into(),
+            KnowledgeFacet {
+                name: "custom".into(),
+                context: vec![],
+                references: vec![],
+                content: String::new(),
+            },
+        );
 
         let prompt = registry.compose(
             Some("custom"),

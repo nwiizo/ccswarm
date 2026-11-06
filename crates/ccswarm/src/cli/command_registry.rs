@@ -61,11 +61,6 @@ impl CommandRegistry {
             runner.init_project(name, repo_url.as_deref(), agents)
         );
 
-        register_command!(self, "task", runner, cmd,
-            Commands::Task { action } =>
-            runner.handle_task(action)
-        );
-
         register_command!(self, "agents", runner, cmd,
             Commands::Agents { all } =>
             runner.list_agents(*all)
@@ -102,8 +97,8 @@ impl CommandRegistry {
         );
 
         register_command!(self, "doctor", runner, cmd,
-            Commands::Doctor { fix, error, check_api } =>
-            runner.handle_doctor(*fix, error.as_deref(), *check_api)
+            Commands::Doctor { fix, check_api } =>
+            runner.handle_doctor(*fix, *check_api)
         );
 
         register_command!(self, "quickstart", runner, cmd,
@@ -159,6 +154,11 @@ impl CommandRegistry {
         register_command!(self, "tail", runner, cmd,
             Commands::Tail { run_id, no_follow } =>
             runner.handle_tail(run_id.as_deref(), *no_follow)
+        );
+
+        register_command!(self, "herdr", runner, cmd,
+            Commands::Herdr { action } =>
+            runner.handle_herdr(action)
         );
 
         register_command!(self, "cost", runner, cmd,
@@ -217,7 +217,6 @@ impl CommandRegistry {
     fn get_command_name(command: &Commands) -> &'static str {
         match command {
             Commands::Init { .. } => "init",
-            Commands::Task { .. } => "task",
             Commands::Agents { .. } => "agents",
             Commands::AgentGen { .. } => "agent-gen",
             Commands::Worktree { .. } => "worktree",
@@ -228,6 +227,7 @@ impl CommandRegistry {
             Commands::Quickstart { .. } => "quickstart",
             Commands::Facets { .. } => "facets",
             Commands::Tail { .. } => "tail",
+            Commands::Herdr { .. } => "herdr",
             Commands::Cost { .. } => "cost",
             Commands::Queue { .. } => "queue",
             Commands::Undo { .. } => "undo",
