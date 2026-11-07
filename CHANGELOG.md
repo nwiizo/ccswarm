@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Flow validation rejects `execution: live` on stages that pin a non-Claude
   provider.
 - Explicit stage `tools:` keep their order in `--allowed-tools`.
+- CI runs the Release workflow's Rust checks on every pull request (format,
+  strict Clippy, locked tests, and rustdoc) plus a separate dependency audit,
+  so a change that would block a release fails before it merges.
 
 ### Removed
 
@@ -77,6 +80,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gitignored `.ccswarm/harness/` directory.
 - CI runs the browser example on `ubuntu-24.04`; Playwright does not support
   Chromium on Ubuntu 26.04.
+- Codex stages with `permission: readonly`, including Sangha members, run
+  with `codex exec --sandbox read-only` instead of `workspace-write`. The
+  stage permission is passed to the provider explicitly, so explicit write or
+  exec `tools:` do not widen it. A rate-limit fallback from such a stage to a
+  provider that cannot enforce read-only access fails with an error.
+- The AI rule judge (`CCSWARM_LLM_JUDGE=1`) requests read-only access, and
+  the `team-dynamic` flow's local `complete` stage is `readonly` like the
+  other builtin flows.
+
+### Security
+
+- Update `quinn-proto` to 0.11.19, `rustls` to 0.23.46, `rustls-webpki` to
+  0.103.16, and `webpki-roots` to 1.0.11 in the lockfile, addressing
+  RUSTSEC-2026-0338 through RUSTSEC-2026-0342, RUSTSEC-2026-0346 through
+  RUSTSEC-2026-0349, RUSTSEC-2026-0381, and RUSTSEC-2026-0382 without changing
+  the dependency feature set.
 
 ## [0.10.2] - 2026-10-09
 

@@ -27,18 +27,34 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm test
 
+  # Same Rust checks as the Release workflow's validate job, so a change that
+  # would block a release fails on its pull request instead.
   test:
     name: Test
-    runs-on: ubuntu-latest
-    
+    runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v6
-    
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Build
-      run: cargo build --verbose
-    
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo doc --no-deps --workspace --locked
+
+  # Separate from Test: a newly published advisory fails this job without
+  # hiding the code checks.
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: Audit dependencies
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit

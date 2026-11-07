@@ -30,6 +30,22 @@ pub(crate) struct ProviderOptions {
     /// Request Codex JSONL output (`CCSWARM_CODEX_JSON=1`) for real token
     /// usage. Codex only.
     pub codex_json: bool,
+    /// Workspace access the stage requested. Codex maps it to `--sandbox`;
+    /// Claude does not enforce it.
+    pub workspace_access: WorkspaceAccess,
+}
+
+/// Workspace access a stage requests from its provider.
+///
+/// Flow stages set it from their `permission` level; the stage's tool list
+/// does not change it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum WorkspaceAccess {
+    /// The provider may modify the working directory.
+    #[default]
+    Write,
+    /// The provider must not modify the working directory.
+    ReadOnly,
 }
 
 /// Identifier for a provider.
@@ -56,6 +72,13 @@ impl ProviderKind {
             Self::Codex => "codex",
             Self::Copilot => "copilot",
         }
+    }
+
+    /// Whether the provider CLI enforces [`WorkspaceAccess::ReadOnly`] with
+    /// its own sandbox. Claude runs with `--dangerously-skip-permissions`, so
+    /// its allowed-tools list is not a sandbox.
+    pub fn enforces_read_only(&self) -> bool {
+        matches!(self, Self::Codex)
     }
 }
 

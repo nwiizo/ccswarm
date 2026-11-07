@@ -1489,6 +1489,7 @@ impl FlowEngine {
                 a2a_endpoint: None,
                 rate_limit_fallbacks,
                 execution: stage.execution,
+                workspace_access: super::permissions::workspace_access(&stage.permission),
             };
 
             // Command-gate loop: when the agent call succeeds but a declared
@@ -2200,6 +2201,8 @@ impl FlowEngine {
                     .as_deref()
                     .and_then(crate::providers::ProviderKind::parse)
             }),
+            // The judge only reads the output it is given.
+            workspace_access: crate::providers::WorkspaceAccess::ReadOnly,
             ..Default::default()
         };
 
@@ -2493,6 +2496,7 @@ stages:
         next: complete
   - id: complete
     instruction: "_local"
+    permission: readonly
 "#;
     Flow::from_yaml(YAML).expect("builtin team-dynamic flow must parse")
 }

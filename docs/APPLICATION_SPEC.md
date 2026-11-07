@@ -33,12 +33,35 @@ process and explicitly separates it from current implementation behavior.
   facets.
 
 Ordinary stage gates are available, but Sangha dispatch currently bypasses
-them. Run events do not provide workflow checkpoint resume. The Codex adapter
-currently requests a writable workspace even for read-only stages. These
-limitations must be fixed before the target Sangha acceptance policy ships.
+them. Run events do not provide workflow checkpoint resume. Claude stages do
+not yet enforce read-only review (see [Stage Permissions](#stage-permissions)).
+These limitations must be fixed before the target Sangha acceptance policy
+ships.
 
 `lab sangha` proposal storage and self-extension commands remain experimental
 and separate from workflow decisions.
+
+## Stage Permissions
+
+A stage's `permission` (`readonly`, `edit`, or `full`) is the single source of
+its workspace boundary. `tools:` only names the tools a provider may offer.
+
+| Setting | Derived from | Claude | Codex |
+| --- | --- | --- | --- |
+| Allowed tools | `tools:`, or the permission's default list | `--allowed-tools` | Not supported |
+| Workspace access | `permission` only | Not enforced (`--dangerously-skip-permissions`) | `--sandbox read-only` for `readonly`, otherwise `workspace-write` |
+
+- Explicit `tools:` never widen the workspace boundary: a `readonly` Codex
+  stage that lists `bash` can run read-only commands but cannot write files.
+- Commands that write, such as builds or test runs that create artifacts, fail
+  in a `readonly` Codex stage. Run them as stage `gates:` or in an `edit`
+  stage; gates are executed by ccswarm, not by the provider.
+- Sangha members default to `readonly`; the AI rule judge
+  (`CCSWARM_LLM_JUDGE=1`) always requests read-only access.
+- A rate-limit fallback from a read-only Codex stage to a provider that cannot
+  enforce read-only access fails with an error instead of continuing with
+  write access.
+- A2A endpoints receive the prompt only; no workspace boundary is sent.
 
 ## Requirements
 

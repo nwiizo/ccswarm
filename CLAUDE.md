@@ -95,7 +95,7 @@ model: sonnet
 
 - Selection precedence: stage YAML > `--provider` flag (global) > `CCSWARM_PROVIDER` env > claude
 - **claude**: `--allowed-tools`, `--agent`, `--append-system-prompt`, `--max-budget-usd`, and `--worktree`. `CCSWARM_CLAUDE_STREAM_JSON=1` enables stream telemetry.
-- **codex**: `codex exec`. `CCSWARM_CODEX_JSON=1` for real token telemetry. No worktree/budget/allowed-tools.
+- **codex**: `codex exec`. `CCSWARM_CODEX_JSON=1` for real token telemetry. Read-only stages use `--sandbox read-only`, others `workspace-write`. No worktree/budget/allowed-tools.
 - **copilot**: unsupported for code generation (gh copilot suggest is interactive); falls back to friendly error
 - **A2A**: set `CCSWARM_A2A_ENDPOINT=https://.../a2a` to send live turns via
   REST `POST /message:send` instead of spawning a local provider CLI.
