@@ -147,7 +147,7 @@ Knowledge: (user-provided under `.ccswarm/facets/knowledge/*.yaml`).
 - タスク記述は簡潔に(500語以下)。長いとimplementがタイムアウト。
 - `{task}`, `{plan_output}` テンプレート変数で stage 間コンテキスト受け渡し。
 - `pass_previous_response: false` で fix stage のコンテキストをリセット。
-- Empty `agents_used` in a summary means no provider CLI was invoked for that stage.
+- `agents_used` in a summary lists stages whose provider call returned output (agent route, persona, or provider name). Empty means no provider answered, for example a run outside Herdr or one with only local stages.
 - Playwright-targeted tasks should ask for stable `data-testid` attributes explicitly.
 - Complex implement stages often need `--timeout 900` or smaller task slices.
 - review→fix ループは flow の `max_stage_visits`(default 3)で打ち切られる。超過は Aborted。

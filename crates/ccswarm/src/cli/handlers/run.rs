@@ -13,7 +13,7 @@ impl CliRunner {
     async fn run_diff(&self, a: &str, b: &str) -> Result<()> {
         let runs_dir = self.repo_path.join(".ccswarm/runs");
         let read_timeline = |id: &str| -> Result<Vec<(String, String, Option<u64>)>> {
-            let p = runs_dir.join(id).join("events.ndjson");
+            let p = super::run_utils::resolve_run_id(&runs_dir, id)?.join("events.ndjson");
             if !p.exists() {
                 anyhow::bail!("events.ndjson not found for run '{}'", id);
             }
@@ -230,11 +230,7 @@ impl CliRunner {
     }
 
     async fn run_view(&self, id: &str) -> Result<()> {
-        let run_dir = self.repo_path.join(".ccswarm/runs").join(id);
-
-        if !run_dir.exists() {
-            anyhow::bail!("Run '{}' not found in .ccswarm/runs/", id);
-        }
+        let run_dir = super::run_utils::resolve_run_id(&self.repo_path.join(".ccswarm/runs"), id)?;
 
         // ── Summary ──────────────────────────────────────────────────────────
         let summary_path = run_dir.join("summary.json");

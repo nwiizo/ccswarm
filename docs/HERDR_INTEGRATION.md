@@ -77,7 +77,7 @@ Herdr's own detector does not classify `claude -p` as working (observed:
 itself with `pane report-agent --source ccswarm --agent <name> --state working`,
 then `idle` when the provider exits, and releases the pane before closing the
 tab. `pane report-metadata` adds the stage and provider as `$stage` and
-`$provider` sidebar tokens. Herdr waits, notifications, and rollups see
+`$provider` sidebar tokens; the tab is named `ccswarm <stage-id> (<provider>)`. Herdr waits, notifications, and rollups see
 ccswarm stages as ordinary agents.
 
 ### Live (Claude only)

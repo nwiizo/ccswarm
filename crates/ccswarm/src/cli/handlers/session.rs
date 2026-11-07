@@ -226,11 +226,7 @@ impl CliRunner {
     }
 
     async fn session_view(&self, id: &str) -> Result<()> {
-        let run_dir = self.repo_path.join(".ccswarm/runs").join(id);
-
-        if !run_dir.exists() {
-            anyhow::bail!("Session '{}' not found in .ccswarm/runs/", id);
-        }
+        let run_dir = super::run_utils::resolve_run_id(&self.repo_path.join(".ccswarm/runs"), id)?;
 
         let summary_path = run_dir.join("summary.json");
         let summary: Option<serde_json::Value> = if summary_path.exists() {
