@@ -14,7 +14,6 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::fs::{self, OpenOptions};
@@ -143,7 +142,8 @@ pub struct RunSummary {
     pub tasks_completed: usize,
     /// Number of [`EventType::ProviderError`] events observed.
     pub tasks_failed: usize,
-    /// Deduplicated list of agent names seen across all events.
+    /// Agents whose provider call returned output, in first-call order; see
+    /// [`provider_agents`]. Empty when no stage reached a provider.
     pub agents_used: Vec<String>,
 }
 
@@ -280,7 +280,7 @@ pub struct SessionInfo {
     pub last_movement: Option<String>,
     /// Count of stages that completed.
     pub movements_completed: usize,
-    /// Deduplicated list of agents seen in events.
+    /// Agents whose provider call returned output; see [`provider_agents`].
     pub agents_used: Vec<String>,
     /// Whether any stage or task reported a failure status.
     pub has_errors: bool,
@@ -386,7 +386,6 @@ impl SessionInfo {
         let mut task: Option<String> = None;
         let mut last_movement: Option<String> = None;
         let mut movements_completed: usize = 0;
-        let mut agents: HashSet<String> = HashSet::new();
         let mut has_errors = false;
         let mut has_task_end = false;
 
@@ -455,11 +454,6 @@ impl SessionInfo {
             if event.get("level").and_then(|v| v.as_str()) == Some("error") {
                 has_errors = true;
             }
-
-            // Extract agent name
-            if let Some(agent) = event.get("agent").and_then(|v| v.as_str()) {
-                agents.insert(agent.to_owned());
-            }
         }
 
         let duration = match (started_at, ended_at) {
@@ -487,10 +481,30 @@ impl SessionInfo {
             task,
             last_movement,
             movements_completed,
-            agents_used: agents.into_iter().collect(),
+            agents_used: provider_agents(content),
             has_errors,
         }
     }
+}
+
+/// Agent labels of the provider calls that returned output in a run, in the
+/// order they first appear. Read from the `agents` metadata of
+/// `movement_end` events; stages that never reached a provider add nothing.
+pub fn provider_agents(events_ndjson: &str) -> Vec<String> {
+    let mut agents: Vec<String> = Vec::new();
+    let labels = events_ndjson
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter(|event| event.get("event_type").and_then(|v| v.as_str()) == Some("movement_end"))
+        .filter_map(|event| event.get("metadata")?.get("agents")?.as_array().cloned())
+        .flatten()
+        .filter_map(|label| label.as_str().map(str::to_owned));
+    for label in labels {
+        if !agents.contains(&label) {
+            agents.push(label);
+        }
+    }
+    agents
 }
 
 /// Extract a flow name from a task_start message.
@@ -834,16 +848,29 @@ mod tests {
     }
 
     #[test]
-    fn test_session_info_from_events_with_agents() {
+    fn agents_used_lists_only_stages_that_reached_a_provider() {
+        // `agent` labels without `metadata.agents` (persona routes from
+        // stages that never called a provider) must not count.
         let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"x","event_type":"task_start","agent":"backend","message":"Starting flow 'default'"}
 {"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"x","event_type":"movement_start","agent":"frontend","stage":"plan","message":"started"}
-{"ts":"2026-03-26T15:30:12.141Z","level":"info","run_id":"x","event_type":"movement_end","agent":"backend","stage":"plan","message":"done"}
+{"ts":"2026-03-26T15:30:12.141Z","level":"info","run_id":"x","event_type":"movement_end","stage":"plan","message":"done","metadata":{"agents":["codex"]}}
+{"ts":"2026-03-26T15:30:12.142Z","level":"info","run_id":"x","event_type":"movement_end","stage":"vote","message":"done","metadata":{"agents":["planner","reviewer","codex"]}}
+{"ts":"2026-03-26T15:30:12.143Z","level":"info","run_id":"x","event_type":"movement_end","agent":"coder","stage":"complete","message":"done","metadata":{"agents":[]}}
 "#;
         let info = SessionInfo::from_events("x", ndjson);
 
-        assert_eq!(info.agents_used.len(), 2);
-        assert!(info.agents_used.contains(&"backend".to_owned()));
-        assert!(info.agents_used.contains(&"frontend".to_owned()));
+        assert_eq!(info.agents_used, ["codex", "planner", "reviewer"]);
+    }
+
+    #[test]
+    fn agents_used_is_empty_when_no_provider_answered() {
+        // A run that failed outside Herdr records stage events but no agents.
+        let ndjson = r#"{"ts":"2026-03-26T15:30:12.139Z","level":"info","run_id":"x","event_type":"task_start","message":"Starting flow 'quick'"}
+{"ts":"2026-03-26T15:30:12.140Z","level":"info","run_id":"x","event_type":"movement_start","stage":"execute","message":"started"}
+{"ts":"2026-03-26T15:30:12.141Z","level":"info","run_id":"x","event_type":"movement_end","stage":"execute","message":"done","metadata":{"status":"failed","agents":[]}}
+"#;
+        assert!(provider_agents(ndjson).is_empty());
+        assert!(SessionInfo::from_events("x", ndjson).agents_used.is_empty());
     }
 
     #[test]

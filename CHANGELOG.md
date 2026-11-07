@@ -103,6 +103,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The AI rule judge (`CCSWARM_LLM_JUDGE=1`) requests read-only access, and
   the `team-dynamic` flow's local `complete` stage is `readonly` like the
   other builtin flows.
+- Herdr tabs and the `$stage` token show the stage ID instead of the persona
+  (or `default`), so parallel stages, Sangha members, and team_leader workers
+  are distinguishable. `run view`, `run diff`, `cost`, `tail`, `replay`,
+  `undo`, and `session view` accept the 8-character run ID that ccswarm
+  prints, or any unique prefix; an ambiguous prefix lists the matching runs.
+  `agents_used` lists only stages whose provider call returned output, so
+  runs that fail outside Herdr record none.
 
 ### Security
 

@@ -785,6 +785,10 @@ pub struct FlowEngine {
     model_override: Option<String>,
     /// Optional isolated worktree name forwarded through A2ABridge.
     worktree_name: Option<String>,
+    /// Agent labels of provider calls that returned output during the
+    /// current top-level stage, including Sangha members, team workers, and
+    /// parallel sub-stages. Drained into the stage's `MovementEnd` event.
+    provider_agents: std::sync::Mutex<Vec<String>>,
 }
 
 /// Progress notification sent after each stage completes
@@ -827,7 +831,30 @@ impl FlowEngine {
             default_provider: None,
             model_override: None,
             worktree_name: None,
+            provider_agents: std::sync::Mutex::new(Vec::new()),
         }
+    }
+
+    /// Record that `stage` reached a provider and got output back.
+    fn note_provider_agent(&self, stage: &Stage, provider: crate::providers::ProviderKind) {
+        let label = provider_agent_label(stage, provider);
+        let mut agents = self
+            .provider_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !agents.contains(&label) {
+            agents.push(label);
+        }
+    }
+
+    /// Take the agent labels recorded since the last call.
+    fn take_provider_agents(&self) -> Vec<String> {
+        std::mem::take(
+            &mut *self
+                .provider_agents
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
     }
 
     /// Set a per-stage budget cap in USD. Forwarded to Claude via `--max-budget-usd`;
@@ -1132,22 +1159,17 @@ impl FlowEngine {
                 stage.id, state.movement_count, name
             );
 
-            // Agent label for RunSummary::agents_used: an explicit
-            // `.claude/agents/<name>` route (stage.agent) wins over the persona.
-            let movement_agent = stage.agent.clone().or_else(|| stage.persona.clone());
-
-            // Record stage start
-            let mut ev_start = crate::events::Event::new(
+            // Record stage start. Whether a provider answers is only known at
+            // the end, so the agent labels ride on the MovementEnd event.
+            let ev_start = crate::events::Event::new(
                 &run_id,
                 crate::events::EventLevel::Info,
                 crate::events::EventType::MovementStart,
                 format!("Stage '{}' started", stage.id),
             )
             .with_movement(&stage.id);
-            if let Some(ref a) = movement_agent {
-                ev_start = ev_start.with_agent(a);
-            }
             self.record_event(ev_start).await;
+            self.take_provider_agents();
 
             // Execute the stage with timing and optional per-stage timeout
             let movement_start = std::time::Instant::now();
@@ -1199,6 +1221,10 @@ impl FlowEngine {
                 .and_then(|v| v.as_str())
                 .unwrap_or("idle")
                 .to_string();
+            // Agents whose provider call returned output in this stage
+            // (RunSummary::agents_used). Empty for local summaries, workflow
+            // calls, and calls that failed before a provider answered.
+            let provider_agents = self.take_provider_agents();
             let mut ev_end = crate::events::Event::new(
                 &run_id,
                 crate::events::EventLevel::Info,
@@ -1210,6 +1236,7 @@ impl FlowEngine {
                 "duration_ms": movement_duration_ms,
                 "tokens_in": tokens_in,
                 "tokens_out": tokens_out,
+                "agents": provider_agents,
                 "attention": attention,
                 "output_preview": output
                     .as_object()
@@ -1223,8 +1250,9 @@ impl FlowEngine {
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown"),
             }));
-            if let Some(ref a) = movement_agent {
-                ev_end = ev_end.with_agent(a);
+            // `ccswarm cost` groups stage durations by this field.
+            if !provider_agents.is_empty() {
+                ev_end = ev_end.with_agent(provider_agents.join(", "));
             }
             self.record_event(ev_end).await;
 
@@ -1365,14 +1393,12 @@ impl FlowEngine {
         .await;
 
         if let Some(ref recorder) = self.event_recorder {
-            // Agent labels per stage: an explicit `agent:` route wins over persona.
-            let mut agents_used: std::collections::HashSet<String> =
-                std::collections::HashSet::new();
-            for m in flow.stages.iter() {
-                if let Some(a) = m.agent.clone().or_else(|| m.persona.clone()) {
-                    agents_used.insert(a);
-                }
-            }
+            // Only stages whose provider call returned output, including
+            // those of nested workflow calls that share this recorder.
+            let agents_used = tokio::fs::read_to_string(recorder.events_path())
+                .await
+                .map(|events| crate::events::provider_agents(&events))
+                .unwrap_or_default();
 
             let summary = crate::events::RunSummary {
                 run_id: run_id.clone(),
@@ -1381,7 +1407,7 @@ impl FlowEngine {
                 total_events: recorder.event_count(),
                 tasks_completed: if completed { 1 } else { 0 },
                 tasks_failed: if completed { 0 } else { 1 },
-                agents_used: agents_used.into_iter().collect(),
+                agents_used,
             };
             if let Err(e) = recorder.write_summary(&summary).await {
                 warn!("Failed to write run summary: {}", e);
@@ -1443,7 +1469,6 @@ impl FlowEngine {
 
         let output = if let Some(ref bridge) = self.bridge {
             // Live execution via A2A or a local provider CLI.
-            let agent_id = stage.persona.as_deref().unwrap_or("default");
 
             // Determine working directory (stage override or engine default)
             let work_dir = stage
@@ -1506,7 +1531,7 @@ impl FlowEngine {
                 };
                 let attempt_output = match bridge
                     .execute_with_retry(
-                        agent_id,
+                        herdr_stage_label(stage),
                         &effective_prompt,
                         &work_dir,
                         stage.agent.as_deref(),
@@ -1517,6 +1542,16 @@ impl FlowEngine {
                     .await
                 {
                     Ok(result) => {
+                        // Each skipped provider advances one fallback target.
+                        let answered_by = result
+                            .fallbacks_used
+                            .len()
+                            .checked_sub(1)
+                            .and_then(|i| exec_options.rate_limit_fallbacks.get(i))
+                            .map(|(kind, _)| *kind)
+                            .or(exec_options.provider)
+                            .unwrap_or(crate::providers::ProviderKind::Claude);
+                        self.note_provider_agent(stage, answered_by);
                         // Rate-limit fallbacks that fired on the way to this result
                         // are recorded as ProviderError events so the switch is
                         // visible in the run's audit trail.
@@ -3422,6 +3457,23 @@ fn routing_outcome(output: &serde_json::Value) -> Option<super::judge::StageOutc
     }
 }
 
+/// Herdr tab label and `$stage` token for a stage's provider call. Stage IDs
+/// are unique within a flow, a parallel group, a Sangha, and a team_leader
+/// decomposition, so concurrent tabs stay distinguishable without a persona.
+fn herdr_stage_label(stage: &Stage) -> &str {
+    &stage.id
+}
+
+/// Label recorded in `agents_used` for a provider call: the explicit
+/// `.claude/agents/<name>` route, then the persona, then the provider.
+fn provider_agent_label(stage: &Stage, provider: crate::providers::ProviderKind) -> String {
+    stage
+        .agent
+        .clone()
+        .or_else(|| stage.persona.clone())
+        .unwrap_or_else(|| provider.as_str().to_string())
+}
+
 fn stage_output_succeeded(output: &serde_json::Value) -> bool {
     output
         .get("status")
@@ -4979,5 +5031,114 @@ stages:
         assert_eq!(event["message"], "Flow 'quick' interrupted");
         assert_eq!(event["metadata"]["reason"], "interrupted");
         assert_eq!(recorder.event_count(), 1);
+    }
+
+    /// Concurrent provider calls without personas must still get distinct
+    /// Herdr tab labels: parallel sub-stages, Sangha members, and
+    /// team_leader workers.
+    #[test]
+    fn herdr_labels_distinguish_concurrent_stages_without_personas() {
+        let flow = Flow::from_yaml(
+            r#"
+name: labels
+initial_movement: fan
+stages:
+  - id: fan
+    instruction: fan out
+    parallel: true
+    sub_movements: [left, right]
+  - id: left
+    instruction: left half
+  - id: right
+    instruction: right half
+  - id: vote
+    instruction: decide
+    sangha:
+      quorum: 2
+      members:
+        - { id: "" }
+        - { id: "" }
+        - { id: judge }
+        - { id: judge }
+  - id: split
+    instruction: split work
+    team_leader:
+      max_parts: 3
+"#,
+        )
+        .expect("flow parses");
+        let stage = |id: &str| {
+            flow.stages
+                .iter()
+                .find(|s| s.id == id)
+                .expect("stage exists")
+                .clone()
+        };
+
+        let parallel: Vec<Stage> = ["left", "right"].iter().map(|id| stage(id)).collect();
+        let vote = stage("vote");
+        let spec = vote.sangha.clone().expect("sangha spec");
+        let members: Vec<Stage> = super::super::sangha::members_or_default(&spec)
+            .iter()
+            .map(|m| super::super::sangha::member_stage(&vote, &spec, m))
+            .collect();
+        let split = stage("split");
+        let leader = split.team_leader.clone().expect("team_leader spec");
+        let parts = super::super::team_leader::parse_parts(
+            r#"[{"id":"part","instruction":"a"},{"id":"part","instruction":"b"},{"id":"","instruction":"c"}]"#,
+            3,
+        )
+        .expect("parts parse");
+        let workers: Vec<Stage> = parts
+            .iter()
+            .map(|p| super::super::team_leader::worker_stage(&split, &leader, p))
+            .collect();
+
+        for group in [&parallel, &members, &workers] {
+            let labels: Vec<&str> = group.iter().map(herdr_stage_label).collect();
+            assert!(group.iter().all(|s| s.persona.is_none()), "{labels:?}");
+            let unique: std::collections::HashSet<&str> = labels.iter().copied().collect();
+            assert_eq!(unique.len(), labels.len(), "duplicate labels: {labels:?}");
+            assert!(!labels.contains(&"default"), "{labels:?}");
+        }
+        assert_eq!(
+            parallel.iter().map(herdr_stage_label).collect::<Vec<_>>(),
+            ["left", "right"]
+        );
+    }
+
+    #[test]
+    fn provider_agent_label_prefers_agent_then_persona_then_provider() {
+        let mut stage = Flow::from_yaml(
+            "name: l\ninitial_movement: s\nstages:\n  - id: s\n    instruction: x\n",
+        )
+        .expect("flow parses")
+        .stages
+        .remove(0);
+        let codex = crate::providers::ProviderKind::Codex;
+        assert_eq!(provider_agent_label(&stage, codex), "codex");
+        stage.persona = Some("reviewer".to_string());
+        assert_eq!(provider_agent_label(&stage, codex), "reviewer");
+        stage.agent = Some("backend-specialist".to_string());
+        assert_eq!(provider_agent_label(&stage, codex), "backend-specialist");
+    }
+
+    #[test]
+    fn provider_agents_are_recorded_per_stage_and_drained() {
+        let engine = FlowEngine::new();
+        let stage = Flow::from_yaml(
+            "name: l\ninitial_movement: s\nstages:\n  - id: s\n    instruction: x\n",
+        )
+        .expect("flow parses")
+        .stages
+        .remove(0);
+        assert!(engine.take_provider_agents().is_empty());
+
+        let codex = crate::providers::ProviderKind::Codex;
+        engine.note_provider_agent(&stage, codex);
+        engine.note_provider_agent(&stage, codex);
+        engine.note_provider_agent(&stage, crate::providers::ProviderKind::Claude);
+        assert_eq!(engine.take_provider_agents(), ["codex", "claude"]);
+        assert!(engine.take_provider_agents().is_empty());
     }
 }

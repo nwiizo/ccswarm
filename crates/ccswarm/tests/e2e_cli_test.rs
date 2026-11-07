@@ -753,3 +753,54 @@ fn test_all_subcommands_have_help() {
         );
     }
 }
+
+/// A run that fails outside Herdr never reaches a provider, so its summary
+/// lists no agents even though the stage has a persona. The 8-character run
+/// ID that ccswarm prints is accepted by `run view` and `cost`.
+#[test]
+fn test_run_outside_herdr_records_no_agents_and_short_ids_resolve() {
+    let temp_dir = TempDir::new().unwrap();
+    let project_path = temp_dir.path();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project_path)
+        .output()
+        .unwrap();
+
+    let output = Command::new(get_binary_path())
+        .args(["pipeline", "--task", "say hi", "--flow", "quick"])
+        .current_dir(project_path)
+        .env_remove("HERDR_ENV")
+        .env_remove("HERDR_WORKSPACE_ID")
+        .env_remove("HERDR_PANE_ID")
+        .env_remove("CCSWARM_A2A_ENDPOINT")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("Failed to execute ccswarm");
+    assert!(!output.status.success(), "a run outside Herdr must fail");
+
+    let runs_dir = project_path.join(".ccswarm").join("runs");
+    let run_dirs: Vec<_> = std::fs::read_dir(&runs_dir)
+        .expect("runs dir")
+        .filter_map(|entry| entry.ok())
+        .collect();
+    assert_eq!(run_dirs.len(), 1, "expected one recorded run");
+    let run_id = run_dirs[0].file_name().into_string().unwrap();
+
+    let summary: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(run_dirs[0].path().join("summary.json")).expect("summary"),
+    )
+    .expect("summary json");
+    assert_eq!(summary["agents_used"], serde_json::json!([]), "{summary}");
+
+    let short_id = &run_id[..8];
+    for args in [vec!["run", "view", short_id], vec!["cost", short_id]] {
+        let output = run_ccswarm(&args, Some(project_path));
+        assert!(
+            output.status.success(),
+            "ccswarm {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}

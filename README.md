@@ -78,6 +78,9 @@ ccswarm replay <run-id>                 # re-execute the recorded task
 ccswarm undo <run-id>                   # advisory: list commits since run started
 ```
 
+Run commands accept the full run ID or any unique prefix, such as the
+8-character ID ccswarm prints after a run.
+
 ## Authoring flows
 
 ```bash
