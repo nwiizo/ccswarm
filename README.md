@@ -112,10 +112,11 @@ stages:
 `codex exec --sandbox read-only`, even when `tools:` lists write or exec
 tools, and a rate-limit fallback from a read-only Codex stage to Claude fails
 instead of running writable. Claude does not yet enforce it: Claude runs with
-`--dangerously-skip-permissions` and an allowed-tools list. Required checks
-also need separate execution: Sangha currently bypasses the ordinary
-stage-gate path. These are prerequisites for the stricter acceptance
-policy described in the product design.
+`--dangerously-skip-permissions` and an allowed-tools list. Stage `gates:`
+run once approvals reach quorum, and a failed gate rejects the decision even
+when every member approved; gate results are not yet bound to the reviewed
+revision. These are prerequisites for the stricter acceptance policy
+described in the product design.
 
 ## Multi-provider
 

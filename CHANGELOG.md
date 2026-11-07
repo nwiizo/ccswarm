@@ -80,6 +80,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gitignored `.ccswarm/harness/` directory.
 - CI runs the browser example on `ubuntu-24.04`; Playwright does not support
   Chromium on Ubuntu 26.04.
+- Sangha stages run their `gates` once approvals reach quorum. A failed gate
+  fails the stage with `gate_failed`, even when every member approved; a
+  round below quorum skips the gates. Previously Sangha dispatch bypassed
+  the gates.
 - Codex stages with `permission: readonly`, including Sangha members, run
   with `codex exec --sandbox read-only` instead of `workspace-write`. The
   stage permission is passed to the provider explicitly, so explicit write or

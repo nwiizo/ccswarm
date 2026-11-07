@@ -208,7 +208,7 @@ they are not claims that the target behavior above already works.
 | Recommendation | The last nonempty line supplies `APPROVE`, `REVISE`, or `ABSTAIN`; other endings abstain | Validate a report with reasons, evidence, and objections |
 | Acceptance | Only completed member outputs contribute recommendations; other execution states abstain. Successful approvals must meet quorum | Bind reports to current evidence and enforce all remaining acceptance conditions |
 | Dissent | Enough approvals can accept despite a `REVISE` vote | Resolve blocking objections and retain advisory dissent |
-| Machine checks | Sangha dispatch returns before ordinary stage gates; member stages clear gates | Explicitly execute and bind required checks to the decision subject |
+| Machine checks | Stage gates run once after quorum (members do not run them); a failed gate rejects the decision with `gate_failed` | Bind required checks to the decision subject |
 | Review permissions | Members request `readonly` by default; Codex runs them with `--sandbox read-only` and refuses a rate-limit fallback to Claude, but Claude members are not sandboxed | Enforce the requested boundary on every backend or reject the unsupported configuration |
 | Standard flow | Sangha assesses the plan; final review is a normal stage | Assess the final change through Sangha after checks pass |
 | Recovery | Event logs exist; replay re-executes the task | Durable decision checkpoints and validated targeted resume |
