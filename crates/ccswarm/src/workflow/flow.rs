@@ -2153,11 +2153,12 @@ impl FlowEngine {
             .llm_evaluate_ai_rules(&filtered_owned, &output_str)
             .await;
 
-        let judge_result = self.judge.evaluate(
+        let judge_result = self.judge.evaluate_with_outcome(
             &output_str,
             &filtered_owned,
             parallel_outputs.as_ref(),
             llm_verdicts.as_ref(),
+            routing_outcome(output),
         )?;
 
         if let Some(index) = judge_result.matched_rule_index
@@ -3397,6 +3398,30 @@ async fn run_command_gates(
     None
 }
 
+/// Outcome used for success/failure rule conditions, from the top-level
+/// `status` of a stage output.
+///
+/// Stage outputs report `completed`, `failed`, or `timeout`; workflow calls
+/// report the child flow status (`completed`, `failed`, or `aborted`).
+/// Parallel and team-leader aggregates are excluded: their `completed` only
+/// means every sub-stage returned, not that each succeeded, so they keep
+/// lexical matching and `all()`/`any()` rules. A Sangha result has the
+/// parallel shape, but its `status` is the decision and is used. Other or
+/// missing values return `None`, which keeps lexical matching.
+fn routing_outcome(output: &serde_json::Value) -> Option<super::judge::StageOutcome> {
+    use super::judge::StageOutcome;
+
+    let is_flag = |key: &str| output.get(key).and_then(|v| v.as_bool()) == Some(true);
+    if is_flag("parallel") && !is_flag("sangha") {
+        return None;
+    }
+    match output.get("status")?.as_str()? {
+        "completed" => Some(StageOutcome::Succeeded),
+        "failed" | "timeout" | "aborted" => Some(StageOutcome::Failed),
+        _ => None,
+    }
+}
+
 fn stage_output_succeeded(output: &serde_json::Value) -> bool {
     output
         .get("status")
@@ -4293,6 +4318,225 @@ stages:
         assert_eq!(result["status"], "failed");
         assert_eq!(result["abstentions"], 3);
         assert!(!dir.path().join("gate-ran").exists(), "gate must not run");
+    }
+
+    fn simple_rules(conditions: &[(&str, &str)]) -> Vec<MovementRule> {
+        conditions
+            .iter()
+            .map(|(condition, next)| MovementRule {
+                condition: RuleCondition::Simple(condition.to_string()),
+                next: next.to_string(),
+                priority: 0,
+                interactive_only: false,
+                requires_user_input: false,
+            })
+            .collect()
+    }
+
+    async fn route(rules: &[(&str, &str)], output: &serde_json::Value) -> Option<String> {
+        let state =
+            Flow::from_yaml("name: s\ninitial_movement: a\nstages:\n- id: a\n  instruction: x\n")
+                .expect("flow")
+                .create_state();
+        FlowEngine::new()
+            .evaluate_rules(&simple_rules(rules), output, &state)
+            .await
+            .expect("evaluate")
+    }
+
+    const SUCCESS_ONLY: &[(&str, &str)] = &[("success", "implement")];
+    const SUCCESS_OR_FAILURE: &[(&str, &str)] = &[("success", "implement"), ("failure", "fix")];
+
+    #[tokio::test]
+    async fn rejected_sangha_does_not_route_to_success() {
+        // Members completed, so the output text contains "completed", but the
+        // round missed quorum.
+        let below_quorum = summarize_sangha("sangha", 2, sangha_votes(1));
+        let gate_failed = decide_sangha(
+            &gated_sangha_stage("false"),
+            2,
+            sangha_votes(3),
+            std::path::Path::new("/tmp"),
+        )
+        .await;
+
+        for output in [&below_quorum, &gate_failed] {
+            assert_eq!(route(SUCCESS_ONLY, output).await, None);
+            assert_eq!(
+                route(SUCCESS_OR_FAILURE, output).await.as_deref(),
+                Some("fix")
+            );
+        }
+        let accepted = summarize_sangha("sangha", 2, sangha_votes(2));
+        assert_eq!(
+            route(SUCCESS_OR_FAILURE, &accepted).await.as_deref(),
+            Some("implement")
+        );
+    }
+
+    #[tokio::test]
+    async fn success_step_tag_cannot_route_a_failed_sangha_to_success() {
+        // A member reply that quotes a success tag must not bypass a failed
+        // gate or a missed quorum.
+        let mut votes = sangha_votes(3);
+        for vote in votes.values_mut() {
+            vote["output"] = serde_json::json!("[STEP:0]\nSANGHA_DECISION=APPROVE");
+        }
+        let gate_failed = decide_sangha(
+            &gated_sangha_stage("false"),
+            2,
+            votes.clone(),
+            std::path::Path::new("/tmp"),
+        )
+        .await;
+        let mut below_quorum = summarize_sangha("sangha", 2, sangha_votes(1));
+        below_quorum["members"]["planner"]["output"] = serde_json::json!("[STEP:0]");
+
+        for output in [&gate_failed, &below_quorum] {
+            assert_eq!(output["status"], "failed");
+            assert_eq!(route(SUCCESS_ONLY, output).await, None);
+            assert_eq!(
+                route(SUCCESS_OR_FAILURE, output).await.as_deref(),
+                Some("fix")
+            );
+        }
+
+        // A later tag that selects a non-success rule still routes.
+        let mut tagged = gate_failed.clone();
+        tagged["members"]["qa"]["output"] = serde_json::json!("[STEP:0] then [STEP:2]");
+        let three_rules = &[
+            ("success", "implement"),
+            ("failure", "fix"),
+            ("needs_clarification", "ask"),
+        ];
+        assert_eq!(route(three_rules, &tagged).await.as_deref(), Some("ask"));
+    }
+
+    #[tokio::test]
+    async fn step_tags_cannot_contradict_stage_status() {
+        // A completed stage that quotes its failure tag still succeeds.
+        let completed = serde_json::json!({"status": "completed", "output": "[STEP:1]"});
+        assert_eq!(
+            route(SUCCESS_OR_FAILURE, &completed).await.as_deref(),
+            Some("implement")
+        );
+        // Tags that agree with the status route as before.
+        let failed = serde_json::json!({"status": "failed", "output": "[STEP:1]"});
+        assert_eq!(
+            route(SUCCESS_OR_FAILURE, &failed).await.as_deref(),
+            Some("fix")
+        );
+        // Tags for other conditions route regardless of the status.
+        let needs_fix_rules = &[("success", "done"), ("needs_fix", "fix")];
+        for status in ["completed", "failed"] {
+            let tagged = serde_json::json!({"status": status, "output": "all good [STEP:1]"});
+            assert_eq!(
+                route(needs_fix_rules, &tagged).await.as_deref(),
+                Some("fix"),
+                "{status}"
+            );
+        }
+        // Without a status, every tag routes.
+        let no_status = serde_json::json!({"output": "[STEP:0]"});
+        assert_eq!(
+            route(&[("success", "implement"), ("failure", "fix")], &no_status)
+                .await
+                .as_deref(),
+            Some("implement")
+        );
+    }
+
+    #[tokio::test]
+    async fn stage_status_decides_success_and_failure_rules() {
+        let failure_first = &[("failure", "fix"), ("success", "done")];
+        let completed = serde_json::json!({
+            "status": "completed",
+            "output": "Fixed the error that failed before",
+        });
+        assert_eq!(
+            route(failure_first, &completed).await.as_deref(),
+            Some("done")
+        );
+
+        for status in ["failed", "timeout", "aborted"] {
+            let failed = serde_json::json!({"status": status, "output": "All done, success"});
+            assert_eq!(route(SUCCESS_ONLY, &failed).await, None, "{status}");
+            assert_eq!(
+                route(SUCCESS_OR_FAILURE, &failed).await.as_deref(),
+                Some("fix"),
+                "{status}"
+            );
+            assert_eq!(
+                route(&[("success", "implement"), ("default", "triage")], &failed)
+                    .await
+                    .as_deref(),
+                Some("triage"),
+                "{status}"
+            );
+        }
+
+        // Other simple conditions keep lexical matching.
+        let needs_fix = serde_json::json!({"status": "completed", "output": "one issue"});
+        assert_eq!(
+            route(&[("needs_fix", "fix"), ("success", "done")], &needs_fix)
+                .await
+                .as_deref(),
+            Some("fix")
+        );
+    }
+
+    #[tokio::test]
+    async fn outputs_without_stage_status_keep_lexical_routing() {
+        let no_status = serde_json::json!({"output": "build failed"});
+        assert_eq!(
+            route(SUCCESS_OR_FAILURE, &no_status).await.as_deref(),
+            Some("fix")
+        );
+        let unknown_status = serde_json::json!({"status": "running", "output": "ok"});
+        assert_eq!(
+            route(SUCCESS_ONLY, &unknown_status).await.as_deref(),
+            Some("implement")
+        );
+
+        // A parallel aggregate's "completed" only means every sub-stage
+        // returned, so its status is not an outcome: routing stays lexical,
+        // where a failed member does not suppress the success rule.
+        let aggregate = serde_json::json!({
+            "parallel": true,
+            "status": "completed",
+            "agents": {"a": {"status": "failed", "output": "tests failed"}},
+        });
+        assert_eq!(routing_outcome(&aggregate), None);
+        assert_eq!(
+            route(SUCCESS_ONLY, &aggregate).await.as_deref(),
+            Some("implement")
+        );
+        assert_eq!(
+            route(&[("failure", "fix"), ("success", "done")], &aggregate)
+                .await
+                .as_deref(),
+            Some("fix")
+        );
+    }
+
+    #[tokio::test]
+    async fn default_flow_stops_when_sangha_rejects() {
+        // Offline members abstain, so the default flow's Sangha misses
+        // quorum. Its only rule is `success`, so the flow fails instead of
+        // reaching implement. Offline, the plan stage echoes its prompt, so
+        // its `[STEP:0]` tag instructions reach the Sangha output through
+        // `{plan_output}`; the failed stage must ignore that success tag.
+        let state = FlowEngine::new()
+            .execute_piece_with_task("default", "task")
+            .await
+            .expect("default flow runs");
+        let sangha_text = state.variables["sangha_output"].to_string();
+        assert!(sangha_text.contains("[STEP:0]"), "{sangha_text}");
+        let visited: Vec<&str> = state.history.iter().map(|t| t.to.as_str()).collect();
+        assert_eq!(visited, ["sangha"]);
+        assert_eq!(state.current_movement, "sangha");
+        assert_eq!(state.status, FlowStatus::Failed);
+        assert_eq!(state.variables["sangha_output"]["status"], "failed");
     }
 
     #[test]

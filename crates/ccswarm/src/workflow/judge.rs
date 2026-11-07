@@ -44,6 +44,29 @@ pub enum MatchMethod {
     NoMatch,
 }
 
+/// Execution outcome taken from a stage output's top-level `status`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StageOutcome {
+    /// The stage reported `completed`.
+    Succeeded,
+    /// The stage reported a failure status such as `failed` or `timeout`.
+    Failed,
+}
+
+/// The outcome a simple success-class (`success`/`complete`/`done`) or
+/// failure-class (`failure`/`error`/`fail`) condition asserts; `None` for
+/// every other condition.
+fn condition_outcome(condition: &RuleCondition) -> Option<StageOutcome> {
+    let RuleCondition::Simple(c) = condition else {
+        return None;
+    };
+    match c.as_str() {
+        "success" | "complete" | "done" => Some(StageOutcome::Succeeded),
+        "failure" | "error" | "fail" => Some(StageOutcome::Failed),
+        _ => None,
+    }
+}
+
 /// Configuration for the AI judge
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JudgeConfig {
@@ -123,6 +146,29 @@ impl MovementJudge {
         parallel_outputs: Option<&HashMap<String, String>>,
         llm_verdicts: Option<&HashMap<usize, bool>>,
     ) -> Result<JudgeResult> {
+        self.evaluate_with_outcome(output, rules, parallel_outputs, llm_verdicts, None)
+    }
+
+    /// Evaluate like [`MovementJudge::evaluate`], deciding the success
+    /// (`success`/`complete`/`done`) and failure (`failure`/`error`/`fail`)
+    /// conditions from a known stage outcome instead of output text.
+    ///
+    /// With `Some(outcome)`, success conditions match only a succeeded stage
+    /// and failure conditions only a failed one, and the success fallback is
+    /// skipped for a failed stage. `[STEP:N]` tags that select a success or
+    /// failure rule contradicting the outcome are skipped as well, because
+    /// output text can quote tags from earlier stages or prompts. With
+    /// `None`, both use the lexical heuristic and every tag routes, as
+    /// [`MovementJudge::evaluate`] does. Other tags, aggregate, `ai()`, and
+    /// other simple conditions are unaffected.
+    pub fn evaluate_with_outcome(
+        &self,
+        output: &str,
+        rules: &[MovementRule],
+        parallel_outputs: Option<&HashMap<String, String>>,
+        llm_verdicts: Option<&HashMap<usize, bool>>,
+        outcome: Option<StageOutcome>,
+    ) -> Result<JudgeResult> {
         if rules.is_empty() {
             return Ok(JudgeResult {
                 matched_rule_index: None,
@@ -140,12 +186,12 @@ impl MovementJudge {
         }
 
         // 2. Check for [STEP:N] tags in output
-        if let Some(result) = self.evaluate_step_tags(output, rules)? {
+        if let Some(result) = self.evaluate_step_tags(output, rules, outcome)? {
             return Ok(result);
         }
 
         // 3. Check simple string conditions
-        if let Some(result) = self.evaluate_simple_conditions(output, rules)? {
+        if let Some(result) = self.evaluate_simple_conditions(output, rules, outcome)? {
             return Ok(result);
         }
 
@@ -157,7 +203,7 @@ impl MovementJudge {
         }
 
         // 5. Fallback: look for default "success" rule
-        if let Some(result) = self.evaluate_fallback(rules)? {
+        if let Some(result) = self.evaluate_fallback(rules, outcome)? {
             return Ok(result);
         }
 
@@ -170,31 +216,52 @@ impl MovementJudge {
     }
 
     /// Check for [STEP:N] tags in output
+    ///
+    /// The first tag decides. With a known outcome, a tag that selects a
+    /// success or failure rule contradicting it is skipped and the next tag,
+    /// if any, is considered instead: output text cannot route a failed gate
+    /// or rejected Sangha round to success, nor a completed stage to its
+    /// failure rule. Tags for other conditions (such as `needs_fix`) route
+    /// unchanged.
     fn evaluate_step_tags(
         &self,
         output: &str,
         rules: &[MovementRule],
+        outcome: Option<StageOutcome>,
     ) -> Result<Option<JudgeResult>> {
         let re = Regex::new(STEP_TAG_PATTERN).context("Invalid step tag regex")?;
 
-        if let Some(captures) = re.captures(output)
-            && let Some(index_str) = captures.get(1)
-            && let Ok(index) = index_str.as_str().parse::<usize>()
-        {
-            if index < rules.len() {
-                info!("Step tag [STEP:{}] matched rule {}", index, index);
-                return Ok(Some(JudgeResult {
-                    matched_rule_index: Some(index),
-                    match_method: MatchMethod::StepTag,
-                    confidence: 1.0,
-                    explanation: format!("Matched [STEP:{}] tag in output", index),
-                }));
+        for captures in re.captures_iter(output) {
+            let Some(index) = captures
+                .get(1)
+                .and_then(|m| m.as_str().parse::<usize>().ok())
+            else {
+                return Ok(None);
+            };
+            let Some(rule) = rules.get(index) else {
+                warn!(
+                    "Step tag [STEP:{}] out of range (only {} rules)",
+                    index,
+                    rules.len()
+                );
+                return Ok(None);
+            };
+            if let (Some(actual), Some(asserted)) = (outcome, condition_outcome(&rule.condition))
+                && actual != asserted
+            {
+                warn!(
+                    "Ignoring step tag [STEP:{}]: it selects a {:?} rule for a {:?} stage",
+                    index, asserted, actual
+                );
+                continue;
             }
-            warn!(
-                "Step tag [STEP:{}] out of range (only {} rules)",
-                index,
-                rules.len()
-            );
+            info!("Step tag [STEP:{}] matched rule {}", index, index);
+            return Ok(Some(JudgeResult {
+                matched_rule_index: Some(index),
+                match_method: MatchMethod::StepTag,
+                confidence: 1.0,
+                explanation: format!("Matched [STEP:{}] tag in output", index),
+            }));
         }
 
         Ok(None)
@@ -205,6 +272,7 @@ impl MovementJudge {
         &self,
         output: &str,
         rules: &[MovementRule],
+        outcome: Option<StageOutcome>,
     ) -> Result<Option<JudgeResult>> {
         let output_lower = output.to_lowercase();
 
@@ -215,6 +283,12 @@ impl MovementJudge {
         for (index, rule) in indexed_rules {
             if let RuleCondition::Simple(condition) = &rule.condition {
                 let matched = match condition.as_str() {
+                    "success" | "complete" | "done" if outcome.is_some() => {
+                        outcome == Some(StageOutcome::Succeeded)
+                    }
+                    "failure" | "error" | "fail" if outcome.is_some() => {
+                        outcome == Some(StageOutcome::Failed)
+                    }
                     "success" | "complete" | "done" => {
                         output_lower.contains("success")
                             || output_lower.contains("completed")
@@ -362,11 +436,18 @@ impl MovementJudge {
         Ok(None)
     }
 
-    /// Fallback: match the first "success"-like rule
-    fn evaluate_fallback(&self, rules: &[MovementRule]) -> Result<Option<JudgeResult>> {
+    /// Fallback: match the first "success"-like rule. A failed stage only
+    /// falls back to an explicit `default` rule.
+    fn evaluate_fallback(
+        &self,
+        rules: &[MovementRule],
+        outcome: Option<StageOutcome>,
+    ) -> Result<Option<JudgeResult>> {
+        let failed = outcome == Some(StageOutcome::Failed);
         for (index, rule) in rules.iter().enumerate() {
             if let RuleCondition::Simple(cond) = &rule.condition
-                && matches!(cond.as_str(), "success" | "complete" | "done" | "default")
+                && (cond == "default"
+                    || (!failed && matches!(cond.as_str(), "success" | "complete" | "done")))
             {
                 return Ok(Some(JudgeResult {
                     matched_rule_index: Some(index),
@@ -690,5 +771,76 @@ mod tests {
         let result = judge.evaluate(output, &rules, None, None).unwrap();
         // Should fallback to "success" rule
         assert_eq!(result.matched_rule_index, Some(1));
+    }
+
+    fn evaluate_outcome(
+        output: &str,
+        rules: &[MovementRule],
+        outcome: Option<StageOutcome>,
+    ) -> JudgeResult {
+        MovementJudge::default()
+            .evaluate_with_outcome(output, rules, None, None, outcome)
+            .unwrap()
+    }
+
+    #[test]
+    fn failed_stage_ignores_success_tag() {
+        let rules = vec![
+            make_simple_rule("success", "implement"),
+            make_simple_rule("failure", "fix"),
+        ];
+        let result = evaluate_outcome("[STEP:0]", &rules, Some(StageOutcome::Failed));
+        assert_eq!(result.matched_rule_index, Some(1));
+        assert_eq!(result.match_method, MatchMethod::SimpleCondition);
+
+        let success_only = vec![make_simple_rule("done", "implement")];
+        let result = evaluate_outcome("[STEP:0]", &success_only, Some(StageOutcome::Failed));
+        assert_eq!(result.matched_rule_index, None);
+    }
+
+    #[test]
+    fn succeeded_stage_ignores_failure_tag() {
+        let rules = vec![
+            make_simple_rule("success", "review"),
+            make_simple_rule("error", "fix"),
+        ];
+        let result = evaluate_outcome("[STEP:1]", &rules, Some(StageOutcome::Succeeded));
+        assert_eq!(result.matched_rule_index, Some(0));
+        assert_eq!(result.match_method, MatchMethod::SimpleCondition);
+
+        // A later tag that agrees with the outcome still decides.
+        let result = evaluate_outcome("[STEP:1]\n[STEP:0]", &rules, Some(StageOutcome::Succeeded));
+        assert_eq!(result.matched_rule_index, Some(0));
+        assert_eq!(result.match_method, MatchMethod::StepTag);
+    }
+
+    #[test]
+    fn needs_fix_tag_routes_for_any_outcome() {
+        let rules = vec![
+            make_simple_rule("success", "done"),
+            make_simple_rule("needs_fix", "fix"),
+        ];
+        for outcome in [
+            Some(StageOutcome::Succeeded),
+            Some(StageOutcome::Failed),
+            None,
+        ] {
+            let result = evaluate_outcome("[STEP:1]", &rules, outcome);
+            assert_eq!(result.matched_rule_index, Some(1), "{outcome:?}");
+            assert_eq!(result.match_method, MatchMethod::StepTag, "{outcome:?}");
+        }
+    }
+
+    #[test]
+    fn tags_without_outcome_route_unchanged() {
+        let rules = vec![
+            make_simple_rule("success", "implement"),
+            make_simple_rule("failure", "fix"),
+        ];
+        for (output, expected) in [("build failed [STEP:0]", 0), ("success [STEP:1]", 1)] {
+            let result = evaluate_outcome(output, &rules, None);
+            assert_eq!(result.matched_rule_index, Some(expected), "{output}");
+            assert_eq!(result.match_method, MatchMethod::StepTag, "{output}");
+        }
     }
 }
