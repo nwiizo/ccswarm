@@ -32,11 +32,11 @@ process and explicitly separates it from current implementation behavior.
 - **Faceted Prompting**: composable persona, policy, knowledge, and instruction
   facets.
 
-Ordinary stage gates are available, but Sangha dispatch currently bypasses
-them. Run events do not provide workflow checkpoint resume. Claude stages do
-not yet enforce read-only review (see [Stage Permissions](#stage-permissions)).
-These limitations must be fixed before the target Sangha acceptance policy
-ships.
+Sangha stages run their command gates once approvals reach quorum; a failed
+gate rejects the decision with `gate_failed`, even when every member approved.
+Run events do not provide workflow checkpoint resume. Claude stages do not yet
+enforce read-only review (see [Stage Permissions](#stage-permissions)). These
+limitations must be fixed before the target Sangha acceptance policy ships.
 
 `lab sangha` proposal storage and self-extension commands remain experimental
 and separate from workflow decisions.

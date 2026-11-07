@@ -129,6 +129,9 @@ pub fn consensus_prompt(task_instruction: &str, member_id: &str, quorum: u32) ->
 }
 
 /// Synthesize a readonly member stage from a parent `sangha:` stage.
+///
+/// Members carry no gates: the parent stage runs its gates once after the
+/// votes reach quorum, rather than once per member.
 pub fn member_stage(parent: &Stage, spec: &SanghaSpec, member: &SanghaMember) -> Stage {
     Stage {
         id: member.id.clone(),

@@ -18,8 +18,10 @@ design it follows.
 | Plugin | `herdr-plugin/` adds run board, recent runs, and doctor actions |
 | Diagnostics | `ccswarm doctor` checks the Herdr CLI, session, server, and integrations |
 
-See the [release notes](releases/v0.11.0.md). Sangha decision behavior is
-unchanged.
+See the [release notes](releases/v0.11.0.md). Sangha stages now run their
+command gates after quorum, and a failed gate rejects the decision; success
+and failure rules follow the stage status; Codex enforces read-only stages
+with its sandbox. Other Sangha decision behavior is unchanged.
 
 ## v0.10.2 Release Scope
 
@@ -96,7 +98,6 @@ atomic shared transaction.
 ## Known Runtime Limitations
 
 - Enough valid approvals can still accept a decision despite a revision vote.
-- Sangha dispatch bypasses ordinary command gates.
 - Run events do not provide workflow checkpoint resume.
 - `lab sangha` proposal storage is separate from workflow acceptance.
 - Selecting Astra through Codex does not expose Responses steering, async
