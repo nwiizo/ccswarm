@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Flow validation rejects `execution: live` on stages that pin a non-Claude
   provider.
 - Explicit stage `tools:` keep their order in `--allowed-tools`.
+- CI runs the Release workflow's Rust checks on every pull request (format,
+  strict Clippy, locked tests, and rustdoc) plus a separate dependency audit,
+  so a change that would block a release fails before it merges.
 
 ### Removed
 
@@ -82,6 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stage permission is passed to the provider explicitly, so explicit write or
   exec `tools:` do not widen it. A rate-limit fallback from such a stage to a
   provider that cannot enforce read-only access fails with an error.
+- The AI rule judge (`CCSWARM_LLM_JUDGE=1`) requests read-only access, and
+  the `team-dynamic` flow's local `complete` stage is `readonly` like the
+  other builtin flows.
 
 ### Security
 

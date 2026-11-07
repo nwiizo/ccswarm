@@ -2201,6 +2201,8 @@ impl FlowEngine {
                     .as_deref()
                     .and_then(crate::providers::ProviderKind::parse)
             }),
+            // The judge only reads the output it is given.
+            workspace_access: crate::providers::WorkspaceAccess::ReadOnly,
             ..Default::default()
         };
 
@@ -2494,6 +2496,7 @@ stages:
         next: complete
   - id: complete
     instruction: "_local"
+    permission: readonly
 "#;
     Flow::from_yaml(YAML).expect("builtin team-dynamic flow must parse")
 }

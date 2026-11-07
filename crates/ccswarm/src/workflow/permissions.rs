@@ -79,6 +79,38 @@ mod tests {
         );
     }
 
+    /// Builtin flows keep `permission` and `tools:` consistent: readonly
+    /// stages list no file-writing tools, and local summary stages, which
+    /// never reach a provider, are readonly.
+    #[test]
+    fn builtin_readonly_stages_stay_read_only() {
+        const WRITE_TOOLS: &[&str] = &["write", "edit", "replace", "delete", "create", "rm"];
+        for flow in super::super::flow::builtin_flows() {
+            for stage in &flow.stages {
+                let local = stage.instruction.is_empty() || stage.instruction.starts_with("_local");
+                assert!(
+                    !local || stage.permission == MovementPermission::Readonly,
+                    "{}/{}: local summary stage must be readonly",
+                    flow.name,
+                    stage.id
+                );
+                if stage.permission == MovementPermission::Readonly {
+                    let writes: Vec<_> = stage
+                        .tools
+                        .iter()
+                        .filter(|tool| WRITE_TOOLS.contains(&tool.to_ascii_lowercase().as_str()))
+                        .collect();
+                    assert!(
+                        writes.is_empty(),
+                        "{}/{}: readonly stage lists write tools {writes:?}",
+                        flow.name,
+                        stage.id
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn explicit_tools_override_the_level_in_order() {
         let explicit = ["grep", "read", "grep"].map(String::from);
